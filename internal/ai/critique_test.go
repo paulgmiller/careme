@@ -24,7 +24,10 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		Instructions: []string{"Roast until golden.", "Finish with lemon juice."},
+		Instructions: []Instruction{
+			{Phase: 1, Text: "Prepare the chicken.", Ingredients: []string{"1 whole chicken", "1 lemon, juiced"}},
+			{Phase: 2, Text: "Roast until golden."},
+		},
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 		OriginHash:   "internal-metadata",
@@ -39,6 +42,8 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`"quantity": "1 whole"`,
 		`"price": "$12"`,
 		`"instructions": [`,
+		`"phase": 1`,
+		`"1 lemon, juiced"`,
 		`"Roast until golden."`,
 		`Recipe JSON:`,
 		`Return JSON only using schema_version "recipe-critique-v1".`,
@@ -56,9 +61,10 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
-		"does every mention of an ingredient in the instructions include the exact amount used in that step",
+		"do steps with the same phase contain work that can genuinely happen concurrently",
+		"does every mention of an ingredient in instruction text or nested ingredient lists include the exact amount used in that step",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
-		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+		"does the stated cook_time match the total elapsed time implied by all instruction phases, including prep, resting, passive cooking, and concurrent work",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}

@@ -170,7 +170,7 @@ func testAdminMealPlanRecipe(title, originHash string) ai.Recipe {
 		CookTime:     "30 minutes",
 		CostEstimate: "$10",
 		Ingredients:  []ai.Ingredient{{Name: "Ingredient", Quantity: "1 cup"}},
-		Instructions: []string{"Cook it"},
+		Instructions: ai.LegacyInstructions("Cook it"),
 		Health:       "Fine",
 		DrinkPairing: "Water",
 		OriginHash:   originHash,

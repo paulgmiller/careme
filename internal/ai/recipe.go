@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	openai "github.com/openai/openai-go/v3"
@@ -32,21 +33,94 @@ type Ingredient struct {
 	Price       string `json:"price,omitempty" jsonschema:"-"`
 }
 
+type Instruction struct {
+	Phase       int      `json:"phase" jsonschema:"minimum=1"`
+	Text        string   `json:"text"`
+	Ingredients []string `json:"ingredients"`
+
+	legacy bool
+}
+
+func (i *Instruction) UnmarshalJSON(data []byte) error {
+	var legacyText string
+	if err := json.Unmarshal(data, &legacyText); err == nil {
+		i.Text = legacyText
+		i.legacy = true
+		return nil
+	}
+
+	type instruction Instruction
+	var decoded instruction
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*i = Instruction(decoded)
+	return nil
+}
+
+func (i Instruction) MarshalJSON() ([]byte, error) {
+	if i.legacy {
+		return json.Marshal(i.Text)
+	}
+	type instruction Instruction
+	return json.Marshal(instruction(i))
+}
+
+func (i Instruction) PromptText() string {
+	if len(i.Ingredients) == 0 {
+		return i.Text
+	}
+
+	var prompt strings.Builder
+	prompt.WriteString(i.Text)
+	for _, ingredient := range i.Ingredients {
+		fmt.Fprintf(&prompt, "\n  - %s", ingredient)
+	}
+	return prompt.String()
+}
+
+func LegacyInstructions(texts ...string) []Instruction {
+	instructions := make([]Instruction, 0, len(texts))
+	for index, text := range texts {
+		instructions = append(instructions, Instruction{
+			Phase:  index + 1,
+			Text:   text,
+			legacy: true,
+		})
+	}
+	return instructions
+}
+
 type Recipe struct {
-	Title          string       `json:"title"`
-	Description    string       `json:"description"`
-	CookTime       string       `json:"cook_time"`
-	CostEstimate   string       `json:"cost_estimate"`
-	Ingredients    []Ingredient `json:"ingredients"`
-	Instructions   []string     `json:"instructions"`
-	Health         string       `json:"health"`
-	DrinkPairing   string       `json:"drink_pairing"`
-	WineStyles     []string     `json:"wine_styles"`
-	ResponseID     string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
-	OriginHash     string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
-	ParentHash     string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
-	PromptCacheKey string       `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
+	Title          string        `json:"title"`
+	Description    string        `json:"description"`
+	CookTime       string        `json:"cook_time"`
+	CostEstimate   string        `json:"cost_estimate"`
+	Ingredients    []Ingredient  `json:"ingredients"`
+	Instructions   []Instruction `json:"instructions"`
+	Health         string        `json:"health"`
+	DrinkPairing   string        `json:"drink_pairing"`
+	WineStyles     []string      `json:"wine_styles"`
+	ResponseID     string        `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
+	OriginHash     string        `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash     string        `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
+	PromptCacheKey string        `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
 	// Shove wine selection in here
+}
+
+func (r *Recipe) UnmarshalJSON(data []byte) error {
+	type recipe Recipe
+	var decoded recipe
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = Recipe(decoded)
+	for index := range r.Instructions {
+		if r.Instructions[index].legacy {
+			r.Instructions[index].Phase = index + 1
+		}
+	}
+	return nil
 }
 
 func (r Recipe) ResponseRef() ResponseRef {
@@ -69,7 +143,14 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
 	for _, instr := range r.Instructions {
-		lo.Must(io.WriteString(fnv, instr))
+		lo.Must(io.WriteString(fnv, instr.Text))
+		if instr.legacy {
+			continue
+		}
+		lo.Must(io.WriteString(fnv, strconv.Itoa(instr.Phase)))
+		for _, ingredient := range instr.Ingredients {
+			lo.Must(io.WriteString(fnv, ingredient))
+		}
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
@@ -113,15 +194,19 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
-- instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Every time a step mentions an ingredient, including a pantry ingredient, state the exact amount of that ingredient used in that step. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
+- instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
+  - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
+  - text: state the action clearly. For prep or a mixture involving several ingredients, introduce the work without packing every ingredient into one long sentence.
+  - ingredients: for prep or a mixture involving several ingredients, list each ingredient as a separate concise bullet with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not repeat listed ingredients in text.
+Every time a step uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
 
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
-Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
-Cross-check every ingredient mention in the instructions for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
+Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases; do not simply add the durations of concurrent steps.
+Cross-check every ingredient mention in instruction text and nested ingredient lists for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
 func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
@@ -130,6 +215,9 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
+	if err := validateRecipeInstructions(recipe.Instructions); err != nil {
+		return nil, fmt.Errorf("failed to validate AI response: %w", err)
+	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
@@ -137,6 +225,34 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	recipe.ResponseID = resp.ID
 	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
+}
+
+func validateRecipeInstructions(instructions []Instruction) error {
+	previousPhase := 0
+	for index, instruction := range instructions {
+		if strings.TrimSpace(instruction.Text) == "" {
+			return fmt.Errorf("instruction %d text is required", index+1)
+		}
+		if instruction.Phase < 1 {
+			return fmt.Errorf("instruction %d phase must be positive", index+1)
+		}
+		if index == 0 && instruction.Phase != 1 {
+			return fmt.Errorf("instruction phases must start at 1")
+		}
+		if instruction.Phase < previousPhase {
+			return fmt.Errorf("instruction %d phase must not decrease", index+1)
+		}
+		if instruction.Phase > previousPhase+1 {
+			return fmt.Errorf("instruction %d phase skips phase %d", index+1, previousPhase+1)
+		}
+		for ingredientIndex, ingredient := range instruction.Ingredients {
+			if strings.TrimSpace(ingredient) == "" {
+				return fmt.Errorf("instruction %d ingredient %d is empty", index+1, ingredientIndex+1)
+			}
+		}
+		previousPhase = instruction.Phase
+	}
+	return nil
 }
 
 func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {

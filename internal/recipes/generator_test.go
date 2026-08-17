@@ -862,8 +862,8 @@ func instructionsForAnchor(t *testing.T, calls [][]string, title string) []strin
 
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	generated := []ai.Recipe{
-		{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}, ResponseID: "resp-chicken"},
-		{Title: "Pasta Primavera", Description: "Vegetable pasta", Instructions: []string{"Boil pasta.", "Toss with vegetables."}, ResponseID: "resp-pasta"},
+		{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: ai.LegacyInstructions("Roast the chicken."), ResponseID: "resp-chicken"},
+		{Title: "Pasta Primavera", Description: "Vegetable pasta", Instructions: ai.LegacyInstructions("Boil pasta.", "Toss with vegetables."), ResponseID: "resp-pasta"},
 	}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
@@ -916,7 +916,7 @@ func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *tes
 				{ProductID: "chicken-1", Name: "Chicken thighs", Quantity: "1 lb", Price: "$99.99"},
 				{Name: "Salt", Quantity: "1 tsp"},
 			},
-			Instructions: []string{"Roast the chicken."},
+			Instructions: ai.LegacyInstructions("Roast the chicken."),
 			ResponseID:   "resp-chicken",
 		},
 	}

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -24,7 +25,7 @@ func TestRecipeComputeHash(t *testing.T) {
 			{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.99"},
 			{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "0.99"},
 		},
-		Instructions: []string{"Step 1", "Step 2"},
+		Instructions: LegacyInstructions("Step 1", "Step 2"),
 		Health:       "Healthy",
 		DrinkPairing: "Red Wine",
 	}
@@ -67,6 +68,53 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
+func TestRecipeStructuredInstructionContentChangesHash(t *testing.T) {
+	base := Recipe{Instructions: []Instruction{{
+		Phase:       1,
+		Text:        "Prepare the sauce.",
+		Ingredients: []string{"1 tablespoon olive oil"},
+	}}}
+	differentPhase := Recipe{Instructions: []Instruction{{
+		Phase:       2,
+		Text:        "Prepare the sauce.",
+		Ingredients: []string{"1 tablespoon olive oil"},
+	}}}
+	differentIngredient := Recipe{Instructions: []Instruction{{
+		Phase:       1,
+		Text:        "Prepare the sauce.",
+		Ingredients: []string{"2 tablespoons olive oil"},
+	}}}
+
+	if base.ComputeHash() == differentPhase.ComputeHash() {
+		t.Fatal("phase should contribute to structured recipe hashes")
+	}
+	if base.ComputeHash() == differentIngredient.ComputeHash() {
+		t.Fatal("nested ingredients should contribute to structured recipe hashes")
+	}
+}
+
+func TestRecipeDecodesAndPreservesLegacyInstructions(t *testing.T) {
+	const body = `{"title":"Soup","instructions":["Chop the onion.","Simmer the soup."]}`
+	var recipe Recipe
+	if err := json.Unmarshal([]byte(body), &recipe); err != nil {
+		t.Fatalf("decode legacy recipe: %v", err)
+	}
+	if len(recipe.Instructions) != 2 || recipe.Instructions[0].Phase != 1 || recipe.Instructions[1].Phase != 2 {
+		t.Fatalf("unexpected legacy phases: %+v", recipe.Instructions)
+	}
+	if recipe.Instructions[0].Text != "Chop the onion." {
+		t.Fatalf("unexpected legacy instruction: %+v", recipe.Instructions[0])
+	}
+
+	encoded, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatalf("encode legacy recipe: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"instructions":["Chop the onion.","Simmer the soup."]`) {
+		t.Fatalf("legacy instructions should retain their wire shape: %s", encoded)
+	}
+}
+
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
@@ -95,19 +143,82 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	}
 }
 
+func TestRecipeSchemaUsesStructuredInstructions(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	properties := schemaProperties(t, client.recipeSchema)
+	instructions := schemaObject(t, properties["instructions"])
+	items := schemaObject(t, instructions["items"])
+	instructionProperties := schemaProperties(t, items)
+	required := schemaRequired(t, items)
+
+	for _, field := range []string{"phase", "text", "ingredients"} {
+		if _, ok := instructionProperties[field]; !ok {
+			t.Fatalf("expected instruction schema to contain %q", field)
+		}
+		if !slices.Contains(required, field) {
+			t.Fatalf("expected instruction schema to require %q, got %v", field, required)
+		}
+	}
+	phase := schemaObject(t, instructionProperties["phase"])
+	if phase["minimum"] != float64(1) {
+		t.Fatalf("expected phase minimum 1, got %#v", phase["minimum"])
+	}
+}
+
+func TestValidateRecipeInstructions(t *testing.T) {
+	tests := []struct {
+		name         string
+		instructions []Instruction
+		wantError    string
+	}{
+		{
+			name: "parallel phases",
+			instructions: []Instruction{
+				{Phase: 1, Text: "Prep."},
+				{Phase: 2, Text: "Cook the rice."},
+				{Phase: 2, Text: "Roast the vegetables."},
+				{Phase: 3, Text: "Plate."},
+			},
+		},
+		{name: "phase zero", instructions: []Instruction{{Text: "Prep."}}, wantError: "phase must be positive"},
+		{name: "does not start at one", instructions: []Instruction{{Phase: 2, Text: "Prep."}}, wantError: "must start at 1"},
+		{name: "decreasing", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 2, Text: "Cook."}, {Phase: 1, Text: "Plate."}}, wantError: "must not decrease"},
+		{name: "skipped", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 3, Text: "Cook."}}, wantError: "skips phase 2"},
+		{name: "empty text", instructions: []Instruction{{Phase: 1, Text: "  "}}, wantError: "text is required"},
+		{name: "empty ingredient", instructions: []Instruction{{Phase: 1, Text: "Prep.", Ingredients: []string{" "}}}, wantError: "ingredient 1 is empty"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRecipeInstructions(tt.instructions)
+			if tt.wantError == "" {
+				if err != nil {
+					t.Fatalf("validate instructions: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
+			}
+		})
+	}
+}
+
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
 		"do not rely on prep details from the ingredient list alone",
 		"provide the total elapsed recipe time",
 		"5 to 8 clear steps",
-		"Ensure cook_time reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
+		"Steps with the same phase can be done concurrently.",
+		"list each ingredient as a separate concise bullet with its exact amount and relevant preparation",
+		"Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases",
 		"set id to the exact ProductId",
 		"Set quantity to the total amount needed across the entire recipe",
-		"Every time a step mentions an ingredient, including a pantry ingredient, state the exact amount of that ingredient used in that step.",
+		"Every time a step uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list.",
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
 		`Do not use an unquantified phrase such as "the remaining oil"`,
-		"Cross-check every ingredient mention in the instructions for an exact step-level amount",
+		"Cross-check every ingredient mention in instruction text and nested ingredient lists for an exact step-level amount",
 		"Presalting meat and salting pasta or blanching water season food during cooking.",
 		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
 	} {
@@ -145,7 +256,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[{\"phase\":1,\"text\":\"Prep.\",\"ingredients\":[]}],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],
