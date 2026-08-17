@@ -525,6 +525,17 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
 	}
+	assert.Contains(t, html, `id="recipe-instructions" data-recipe-steps`)
+	assert.Equal(t, len(recipe.Instructions), strings.Count(html, `data-recipe-step>`))
+	assert.Contains(t, html, `<ol class="recipe-step-list mt-3 space-y-2`)
+	assert.Contains(t, html, `data-recipe-step-number>1.</span>`)
+	assert.Contains(t, html, `data-recipe-step-number>2.</span>`)
+	assert.NotContains(t, html, `data-recipe-step-done`)
+	assert.Contains(t, html, `data-recipe-step-undo`)
+	assert.Contains(t, html, `data-recipe-step-reset`)
+	assert.Contains(t, html, `data-recipe-step-message aria-live="polite"`)
+	assert.Contains(t, html, `Swipe or drag a step aside when it’s done.`)
+	assert.Contains(t, html, `initializeRecipeSteps`)
 	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group"[^>]*\sopen>`, html)
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("recipe HTML should no longer use the old wrapped ingredient row layout")
