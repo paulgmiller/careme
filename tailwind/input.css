@@ -259,6 +259,10 @@ https://tailwindcss.com/docs/adding-custom-variants#custom-variants
     letter-spacing: 0.08em !important;
   }
 
+  .recipe-ingredients > ul {
+    display: block !important;
+  }
+
   .printable-recipe li {
     break-inside: avoid;
   }
