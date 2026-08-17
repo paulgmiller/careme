@@ -33,10 +33,8 @@ function initializeRecipeSteps() {
   if (!root) return;
 
   const steps = Array.from(root.querySelectorAll("[data-recipe-step]"));
-  const status = root.querySelector("[data-recipe-step-status]");
-  const message = root.querySelector("[data-recipe-step-message]");
   const undoButton = root.querySelector("[data-recipe-step-undo]");
-  if (!steps.length || !status || !message || !undoButton) return;
+  if (!steps.length || !undoButton) return;
 
   const completedSteps = [];
   const swipeIntentDistance = 10;
@@ -49,16 +47,8 @@ function initializeRecipeSteps() {
     step.style.removeProperty("transform");
   }
 
-  function updateStatus() {
-    const count = completedSteps.length;
-    const allDone = count === steps.length;
-    status.classList.toggle("hidden", count === 0);
-    status.classList.toggle("flex", count > 0);
-    message.textContent = count === 0
-      ? ""
-      : allDone
-        ? "All done, chef!"
-        : `${count} ${count === 1 ? "step" : "steps"} done.`;
+  function updateUndoButton() {
+    undoButton.classList.toggle("hidden", completedSteps.length === 0);
   }
 
   function restoreStep(step) {
@@ -73,14 +63,14 @@ function initializeRecipeSteps() {
     restoreStepStyles(step);
     step.hidden = true;
     completedSteps.push(step);
-    updateStatus();
+    updateUndoButton();
   }
 
   undoButton.addEventListener("click", () => {
     const step = completedSteps.pop();
     if (!step) return;
     restoreStep(step);
-    updateStatus();
+    updateUndoButton();
   });
   steps.forEach((step) => {
     let pointerID = null;
