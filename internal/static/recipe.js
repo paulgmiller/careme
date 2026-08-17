@@ -32,6 +32,9 @@ function initializeRecipeSteps() {
   const root = document.querySelector("[data-recipe-steps]");
   if (!root) return;
 
+  // Keep this small pointer handler local instead of adding a swipe library
+  // such as TinyGesture. Recipe steps only need horizontal dragging, while the
+  // page must preserve normal vertical scrolling and support desktop mice.
   const steps = Array.from(root.querySelectorAll("[data-recipe-step]"));
   const undoButton = root.querySelector("[data-recipe-step-undo]");
   if (!steps.length || !undoButton) return;
@@ -47,30 +50,24 @@ function initializeRecipeSteps() {
     step.style.removeProperty("transform");
   }
 
-  function updateUndoButton() {
-    undoButton.classList.toggle("hidden", completedSteps.length === 0);
-  }
-
   function restoreStep(step) {
     step.hidden = false;
     step.removeAttribute("data-recipe-step-completed");
-    restoreStepStyles(step);
   }
 
   function completeStep(step) {
     if (step.hasAttribute("data-recipe-step-completed")) return;
     step.setAttribute("data-recipe-step-completed", "true");
-    restoreStepStyles(step);
     step.hidden = true;
     completedSteps.push(step);
-    updateUndoButton();
+    undoButton.classList.remove("hidden");
   }
 
   undoButton.addEventListener("click", () => {
     const step = completedSteps.pop();
     if (!step) return;
     restoreStep(step);
-    updateUndoButton();
+    undoButton.classList.toggle("hidden", completedSteps.length === 0);
   });
   steps.forEach((step) => {
     let pointerID = null;
@@ -83,6 +80,7 @@ function initializeRecipeSteps() {
       pointerID = null;
       offsetX = 0;
       isHorizontal = false;
+      // Inline drag styles must be cleared before a step snaps back or is hidden.
       restoreStepStyles(step);
     }
 
@@ -103,6 +101,7 @@ function initializeRecipeSteps() {
 
       if (!isHorizontal) {
         if (Math.abs(deltaX) < swipeIntentDistance && Math.abs(deltaY) < swipeIntentDistance) return;
+        // A vertical-first gesture belongs to page scrolling, not step dismissal.
         if (Math.abs(deltaY) >= Math.abs(deltaX)) {
           resetSwipe();
           return;
