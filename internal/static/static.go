@@ -87,9 +87,11 @@ func Register(mux routing.Registrar) {
 		}
 	})
 
+	// TODO: Revisit content-hashed URLs for first-party JavaScript when asset
+	// paths can be wired into templates without expanding template initialization.
 	mux.HandleFunc("/static/share.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 		if _, err := w.Write(shareJS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write share js", "error", err)
 		}
@@ -97,7 +99,7 @@ func Register(mux routing.Registrar) {
 
 	mux.HandleFunc("/static/recipe.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 		if _, err := w.Write(recipeJS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write recipe js", "error", err)
 		}

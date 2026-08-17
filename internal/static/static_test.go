@@ -133,7 +133,7 @@ func TestRegisterServesShareJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("share js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("share js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "navigator.share") {
@@ -156,7 +156,7 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("recipe js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("recipe js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
