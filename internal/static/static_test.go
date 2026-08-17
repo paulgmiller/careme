@@ -133,11 +133,34 @@ func TestRegisterServesShareJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("share js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Fatalf("share js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "navigator.share") {
 		t.Fatal("share js response should include Web Share logic")
+	}
+}
+
+func TestRegisterServesRecipeJS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/recipe.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("recipe js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("recipe js content type = %q, want application/javascript; charset=utf-8", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("recipe js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
+		t.Fatal("recipe js response should include recipe step interaction logic")
 	}
 }
 
