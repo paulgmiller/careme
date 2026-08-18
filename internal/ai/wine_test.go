@@ -55,7 +55,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
 		InstructionsV2: []Instruction{
-			{Phase: 1, Text: "Season the chicken.", Ingredients: []string{"1 whole chicken", "1 teaspoon kosher salt"}},
+			{Phase: 1, Text: "Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt"},
 			{Phase: 2, Text: "Roast until golden."},
 		},
 		Health:       "Balanced dinner",
@@ -78,7 +78,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "Existing drink pairing note: Pinot Noir") {
 		t.Fatalf("expected pairing hints in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "- Season the chicken.\n  - 1 whole chicken\n  - 1 teaspoon kosher salt\n- Roast until golden.\n") {
+	if !strings.Contains(prompt, "- Season:\n  \n  - 1 whole chicken\n  - 1 teaspoon kosher salt\n- Roast until golden.\n") {
 		t.Fatalf("expected instructions replay in prompt: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Candidate wines TSV:\nProductId\tBrand\tDescription\tSize\tPriceRegular\tPriceSale\npinot-noir-1\t\tPinot Noir\t750mL\t13.99\t13.99\n") {

@@ -68,31 +68,28 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
-func TestRecipeStructuredInstructionHashUsesFlattenedContent(t *testing.T) {
+func TestRecipeStructuredInstructionHashUsesText(t *testing.T) {
 	base := Recipe{InstructionsV2: []Instruction{{
-		Phase:       1,
-		Text:        "Prepare the sauce.",
-		Ingredients: []string{"1 tablespoon olive oil"},
+		Phase: 1,
+		Text:  "Prepare the sauce:\n\n- 1 tablespoon olive oil",
 	}}}
 	differentPhase := Recipe{InstructionsV2: []Instruction{{
-		Phase:       2,
-		Text:        "Prepare the sauce.",
-		Ingredients: []string{"1 tablespoon olive oil"},
+		Phase: 2,
+		Text:  "Prepare the sauce:\n\n- 1 tablespoon olive oil",
 	}}}
-	differentIngredient := Recipe{InstructionsV2: []Instruction{{
-		Phase:       1,
-		Text:        "Prepare the sauce.",
-		Ingredients: []string{"2 tablespoons olive oil"},
+	differentText := Recipe{InstructionsV2: []Instruction{{
+		Phase: 1,
+		Text:  "Prepare the sauce:\n\n- 2 tablespoons olive oil",
 	}}}
 
 	if base.ComputeHash() != differentPhase.ComputeHash() {
 		t.Fatal("phase-only changes should not change recipe hashes")
 	}
-	if base.ComputeHash() == differentIngredient.ComputeHash() {
-		t.Fatal("nested ingredients should contribute to structured recipe hashes")
+	if base.ComputeHash() == differentText.ComputeHash() {
+		t.Fatal("instruction Markdown should contribute to structured recipe hashes")
 	}
 
-	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].flattenedText()}}
+	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].Text}}
 	if base.ComputeHash() != legacy.ComputeHash() {
 		t.Fatal("structured and flattened legacy instructions should produce the same hash")
 	}
@@ -140,9 +137,8 @@ func TestRecipeStructuredInstructionsPanicsWhenBothVersionsAreSet(t *testing.T) 
 
 func TestRecipeSerializesOnlyV2Instructions(t *testing.T) {
 	recipe := Recipe{InstructionsV2: []Instruction{{
-		Phase:       1,
-		Text:        "Prepare the vegetables:",
-		Ingredients: []string{"1 pepper, diced", "2 onions, sliced", "3 garlic cloves, minced"},
+		Phase: 1,
+		Text:  "Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced",
 	}}}
 	encoded, err := json.Marshal(recipe)
 	if err != nil {
@@ -151,7 +147,7 @@ func TestRecipeSerializesOnlyV2Instructions(t *testing.T) {
 	if strings.Contains(string(encoded), `"instructions":`) {
 		t.Fatalf("structured recipe JSON should omit legacy instructions: %s", encoded)
 	}
-	want := `"instructionsv2":[{"phase":1,"text":"Prepare the vegetables:","ingredients":["1 pepper, diced","2 onions, sliced","3 garlic cloves, minced"]}]`
+	want := `"instructionsv2":[{"phase":1,"text":"Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced"}]`
 	if !strings.Contains(string(encoded), want) {
 		t.Fatalf("structured recipe JSON should contain %s: %s", want, encoded)
 	}
@@ -196,13 +192,16 @@ func TestRecipeSchemaUsesStructuredInstructions(t *testing.T) {
 	instructionProperties := schemaProperties(t, items)
 	required := schemaRequired(t, items)
 
-	for _, field := range []string{"phase", "text", "ingredients"} {
+	for _, field := range []string{"phase", "text"} {
 		if _, ok := instructionProperties[field]; !ok {
 			t.Fatalf("expected instruction schema to contain %q", field)
 		}
 		if !slices.Contains(required, field) {
 			t.Fatalf("expected instruction schema to require %q, got %v", field, required)
 		}
+	}
+	if _, ok := instructionProperties["ingredients"]; ok {
+		t.Fatal("instruction schema should keep lists inside text Markdown")
 	}
 	phase := schemaObject(t, instructionProperties["phase"])
 	if phase["minimum"] != float64(1) {
@@ -231,7 +230,6 @@ func TestValidateRecipeInstructions(t *testing.T) {
 		{name: "decreasing", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 2, Text: "Cook."}, {Phase: 1, Text: "Plate."}}, wantError: "must not decrease"},
 		{name: "skipped", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 3, Text: "Cook."}}, wantError: "skips phase 2"},
 		{name: "empty text", instructions: []Instruction{{Phase: 1, Text: "  "}}, wantError: "text is required"},
-		{name: "empty ingredient", instructions: []Instruction{{Phase: 1, Text: "Prep.", Ingredients: []string{" "}}}, wantError: "ingredient 1 is empty"},
 	}
 
 	for _, tt := range tests {
@@ -252,7 +250,7 @@ func TestValidateRecipeInstructions(t *testing.T) {
 
 func TestInstructionRejectsNegativePhaseDuringDecoding(t *testing.T) {
 	var instruction Instruction
-	err := json.Unmarshal([]byte(`{"phase":-1,"text":"Prep.","ingredients":[]}`), &instruction)
+	err := json.Unmarshal([]byte(`{"phase":-1,"text":"Prep."}`), &instruction)
 	if err == nil {
 		t.Fatal("negative phase should not decode into an unsigned phase")
 	}
@@ -264,21 +262,24 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"do not rely on prep details from the ingredient list alone",
 		"Legacy instructions are read-only compatibility data; return only instructionsv2.",
 		"provide the total elapsed recipe time",
-		"5 to 8 clear steps",
-		"Each step should cover one coherent task or component.",
-		"Keep immediate actions on the same ingredient together, such as patting shrimp dry and seasoning it.",
+		"use as many clear steps as the work requires",
+		"Each step should cover one coherent task or component whose actions are naturally done together.",
+		"Do not combine unrelated work to limit the number of steps.",
+		"Keep immediate actions on the same ingredient in the same step.",
 		"if they can happen concurrently, give those separate steps the same phase instead of combining them",
 		"Steps with the same phase can be done concurrently.",
-		"use this nested list only when the cook must measure, prepare, or combine at least three distinct ingredients in this step",
-		"Do not use a nested list for ordinary cooking actions, resting, serving, plating, a single primary ingredient",
+		"place a \"- \" bullet list at the point those ingredients enter the action",
+		"continue with prose after the list when the action continues",
+		"Do not use lists for cooking, resting, serving, plating, one primary ingredient",
+		"Do not use HTML or other Markdown.",
 		"later steps should refer to that component by name without restating its ingredients or their amounts",
 		"Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases",
 		"set id to the exact ProductId",
 		"Set quantity to the total amount needed across the entire recipe",
-		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list.",
+		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet.",
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
 		`Do not use an unquantified phrase such as "the remaining oil"`,
-		"Cross-check every ingredient mention in instruction text and nested ingredient lists for an exact step-level amount",
+		"Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount",
 		"Presalting meat and salting pasta or blanching water season food during cooking.",
 		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
 	} {
@@ -316,7 +317,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructionsv2\":[{\"phase\":1,\"text\":\"Prep.\",\"ingredients\":[]}],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructionsv2\":[{\"phase\":1,\"text\":\"Prep.\"}],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],

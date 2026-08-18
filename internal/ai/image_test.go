@@ -15,9 +15,8 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 		Description: "Crisp skin and herbs.",
 		Ingredients: []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
 		InstructionsV2: []Instruction{{
-			Phase:       1,
-			Text:        "Season the chicken.",
-			Ingredients: []string{"1 whole chicken", "1 teaspoon kosher salt"},
+			Phase: 1,
+			Text:  "Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt",
 		}},
 	}
 
@@ -28,7 +27,7 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	if !strings.Contains(prompt, "realistic overhead food photograph") {
 		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Season the chicken.\n  - 1 whole chicken\n  - 1 teaspoon kosher salt\n") {
+	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Season:\n  \n  - 1 whole chicken\n  - 1 teaspoon kosher salt\n") {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
 }

@@ -139,7 +139,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 }
 
-func TestRecipeViewsRenderNestedInstructionIngredients(t *testing.T) {
+func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	recipe := ai.Recipe{
@@ -147,11 +147,7 @@ func TestRecipeViewsRenderNestedInstructionIngredients(t *testing.T) {
 		Description: "A quick pasta dinner.",
 		InstructionsV2: []ai.Instruction{{
 			Phase: 1,
-			Text:  "Prepare the vegetables:",
-			Ingredients: []string{
-				"1 green bell pepper, diced",
-				"4 ounces sweet onion, diced",
-			},
+			Text:  "Prepare:\n\n- 1 green bell pepper, diced\n- 4 ounces sweet onion, diced\n\nthen toss with the pasta.",
 		}},
 	}
 
@@ -160,7 +156,7 @@ func TestRecipeViewsRenderNestedInstructionIngredients(t *testing.T) {
 		FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, nil, feedback.Feedback{}, nil, w)
 		html := assertHTTPSuccess(t, w)
 		isValidHTML(t, html)
-		assertNestedInstructionIngredients(t, html)
+		assertInstructionMarkdown(t, html)
 	})
 
 	t.Run("shopping list", func(t *testing.T) {
@@ -168,17 +164,18 @@ func TestRecipeViewsRenderNestedInstructionIngredients(t *testing.T) {
 		formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, true, recipeSelection{}, w)
 		html := assertHTTPSuccess(t, w)
 		isValidHTML(t, html)
-		assertNestedInstructionIngredients(t, html)
+		assertInstructionMarkdown(t, html)
 	})
 }
 
-func assertNestedInstructionIngredients(t *testing.T, html string) {
+func assertInstructionMarkdown(t *testing.T, html string) {
 	t.Helper()
 	for _, want := range []string{
-		"Prepare the vegetables:",
+		"<p>Prepare:</p>",
+		"<ul><li>1 green bell pepper, diced</li>",
 		"1 green bell pepper, diced",
 		"4 ounces sweet onion, diced",
-		`list-disc`,
+		"</ul><p>then toss with the pasta.</p>",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("recipe instructions should contain %q: %s", want, html)

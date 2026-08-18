@@ -31,7 +31,8 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do the instructions begin with preparation before active cooking starts
 - does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate same-phase steps when it can happen concurrently
 - do steps with the same phase contain work that can genuinely happen concurrently, and do later phases wait for all work they require
-- when an ingredient is first used, does instruction text or its nested ingredient list include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- are bullet lists limited to preparations or mixtures of more than three ingredients and placed where those ingredients enter the action
 - do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate

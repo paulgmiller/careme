@@ -284,14 +284,7 @@
         <ol class="mt-3 list-decimal space-y-2 pl-5 text-ink-700">
           {{range .StructuredInstructions}}
           <li>
-            <p>{{.Text}}</p>
-            {{if .Ingredients}}
-            <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-ink-600">
-              {{range .Ingredients}}
-              <li>{{.}}</li>
-              {{end}}
-            </ul>
-            {{end}}
+            <div class="space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-ink-600">{{InstructionMarkdown .Text}}</div>
           </li>
           {{end}}
         </ol>

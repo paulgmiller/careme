@@ -135,16 +135,7 @@
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
                     <div class="flex items-start gap-3">
                       <span class="w-5 shrink-0 text-right" data-recipe-step-number>{{InstructionNumber $index}}.</span>
-                      <div class="min-w-0 flex-1">
-                        <p>{{$instruction.Text}}</p>
-                        {{if $instruction.Ingredients}}
-                        <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-600">
-                          {{range $instruction.Ingredients}}
-                          <li>{{.}}</li>
-                          {{end}}
-                        </ul>
-                        {{end}}
-                      </div>
+                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{InstructionMarkdown $instruction.Text}}</div>
                     </div>
                   </li>
                   {{end}}

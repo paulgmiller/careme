@@ -33,30 +33,13 @@ type Ingredient struct {
 }
 
 type Instruction struct {
-	Phase       uint     `json:"phase" jsonschema:"minimum=1"`
-	Text        string   `json:"text"`
-	Ingredients []string `json:"ingredients"`
+	Phase uint   `json:"phase" jsonschema:"minimum=1"`
+	Text  string `json:"text"`
 }
 
+// Description for wine and image. Doesn't include phase
 func (i Instruction) PromptText() string {
-	if len(i.Ingredients) == 0 {
-		return i.Text
-	}
-
-	var prompt strings.Builder
-	prompt.WriteString(i.Text)
-	for _, ingredient := range i.Ingredients {
-		fmt.Fprintf(&prompt, "\n  - %s", ingredient)
-	}
-	return prompt.String()
-}
-
-// only used for back compat in computehash
-func (i Instruction) flattenedText() string {
-	if len(i.Ingredients) == 0 {
-		return i.Text
-	}
-	return strings.TrimSpace(i.Text) + " " + strings.Join(i.Ingredients, "; ")
+	return strings.ReplaceAll(i.Text, "\n", "\n  ")
 }
 
 func SequentialInstructions(texts ...string) []Instruction {
@@ -122,7 +105,7 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
 	for _, instruction := range r.StructuredInstructions() {
-		lo.Must(io.WriteString(fnv, instruction.flattenedText()))
+		lo.Must(io.WriteString(fnv, instruction.Text))
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
@@ -166,11 +149,10 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
-- instructionsv2: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component. Keep immediate actions on the same ingredient together, such as patting shrimp dry and seasoning it. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. Legacy instructions are read-only compatibility data; return only instructionsv2.
+- instructionsv2: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. Legacy instructions are read-only compatibility data; return only instructionsv2.
   - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
-  - text: state the action clearly. For prep or a mixture that qualifies for an ingredients list, introduce the work without packing every ingredient into one long sentence.
-  - ingredients: use this nested list only when the cook must measure, prepare, or combine at least three distinct ingredients in this step and moving them out of the prose makes the action materially easier to scan. List each with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not use a nested list for ordinary cooking actions, resting, serving, plating, a single primary ingredient, or to restate ingredients or prepared components already established by an earlier step. Do not repeat listed ingredients in text.
-Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in either the step text or that step's ingredients list. Once quantified ingredients have been made into a named mixture or prepared component, later steps should refer to that component by name without restating its ingredients or their amounts. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
+  - text: state the complete action using plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
+Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet. Once quantified ingredients have been made into a named mixture or prepared component, later steps should refer to that component by name without restating its ingredients or their amounts. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
 - wine_styles: at most two searchable consumer wine styles, such as "Pinot Noir" or "Sauvignon Blanc"; no regions, parenthetical notes, commas, "or", or "*-style blend" phrasing.
@@ -178,7 +160,7 @@ Every time a step first uses an ingredient, including a pantry ingredient, state
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
 Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases; do not simply add the durations of concurrent steps.
-Cross-check every ingredient mention in instruction text and nested ingredient lists for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
+Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
 func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
@@ -219,11 +201,6 @@ func validateRecipeInstructions(instructions []Instruction) error {
 		}
 		if instruction.Phase > previousPhase+1 {
 			return fmt.Errorf("instruction %d phase skips phase %d", index+1, previousPhase+1)
-		}
-		for ingredientIndex, ingredient := range instruction.Ingredients {
-			if strings.TrimSpace(ingredient) == "" {
-				return fmt.Errorf("instruction %d ingredient %d is empty", index+1, ingredientIndex+1)
-			}
 		}
 		previousPhase = instruction.Phase
 	}
