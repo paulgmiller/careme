@@ -127,22 +127,33 @@
                   {{end}}
                 </ul>
               </details>
-              <div>
+              <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                <ol class="mt-3 list-decimal space-y-2 pl-5 text-gray-700">
-                  {{range .Recipe.StructuredInstructions}}
-                  <li>
-                    <p>{{.Text}}</p>
-                    {{if .Ingredients}}
-                    <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-600">
-                      {{range .Ingredients}}
-                      <li>{{.}}</li>
-                      {{end}}
-                    </ul>
-                    {{end}}
+                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done. ↔</p>
+                <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
+                  {{range $index, $instruction := .Recipe.StructuredInstructions}}
+                  <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
+                    <div class="flex items-start gap-3">
+                      <span class="w-5 shrink-0 text-right" data-recipe-step-number>{{InstructionNumber $index}}.</span>
+                      <div class="min-w-0 flex-1">
+                        <p>{{$instruction.Text}}</p>
+                        {{if $instruction.Ingredients}}
+                        <ul class="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-600">
+                          {{range $instruction.Ingredients}}
+                          <li>{{.}}</li>
+                          {{end}}
+                        </ul>
+                        {{end}}
+                      </div>
+                    </div>
                   </li>
                   {{end}}
                 </ol>
+                <button type="button"
+                        class="print-hidden mt-3 hidden text-sm font-semibold text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+                        data-recipe-step-undo>
+                  Undo
+                </button>
               </div>
             </div>
 
@@ -281,39 +292,7 @@
       </div>
     </section>
   </main>
-  <script>
-    function renderStars(selectedStars) {
-      const selected = Number(selectedStars) || 0;
-      const buttons = document.querySelectorAll('#star-rating [data-star]');
-      buttons.forEach((button) => {
-        const value = Number(button.dataset.star || 0);
-        const filled = value <= selected;
-        button.textContent = filled ? '★' : '☆';
-        button.classList.toggle('text-amber-500', filled);
-        button.classList.toggle('text-gray-300', !filled);
-      });
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-      const rating = document.getElementById('star-rating');
-      const input = document.getElementById('stars-input');
-      if (!rating || !input) return;
-
-      const initial = Number(rating.dataset.initialStars || input.value || 0);
-      if (initial > 0) {
-        input.value = String(initial);
-      }
-      renderStars(initial);
-
-      rating.querySelectorAll('[data-star]').forEach((button) => {
-        button.addEventListener('click', function () {
-          const stars = Number(button.dataset.star || 0);
-          input.value = stars > 0 ? String(stars) : '';
-          renderStars(stars);
-        });
-      });
-    });
-  </script>
+  <script src="/static/recipe.js"></script>
   <script src="/static/htmx@2.0.8.js"></script>
   <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}
