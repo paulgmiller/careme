@@ -72,7 +72,7 @@ var list = ai.ShoppingList{
 				EstimatedCostDollars: 21,
 				CaloriesPerServing:   540,
 				CookingMethods:       []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven, ai.CookingMethodOther},
-				HealthNote:           "Brown rice adds fiber but takes longer to cook.",
+				HealthNote:           "Legacy structured health note should stay hidden",
 				SpecialEquipment:     "Food processor",
 			},
 			Ingredients: []ai.Ingredient{
@@ -83,7 +83,7 @@ var list = ai.ShoppingList{
 				"Step 1: Do something.",
 				"Step 2: Do something else.",
 			},
-			Health:       "Legacy health prose should stay hidden",
+			Health:       "Brown rice adds fiber but takes longer to cook.",
 			DrinkPairing: "Water",
 		},
 	},
@@ -101,7 +101,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 	assert.NotContains(t, html, "Special equipment:")
 	assert.NotContains(t, html, "Food processor")
-	assert.NotContains(t, html, "Legacy health prose should stay hidden")
+	assert.NotContains(t, html, "Legacy structured health note should stay hidden")
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
@@ -593,7 +593,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	}
 	assert.NotContains(t, html, "Special equipment:")
 	assert.NotContains(t, html, "Food processor")
-	assert.NotContains(t, html, "Legacy health prose should stay hidden")
+	assert.NotContains(t, html, "Legacy structured health note should stay hidden")
 	propertyIndex := strings.Index(html, `aria-label="Recipe details"`)
 	ingredientsIndex := strings.Index(html, `id="recipe-ingredients"`)
 	assert.NotEqual(t, -1, propertyIndex)
@@ -831,7 +831,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 			{Name: "Little gem lettuce", Quantity: "2 heads", Price: ""},
 		},
 		Instructions: []string{"Wash and plate."},
-		Health:       "Light",
+		Health:       "",
 		DrinkPairing: "Sparkling water",
 		ResponseID:   "resp-123",
 	}

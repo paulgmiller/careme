@@ -174,7 +174,8 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 	assert.Contains(t, properties, "properties")
 	assert.NotContains(t, properties, "cook_time")
 	assert.NotContains(t, properties, "cost_estimate")
-	assert.NotContains(t, properties, "health")
+	assert.Contains(t, properties, "health")
+	assert.Contains(t, schemaRequired(t, client.recipeSchema), "health")
 
 	recipeProperties := schemaObject(t, properties["properties"])
 	fields := schemaProperties(t, recipeProperties)
@@ -184,11 +185,11 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 		"estimated_cost_dollars",
 		"calories_per_serving",
 		"cooking_methods",
-		"health_note",
 	} {
 		assert.Contains(t, fields, name)
 		assert.Contains(t, schemaRequired(t, recipeProperties), name)
 	}
+	assert.NotContains(t, fields, "health_note")
 	assert.NotContains(t, fields, "special_equipment")
 	for _, name := range []string{"total_minutes", "servings", "estimated_cost_dollars", "calories_per_serving"} {
 		field := schemaObject(t, fields[name])
@@ -228,7 +229,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other",
 		"Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide.",
 		"Never recommend microwave cooking.",
-		"properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
+		"health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
 		"otherwise return an empty string",
 		"Do not imply that gluten-free food is inherently healthier.",
 		"use as many clear steps as the work requires",
@@ -296,7 +297,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"],\"health_note\":\"\"},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"]},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],

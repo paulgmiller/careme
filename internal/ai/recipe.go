@@ -67,7 +67,7 @@ type RecipeProperties struct {
 	EstimatedCostDollars int             `json:"estimated_cost_dollars" jsonschema:"minimum=1"`
 	CaloriesPerServing   int             `json:"calories_per_serving" jsonschema:"minimum=1"`
 	CookingMethods       []CookingMethod `json:"cooking_methods" jsonschema:"minItems=1"`
-	HealthNote           string          `json:"health_note"`
+	HealthNote           string          `json:"health_note,omitempty" jsonschema:"-"`       // legacy cached recipe field
 	SpecialEquipment     string          `json:"special_equipment,omitempty" jsonschema:"-"` // legacy cached recipe field
 }
 
@@ -79,7 +79,7 @@ type Recipe struct {
 	CostEstimate   string           `json:"cost_estimate,omitempty" jsonschema:"-"` // legacy cached recipe field
 	Ingredients    []Ingredient     `json:"ingredients"`
 	Instructions   []string         `json:"instructions"`
-	Health         string           `json:"health,omitempty" jsonschema:"-"` // legacy cached recipe field
+	Health         string           `json:"health"`
 	DrinkPairing   string           `json:"drink_pairing"`
 	WineStyles     []string         `json:"wine_styles"`
 	ResponseID     string           `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
@@ -178,7 +178,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - properties.estimated_cost_dollars: provide one integer estimate of the total recipe cost in US dollars, rounded to the nearest dollar. Use only prices from the input and do not add costs for unpriced ingredients.
 - properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving.
 - properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other. Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide. Do not include no_cook with another method.
-- properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
+- health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps.
   Each instruction may use plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Put a blank line before the first bullet and after the final bullet so surrounding prose stays outside the list. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
@@ -201,6 +201,7 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	recipe.Properties.CookingMethods = normalizeCookingMethods(recipe.Properties.CookingMethods)
+	recipe.Health = strings.TrimSpace(recipe.Health)
 	recipe.Properties.HealthNote = strings.TrimSpace(recipe.Properties.HealthNote)
 	recipe.Properties.SpecialEquipment = strings.TrimSpace(recipe.Properties.SpecialEquipment)
 	if strings.TrimSpace(resp.ID) == "" {

@@ -42,7 +42,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
 - does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - do properties.cooking_methods match the instructions, exclude microwave cooking, avoid combining no_cook with another method, and use other only for a method outside the named choices
-- is properties.health_note empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
+- is health empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 

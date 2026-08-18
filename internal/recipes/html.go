@@ -44,7 +44,7 @@ type recipePropertyDisplay struct {
 	Cost           string
 	Calories       string
 	CookingMethods []cookingMethodDisplay
-	HealthNote     string
+	Health         string
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -380,7 +380,7 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 		Cost:           costDisplay,
 		Calories:       caloriesDisplay,
 		CookingMethods: methods,
-		HealthNote:     strings.TrimSpace(recipe.Properties.HealthNote),
+		Health:         strings.TrimSpace(recipe.Health),
 	}
 }
 
