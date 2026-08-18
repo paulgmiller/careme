@@ -24,7 +24,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		Instructions: []Instruction{
+		InstructionsV2: []Instruction{
 			{Phase: 1, Text: "Prepare the chicken.", Ingredients: []string{"1 whole chicken", "1 lemon, juiced"}},
 			{Phase: 2, Text: "Roast until golden."},
 		},
@@ -41,7 +41,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`"name": "Chicken"`,
 		`"quantity": "1 whole"`,
 		`"price": "$12"`,
-		`"instructions": [`,
+		`"instructionsv2": [`,
 		`"phase": 1`,
 		`"1 lemon, juiced"`,
 		`"Roast until golden."`,
@@ -61,6 +61,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
+		"does each step cover one coherent task or component, keeping immediate actions on the same ingredient together",
 		"do steps with the same phase contain work that can genuinely happen concurrently",
 		"when an ingredient is first used, does instruction text or its nested ingredient list include the exact amount used in that step",
 		"do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts",

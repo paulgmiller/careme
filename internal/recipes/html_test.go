@@ -145,7 +145,7 @@ func TestRecipeViewsRenderNestedInstructionIngredients(t *testing.T) {
 	recipe := ai.Recipe{
 		Title:       "Pepper Pasta",
 		Description: "A quick pasta dinner.",
-		Instructions: []ai.Instruction{{
+		InstructionsV2: []ai.Instruction{{
 			Phase: 1,
 			Text:  "Prepare the vegetables:",
 			Ingredients: []string{

@@ -66,7 +66,7 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
 	fmt.Fprintf(&promptBuilder, "Instructions:\n")
-	for _, ins := range recipe.Instructions {
+	for _, ins := range recipe.StructuredInstructions() {
 		fmt.Fprintf(&promptBuilder, "- %s\n", ins.PromptText())
 	}
 	fmt.Fprintf(&promptBuilder, "Existing drink pairing note: %s\n", recipe.DrinkPairing)

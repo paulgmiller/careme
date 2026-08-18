@@ -29,6 +29,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - is it realistic to cook as written
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
+- does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate same-phase steps when it can happen concurrently
 - do steps with the same phase contain work that can genuinely happen concurrently, and do later phases wait for all work they require
 - when an ingredient is first used, does instruction text or its nested ingredient list include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
 - do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
@@ -203,6 +204,9 @@ func parseRecipeCritique(body string) (*RecipeCritique, error) {
 func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 	payload := recipe
 	payload.OriginHash = ""
+	if len(payload.InstructionsV2) > 0 {
+		payload.Instructions = nil
+	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)

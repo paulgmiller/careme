@@ -54,7 +54,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		Instructions: []Instruction{
+		InstructionsV2: []Instruction{
 			{Phase: 1, Text: "Season the chicken.", Ingredients: []string{"1 whole chicken", "1 teaspoon kosher salt"}},
 			{Phase: 2, Text: "Roast until golden."},
 		},

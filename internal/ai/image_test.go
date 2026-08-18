@@ -14,7 +14,7 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 		Title:       "Roast Chicken",
 		Description: "Crisp skin and herbs.",
 		Ingredients: []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
-		Instructions: []Instruction{{
+		InstructionsV2: []Instruction{{
 			Phase:       1,
 			Text:        "Season the chicken.",
 			Ingredients: []string{"1 whole chicken", "1 teaspoon kosher salt"},

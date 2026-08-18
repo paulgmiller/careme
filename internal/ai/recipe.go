@@ -37,33 +37,6 @@ type Instruction struct {
 	Phase       int      `json:"phase" jsonschema:"minimum=1"`
 	Text        string   `json:"text"`
 	Ingredients []string `json:"ingredients"`
-
-	legacy bool
-}
-
-func (i *Instruction) UnmarshalJSON(data []byte) error {
-	var legacyText string
-	if err := json.Unmarshal(data, &legacyText); err == nil {
-		i.Text = legacyText
-		i.legacy = true
-		return nil
-	}
-
-	type instruction Instruction
-	var decoded instruction
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	*i = Instruction(decoded)
-	return nil
-}
-
-func (i Instruction) MarshalJSON() ([]byte, error) {
-	if i.legacy {
-		return json.Marshal(i.Text)
-	}
-	type instruction Instruction
-	return json.Marshal(instruction(i))
 }
 
 func (i Instruction) PromptText() string {
@@ -79,16 +52,16 @@ func (i Instruction) PromptText() string {
 	return prompt.String()
 }
 
-func LegacyInstructions(texts ...string) []Instruction {
-	instructions := make([]Instruction, 0, len(texts))
-	for index, text := range texts {
-		instructions = append(instructions, Instruction{
-			Phase:  index + 1,
-			Text:   text,
-			legacy: true,
-		})
+func (i Instruction) LegacyText() string {
+	text := strings.TrimSpace(i.Text)
+	if len(i.Ingredients) == 0 {
+		return text
 	}
-	return instructions
+	return text + " " + strings.Join(i.Ingredients, "; ")
+}
+
+func LegacyInstructions(texts ...string) []string {
+	return texts
 }
 
 type Recipe struct {
@@ -97,7 +70,8 @@ type Recipe struct {
 	CookTime       string        `json:"cook_time"`
 	CostEstimate   string        `json:"cost_estimate"`
 	Ingredients    []Ingredient  `json:"ingredients"`
-	Instructions   []Instruction `json:"instructions"`
+	Instructions   []string      `json:"instructions,omitempty" jsonschema:"-"`
+	InstructionsV2 []Instruction `json:"instructionsv2,omitempty" jsonschema:"required"`
 	Health         string        `json:"health"`
 	DrinkPairing   string        `json:"drink_pairing"`
 	WineStyles     []string      `json:"wine_styles"`
@@ -109,22 +83,63 @@ type Recipe struct {
 }
 
 func (r *Recipe) UnmarshalJSON(data []byte) error {
-	// Rollback note: binaries from before structured instructions expect instructions to be []string
-	// and cannot decode object-form recipe/ or shoppinglist/ cache records. Before rolling back,
-	// backport a decoder that flattens each object's Text and Ingredients into one string (discarding
-	// Phase), or rewrite affected cache records to the legacy string-array shape.
+	// Transitional builds wrote structured objects directly to instructions. Keep accepting that
+	// short-lived format so those recipe/ and shoppinglist/ cache records can be recovered. Resaving
+	// them writes rollback-safe strings to instructions and the structured data to instructionsv2;
+	// rewrite any affected records with this version before rolling back to an older binary.
 	type recipe Recipe
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	instructionsJSON := fields["instructions"]
+	delete(fields, "instructions")
+	remaining, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
 	var decoded recipe
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := json.Unmarshal(remaining, &decoded); err != nil {
 		return err
 	}
 	*r = Recipe(decoded)
-	for index := range r.Instructions {
-		if r.Instructions[index].legacy {
-			r.Instructions[index].Phase = index + 1
+
+	if len(instructionsJSON) > 0 {
+		if err := json.Unmarshal(instructionsJSON, &r.Instructions); err != nil {
+			r.Instructions = nil
+			var transitional []Instruction
+			if err := json.Unmarshal(instructionsJSON, &transitional); err != nil {
+				return err
+			}
+			if len(r.InstructionsV2) == 0 {
+				r.InstructionsV2 = transitional
+			}
 		}
 	}
+	if len(r.Instructions) == 0 && len(r.InstructionsV2) > 0 {
+		r.Instructions = flattenInstructions(r.InstructionsV2)
+	}
 	return nil
+}
+
+func (r Recipe) StructuredInstructions() []Instruction {
+	if len(r.InstructionsV2) > 0 {
+		return r.InstructionsV2
+	}
+
+	instructions := make([]Instruction, 0, len(r.Instructions))
+	for index, text := range r.Instructions {
+		instructions = append(instructions, Instruction{Phase: index + 1, Text: text})
+	}
+	return instructions
+}
+
+func flattenInstructions(instructions []Instruction) []string {
+	flattened := make([]string, 0, len(instructions))
+	for _, instruction := range instructions {
+		flattened = append(flattened, instruction.LegacyText())
+	}
+	return flattened
 }
 
 func (r Recipe) ResponseRef() ResponseRef {
@@ -146,14 +161,17 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Quantity))
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
-	for _, instr := range r.Instructions {
-		lo.Must(io.WriteString(fnv, instr.Text))
-		if instr.legacy {
-			continue
+	if len(r.InstructionsV2) == 0 {
+		for _, instruction := range r.Instructions {
+			lo.Must(io.WriteString(fnv, instruction))
 		}
-		lo.Must(io.WriteString(fnv, strconv.Itoa(instr.Phase)))
-		for _, ingredient := range instr.Ingredients {
-			lo.Must(io.WriteString(fnv, ingredient))
+	} else {
+		for _, instruction := range r.InstructionsV2 {
+			lo.Must(io.WriteString(fnv, instruction.Text))
+			lo.Must(io.WriteString(fnv, strconv.Itoa(instruction.Phase)))
+			for _, ingredient := range instruction.Ingredients {
+				lo.Must(io.WriteString(fnv, ingredient))
+			}
 		}
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
@@ -198,7 +216,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
-- instructions: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers.
+- instructionsv2: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component. Keep immediate actions on the same ingredient together, such as patting shrimp dry and seasoning it. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. The app derives the legacy instructions string array from this field.
   - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
   - text: state the action clearly. For prep or a mixture that qualifies for an ingredients list, introduce the work without packing every ingredient into one long sentence.
   - ingredients: use this nested list only when the cook must measure, prepare, or combine at least three distinct ingredients in this step and moving them out of the prose makes the action materially easier to scan. List each with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not use a nested list for ordinary cooking actions, resting, serving, plating, a single primary ingredient, or to restate ingredients or prepared components already established by an earlier step. Do not repeat listed ingredients in text.
@@ -219,9 +237,10 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	if err := validateRecipeInstructions(recipe.Instructions); err != nil {
+	if err := validateRecipeInstructions(recipe.InstructionsV2); err != nil {
 		return nil, fmt.Errorf("failed to validate AI response: %w", err)
 	}
+	recipe.Instructions = flattenInstructions(recipe.InstructionsV2)
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
@@ -232,6 +251,9 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 }
 
 func validateRecipeInstructions(instructions []Instruction) error {
+	if len(instructions) == 0 {
+		return fmt.Errorf("at least one instruction is required")
+	}
 	previousPhase := 0
 	for index, instruction := range instructions {
 		if strings.TrimSpace(instruction.Text) == "" {

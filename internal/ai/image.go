@@ -95,7 +95,7 @@ func buildRecipeImagePrompt(recipe Recipe) (string, error) {
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
 	fmt.Fprintf(&promptBuilder, "Instructions:\n")
-	for _, ins := range recipe.Instructions {
+	for _, ins := range recipe.StructuredInstructions() {
 		fmt.Fprintf(&promptBuilder, "- %s\n", ins.PromptText())
 	}
 	return promptBuilder.String(), nil
