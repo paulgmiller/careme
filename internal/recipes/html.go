@@ -34,8 +34,8 @@ type recipeImageView struct {
 }
 
 type cookingMethodDisplay struct {
-	Key   ai.CookingMethod
 	Label string
+	Emoji string
 }
 
 type recipePropertyDisplay struct {
@@ -367,11 +367,11 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 
 	methods := make([]cookingMethodDisplay, 0, len(recipe.Properties.CookingMethods))
 	for _, method := range recipe.Properties.CookingMethods {
-		label := cookingMethodLabel(method)
-		if label == "" {
+		display := newCookingMethodDisplay(method)
+		if display.Label == "" {
 			continue
 		}
-		methods = append(methods, cookingMethodDisplay{Key: method, Label: label})
+		methods = append(methods, display)
 	}
 
 	return recipePropertyDisplay{
@@ -384,24 +384,24 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 	}
 }
 
-func cookingMethodLabel(method ai.CookingMethod) string {
+func newCookingMethodDisplay(method ai.CookingMethod) cookingMethodDisplay {
 	switch method {
 	case ai.CookingMethodStovetop:
-		return "Stovetop"
+		return cookingMethodDisplay{Label: "Stovetop", Emoji: "🍳"}
 	case ai.CookingMethodOven:
-		return "Oven"
+		return cookingMethodDisplay{Label: "Oven", Emoji: "♨️"}
 	case ai.CookingMethodGrill:
-		return "Grill"
+		return cookingMethodDisplay{Label: "Grill", Emoji: "🔥"}
 	case ai.CookingMethodSlowCooker:
-		return "Slow cooker"
+		return cookingMethodDisplay{Label: "Slow cooker", Emoji: "🍲"}
 	case ai.CookingMethodAirFryer:
-		return "Air fryer"
+		return cookingMethodDisplay{Label: "Air fryer", Emoji: "🌀"}
 	case ai.CookingMethodNoCook:
-		return "No-cook"
+		return cookingMethodDisplay{Label: "No-cook", Emoji: "🥗"}
 	case ai.CookingMethodOther:
-		return "Other"
+		return cookingMethodDisplay{Label: "Other", Emoji: "❓"}
 	default:
-		return ""
+		return cookingMethodDisplay{}
 	}
 }
 
