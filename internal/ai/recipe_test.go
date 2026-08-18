@@ -68,7 +68,7 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
-func TestRecipeStructuredInstructionContentChangesHash(t *testing.T) {
+func TestRecipeStructuredInstructionHashUsesFlattenedContent(t *testing.T) {
 	base := Recipe{InstructionsV2: []Instruction{{
 		Phase:       1,
 		Text:        "Prepare the sauce.",
@@ -85,11 +85,16 @@ func TestRecipeStructuredInstructionContentChangesHash(t *testing.T) {
 		Ingredients: []string{"2 tablespoons olive oil"},
 	}}}
 
-	if base.ComputeHash() == differentPhase.ComputeHash() {
-		t.Fatal("phase should contribute to structured recipe hashes")
+	if base.ComputeHash() != differentPhase.ComputeHash() {
+		t.Fatal("phase-only changes should not change recipe hashes")
 	}
 	if base.ComputeHash() == differentIngredient.ComputeHash() {
 		t.Fatal("nested ingredients should contribute to structured recipe hashes")
+	}
+
+	legacy := Recipe{Instructions: flattenInstructions(base.InstructionsV2)}
+	if base.ComputeHash() != legacy.ComputeHash() {
+		t.Fatal("structured and flattened legacy instructions should produce the same hash")
 	}
 }
 
@@ -243,6 +248,14 @@ func TestValidateRecipeInstructions(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
 			}
 		})
+	}
+}
+
+func TestInstructionRejectsNegativePhaseDuringDecoding(t *testing.T) {
+	var instruction Instruction
+	err := json.Unmarshal([]byte(`{"phase":-1,"text":"Prep.","ingredients":[]}`), &instruction)
+	if err == nil {
+		t.Fatal("negative phase should not decode into an unsigned phase")
 	}
 }
 

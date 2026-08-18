@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	openai "github.com/openai/openai-go/v3"
@@ -34,7 +33,7 @@ type Ingredient struct {
 }
 
 type Instruction struct {
-	Phase       int      `json:"phase" jsonschema:"minimum=1"`
+	Phase       uint     `json:"phase" jsonschema:"minimum=1"`
 	Text        string   `json:"text"`
 	Ingredients []string `json:"ingredients"`
 }
@@ -53,17 +52,16 @@ func (i Instruction) PromptText() string {
 }
 
 func (i Instruction) FlattenedText() string {
-	text := strings.TrimSpace(i.Text)
 	if len(i.Ingredients) == 0 {
-		return text
+		return i.Text
 	}
-	return text + " " + strings.Join(i.Ingredients, "; ")
+	return strings.TrimSpace(i.Text) + " " + strings.Join(i.Ingredients, "; ")
 }
 
 func LegacyInstructions(texts ...string) []Instruction {
 	instructions := make([]Instruction, 0, len(texts))
 	for index, text := range texts {
-		instructions = append(instructions, Instruction{Phase: index + 1, Text: text})
+		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
 	}
 	return instructions
 }
@@ -93,7 +91,7 @@ func (r Recipe) StructuredInstructions() []Instruction {
 
 	instructions := make([]Instruction, 0, len(r.Instructions))
 	for index, text := range r.Instructions {
-		instructions = append(instructions, Instruction{Phase: index + 1, Text: text})
+		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
 	}
 	return instructions
 }
@@ -125,18 +123,8 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Quantity))
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
-	if len(r.InstructionsV2) == 0 {
-		for _, instruction := range r.Instructions {
-			lo.Must(io.WriteString(fnv, instruction))
-		}
-	} else {
-		for _, instruction := range r.InstructionsV2 {
-			lo.Must(io.WriteString(fnv, instruction.Text))
-			lo.Must(io.WriteString(fnv, strconv.Itoa(instruction.Phase)))
-			for _, ingredient := range instruction.Ingredients {
-				lo.Must(io.WriteString(fnv, ingredient))
-			}
-		}
+	for _, instruction := range r.StructuredInstructions() {
+		lo.Must(io.WriteString(fnv, instruction.FlattenedText()))
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
@@ -218,7 +206,7 @@ func validateRecipeInstructions(instructions []Instruction) error {
 	if len(instructions) == 0 {
 		return fmt.Errorf("at least one instruction is required")
 	}
-	previousPhase := 0
+	var previousPhase uint
 	for index, instruction := range instructions {
 		if strings.TrimSpace(instruction.Text) == "" {
 			return fmt.Errorf("instruction %d text is required", index+1)
