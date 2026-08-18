@@ -1,6 +1,7 @@
 const CACHE_NAME = {{.CacheName}};
 const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";
 const SAVED_RECIPES_LIST_URL = "/user/recipes/offline-cache";
+const SAVED_RECIPE_CACHE_DELAY_MS = 90_000;
 const PRECACHE_URLS = {{.PrecacheURLs}};
 const AUTH_PATHS = new Set({{.AuthPaths}});
 
@@ -33,26 +34,30 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function fetchAndCache(cache, url) {
+  const request = new Request(url, { cache: "reload" });
+  return fetch(request)
+    .then((response) => {
+      if (!response || !response.ok) {
+        return false;
+      }
+      return cache.put(request, response).then(() => true);
+    })
+    .catch(() => false);
+}
+
 function cacheSavedRecipeURLs(body) {
   const urls = body.split(/\r?\n/).filter(Boolean);
   return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
     Promise.all(
       urls.map((url) => {
-        const request = new Request(url, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
         // Recipe pages are refreshed on each sync so offline copies pick up
         // later additions like questions, generated images, and wine pairings.
         // Ideally the app would trigger this only when one of those changes.
-        return fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              return cache.put(url, response).then(() => true);
-            }
-            return false;
-          })
-          .catch(() => false);
+        return Promise.all([
+          fetchAndCache(cache, url),
+          fetchAndCache(cache, `${url}/image`),
+        ]).then(([pageCached]) => pageCached);
       }),
     ).then((results) => {
       if (!results.every(Boolean)) {
@@ -94,7 +99,9 @@ function syncSavedRecipes() {
         if (!changed) {
           return true;
         }
-        return cacheSavedRecipeURLs(body);
+        return new Promise((resolve) =>
+          setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS),
+        ).then(() => cacheSavedRecipeURLs(body));
       });
     })
     .catch(() => false);
@@ -171,15 +178,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Recipe images are immutable for a recipe hash. Saved-recipe sync puts them
+  // in the stable cache, and this cache-first path makes them available offline.
+  const isRecipeImage =
+    url.pathname.startsWith("/recipe/") && url.pathname.endsWith("/image");
   const isStaticAsset =
     url.pathname.startsWith("/static/") ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/offline";
-  if (!isStaticAsset) {
+  if (!isStaticAsset && !isRecipeImage) {
     return;
   }
 
-  // Versioned CSS/JS and app icons are stable. Serve them from cache first and
-  // populate the cache after the first successful network response.
+  // Versioned CSS/JS, app icons, and recipe images are stable. Serve them from
+  // cache first and populate the cache after the first successful network response.
   event.respondWith(cacheFirstWithNetworkFill(request));
 });
