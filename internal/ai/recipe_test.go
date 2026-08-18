@@ -25,7 +25,7 @@ func TestRecipeComputeHash(t *testing.T) {
 			{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.99"},
 			{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "0.99"},
 		},
-		Instructions: LegacyInstructions("Step 1", "Step 2"),
+		Instructions: []string{"Step 1", "Step 2"},
 		Health:       "Healthy",
 		DrinkPairing: "Red Wine",
 	}
@@ -118,7 +118,7 @@ func TestRecipeDecodesAndPreservesLegacyInstructions(t *testing.T) {
 
 func TestRecipeStructuredInstructionsPreferV2(t *testing.T) {
 	recipe := Recipe{
-		Instructions: LegacyInstructions("Legacy step."),
+		Instructions: []string{"Legacy step."},
 		InstructionsV2: []Instruction{{
 			Phase: 1,
 			Text:  "Structured step.",
@@ -150,29 +150,6 @@ func TestRecipeSerializesLegacyAndV2Instructions(t *testing.T) {
 		if !strings.Contains(string(encoded), want) {
 			t.Fatalf("structured recipe JSON should contain %s: %s", want, encoded)
 		}
-	}
-}
-
-func TestRecipeDecodesTransitionalObjectInstructions(t *testing.T) {
-	const body = `{"title":"Soup","instructions":[{"phase":1,"text":"Prepare the aromatics:","ingredients":["1 onion, diced","2 carrots, diced","3 garlic cloves, minced"]}]}`
-	var recipe Recipe
-	if err := json.Unmarshal([]byte(body), &recipe); err != nil {
-		t.Fatalf("decode transitional recipe: %v", err)
-	}
-	if len(recipe.InstructionsV2) != 1 || recipe.InstructionsV2[0].Text != "Prepare the aromatics:" {
-		t.Fatalf("unexpected v2 instructions: %+v", recipe.InstructionsV2)
-	}
-	if len(recipe.Instructions) != 1 || recipe.Instructions[0] != "Prepare the aromatics: 1 onion, diced; 2 carrots, diced; 3 garlic cloves, minced" {
-		t.Fatalf("unexpected flattened instructions: %+v", recipe.Instructions)
-	}
-
-	encoded, err := json.Marshal(recipe)
-	if err != nil {
-		t.Fatalf("rewrite transitional recipe: %v", err)
-	}
-	if !strings.Contains(string(encoded), `"instructions":["Prepare the aromatics: 1 onion, diced; 2 carrots, diced; 3 garlic cloves, minced"]`) ||
-		!strings.Contains(string(encoded), `"instructionsv2":[`) {
-		t.Fatalf("transitional recipe should rewrite to dual fields: %s", encoded)
 	}
 }
 

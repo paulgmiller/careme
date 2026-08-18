@@ -72,7 +72,7 @@ var list = ai.ShoppingList{
 				{Name: "quail", Quantity: "1 cup", Price: "2.00"},
 				{Name: "kohlrabi", Quantity: "2 tbsp", Price: "1.50"},
 			},
-			Instructions: ai.LegacyInstructions(
+			InstructionsV2: ai.LegacyInstructions(
 				"Step 1: Do something.",
 				"Step 2: Do something else.",
 			),
@@ -306,20 +306,20 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{
-		Title:        "Added Bowl",
-		Description:  "Selected dinner",
-		Ingredients:  []ai.Ingredient{{Name: "Added carrots", Quantity: "2 cups"}},
-		Instructions: ai.LegacyInstructions("Cook."),
-		Health:       "Balanced",
-		DrinkPairing: "Water",
+		Title:          "Added Bowl",
+		Description:    "Selected dinner",
+		Ingredients:    []ai.Ingredient{{Name: "Added carrots", Quantity: "2 cups"}},
+		InstructionsV2: ai.LegacyInstructions("Cook."),
+		Health:         "Balanced",
+		DrinkPairing:   "Water",
 	}
 	unaddedRecipe := ai.Recipe{
-		Title:        "Maybe Pasta",
-		Description:  "Not selected",
-		Ingredients:  []ai.Ingredient{{Name: "Unadded noodles", Quantity: "1 box"}},
-		Instructions: ai.LegacyInstructions("Boil."),
-		Health:       "Filling",
-		DrinkPairing: "Tea",
+		Title:          "Maybe Pasta",
+		Description:    "Not selected",
+		Ingredients:    []ai.Ingredient{{Name: "Unadded noodles", Quantity: "1 box"}},
+		InstructionsV2: ai.LegacyInstructions("Boil."),
+		Health:         "Filling",
+		DrinkPairing:   "Tea",
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
 	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
@@ -355,9 +355,9 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
 			{Name: "Salt", Quantity: "1 tsp"},
 		},
-		Instructions: ai.LegacyInstructions("Cook."),
-		Health:       "Balanced",
-		DrinkPairing: "Water",
+		InstructionsV2: ai.LegacyInstructions("Cook."),
+		Health:         "Balanced",
+		DrinkPairing:   "Water",
 	}}}
 	p := DefaultParams(&loc, time.Now())
 	selection := recipeSelection{SavedHashes: []string{shoppingList.Recipes[0].ComputeHash()}}
@@ -573,7 +573,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
 	}
 	assert.Contains(t, html, `id="recipe-instructions" data-recipe-steps`)
-	assert.Equal(t, len(recipe.Instructions), strings.Count(html, `data-recipe-step>`))
+	assert.Equal(t, len(recipe.StructuredInstructions()), strings.Count(html, `data-recipe-step>`))
 	assert.Contains(t, html, `<ol class="recipe-step-list mt-3 space-y-2`)
 	assert.Contains(t, html, `data-recipe-step-number>1.</span>`)
 	assert.Contains(t, html, `data-recipe-step-number>2.</span>`)
@@ -711,7 +711,7 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 				Title:       "Recipe One",
 				Description: "First recipe",
 				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-				Instructions: ai.LegacyInstructions(
+				InstructionsV2: ai.LegacyInstructions(
 					"Step 1",
 				),
 				Health:       "Healthy",
@@ -800,10 +800,10 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		Ingredients: []ai.Ingredient{
 			{Name: "Little gem lettuce", Quantity: "2 heads", Price: ""},
 		},
-		Instructions: ai.LegacyInstructions("Wash and plate."),
-		Health:       "Light",
-		DrinkPairing: "Sparkling water",
-		ResponseID:   "resp-123",
+		InstructionsV2: ai.LegacyInstructions("Wash and plate."),
+		Health:         "Light",
+		DrinkPairing:   "Sparkling water",
+		ResponseID:     "resp-123",
 	}
 
 	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
@@ -835,9 +835,9 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 				Ingredients: []ai.Ingredient{
 					{Name: "English peas", Quantity: "1 cup", Price: ""},
 				},
-				Instructions: ai.LegacyInstructions("Boil and toss."),
-				Health:       "Balanced",
-				DrinkPairing: "Lemon water",
+				InstructionsV2: ai.LegacyInstructions("Boil and toss."),
+				Health:         "Balanced",
+				DrinkPairing:   "Lemon water",
 			},
 		},
 	}
@@ -902,20 +902,20 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	multi := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
-				Title:        "Roast Chicken",
-				Description:  "Simple roast",
-				Ingredients:  []ai.Ingredient{{Name: "Chicken", Quantity: "1", Price: "$10"}},
-				Instructions: ai.LegacyInstructions("Roast"),
-				Health:       "Protein",
-				DrinkPairing: "Pinot noir",
+				Title:          "Roast Chicken",
+				Description:    "Simple roast",
+				Ingredients:    []ai.Ingredient{{Name: "Chicken", Quantity: "1", Price: "$10"}},
+				InstructionsV2: ai.LegacyInstructions("Roast"),
+				Health:         "Protein",
+				DrinkPairing:   "Pinot noir",
 			},
 			{
-				Title:        "Pasta",
-				Description:  "Quick pasta",
-				Ingredients:  []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2"}},
-				Instructions: ai.LegacyInstructions("Boil"),
-				Health:       "Carb-rich",
-				DrinkPairing: "Sparkling water",
+				Title:          "Pasta",
+				Description:    "Quick pasta",
+				Ingredients:    []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2"}},
+				InstructionsV2: ai.LegacyInstructions("Boil"),
+				Health:         "Carb-rich",
+				DrinkPairing:   "Sparkling water",
 			},
 		},
 	}

@@ -52,7 +52,7 @@ func (i Instruction) PromptText() string {
 	return prompt.String()
 }
 
-func (i Instruction) LegacyText() string {
+func (i Instruction) FlattenedText() string {
 	text := strings.TrimSpace(i.Text)
 	if len(i.Ingredients) == 0 {
 		return text
@@ -60,8 +60,12 @@ func (i Instruction) LegacyText() string {
 	return text + " " + strings.Join(i.Ingredients, "; ")
 }
 
-func LegacyInstructions(texts ...string) []string {
-	return texts
+func LegacyInstructions(texts ...string) []Instruction {
+	instructions := make([]Instruction, 0, len(texts))
+	for index, text := range texts {
+		instructions = append(instructions, Instruction{Phase: index + 1, Text: text})
+	}
+	return instructions
 }
 
 type Recipe struct {
@@ -82,46 +86,6 @@ type Recipe struct {
 	// Shove wine selection in here
 }
 
-func (r *Recipe) UnmarshalJSON(data []byte) error {
-	// Transitional builds wrote structured objects directly to instructions. Keep accepting that
-	// short-lived format so those recipe/ and shoppinglist/ cache records can be recovered. Resaving
-	// them writes rollback-safe strings to instructions and the structured data to instructionsv2;
-	// rewrite any affected records with this version before rolling back to an older binary.
-	type recipe Recipe
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	instructionsJSON := fields["instructions"]
-	delete(fields, "instructions")
-	remaining, err := json.Marshal(fields)
-	if err != nil {
-		return err
-	}
-	var decoded recipe
-	if err := json.Unmarshal(remaining, &decoded); err != nil {
-		return err
-	}
-	*r = Recipe(decoded)
-
-	if len(instructionsJSON) > 0 {
-		if err := json.Unmarshal(instructionsJSON, &r.Instructions); err != nil {
-			r.Instructions = nil
-			var transitional []Instruction
-			if err := json.Unmarshal(instructionsJSON, &transitional); err != nil {
-				return err
-			}
-			if len(r.InstructionsV2) == 0 {
-				r.InstructionsV2 = transitional
-			}
-		}
-	}
-	if len(r.Instructions) == 0 && len(r.InstructionsV2) > 0 {
-		r.Instructions = flattenInstructions(r.InstructionsV2)
-	}
-	return nil
-}
-
 func (r Recipe) StructuredInstructions() []Instruction {
 	if len(r.InstructionsV2) > 0 {
 		return r.InstructionsV2
@@ -137,7 +101,7 @@ func (r Recipe) StructuredInstructions() []Instruction {
 func flattenInstructions(instructions []Instruction) []string {
 	flattened := make([]string, 0, len(instructions))
 	for _, instruction := range instructions {
-		flattened = append(flattened, instruction.LegacyText())
+		flattened = append(flattened, instruction.FlattenedText())
 	}
 	return flattened
 }
