@@ -23,14 +23,19 @@ func TestRenderRecipeInstructionsPlacesListWithinProse(t *testing.T) {
 	assert.Contains(t, html, "<p>to make the garlic oil.</p>")
 }
 
-func TestRenderRecipeInstructionsUsesSafeGoldmarkDefaults(t *testing.T) {
+func TestRenderRecipeInstructionsRestrictsMarkdownConstructs(t *testing.T) {
 	rendered, err := renderRecipeInstructions([]string{
-		"Mix <script>alert('no')</script> [oil](javascript:alert('no')).",
+		"Mix <script>alert('no')</script> **oil** [safely](https://example.test) ![tracking](https://example.test/pixel).",
 	})
 	require.NoError(t, err)
 	require.Len(t, rendered, 1)
 
 	html := string(rendered[0])
 	assert.NotContains(t, html, "<script>")
-	assert.NotContains(t, strings.ToLower(html), "href=\"javascript:")
+	assert.NotContains(t, strings.ToLower(html), "<a ")
+	assert.NotContains(t, strings.ToLower(html), "<img ")
+	assert.NotContains(t, strings.ToLower(html), "<strong>")
+	assert.Contains(t, html, "&lt;script&gt;alert('no')&lt;/script&gt;")
+	assert.Contains(t, html, "**oil**")
+	assert.Contains(t, html, "![tracking](https://example.test/pixel)")
 }
