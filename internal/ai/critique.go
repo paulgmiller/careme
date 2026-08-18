@@ -31,7 +31,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do the instructions begin with preparation before active cooking starts
 - does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate steps
 - when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
-- are bullet lists limited to preparations or mixtures of more than three ingredients and placed where those ingredients enter the action
+- are bullet lists limited to preparations or mixtures of more than three ingredients, placed where those ingredients enter the action, and separated from surrounding prose by a blank line before and after the list
 - do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate

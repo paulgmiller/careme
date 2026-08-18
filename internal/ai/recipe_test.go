@@ -158,6 +158,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Do not combine unrelated work to limit the number of steps.",
 		"Keep immediate actions on the same ingredient in the same step.",
 		"place a \"- \" bullet list at the point those ingredients enter the action",
+		"Put a blank line before the first bullet and after the final bullet so surrounding prose stays outside the list.",
 		"continue with prose after the list when the action continues",
 		"Do not use lists for cooking, resting, serving, plating, one primary ingredient",
 		"Do not use HTML or other Markdown.",
