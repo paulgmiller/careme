@@ -1,6 +1,8 @@
 package recipes
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -53,6 +55,25 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	assert.Nil(t, score)
+}
+
+func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
+	tests := map[string]error{
+		"canceled":          context.Canceled,
+		"deadline exceeded": context.DeadlineExceeded,
+	}
+
+	for name, contextErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			cache := &canceledIngredientCache{err: contextErr}
+			loc := testProduceScoreLocation()
+
+			score := NewCachedProduceScorer(cache).ProduceScore(t.Context(), *loc)
+
+			assert.Nil(t, score)
+			assert.Equal(t, 1, cache.calls, "should not try yesterday after cancellation")
+		})
+	}
 }
 
 func TestSumIngredientGradesAboveCutoff(t *testing.T) {
@@ -109,4 +130,18 @@ func withNow(t *testing.T, now time.Time) {
 	t.Cleanup(func() {
 		nowFn = oldNowFn
 	})
+}
+
+type canceledIngredientCache struct {
+	err   error
+	calls int
+}
+
+func (c *canceledIngredientCache) SaveIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
+}
+
+func (c *canceledIngredientCache) IngredientsFromCache(context.Context, string) ([]ai.InputIngredient, error) {
+	c.calls++
+	return nil, errors.Join(errors.New("cache read failed"), c.err)
 }
