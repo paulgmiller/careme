@@ -56,7 +56,6 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
 		"GoogleTagNoScript":         GoogleTagNoScript,
-		"InstructionMarkdown":       instructionMarkdownHTML,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
 		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },

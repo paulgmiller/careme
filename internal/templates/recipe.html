@@ -131,11 +131,11 @@
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
                 <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done. ↔</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
-                  {{range $index, $instruction := .Recipe.Instructions}}
+                  {{range $index, $instruction := .InstructionsHTML}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
                     <div class="flex items-start gap-3">
                       <span class="w-5 shrink-0 text-right" data-recipe-step-number>{{InstructionNumber $index}}.</span>
-                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{InstructionMarkdown $instruction}}</div>
+                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{$instruction}}</div>
                     </div>
                   </li>
                   {{end}}

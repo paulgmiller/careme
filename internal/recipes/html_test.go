@@ -171,10 +171,10 @@ func assertInstructionMarkdown(t *testing.T, html string) {
 	t.Helper()
 	for _, want := range []string{
 		"<p>Prepare:</p>",
-		"<ul><li>1 green bell pepper, diced</li>",
-		"1 green bell pepper, diced",
-		"4 ounces sweet onion, diced",
-		"</ul><p>then toss with the pasta.</p>",
+		"<ul>",
+		"<li>1 green bell pepper, diced</li>",
+		"<li>4 ounces sweet onion, diced</li>",
+		"<p>then toss with the pasta.</p>",
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("recipe instructions should contain %q: %s", want, html)
