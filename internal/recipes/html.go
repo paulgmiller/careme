@@ -44,7 +44,6 @@ type recipePropertyDisplay struct {
 	Cost           string
 	Calories       string
 	CookingMethods []cookingMethodDisplay
-	Health         string
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -336,6 +335,10 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
 
+// newRecipePropertyDisplay also supports recipes cached before structured properties
+// were introduced. A missing properties object decodes to RecipeProperties' zero value,
+// and ranging over its nil CookingMethods slice is safe; unavailable values render as a
+// dash while legacy time and cost strings remain available as fallbacks.
 func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 	timeDisplay := strings.TrimSpace(recipe.CookTime)
 	if recipe.Properties.TotalMinutes > 0 {
@@ -380,7 +383,6 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 		Cost:           costDisplay,
 		Calories:       caloriesDisplay,
 		CookingMethods: methods,
-		Health:         strings.TrimSpace(recipe.Health),
 	}
 }
 

@@ -190,7 +190,6 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 		assert.Contains(t, schemaRequired(t, recipeProperties), name)
 	}
 	assert.NotContains(t, fields, "health_note")
-	assert.NotContains(t, fields, "special_equipment")
 	for _, name := range []string{"total_minutes", "servings", "estimated_cost_dollars", "calories_per_serving"} {
 		field := schemaObject(t, fields[name])
 		assert.Equal(t, "integer", field["type"])

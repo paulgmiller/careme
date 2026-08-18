@@ -241,6 +241,9 @@
 
     <div class="space-y-3 text-sm text-ink-600 sm:col-start-1 sm:row-start-3">
       {{template "recipe_properties" .PropertyDisplay}}
+      {{if .Health}}
+      <p><span class="font-semibold text-brand-700">Health:</span> {{.Health}}</p>
+      {{end}}
       <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
     </div>
   </div>

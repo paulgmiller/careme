@@ -67,8 +67,6 @@ type RecipeProperties struct {
 	EstimatedCostDollars int             `json:"estimated_cost_dollars" jsonschema:"minimum=1"`
 	CaloriesPerServing   int             `json:"calories_per_serving" jsonschema:"minimum=1"`
 	CookingMethods       []CookingMethod `json:"cooking_methods" jsonschema:"minItems=1"`
-	HealthNote           string          `json:"health_note,omitempty" jsonschema:"-"`       // legacy cached recipe field
-	SpecialEquipment     string          `json:"special_equipment,omitempty" jsonschema:"-"` // legacy cached recipe field
 }
 
 type Recipe struct {
@@ -122,8 +120,6 @@ func (r *Recipe) ComputeHash() string {
 		for _, method := range r.Properties.CookingMethods {
 			lo.Must(io.WriteString(fnv, string(method)))
 		}
-		lo.Must(io.WriteString(fnv, r.Properties.HealthNote))
-		lo.Must(io.WriteString(fnv, r.Properties.SpecialEquipment))
 	}
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
@@ -133,9 +129,7 @@ func (r Recipe) hasStructuredProperties() bool {
 		r.Properties.Servings != 0 ||
 		r.Properties.EstimatedCostDollars != 0 ||
 		r.Properties.CaloriesPerServing != 0 ||
-		len(r.Properties.CookingMethods) != 0 ||
-		r.Properties.HealthNote != "" ||
-		r.Properties.SpecialEquipment != ""
+		len(r.Properties.CookingMethods) != 0
 }
 
 // now we can reuse first recipes and people can go off in different directions.
@@ -202,8 +196,6 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	recipe.Properties.CookingMethods = normalizeCookingMethods(recipe.Properties.CookingMethods)
 	recipe.Health = strings.TrimSpace(recipe.Health)
-	recipe.Properties.HealthNote = strings.TrimSpace(recipe.Properties.HealthNote)
-	recipe.Properties.SpecialEquipment = strings.TrimSpace(recipe.Properties.SpecialEquipment)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}

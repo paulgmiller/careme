@@ -151,6 +151,9 @@
             </div>
 
             <div class="space-y-3 text-sm text-gray-600">
+              {{if .Recipe.Health}}
+              <p><span class="font-semibold text-brand-700">Health:</span> {{.Recipe.Health}}</p>
+              {{end}}
               <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
               {{template "recipe_wine" .}}
             </div>
