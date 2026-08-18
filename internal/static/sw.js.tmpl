@@ -1,7 +1,7 @@
 const CACHE_NAME = {{.CacheName}};
 const SAVED_RECIPES_CACHE_NAME = "careme-saved-recipes-v1";
 const SAVED_RECIPES_LIST_URL = "/user/recipes/offline-cache";
-const SAVED_RECIPE_IMAGE_RETRY_DELAY_MS = 75_000;
+const SAVED_RECIPE_CACHE_DELAY_MS = 90_000;
 const PRECACHE_URLS = {{.PrecacheURLs}};
 const AUTH_PATHS = new Set({{.AuthPaths}});
 
@@ -34,82 +34,56 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-function cacheSavedRecipePage(cache, recipeRequest) {
-  return fetch(recipeRequest)
-    .then((response) => {
-      if (!response || !response.ok) {
-        return false;
-      }
-      return cache.put(recipeRequest, response).then(() => true);
-    })
-    .catch(() => false);
-}
-
-function cacheSavedRecipeImage(cache, imageRequest) {
-  return fetch(imageRequest)
-    .then((response) => {
-      if (!response || !response.ok) {
-        return false;
-      }
-      return cache.put(imageRequest, response).then(() => true);
-    })
-    .catch(() => false);
-}
-
-function retrySavedRecipeImage(cache, recipeRequest, imageRequest) {
+function waitForSavedRecipeCacheDelay() {
   return new Promise((resolve) =>
-    setTimeout(resolve, SAVED_RECIPE_IMAGE_RETRY_DELAY_MS),
-  )
-    .then(() => cacheSavedRecipeImage(cache, imageRequest))
-    .then((imageCached) => {
-      if (!imageCached) {
-        return false;
-      }
-      // The first page response may not include an image element. Refresh only
-      // this recipe after its delayed image becomes available.
-      return cacheSavedRecipePage(cache, recipeRequest);
-    });
+    setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS),
+  );
 }
 
 function cacheSavedRecipeURLs(body) {
   const urls = body.split(/\r?\n/).filter(Boolean);
-  const imageRetryPromises = [];
-  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
-    Promise.all(
-      urls.map((url) => {
-        const recipeRequest = new Request(url, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
-        const imageRequest = new Request(`${url}/image`, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
-        // Recipe pages are refreshed on each sync so offline copies pick up
-        // later additions like questions, generated images, and wine pairings.
-        // Ideally the app would trigger this only when one of those changes.
-        return cacheSavedRecipePage(cache, recipeRequest).then((pageCached) => {
-          if (!pageCached) {
-            return false;
-          }
-          return cacheSavedRecipeImage(cache, imageRequest).then((imageCached) => {
-            if (!imageCached) {
-              imageRetryPromises.push(
-                retrySavedRecipeImage(cache, recipeRequest, imageRequest),
-              );
-            }
-            return true;
+  return waitForSavedRecipeCacheDelay().then(() =>
+    caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+      Promise.all(
+        urls.map((url) => {
+          const recipeRequest = new Request(url, {
+            credentials: "same-origin",
+            cache: "reload",
           });
-        });
+          const imageRequest = new Request(`${url}/image`, {
+            credentials: "same-origin",
+            cache: "reload",
+          });
+          // Recipe pages are refreshed on each sync so offline copies pick up
+          // later additions like questions, generated images, and wine pairings.
+          // Ideally the app would trigger this only when one of those changes.
+          return fetch(recipeRequest)
+            .then((response) => {
+              if (response && response.ok) {
+                return cache.put(recipeRequest, response).then(() =>
+                  // Some recipes still may not have an image after the delay. A
+                  // missing image must not prevent its page from working offline.
+                  fetch(imageRequest)
+                    .then((imageResponse) => {
+                      if (imageResponse && imageResponse.ok) {
+                        return cache.put(imageRequest, imageResponse);
+                      }
+                    })
+                    .catch(() => {})
+                    .then(() => true),
+                );
+              }
+              return false;
+            })
+            .catch(() => false);
+        }),
+      ).then((results) => {
+        if (!results.every(Boolean)) {
+          return false;
+        }
+        return cache.put(SAVED_RECIPES_LIST_URL, new Response(body)).then(() => true);
       }),
-    ).then((results) => {
-      const cacheList = results.every(Boolean)
-        ? cache.put(SAVED_RECIPES_LIST_URL, new Response(body)).then(() => true)
-        : Promise.resolve(false);
-      return cacheList.then((listCached) =>
-        Promise.all(imageRetryPromises).then(() => listCached),
-      );
-    }),
+    ),
   );
 }
 

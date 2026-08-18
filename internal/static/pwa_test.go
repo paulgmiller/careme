@@ -364,11 +364,11 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 		`body.split(/\r?\n/)`,
 		`const recipeRequest = new Request(url`,
 		"const imageRequest = new Request(`${url}/image`",
-		`const SAVED_RECIPE_IMAGE_RETRY_DELAY_MS = 75_000;`,
-		`retrySavedRecipeImage(cache, recipeRequest, imageRequest)`,
-		`setTimeout(resolve, SAVED_RECIPE_IMAGE_RETRY_DELAY_MS)`,
-		`return cacheSavedRecipePage(cache, recipeRequest)`,
-		`Promise.all(imageRetryPromises)`,
+		`const SAVED_RECIPE_CACHE_DELAY_MS = 90_000;`,
+		`waitForSavedRecipeCacheDelay().then(() =>`,
+		`setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS)`,
+		`return cache.put(recipeRequest, response).then(() =>`,
+		`return cache.put(imageRequest, imageResponse)`,
 		`url.pathname.startsWith("/recipe/") && url.pathname.endsWith("/image")`,
 		`if (!isStaticAsset && !isRecipeImage)`,
 		`cache.put(SAVED_RECIPES_LIST_URL, new Response(body))`,
@@ -383,7 +383,7 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 	if !strings.Contains(rendered, `caches.match(request).then((cached) => cached || caches.match("/offline"))`) {
 		t.Fatalf("service worker should fall back to cached saved recipe navigations before offline page, script: %s", rendered)
 	}
-	for _, removed := range []string{`savedRecipeURL`, `pruneSavedRecipeCache`, `keepURLs`, `event.ports[0].postMessage`} {
+	for _, removed := range []string{`savedRecipeURL`, `pruneSavedRecipeCache`, `keepURLs`, `event.ports[0].postMessage`, `retrySavedRecipeImage`, `imageRetryPromises`} {
 		if strings.Contains(rendered, removed) {
 			t.Fatalf("service worker should not include %q after simplifying saved recipe caching, script: %s", removed, rendered)
 		}
