@@ -24,7 +24,10 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		Instructions: []string{"Roast until golden.", "Finish with lemon juice."},
+		Instructions: []string{
+			"Prepare:\n\n- 1 whole chicken\n- 1 lemon, juiced",
+			"Roast until golden.",
+		},
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
 		OriginHash:   "internal-metadata",
@@ -39,6 +42,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`"quantity": "1 whole"`,
 		`"price": "$12"`,
 		`"instructions": [`,
+		`1 lemon, juiced`,
 		`"Roast until golden."`,
 		`Recipe JSON:`,
 		`Return JSON only using schema_version "recipe-critique-v1".`,
@@ -56,9 +60,14 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
-		"does every mention of an ingredient in the instructions include the exact amount used in that step",
+		"does each step cover one coherent task or component, keeping immediate actions on the same ingredient together",
+		"when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step",
+		"are bullet lists limited to preparations or mixtures of more than three ingredients",
+		"placed where those ingredients enter the action",
+		"separated from surrounding prose by a blank line before and after the list",
+		"do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
-		"does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking",
+		"does the stated cook_time match the total elapsed time implied by all instructions, including prep, resting, and passive cooking",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}

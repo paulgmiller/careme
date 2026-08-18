@@ -29,7 +29,10 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - is it realistic to cook as written
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
-- does every mention of an ingredient in the instructions include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate steps
+- when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- are bullet lists limited to preparations or mixtures of more than three ingredients, placed where those ingredients enter the action, and separated from surrounding prose by a blank line before and after the list
+- do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate
 - when quantities permit calculation, use these salt amounts as starting points: 1.25% salt by weight for boneless meat, 1.5% for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water
@@ -37,7 +40,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
 - report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
 - are the timing and cost estimates plausible
-- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- does the stated cook_time match the total elapsed time implied by all instructions, including prep, resting, and passive cooking
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
