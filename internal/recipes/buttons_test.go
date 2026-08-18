@@ -20,9 +20,9 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 				Ingredients: []ai.Ingredient{
 					{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"},
 				},
-				InstructionsV2: ai.SequentialInstructions("Step 1"),
-				Health:         "Healthy",
-				DrinkPairing:   "Water",
+				Instructions: []string{"Step 1"},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
 			},
 			{
 				Title:       "Recipe Two",
@@ -30,9 +30,9 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 				Ingredients: []ai.Ingredient{
 					{Name: "ingredient2", Quantity: "2 cups", Price: "3.00"},
 				},
-				InstructionsV2: ai.SequentialInstructions("Step 1"),
-				Health:         "Very Healthy",
-				DrinkPairing:   "Tea",
+				Instructions: []string{"Step 1"},
+				Health:       "Very Healthy",
+				DrinkPairing: "Tea",
 			},
 		},
 	}
@@ -108,9 +108,9 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 				Title:       "Saved Recipe",
 				Description: "Saved recipe",
 				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-				InstructionsV2: ai.SequentialInstructions(
+				Instructions: []string{
 					"Step 1",
-				),
+				},
 				Health:       "Healthy",
 				DrinkPairing: "Water",
 			},
@@ -170,12 +170,12 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 	listWithDismissedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
-				Title:          "Weeknight Noodles",
-				Description:    "Fast noodles",
-				Ingredients:    []ai.Ingredient{{Name: "noodles", Quantity: "1 pound", Price: "2.00"}},
-				InstructionsV2: ai.SequentialInstructions("Step 1"),
-				Health:         "Balanced",
-				DrinkPairing:   "Tea",
+				Title:        "Weeknight Noodles",
+				Description:  "Fast noodles",
+				Ingredients:  []ai.Ingredient{{Name: "noodles", Quantity: "1 pound", Price: "2.00"}},
+				Instructions: []string{"Step 1"},
+				Health:       "Balanced",
+				DrinkPairing: "Tea",
 			},
 		},
 	}
@@ -214,12 +214,12 @@ func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
-				Title:          "Shared Recipe",
-				Description:    "Read-only recipe",
-				Ingredients:    []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-				InstructionsV2: ai.SequentialInstructions("Step 1"),
-				Health:         "Healthy",
-				DrinkPairing:   "Water",
+				Title:        "Shared Recipe",
+				Description:  "Read-only recipe",
+				Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+				Instructions: []string{"Step 1"},
+				Health:       "Healthy",
+				DrinkPairing: "Water",
 			},
 		},
 	}

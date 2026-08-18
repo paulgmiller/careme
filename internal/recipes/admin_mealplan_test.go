@@ -165,15 +165,15 @@ func testAdminMealPlanList(cuisine, anchorIngredient, originHash string) *ai.Sho
 
 func testAdminMealPlanRecipe(title, originHash string) ai.Recipe {
 	return ai.Recipe{
-		Title:          title,
-		Description:    "A test recipe",
-		CookTime:       "30 minutes",
-		CostEstimate:   "$10",
-		Ingredients:    []ai.Ingredient{{Name: "Ingredient", Quantity: "1 cup"}},
-		InstructionsV2: ai.SequentialInstructions("Cook it"),
-		Health:         "Fine",
-		DrinkPairing:   "Water",
-		OriginHash:     originHash,
-		ResponseID:     "resp-" + title,
+		Title:        title,
+		Description:  "A test recipe",
+		CookTime:     "30 minutes",
+		CostEstimate: "$10",
+		Ingredients:  []ai.Ingredient{{Name: "Ingredient", Quantity: "1 cup"}},
+		Instructions: []string{"Cook it"},
+		Health:       "Fine",
+		DrinkPairing: "Water",
+		OriginHash:   originHash,
+		ResponseID:   "resp-" + title,
 	}
 }

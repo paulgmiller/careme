@@ -68,88 +68,45 @@ func TestRecipeHashLength(t *testing.T) {
 	}
 }
 
-func TestRecipeStructuredInstructionHashUsesText(t *testing.T) {
-	base := Recipe{InstructionsV2: []Instruction{{
-		Phase: 1,
-		Text:  "Prepare the sauce:\n\n- 1 tablespoon olive oil",
-	}}}
-	differentPhase := Recipe{InstructionsV2: []Instruction{{
-		Phase: 2,
-		Text:  "Prepare the sauce:\n\n- 1 tablespoon olive oil",
-	}}}
-	differentText := Recipe{InstructionsV2: []Instruction{{
-		Phase: 1,
-		Text:  "Prepare the sauce:\n\n- 2 tablespoons olive oil",
-	}}}
+func TestRecipeInstructionMarkdownContributesToHash(t *testing.T) {
+	base := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 1 tablespoon olive oil"}}
+	different := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 2 tablespoons olive oil"}}
 
-	if base.ComputeHash() != differentPhase.ComputeHash() {
-		t.Fatal("phase-only changes should not change recipe hashes")
-	}
-	if base.ComputeHash() == differentText.ComputeHash() {
-		t.Fatal("instruction Markdown should contribute to structured recipe hashes")
-	}
-
-	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].Text}}
-	if base.ComputeHash() != legacy.ComputeHash() {
-		t.Fatal("structured and flattened legacy instructions should produce the same hash")
+	if base.ComputeHash() == different.ComputeHash() {
+		t.Fatal("instruction Markdown should contribute to recipe hashes")
 	}
 }
 
-func TestRecipeDecodesAndPreservesLegacyInstructions(t *testing.T) {
+func TestRecipeDecodesAndPreservesInstructions(t *testing.T) {
 	const body = `{"title":"Soup","instructions":["Chop the onion.","Simmer the soup."]}`
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(body), &recipe); err != nil {
-		t.Fatalf("decode legacy recipe: %v", err)
+		t.Fatalf("decode recipe: %v", err)
 	}
-	structured := recipe.StructuredInstructions()
-	if len(structured) != 2 || structured[0].Phase != 1 || structured[1].Phase != 2 {
-		t.Fatalf("unexpected legacy phases: %+v", structured)
-	}
-	if structured[0].Text != "Chop the onion." {
-		t.Fatalf("unexpected legacy instruction: %+v", structured[0])
+	if !reflect.DeepEqual(recipe.Instructions, []string{"Chop the onion.", "Simmer the soup."}) {
+		t.Fatalf("unexpected instructions: %+v", recipe.Instructions)
 	}
 
 	encoded, err := json.Marshal(recipe)
 	if err != nil {
-		t.Fatalf("encode legacy recipe: %v", err)
+		t.Fatalf("encode recipe: %v", err)
 	}
 	if !strings.Contains(string(encoded), `"instructions":["Chop the onion.","Simmer the soup."]`) {
-		t.Fatalf("legacy instructions should retain their wire shape: %s", encoded)
+		t.Fatalf("instructions should retain their wire shape: %s", encoded)
 	}
 }
 
-func TestRecipeStructuredInstructionsPanicsWhenBothVersionsAreSet(t *testing.T) {
-	recipe := Recipe{
-		Instructions: []string{"Legacy step."},
-		InstructionsV2: []Instruction{{
-			Phase: 1,
-			Text:  "Structured step.",
-		}},
-	}
-
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected both instruction versions to panic")
-		}
-	}()
-	recipe.StructuredInstructions()
-}
-
-func TestRecipeSerializesOnlyV2Instructions(t *testing.T) {
-	recipe := Recipe{InstructionsV2: []Instruction{{
-		Phase: 1,
-		Text:  "Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced",
-	}}}
+func TestRecipeSerializesMarkdownInstructions(t *testing.T) {
+	recipe := Recipe{Instructions: []string{
+		"Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced",
+	}}
 	encoded, err := json.Marshal(recipe)
 	if err != nil {
-		t.Fatalf("encode structured recipe: %v", err)
+		t.Fatalf("encode recipe: %v", err)
 	}
-	if strings.Contains(string(encoded), `"instructions":`) {
-		t.Fatalf("structured recipe JSON should omit legacy instructions: %s", encoded)
-	}
-	want := `"instructionsv2":[{"phase":1,"text":"Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced"}]`
+	want := `"instructions":["Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced"]`
 	if !strings.Contains(string(encoded), want) {
-		t.Fatalf("structured recipe JSON should contain %s: %s", want, encoded)
+		t.Fatalf("recipe JSON should contain %s: %s", want, encoded)
 	}
 }
 
@@ -181,55 +138,25 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	}
 }
 
-func TestRecipeSchemaUsesStructuredInstructions(t *testing.T) {
+func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
-	if _, ok := properties["instructions"]; ok {
-		t.Fatal("legacy instructions should not be part of the model schema")
-	}
-	instructions := schemaObject(t, properties["instructionsv2"])
+	instructions := schemaObject(t, properties["instructions"])
 	items := schemaObject(t, instructions["items"])
-	instructionProperties := schemaProperties(t, items)
-	required := schemaRequired(t, items)
-
-	for _, field := range []string{"phase", "text"} {
-		if _, ok := instructionProperties[field]; !ok {
-			t.Fatalf("expected instruction schema to contain %q", field)
-		}
-		if !slices.Contains(required, field) {
-			t.Fatalf("expected instruction schema to require %q, got %v", field, required)
-		}
-	}
-	if _, ok := instructionProperties["ingredients"]; ok {
-		t.Fatal("instruction schema should keep lists inside text Markdown")
-	}
-	phase := schemaObject(t, instructionProperties["phase"])
-	if phase["minimum"] != float64(1) {
-		t.Fatalf("expected phase minimum 1, got %#v", phase["minimum"])
+	if items["type"] != "string" {
+		t.Fatalf("expected instruction items to be strings, got %#v", items)
 	}
 }
 
 func TestValidateRecipeInstructions(t *testing.T) {
 	tests := []struct {
 		name         string
-		instructions []Instruction
+		instructions []string
 		wantError    string
 	}{
-		{
-			name: "parallel phases",
-			instructions: []Instruction{
-				{Phase: 1, Text: "Prep."},
-				{Phase: 2, Text: "Cook the rice."},
-				{Phase: 2, Text: "Roast the vegetables."},
-				{Phase: 3, Text: "Plate."},
-			},
-		},
+		{name: "valid", instructions: []string{"Prep.", "Cook.", "Plate."}},
 		{name: "empty", wantError: "at least one instruction is required"},
-		{name: "phase zero", instructions: []Instruction{{Text: "Prep."}}, wantError: "phase must be positive"},
-		{name: "does not start at one", instructions: []Instruction{{Phase: 2, Text: "Prep."}}, wantError: "must start at 1"},
-		{name: "decreasing", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 2, Text: "Cook."}, {Phase: 1, Text: "Plate."}}, wantError: "must not decrease"},
-		{name: "skipped", instructions: []Instruction{{Phase: 1, Text: "Prep."}, {Phase: 3, Text: "Cook."}}, wantError: "skips phase 2"},
-		{name: "empty text", instructions: []Instruction{{Phase: 1, Text: "  "}}, wantError: "text is required"},
+		{name: "empty text", instructions: []string{"Prep.", "  "}, wantError: "instruction 2 text is required"},
 	}
 
 	for _, tt := range tests {
@@ -248,32 +175,21 @@ func TestValidateRecipeInstructions(t *testing.T) {
 	}
 }
 
-func TestInstructionRejectsNegativePhaseDuringDecoding(t *testing.T) {
-	var instruction Instruction
-	err := json.Unmarshal([]byte(`{"phase":-1,"text":"Prep."}`), &instruction)
-	if err == nil {
-		t.Fatal("negative phase should not decode into an unsigned phase")
-	}
-}
-
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
 		"do not rely on prep details from the ingredient list alone",
-		"Legacy instructions are read-only compatibility data; return only instructionsv2.",
 		"provide the total elapsed recipe time",
 		"use as many clear steps as the work requires",
 		"Each step should cover one coherent task or component whose actions are naturally done together.",
 		"Do not combine unrelated work to limit the number of steps.",
 		"Keep immediate actions on the same ingredient in the same step.",
-		"if they can happen concurrently, give those separate steps the same phase instead of combining them",
-		"Steps with the same phase can be done concurrently.",
 		"place a \"- \" bullet list at the point those ingredients enter the action",
 		"continue with prose after the list when the action continues",
 		"Do not use lists for cooking, resting, serving, plating, one primary ingredient",
 		"Do not use HTML or other Markdown.",
 		"later steps should refer to that component by name without restating its ingredients or their amounts",
-		"Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases",
+		"Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, and passive cooking.",
 		"set id to the exact ProductId",
 		"Set quantity to the total amount needed across the entire recipe",
 		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet.",
@@ -317,7 +233,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructionsv2\":[{\"phase\":1,\"text\":\"Prep.\"}],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],
@@ -342,8 +258,8 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
 	}
-	if len(got.Instructions) != 0 || len(got.InstructionsV2) != 1 || got.InstructionsV2[0].Text != "Prep." {
-		t.Fatalf("expected only v2 instructions, got %+v", got)
+	if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
+		t.Fatalf("unexpected instructions: %+v", got.Instructions)
 	}
 	if got.PromptCacheKey != cacheKey {
 		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)

@@ -24,9 +24,9 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		InstructionsV2: []Instruction{
-			{Phase: 1, Text: "Prepare:\n\n- 1 whole chicken\n- 1 lemon, juiced"},
-			{Phase: 2, Text: "Roast until golden."},
+		Instructions: []string{
+			"Prepare:\n\n- 1 whole chicken\n- 1 lemon, juiced",
+			"Roast until golden.",
 		},
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
@@ -41,8 +41,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`"name": "Chicken"`,
 		`"quantity": "1 whole"`,
 		`"price": "$12"`,
-		`"instructionsv2": [`,
-		`"phase": 1`,
+		`"instructions": [`,
 		`1 lemon, juiced`,
 		`"Roast until golden."`,
 		`Recipe JSON:`,
@@ -62,12 +61,11 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 	for _, want := range []string{
 		"do the instructions begin with preparation before active cooking starts",
 		"does each step cover one coherent task or component, keeping immediate actions on the same ingredient together",
-		"do steps with the same phase contain work that can genuinely happen concurrently",
 		"when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step",
 		"are bullet lists limited to preparations or mixtures of more than three ingredients and placed where those ingredients enter the action",
 		"do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts",
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
-		"does the stated cook_time match the total elapsed time implied by all instruction phases, including prep, resting, passive cooking, and concurrent work",
+		"does the stated cook_time match the total elapsed time implied by all instructions, including prep, resting, and passive cooking",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}

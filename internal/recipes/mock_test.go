@@ -41,7 +41,7 @@ func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 		if len(recipe.Ingredients) == 0 {
 			t.Errorf("recipe %d has no ingredients", i)
 		}
-		if len(recipe.StructuredInstructions()) == 0 {
+		if len(recipe.Instructions) == 0 {
 			t.Errorf("recipe %d has no instructions", i)
 		}
 	}

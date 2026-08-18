@@ -32,57 +32,21 @@ type Ingredient struct {
 	Price       string `json:"price,omitempty" jsonschema:"-"`
 }
 
-type Instruction struct {
-	Phase uint   `json:"phase" jsonschema:"minimum=1"`
-	Text  string `json:"text"`
-}
-
-// Description for wine and image. Doesn't include phase
-func (i Instruction) PromptText() string {
-	return strings.ReplaceAll(i.Text, "\n", "\n  ")
-}
-
-func SequentialInstructions(texts ...string) []Instruction {
-	instructions := make([]Instruction, 0, len(texts))
-	for index, text := range texts {
-		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
-	}
-	return instructions
-}
-
 type Recipe struct {
-	Title        string       `json:"title"`
-	Description  string       `json:"description"`
-	CookTime     string       `json:"cook_time"`
-	CostEstimate string       `json:"cost_estimate"`
-	Ingredients  []Ingredient `json:"ingredients"`
-	// Instructions holds legacy cache records. Exactly one instruction field should be populated.
-	Instructions []string `json:"instructions,omitempty" jsonschema:"-"`
-	// InstructionsV2 is a one-way cache migration. Once V2 recipes have been
-	// written, every deployed or rollback binary must continue to read this field;
-	// do not roll back to a binary that only understands Instructions.
-	InstructionsV2 []Instruction `json:"instructionsv2,omitempty" jsonschema:"required"`
-	Health         string        `json:"health"`
-	DrinkPairing   string        `json:"drink_pairing"`
-	WineStyles     []string      `json:"wine_styles"`
-	ResponseID     string        `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
-	OriginHash     string        `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
-	ParentHash     string        `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
-	PromptCacheKey string        `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
+	Title          string       `json:"title"`
+	Description    string       `json:"description"`
+	CookTime       string       `json:"cook_time"`
+	CostEstimate   string       `json:"cost_estimate"`
+	Ingredients    []Ingredient `json:"ingredients"`
+	Instructions   []string     `json:"instructions"`
+	Health         string       `json:"health"`
+	DrinkPairing   string       `json:"drink_pairing"`
+	WineStyles     []string     `json:"wine_styles"`
+	ResponseID     string       `json:"response_id,omitempty" jsonschema:"-"`      // not in schema
+	OriginHash     string       `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
+	ParentHash     string       `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
+	PromptCacheKey string       `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
 	// Shove wine selection in here
-}
-
-func (r Recipe) StructuredInstructions() []Instruction {
-	if len(r.Instructions) > 0 && len(r.InstructionsV2) > 0 {
-		panic("recipe contains both instructions and instructionsv2")
-	}
-	if len(r.InstructionsV2) > 0 {
-		return r.InstructionsV2
-	}
-
-	return lo.Map(r.Instructions, func(text string, index int) Instruction {
-		return Instruction{Phase: uint(index + 1), Text: text}
-	})
 }
 
 func (r Recipe) ResponseRef() ResponseRef {
@@ -104,8 +68,8 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Quantity))
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
-	for _, instruction := range r.StructuredInstructions() {
-		lo.Must(io.WriteString(fnv, instruction.Text))
+	for _, instruction := range r.Instructions {
+		lo.Must(io.WriteString(fnv, instruction))
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
@@ -149,9 +113,8 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
-- instructionsv2: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. Legacy instructions are read-only compatibility data; return only instructionsv2.
-  - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
-  - text: state the complete action using plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
+- instructions: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps.
+  Each instruction may use plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
 Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet. Once quantified ingredients have been made into a named mixture or prepared component, later steps should refer to that component by name without restating its ingredients or their amounts. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
 - health: one short sentence with plausible calories and macro notes for the stated servings.
 - drink_pairing: one concise sentence tied to the dish.
@@ -159,7 +122,7 @@ Every time a step first uses an ingredient, including a pantry ingredient, state
 
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
-Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, passive cooking, and work performed in parallel phases; do not simply add the durations of concurrent steps.
+Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, and passive cooking.
 Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
 
@@ -169,7 +132,7 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	if err := validateRecipeInstructions(recipe.InstructionsV2); err != nil {
+	if err := validateRecipeInstructions(recipe.Instructions); err != nil {
 		return nil, fmt.Errorf("failed to validate AI response: %w", err)
 	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
@@ -181,28 +144,14 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	return &recipe, nil
 }
 
-func validateRecipeInstructions(instructions []Instruction) error {
+func validateRecipeInstructions(instructions []string) error {
 	if len(instructions) == 0 {
 		return fmt.Errorf("at least one instruction is required")
 	}
-	var previousPhase uint
 	for index, instruction := range instructions {
-		if strings.TrimSpace(instruction.Text) == "" {
+		if strings.TrimSpace(instruction) == "" {
 			return fmt.Errorf("instruction %d text is required", index+1)
 		}
-		if instruction.Phase < 1 {
-			return fmt.Errorf("instruction %d phase must be positive", index+1)
-		}
-		if index == 0 && instruction.Phase != 1 {
-			return fmt.Errorf("instruction phases must start at 1")
-		}
-		if instruction.Phase < previousPhase {
-			return fmt.Errorf("instruction %d phase must not decrease", index+1)
-		}
-		if instruction.Phase > previousPhase+1 {
-			return fmt.Errorf("instruction %d phase skips phase %d", index+1, previousPhase+1)
-		}
-		previousPhase = instruction.Phase
 	}
 	return nil
 }

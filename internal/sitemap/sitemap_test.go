@@ -149,14 +149,14 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 
 	list := recipes.IO(cacheStore)
 	recipe := ai.Recipe{
-		Title:          "Feedback Soup",
-		Description:    "A soup worth commenting on.",
-		CookTime:       "35 minutes",
-		CostEstimate:   "$18-24",
-		Ingredients:    []ai.Ingredient{{Name: "Broth", Quantity: "4 cups", Price: "$4"}},
-		InstructionsV2: ai.SequentialInstructions("Bring broth to a simmer.", "Serve hot."),
-		Health:         "Balanced dinner",
-		DrinkPairing:   "Pinot Noir",
+		Title:        "Feedback Soup",
+		Description:  "A soup worth commenting on.",
+		CookTime:     "35 minutes",
+		CostEstimate: "$18-24",
+		Ingredients:  []ai.Ingredient{{Name: "Broth", Quantity: "4 cups", Price: "$4"}},
+		Instructions: []string{"Bring broth to a simmer.", "Serve hot."},
+		Health:       "Balanced dinner",
+		DrinkPairing: "Pinot Noir",
 	}
 	if err := list.SaveShoppingList(context.Background(), &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, shoppingListHash); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)

@@ -11,13 +11,10 @@ import (
 
 func TestBuildRecipeImagePrompt(t *testing.T) {
 	recipe := Recipe{
-		Title:       "Roast Chicken",
-		Description: "Crisp skin and herbs.",
-		Ingredients: []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
-		InstructionsV2: []Instruction{{
-			Phase: 1,
-			Text:  "Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt",
-		}},
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []Ingredient{{Name: "Chicken", Quantity: "1 whole"}},
+		Instructions: []string{"Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt"},
 	}
 
 	prompt, err := buildRecipeImagePrompt(recipe)

@@ -54,9 +54,9 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 			{Name: "Chicken", Quantity: "1 whole", Price: "$12"},
 			{Name: "Lemon", Quantity: "1", Price: "$1"},
 		},
-		InstructionsV2: []Instruction{
-			{Phase: 1, Text: "Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt"},
-			{Phase: 2, Text: "Roast until golden."},
+		Instructions: []string{
+			"Season:\n\n- 1 whole chicken\n- 1 teaspoon kosher salt",
+			"Roast until golden.",
 		},
 		Health:       "Balanced dinner",
 		DrinkPairing: "Pinot Noir",
@@ -131,10 +131,10 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 	})}, nil)
 
 	selection, err := client.PickWine(t.Context(), Recipe{
-		Title:          "Roast Chicken",
-		Description:    "Crisp skin.",
-		InstructionsV2: SequentialInstructions("Roast until golden."),
-		DrinkPairing:   "Pinot Noir",
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin.",
+		Instructions: []string{"Roast until golden."},
+		DrinkPairing: "Pinot Noir",
 	}, []InputIngredient{{ProductID: "pinot-noir-1", Description: "Pinot Noir"}})
 	if err != nil {
 		t.Fatalf("PickWine returned error: %v", err)

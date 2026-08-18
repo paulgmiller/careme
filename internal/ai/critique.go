@@ -29,8 +29,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - is it realistic to cook as written
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
-- does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate same-phase steps when it can happen concurrently
-- do steps with the same phase contain work that can genuinely happen concurrently, and do later phases wait for all work they require
+- does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate steps
 - when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
 - are bullet lists limited to preparations or mixtures of more than three ingredients and placed where those ingredients enter the action
 - do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
@@ -41,7 +40,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
 - report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
 - are the timing and cost estimates plausible
-- does the stated cook_time match the total elapsed time implied by all instruction phases, including prep, resting, passive cooking, and concurrent work
+- does the stated cook_time match the total elapsed time implied by all instructions, including prep, resting, and passive cooking
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 

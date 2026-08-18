@@ -766,13 +766,13 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 
 	recipe := ai.Recipe{
-		Title:          "Sheet Pan Salmon",
-		Description:    "Simple weeknight salmon dinner.",
-		Ingredients:    []ai.Ingredient{{Name: "salmon", Quantity: "1 lb", Price: "$12"}},
-		InstructionsV2: ai.SequentialInstructions("Roast salmon and vegetables until done."),
-		Health:         "High protein",
-		DrinkPairing:   "Pinot Noir",
-		OriginHash:     legacyHash,
+		Title:        "Sheet Pan Salmon",
+		Description:  "Simple weeknight salmon dinner.",
+		Ingredients:  []ai.Ingredient{{Name: "salmon", Quantity: "1 lb", Price: "$12"}},
+		Instructions: []string{"Roast salmon and vegetables until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot Noir",
+		OriginHash:   legacyHash,
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, legacyHash, recipe)
@@ -817,12 +817,12 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 	}
 
 	recipe := ai.Recipe{
-		Title:          "Legacy Hash Recipe",
-		Description:    "Recipe with legacy origin hash and no params record.",
-		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1 lb", Price: "$8"}},
-		InstructionsV2: ai.SequentialInstructions("Cook chicken until done."),
-		Health:         "Protein rich",
-		DrinkPairing:   "Sparkling water",
+		Title:        "Legacy Hash Recipe",
+		Description:  "Recipe with legacy origin hash and no params record.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1 lb", Price: "$8"}},
+		Instructions: []string{"Cook chicken until done."},
+		Health:       "Protein rich",
+		DrinkPairing: "Sparkling water",
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, legacyHash, recipe)
@@ -852,14 +852,14 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 
 	recipe := ai.Recipe{
-		OriginHash:     originHash,
-		ResponseID:     "resp-wine-single",
-		Title:          "Roast Chicken",
-		Description:    "Crisp skin and herbs.",
-		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.SequentialInstructions("Roast until done."),
-		Health:         "High protein",
-		DrinkPairing:   "Pinot noir",
+		OriginHash:   originHash,
+		ResponseID:   "resp-wine-single",
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -905,13 +905,13 @@ func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	recipe := ai.Recipe{
-		OriginHash:     originHash,
-		Title:          "Saved Single Recipe",
-		Description:    "Saved from the list page.",
-		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.SequentialInstructions("Roast until done."),
-		Health:         "High protein",
-		DrinkPairing:   "Pinot noir",
+		OriginHash:   originHash,
+		Title:        "Saved Single Recipe",
+		Description:  "Saved from the list page.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
+		Health:       "High protein",
+		DrinkPairing: "Pinot noir",
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -951,13 +951,13 @@ func TestHandleSingle_GuestSeesSaveButton(t *testing.T) {
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	recipe := ai.Recipe{
-		OriginHash:     originHash,
-		Title:          "Guest Single Recipe",
-		Description:    "Guests can see save.",
-		Ingredients:    []ai.Ingredient{{Name: "beans", Quantity: "1 can"}},
-		InstructionsV2: ai.SequentialInstructions("Warm gently."),
-		Health:         "Fiber rich",
-		DrinkPairing:   "Sparkling water",
+		OriginHash:   originHash,
+		Title:        "Guest Single Recipe",
+		Description:  "Guests can see save.",
+		Ingredients:  []ai.Ingredient{{Name: "beans", Quantity: "1 can"}},
+		Instructions: []string{"Warm gently."},
+		Health:       "Fiber rich",
+		DrinkPairing: "Sparkling water",
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1046,12 +1046,12 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	shoppingListHash := params.Hash()
 	original := ai.Recipe{
-		Title:          "Original Steak Dinner",
-		Description:    "Original.",
-		Ingredients:    []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
-		InstructionsV2: ai.SequentialInstructions("Cook steak.", "Serve."),
-		OriginHash:     shoppingListHash,
-		ResponseID:     "resp-original",
+		Title:        "Original Steak Dinner",
+		Description:  "Original.",
+		Ingredients:  []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
+		Instructions: []string{"Cook steak.", "Serve."},
+		OriginHash:   shoppingListHash,
+		ResponseID:   "resp-original",
 	}
 	originalHash := original.ComputeHash()
 	params.Saved = []ai.Recipe{original}
@@ -1428,11 +1428,11 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instruc
 	c.regenerateCalls++
 	c.lastResponse = previous
 	return &ai.Recipe{
-		Title:          "Updated Skirt Steak Dinner",
-		Description:    "Updated after questions.",
-		Ingredients:    []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
-		InstructionsV2: ai.SequentialInstructions("Cook the steak.", "Serve."),
-		ResponseID:     "resp-regenerated",
+		Title:        "Updated Skirt Steak Dinner",
+		Description:  "Updated after questions.",
+		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
+		Instructions: []string{"Cook the steak.", "Serve."},
+		ResponseID:   "resp-regenerated",
 	}, nil
 }
 
@@ -1500,7 +1500,7 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 		Title:          "Roast Chicken",
 		Description:    "Crisp skin and herbs.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.SequentialInstructions("Roast until done."),
+		Instructions:   []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1635,10 +1635,10 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	)
 
 	recipe := ai.Recipe{
-		Title:          "Roast Chicken",
-		Description:    "Crisp skin and herbs.",
-		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.SequentialInstructions("Roast until done."),
+		Title:        "Roast Chicken",
+		Description:  "Crisp skin and herbs.",
+		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
+		Instructions: []string{"Roast until done."},
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
@@ -1873,12 +1873,12 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 	)
 
 	recipe := ai.Recipe{
-		Title:          "Recovered Recipe",
-		Description:    "Recipe to recover",
-		Ingredients:    []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-		InstructionsV2: ai.SequentialInstructions("Step 1"),
-		Health:         "Healthy",
-		DrinkPairing:   "Water",
+		Title:        "Recovered Recipe",
+		Description:  "Recipe to recover",
+		Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+		Instructions: []string{"Step 1"},
+		Health:       "Healthy",
+		DrinkPairing: "Water",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	originHash := p.Hash()
@@ -1925,12 +1925,12 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	)
 
 	recipe := ai.Recipe{
-		Title:          "Single Recipe",
-		Description:    "Recipe to save from detail page",
-		Ingredients:    []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-		InstructionsV2: ai.SequentialInstructions("Step 1"),
-		Health:         "Healthy",
-		DrinkPairing:   "Water",
+		Title:        "Single Recipe",
+		Description:  "Recipe to save from detail page",
+		Ingredients:  []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
+		Instructions: []string{"Step 1"},
+		Health:       "Healthy",
+		DrinkPairing: "Water",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	originHash := p.Hash()

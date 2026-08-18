@@ -66,8 +66,8 @@ func buildWineSelectionPrompt(recipe Recipe, wines []InputIngredient) (string, e
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Description)
 	fmt.Fprintf(&promptBuilder, "Instructions:\n")
-	for _, ins := range recipe.StructuredInstructions() {
-		fmt.Fprintf(&promptBuilder, "- %s\n", ins.PromptText())
+	for _, instruction := range recipe.Instructions {
+		fmt.Fprintf(&promptBuilder, "- %s\n", strings.ReplaceAll(instruction, "\n", "\n  "))
 	}
 	fmt.Fprintf(&promptBuilder, "Existing drink pairing note: %s\n", recipe.DrinkPairing)
 	// add cost estimate when we believ it?

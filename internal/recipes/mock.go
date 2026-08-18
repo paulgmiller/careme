@@ -52,12 +52,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Glue", Quantity: "1 oz", Price: "$500"},
 			{Name: "Cheese", Quantity: "1/2 lb", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"roll dough",
 			"mix glue and sauce",
 			"attach cheese to dough with sticky sauce",
 			"bake that sucker",
-		),
+		},
 	},
 	{
 		Title:       "Grilled Chicken Marinade",
@@ -68,11 +68,11 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Salt", Quantity: "1 tsp", Price: "$1"},
 			{Name: "Marinade", Quantity: "1/2 cup", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"marinade chicken for 2 hours",
 			"toss on grill",
 			"pull it off before you over cook it",
-		),
+		},
 	},
 	{
 		Title:       "Spaghetti Carbonara",
@@ -83,12 +83,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Eggs", Quantity: "4", Price: "$3"},
 			{Name: "Parmesan Cheese", Quantity: "1 cup", Price: "$5"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"cook spaghetti",
 			"fry bacon until crispy",
 			"mix eggs and parmesan",
 			"combine all ingredients while pasta is hot",
-		),
+		},
 	},
 	{
 		Title:       "Beef Tacos",
@@ -100,12 +100,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Cheese", Quantity: "8 oz", Price: "$4"},
 			{Name: "Taco Seasoning", Quantity: "1 packet", Price: "$1"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"brown ground beef",
 			"add taco seasoning and water",
 			"warm taco shells",
 			"assemble tacos with toppings",
-		),
+		},
 	},
 	{
 		Title:       "Caesar Salad",
@@ -116,12 +116,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Croutons", Quantity: "2 cups", Price: "$3"},
 			{Name: "Parmesan Cheese", Quantity: "1/2 cup", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"chop romaine lettuce",
 			"toss with caesar dressing",
 			"add croutons and parmesan",
 			"serve immediately",
-		),
+		},
 	},
 	{
 		Title:       "Salmon Teriyaki",
@@ -132,12 +132,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Ginger", Quantity: "1 tbsp", Price: "$2"},
 			{Name: "Green Onions", Quantity: "3", Price: "$1"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"season salmon fillets",
 			"sear in hot pan",
 			"add teriyaki sauce and ginger",
 			"garnish with green onions",
-		),
+		},
 	},
 	{
 		Title:       "Veggie Stir Fry",
@@ -148,12 +148,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Garlic", Quantity: "3 cloves", Price: "$1"},
 			{Name: "Rice", Quantity: "2 cups", Price: "$3"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"cook rice according to package",
 			"heat oil in wok",
 			"stir fry vegetables with garlic",
 			"add soy sauce and serve over rice",
-		),
+		},
 	},
 	{
 		Title:       "Mushroom Risotto",
@@ -165,12 +165,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Parmesan Cheese", Quantity: "1 cup", Price: "$5"},
 			{Name: "White Wine", Quantity: "1/2 cup", Price: "$8"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"sauté mushrooms",
 			"toast rice in butter",
 			"add wine and broth gradually",
 			"stir in parmesan until creamy",
-		),
+		},
 	},
 	{
 		Title:       "BBQ Pulled Pork",
@@ -181,12 +181,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Buns", Quantity: "8", Price: "$3"},
 			{Name: "Coleslaw", Quantity: "1 lb", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"season pork shoulder",
 			"slow cook for 8 hours",
 			"shred meat and mix with BBQ sauce",
 			"serve on buns with coleslaw",
-		),
+		},
 	},
 	{
 		Title:       "Greek Salad",
@@ -198,12 +198,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Olives", Quantity: "1 cup", Price: "$4"},
 			{Name: "Olive Oil", Quantity: "1/4 cup", Price: "$3"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"chop tomatoes and cucumber",
 			"add feta cheese and olives",
 			"dress with olive oil and lemon",
 			"season with oregano",
-		),
+		},
 	},
 	{
 		Title:       "Chicken Curry",
@@ -214,12 +214,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Coconut Milk", Quantity: "14 oz", Price: "$3"},
 			{Name: "Rice", Quantity: "2 cups", Price: "$3"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"brown chicken pieces",
 			"add curry paste and cook",
 			"pour in coconut milk and simmer",
 			"serve over rice",
-		),
+		},
 	},
 	{
 		Title:       "Margherita Pizza",
@@ -230,12 +230,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Fresh Mozzarella", Quantity: "8 oz", Price: "$6"},
 			{Name: "Fresh Basil", Quantity: "1 bunch", Price: "$2"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"stretch pizza dough",
 			"spread tomato sauce",
 			"add mozzarella slices",
 			"bake and top with fresh basil",
-		),
+		},
 	},
 	{
 		Title:       "Beef Stew",
@@ -247,12 +247,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Beef Broth", Quantity: "4 cups", Price: "$3"},
 			{Name: "Onions", Quantity: "2", Price: "$2"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"brown beef chunks",
 			"add vegetables and broth",
 			"simmer for 3 hours",
 			"season and serve hot",
-		),
+		},
 	},
 	{
 		Title:       "Shrimp Scampi",
@@ -264,12 +264,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Butter", Quantity: "1/2 cup", Price: "$3"},
 			{Name: "White Wine", Quantity: "1/2 cup", Price: "$8"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"cook linguine",
 			"sauté garlic in butter",
 			"add shrimp and wine",
 			"toss with pasta",
-		),
+		},
 	},
 	{
 		Title:       "Vegetable Soup",
@@ -280,12 +280,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Tomatoes", Quantity: "2", Price: "$2"},
 			{Name: "Beans", Quantity: "1 can", Price: "$2"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"chop all vegetables",
 			"bring broth to boil",
 			"add vegetables and simmer",
 			"season to taste",
-		),
+		},
 	},
 	{
 		Title:       "Fish Tacos",
@@ -297,12 +297,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Lime", Quantity: "3", Price: "$1"},
 			{Name: "Chipotle Mayo", Quantity: "1/2 cup", Price: "$3"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"bread and fry fish",
 			"make cabbage slaw with lime",
 			"warm tortillas",
 			"assemble with chipotle mayo",
-		),
+		},
 	},
 	{
 		Title:       "Lasagna",
@@ -314,12 +314,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Mozzarella Cheese", Quantity: "2 cups", Price: "$6"},
 			{Name: "Marinara Sauce", Quantity: "4 cups", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"cook lasagna noodles",
 			"brown ground beef with sauce",
 			"layer noodles, ricotta, beef sauce, mozzarella",
 			"bake until bubbly",
-		),
+		},
 	},
 	{
 		Title:       "Pad Thai",
@@ -331,12 +331,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Bean Sprouts", Quantity: "2 cups", Price: "$2"},
 			{Name: "Pad Thai Sauce", Quantity: "1/2 cup", Price: "$5"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"soak rice noodles",
 			"stir fry protein",
 			"add noodles and sauce",
 			"garnish with peanuts and sprouts",
-		),
+		},
 	},
 	{
 		Title:       "Chili Con Carne",
@@ -348,12 +348,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Chili Powder", Quantity: "3 tbsp", Price: "$2"},
 			{Name: "Onions", Quantity: "2", Price: "$2"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"brown beef with onions",
 			"add beans and tomatoes",
 			"season with chili powder",
 			"simmer for 1 hour",
-		),
+		},
 	},
 	{
 		Title:       "Chicken Parmesan",
@@ -365,12 +365,12 @@ var mockRecipes = []ai.Recipe{
 			{Name: "Mozzarella Cheese", Quantity: "1 cup", Price: "$4"},
 			{Name: "Parmesan Cheese", Quantity: "1/2 cup", Price: "$4"},
 		},
-		InstructionsV2: ai.SequentialInstructions(
+		Instructions: []string{
 			"bread chicken breasts",
 			"fry until golden",
 			"top with marinara and cheese",
 			"bake until cheese melts",
-		),
+		},
 	},
 }
 
