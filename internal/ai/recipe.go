@@ -97,11 +97,9 @@ func (r Recipe) StructuredInstructions() []Instruction {
 		return r.InstructionsV2
 	}
 
-	instructions := make([]Instruction, 0, len(r.Instructions))
-	for index, text := range r.Instructions {
-		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
-	}
-	return instructions
+	return lo.Map(r.Instructions, func(text string, index int) Instruction {
+		return Instruction{Phase: uint(index + 1), Text: text}
+	})
 }
 
 func (r Recipe) ResponseRef() ResponseRef {
