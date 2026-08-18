@@ -92,7 +92,7 @@ func TestRecipeStructuredInstructionHashUsesFlattenedContent(t *testing.T) {
 		t.Fatal("nested ingredients should contribute to structured recipe hashes")
 	}
 
-	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].FlattenedText()}}
+	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].flattenedText()}}
 	if base.ComputeHash() != legacy.ComputeHash() {
 		t.Fatal("structured and flattened legacy instructions should produce the same hash")
 	}

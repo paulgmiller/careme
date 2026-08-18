@@ -51,7 +51,8 @@ func (i Instruction) PromptText() string {
 	return prompt.String()
 }
 
-func (i Instruction) FlattenedText() string {
+// only used for back compat in computehash
+func (i Instruction) flattenedText() string {
 	if len(i.Ingredients) == 0 {
 		return i.Text
 	}
@@ -67,12 +68,16 @@ func SequentialInstructions(texts ...string) []Instruction {
 }
 
 type Recipe struct {
-	Title          string        `json:"title"`
-	Description    string        `json:"description"`
-	CookTime       string        `json:"cook_time"`
-	CostEstimate   string        `json:"cost_estimate"`
-	Ingredients    []Ingredient  `json:"ingredients"`
-	Instructions   []string      `json:"instructions,omitempty" jsonschema:"-"`
+	Title        string       `json:"title"`
+	Description  string       `json:"description"`
+	CookTime     string       `json:"cook_time"`
+	CostEstimate string       `json:"cost_estimate"`
+	Ingredients  []Ingredient `json:"ingredients"`
+	// Instructions holds legacy cache records. Exactly one instruction field should be populated.
+	Instructions []string `json:"instructions,omitempty" jsonschema:"-"`
+	// InstructionsV2 is a one-way cache migration. Once V2 recipes have been
+	// written, every deployed or rollback binary must continue to read this field;
+	// do not roll back to a binary that only understands Instructions.
 	InstructionsV2 []Instruction `json:"instructionsv2,omitempty" jsonschema:"required"`
 	Health         string        `json:"health"`
 	DrinkPairing   string        `json:"drink_pairing"`
@@ -119,7 +124,7 @@ func (r *Recipe) ComputeHash() string {
 		lo.Must(io.WriteString(fnv, ing.Price))
 	}
 	for _, instruction := range r.StructuredInstructions() {
-		lo.Must(io.WriteString(fnv, instruction.FlattenedText()))
+		lo.Must(io.WriteString(fnv, instruction.flattenedText()))
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
