@@ -92,6 +92,8 @@
 
             <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
 
+            {{template "recipe_properties" .PropertyDisplay}}
+
             <div class="grid gap-6 md:grid-cols-2">
               <details id="recipe-ingredients"
                        class="recipe-ingredients group"
@@ -149,7 +151,6 @@
             </div>
 
             <div class="space-y-3 text-sm text-gray-600">
-              {{template "recipe_properties" .PropertyDisplay}}
               <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
               {{template "recipe_wine" .}}
             </div>

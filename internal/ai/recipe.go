@@ -43,6 +43,7 @@ const (
 	CookingMethodSlowCooker CookingMethod = "slow_cooker"
 	CookingMethodAirFryer   CookingMethod = "air_fryer"
 	CookingMethodNoCook     CookingMethod = "no_cook"
+	CookingMethodOther      CookingMethod = "other"
 )
 
 func (CookingMethod) JSONSchema() *jsonschema.Schema {
@@ -55,6 +56,7 @@ func (CookingMethod) JSONSchema() *jsonschema.Schema {
 			string(CookingMethodSlowCooker),
 			string(CookingMethodAirFryer),
 			string(CookingMethodNoCook),
+			string(CookingMethodOther),
 		},
 	}
 }
@@ -64,9 +66,9 @@ type RecipeProperties struct {
 	Servings             int             `json:"servings" jsonschema:"minimum=1"`
 	EstimatedCostDollars int             `json:"estimated_cost_dollars" jsonschema:"minimum=1"`
 	CaloriesPerServing   int             `json:"calories_per_serving" jsonschema:"minimum=1"`
-	CookingMethods       []CookingMethod `json:"cooking_methods" jsonschema:"minItems=1,uniqueItems=true"`
+	CookingMethods       []CookingMethod `json:"cooking_methods" jsonschema:"minItems=1"`
 	HealthNote           string          `json:"health_note"`
-	SpecialEquipment     string          `json:"special_equipment"`
+	SpecialEquipment     string          `json:"special_equipment,omitempty" jsonschema:"-"` // legacy cached recipe field
 }
 
 type Recipe struct {
@@ -175,9 +177,8 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - properties.servings: provide the integer number of people served and ensure ingredient quantities match that yield.
 - properties.estimated_cost_dollars: provide one integer estimate of the total recipe cost in US dollars, rounded to the nearest dollar. Use only prices from the input and do not add costs for unpriced ingredients.
 - properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving.
-- properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, or no_cook. Do not include no_cook with another method.
+- properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other. Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide. Do not include no_cook with another method.
 - properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
-- properties.special_equipment: name uncommon required equipment not covered by cooking_methods, such as a pressure cooker, blender, smoker, or food processor; otherwise return an empty string. Do not list ordinary knives, bowls, pots, pans, baking sheets, or utensils.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps.
   Each instruction may use plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Put a blank line before the first bullet and after the final bullet so surrounding prose stays outside the list. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
@@ -218,6 +219,7 @@ func normalizeCookingMethods(methods []CookingMethod) []CookingMethod {
 		CookingMethodSlowCooker: {},
 		CookingMethodAirFryer:   {},
 		CookingMethodNoCook:     {},
+		CookingMethodOther:      {},
 	}
 	cleaned := make([]CookingMethod, 0, len(methods))
 	seen := make(map[CookingMethod]struct{}, len(methods))

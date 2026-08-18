@@ -1,10 +1,11 @@
-{{define "recipe_cooking_method_icon"}}
-  {{if eq . "stovetop"}}{{template "icon_stovetop" .}}
-  {{else if eq . "oven"}}{{template "icon_oven" .}}
-  {{else if eq . "grill"}}{{template "icon_grill" .}}
-  {{else if eq . "slow_cooker"}}{{template "icon_slow_cooker" .}}
-  {{else if eq . "air_fryer"}}{{template "icon_air_fryer" .}}
-  {{else if eq . "no_cook"}}{{template "icon_no_cook" .}}
+{{define "recipe_cooking_method_emoji"}}
+  {{if eq . "stovetop"}}🍳
+  {{else if eq . "oven"}}♨️
+  {{else if eq . "grill"}}🔥
+  {{else if eq . "slow_cooker"}}🍲
+  {{else if eq . "air_fryer"}}🌀
+  {{else if eq . "no_cook"}}🥗
+  {{else if eq . "other"}}❓
   {{end}}
 {{end}}
 
@@ -12,38 +13,32 @@
 <section class="space-y-3" aria-label="Recipe details">
   <ul class="flex flex-wrap gap-2 text-sm text-ink-600">
     <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Total time">
-      {{template "icon_clock" .}}
+      <span class="text-base leading-none" aria-hidden="true">⏱️</span>
       <span class="sr-only">Total time: </span>{{.Time}}
     </li>
     <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Servings">
-      {{template "icon_servings" .}}
+      <span class="text-base leading-none" aria-hidden="true">👥</span>
       <span class="sr-only">Servings: </span>{{.Servings}}
     </li>
     <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Estimated total cost">
-      {{template "icon_cost" .}}
+      <span class="text-base leading-none" aria-hidden="true">💵</span>
       <span class="sr-only">Estimated total cost: </span>{{.Cost}}
     </li>
     <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Calories per serving">
-      {{template "icon_calories" .}}
+      <span class="text-base leading-none" aria-hidden="true">❤️</span>
       <span class="sr-only">Calories per serving: </span>{{.Calories}}
     </li>
     {{range .CookingMethods}}
     <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Cooking method: {{.Label}}">
-      {{template "recipe_cooking_method_icon" .Key}}
+      <span class="text-base leading-none" aria-hidden="true">{{template "recipe_cooking_method_emoji" .Key}}</span>
       <span>{{.Label}}</span>
     </li>
     {{end}}
   </ul>
   {{if .HealthNote}}
   <p class="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-    {{template "icon_health_note" .}}
+    <span class="text-base leading-none" aria-hidden="true">🌿</span>
     <span><span class="font-semibold">Health note:</span> {{.HealthNote}}</span>
-  </p>
-  {{end}}
-  {{if .SpecialEquipment}}
-  <p class="flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm text-ink-600">
-    {{template "icon_special_equipment" .}}
-    <span><span class="font-semibold text-brand-700">Special equipment:</span> {{.SpecialEquipment}}</span>
   </p>
   {{end}}
 </section>

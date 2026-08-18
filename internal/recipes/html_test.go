@@ -71,7 +71,7 @@ var list = ai.ShoppingList{
 				Servings:             4,
 				EstimatedCostDollars: 21,
 				CaloriesPerServing:   540,
-				CookingMethods:       []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven},
+				CookingMethods:       []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven, ai.CookingMethodOther},
 				HealthNote:           "Brown rice adds fiber but takes longer to cook.",
 				SpecialEquipment:     "Food processor",
 			},
@@ -96,9 +96,11 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
 	isValidHTML(t, html)
-	for _, want := range []string{"Total time:", "35 min", "Servings:", "4 servings", "Estimated total cost:", "$21", "Calories per serving:", "540 cal", "Stovetop", "Oven", "Health note:", "Brown rice adds fiber", "Special equipment:", "Food processor"} {
+	for _, want := range []string{"⏱️", "Total time:", "35 min", "👥", "Servings:", "4 servings", "💵", "Estimated total cost:", "$21", "❤️", "Calories per serving:", "540 cal", "🍳", "Stovetop", "♨️", "Oven", "❓", "Other", "🌿", "Health note:", "Brown rice adds fiber"} {
 		assert.Contains(t, html, want)
 	}
+	assert.NotContains(t, html, "Special equipment:")
+	assert.NotContains(t, html, "Food processor")
 	assert.NotContains(t, html, "Legacy health prose should stay hidden")
 	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
 		t.Error("shopping list HTML should include htmx script")
@@ -155,6 +157,7 @@ func TestCookingMethodLabel(t *testing.T) {
 		{method: ai.CookingMethodSlowCooker, want: "Slow cooker"},
 		{method: ai.CookingMethodAirFryer, want: "Air fryer"},
 		{method: ai.CookingMethodNoCook, want: "No-cook"},
+		{method: ai.CookingMethodOther, want: "Other"},
 		{method: ai.CookingMethod("microwave"), want: ""},
 	}
 
@@ -585,10 +588,17 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if strings.Contains(html, "See plated dish") || strings.Contains(html, "Sign in to see plated dish") {
 		t.Error("recipe HTML should not include manual image generation actions")
 	}
-	for _, want := range []string{"Total time:", "35 min", "Servings:", "4 servings", "Estimated total cost:", "$21", "Calories per serving:", "540 cal", "Stovetop", "Oven", "Health note:", "Brown rice adds fiber", "Special equipment:", "Food processor"} {
+	for _, want := range []string{"Total time:", "35 min", "Servings:", "4 servings", "Estimated total cost:", "$21", "Calories per serving:", "540 cal", "Stovetop", "Oven", "Other", "Health note:", "Brown rice adds fiber"} {
 		assert.Contains(t, html, want)
 	}
+	assert.NotContains(t, html, "Special equipment:")
+	assert.NotContains(t, html, "Food processor")
 	assert.NotContains(t, html, "Legacy health prose should stay hidden")
+	propertyIndex := strings.Index(html, `aria-label="Recipe details"`)
+	ingredientsIndex := strings.Index(html, `id="recipe-ingredients"`)
+	assert.NotEqual(t, -1, propertyIndex)
+	assert.NotEqual(t, -1, ingredientsIndex)
+	assert.Less(t, propertyIndex, ingredientsIndex, "recipe properties should appear before ingredients")
 	if !strings.Contains(html, `sm:grid-cols-[minmax(0,1fr)_10rem_5rem]`) {
 		t.Error("recipe HTML should render ingredient rows with responsive aligned columns")
 	}

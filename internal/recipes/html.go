@@ -39,13 +39,12 @@ type cookingMethodDisplay struct {
 }
 
 type recipePropertyDisplay struct {
-	Time             string
-	Servings         string
-	Cost             string
-	Calories         string
-	CookingMethods   []cookingMethodDisplay
-	HealthNote       string
-	SpecialEquipment string
+	Time           string
+	Servings       string
+	Cost           string
+	Calories       string
+	CookingMethods []cookingMethodDisplay
+	HealthNote     string
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -376,13 +375,12 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 	}
 
 	return recipePropertyDisplay{
-		Time:             timeDisplay,
-		Servings:         servingsDisplay,
-		Cost:             costDisplay,
-		Calories:         caloriesDisplay,
-		CookingMethods:   methods,
-		HealthNote:       strings.TrimSpace(recipe.Properties.HealthNote),
-		SpecialEquipment: strings.TrimSpace(recipe.Properties.SpecialEquipment),
+		Time:           timeDisplay,
+		Servings:       servingsDisplay,
+		Cost:           costDisplay,
+		Calories:       caloriesDisplay,
+		CookingMethods: methods,
+		HealthNote:     strings.TrimSpace(recipe.Properties.HealthNote),
 	}
 }
 
@@ -400,6 +398,8 @@ func cookingMethodLabel(method ai.CookingMethod) string {
 		return "Air fryer"
 	case ai.CookingMethodNoCook:
 		return "No-cook"
+	case ai.CookingMethodOther:
+		return "Other"
 	default:
 		return ""
 	}

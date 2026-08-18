@@ -185,11 +185,11 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 		"calories_per_serving",
 		"cooking_methods",
 		"health_note",
-		"special_equipment",
 	} {
 		assert.Contains(t, fields, name)
 		assert.Contains(t, schemaRequired(t, recipeProperties), name)
 	}
+	assert.NotContains(t, fields, "special_equipment")
 	for _, name := range []string{"total_minutes", "servings", "estimated_cost_dollars", "calories_per_serving"} {
 		field := schemaObject(t, fields[name])
 		assert.Equal(t, "integer", field["type"])
@@ -198,11 +198,11 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 
 	methods := schemaObject(t, fields["cooking_methods"])
 	assert.Equal(t, float64(1), methods["minItems"])
-	assert.Equal(t, true, methods["uniqueItems"])
+	assert.NotContains(t, methods, "uniqueItems")
 	methodItems := schemaObject(t, methods["items"])
 	enum, ok := methodItems["enum"].([]any)
 	require.True(t, ok)
-	assert.ElementsMatch(t, []any{"stovetop", "oven", "grill", "slow_cooker", "air_fryer", "no_cook"}, enum)
+	assert.ElementsMatch(t, []any{"stovetop", "oven", "grill", "slow_cooker", "air_fryer", "no_cook", "other"}, enum)
 	assert.NotContains(t, enum, "microwave")
 }
 
@@ -225,7 +225,8 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"properties.servings: provide the integer number of people served",
 		"properties.estimated_cost_dollars: provide one integer estimate",
 		"properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving",
-		"choosing only stovetop, oven, grill, slow_cooker, air_fryer, or no_cook",
+		"choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other",
+		"Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide.",
 		"Never recommend microwave cooking.",
 		"properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
 		"otherwise return an empty string",
@@ -261,9 +262,10 @@ func TestNormalizeCookingMethodsRemovesUnknownDuplicatesAndContradictoryNoCook(t
 		CookingMethodStovetop,
 		CookingMethod("microwave"),
 		CookingMethodStovetop,
+		CookingMethodOther,
 	})
 
-	assert.Equal(t, []CookingMethod{CookingMethodStovetop}, methods)
+	assert.Equal(t, []CookingMethod{CookingMethodStovetop, CookingMethodOther}, methods)
 }
 
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
@@ -294,7 +296,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"],\"health_note\":\"\",\"special_equipment\":\"\"},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"],\"health_note\":\"\"},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],

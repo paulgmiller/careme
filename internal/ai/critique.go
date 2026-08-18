@@ -41,9 +41,8 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
 - are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
 - does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
-- do properties.cooking_methods match the instructions, exclude microwave cooking, and avoid combining no_cook with another method
+- do properties.cooking_methods match the instructions, exclude microwave cooking, avoid combining no_cook with another method, and use other only for a method outside the named choices
 - is properties.health_note empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
-- is properties.special_equipment empty unless the recipe genuinely requires uncommon equipment not represented by cooking_methods
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
