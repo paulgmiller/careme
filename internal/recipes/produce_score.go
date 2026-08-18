@@ -33,6 +33,9 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Lo
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score
 		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.WarnContext(ctx, "failed to read cached produce score ingredients", "location_id", loc.ID, "date", candidate.Format("2006-01-02"), "error", err)
 		}
