@@ -34,7 +34,8 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-function fetchAndCache(cache, request) {
+function fetchAndCache(cache, url) {
+  const request = new Request(url, { cache: "reload" });
   return fetch(request)
     .then((response) => {
       if (!response || !response.ok) {
@@ -50,20 +51,12 @@ function cacheSavedRecipeURLs(body) {
   return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
     Promise.all(
       urls.map((url) => {
-        const recipeRequest = new Request(url, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
-        const imageRequest = new Request(`${url}/image`, {
-          credentials: "same-origin",
-          cache: "reload",
-        });
         // Recipe pages are refreshed on each sync so offline copies pick up
         // later additions like questions, generated images, and wine pairings.
         // Ideally the app would trigger this only when one of those changes.
         return Promise.all([
-          fetchAndCache(cache, recipeRequest),
-          fetchAndCache(cache, imageRequest),
+          fetchAndCache(cache, url),
+          fetchAndCache(cache, `${url}/image`),
         ]).then(([pageCached]) => pageCached);
       }),
     ).then((results) => {
