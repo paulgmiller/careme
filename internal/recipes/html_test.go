@@ -165,6 +165,49 @@ func TestCookingMethodLabel(t *testing.T) {
 	}
 }
 
+func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	p := DefaultParams(&loc, time.Now())
+	recipe := ai.Recipe{
+		Title:       "Pepper Pasta",
+		Description: "A quick pasta dinner.",
+		Instructions: []string{
+			"Prepare:\n\n- 1 green bell pepper, diced\n- 4 ounces sweet onion, diced\n\nthen toss with the pasta.",
+		},
+	}
+
+	t.Run("single recipe", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, nil, feedback.Feedback{}, nil, w)
+		html := assertHTTPSuccess(t, w)
+		isValidHTML(t, html)
+		assertInstructionMarkdown(t, html)
+	})
+
+	t.Run("shopping list", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, true, recipeSelection{}, w)
+		html := assertHTTPSuccess(t, w)
+		isValidHTML(t, html)
+		assertInstructionMarkdown(t, html)
+	})
+}
+
+func assertInstructionMarkdown(t *testing.T, html string) {
+	t.Helper()
+	for _, want := range []string{
+		"<p>Prepare:</p>",
+		"<ul>",
+		"<li>1 green bell pepper, diced</li>",
+		"<li>4 ounces sweet onion, diced</li>",
+		"<p>then toss with the pasta.</p>",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("recipe instructions should contain %q: %s", want, html)
+		}
+	}
+}
+
 func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())

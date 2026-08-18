@@ -65,6 +65,7 @@ type shoppingRecipeView struct {
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
 	PropertyDisplay    recipePropertyDisplay
+	InstructionsHTML   []template.HTML
 	Saved              bool
 	Dismissed          bool
 	HasImage           bool
@@ -93,6 +94,11 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
+		instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+		if err != nil {
+			http.Error(writer, "instruction rendering error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		saved := selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
@@ -101,6 +107,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
 			PropertyDisplay:    newRecipePropertyDisplay(recipe),
+			InstructionsHTML:   instructionsHTML,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
 			HasImage:           recipeImages[recipeHash],
@@ -190,6 +197,11 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
+	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+	if err != nil {
+		http.Error(writer, "instruction rendering error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	activeResponseID := recipe.ResponseID
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
@@ -201,6 +213,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript           template.HTML
 		GoogleTagScript         template.HTML
 		Recipe                  ai.Recipe
+		InstructionsHTML        []template.HTML
 		Saved                   bool
 		DisplayIngredients      []ai.Ingredient
 		PropertyDisplay         recipePropertyDisplay
@@ -227,6 +240,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
 		Recipe:                  recipe,
+		InstructionsHTML:        instructionsHTML,
 		Saved:                   saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		PropertyDisplay:         newRecipePropertyDisplay(recipe),
@@ -303,6 +317,10 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
 func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
+	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+	if err != nil {
+		return err
+	}
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
@@ -310,6 +328,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		ServerSignedIn:     true, // have to be signed in to toggle
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
 		PropertyDisplay:    newRecipePropertyDisplay(recipe),
+		InstructionsHTML:   instructionsHTML,
 		Saved:              saved,
 		Dismissed:          !saved,
 		HasImage:           hasImage,

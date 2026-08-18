@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -96,6 +97,48 @@ func TestRecipeComputeHashIncludesStructuredPropertiesWithoutChangingLegacyHash(
 	assert.NotEqual(t, legacy.ComputeHash(), structured.ComputeHash())
 }
 
+func TestRecipeInstructionMarkdownContributesToHash(t *testing.T) {
+	base := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 1 tablespoon olive oil"}}
+	different := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 2 tablespoons olive oil"}}
+
+	if base.ComputeHash() == different.ComputeHash() {
+		t.Fatal("instruction Markdown should contribute to recipe hashes")
+	}
+}
+
+func TestRecipeDecodesAndPreservesInstructions(t *testing.T) {
+	const body = `{"title":"Soup","instructions":["Chop the onion.","Simmer the soup."]}`
+	var recipe Recipe
+	if err := json.Unmarshal([]byte(body), &recipe); err != nil {
+		t.Fatalf("decode recipe: %v", err)
+	}
+	if !reflect.DeepEqual(recipe.Instructions, []string{"Chop the onion.", "Simmer the soup."}) {
+		t.Fatalf("unexpected instructions: %+v", recipe.Instructions)
+	}
+
+	encoded, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatalf("encode recipe: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"instructions":["Chop the onion.","Simmer the soup."]`) {
+		t.Fatalf("instructions should retain their wire shape: %s", encoded)
+	}
+}
+
+func TestRecipeSerializesMarkdownInstructions(t *testing.T) {
+	recipe := Recipe{Instructions: []string{
+		"Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced",
+	}}
+	encoded, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatalf("encode recipe: %v", err)
+	}
+	want := `"instructions":["Prepare the vegetables:\n\n- 1 pepper, diced\n- 2 onions, sliced\n- 3 garlic cloves, minced"]`
+	if !strings.Contains(string(encoded), want) {
+		t.Fatalf("recipe JSON should contain %s: %s", want, encoded)
+	}
+}
+
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
@@ -163,12 +206,21 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 	assert.NotContains(t, enum, "microwave")
 }
 
+func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	properties := schemaProperties(t, client.recipeSchema)
+	instructions := schemaObject(t, properties["instructions"])
+	items := schemaObject(t, instructions["items"])
+	if items["type"] != "string" {
+		t.Fatalf("expected instruction items to be strings, got %#v", items)
+	}
+}
+
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
 		"do not rely on prep details from the ingredient list alone",
 		"provide the total elapsed recipe time",
-		"5 to 8 clear steps",
 		"Ensure properties.total_minutes reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
 		"properties.servings: provide the integer number of people served",
 		"properties.estimated_cost_dollars: provide one integer estimate",
@@ -178,12 +230,22 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"properties.health_note: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
 		"otherwise return an empty string",
 		"Do not imply that gluten-free food is inherently healthier.",
+		"use as many clear steps as the work requires",
+		"Each step should cover one coherent task or component whose actions are naturally done together.",
+		"Do not combine unrelated work to limit the number of steps.",
+		"Keep immediate actions on the same ingredient in the same step.",
+		"place a \"- \" bullet list at the point those ingredients enter the action",
+		"Put a blank line before the first bullet and after the final bullet so surrounding prose stays outside the list.",
+		"continue with prose after the list when the action continues",
+		"Do not use lists for cooking, resting, serving, plating, one primary ingredient",
+		"Do not use HTML or other Markdown.",
+		"later steps should refer to that component by name without restating its ingredients or their amounts",
 		"set id to the exact ProductId",
 		"Set quantity to the total amount needed across the entire recipe",
-		"Every time a step mentions an ingredient, including a pantry ingredient, state the exact amount of that ingredient used in that step.",
+		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet.",
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
 		`Do not use an unquantified phrase such as "the remaining oil"`,
-		"Cross-check every ingredient mention in the instructions for an exact step-level amount",
+		"Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount",
 		"Presalting meat and salting pasta or blanching water season food during cooking.",
 		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
 	} {
@@ -259,6 +321,9 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	}
 	assert.Equal(t, 35, got.Properties.TotalMinutes)
 	assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
+	if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
+		t.Fatalf("unexpected instructions: %+v", got.Instructions)
+	}
 	if got.PromptCacheKey != cacheKey {
 		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)
 	}
