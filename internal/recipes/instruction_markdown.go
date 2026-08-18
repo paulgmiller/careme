@@ -1,9 +1,9 @@
 package recipes
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
+	"strings"
 
 	"github.com/yuin/goldmark"
 )
@@ -11,7 +11,7 @@ import (
 func renderRecipeInstructions(instructions []string) ([]template.HTML, error) {
 	rendered := make([]template.HTML, 0, len(instructions))
 	for index, instruction := range instructions {
-		var output bytes.Buffer
+		var output strings.Builder
 		// Goldmark's default renderer omits raw HTML and dangerous links. Do not
 		// enable html.WithUnsafe: these instructions come from the model.
 		if err := goldmark.Convert([]byte(instruction), &output); err != nil {
