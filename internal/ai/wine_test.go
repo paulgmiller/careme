@@ -133,7 +133,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 	selection, err := client.PickWine(t.Context(), Recipe{
 		Title:          "Roast Chicken",
 		Description:    "Crisp skin.",
-		InstructionsV2: LegacyInstructions("Roast until golden."),
+		InstructionsV2: SequentialInstructions("Roast until golden."),
 		DrinkPairing:   "Pinot Noir",
 	}, []InputIngredient{{ProductID: "pinot-noir-1", Description: "Pinot Noir"}})
 	if err != nil {

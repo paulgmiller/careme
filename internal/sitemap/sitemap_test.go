@@ -154,7 +154,7 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		CookTime:       "35 minutes",
 		CostEstimate:   "$18-24",
 		Ingredients:    []ai.Ingredient{{Name: "Broth", Quantity: "4 cups", Price: "$4"}},
-		InstructionsV2: ai.LegacyInstructions("Bring broth to a simmer.", "Serve hot."),
+		InstructionsV2: ai.SequentialInstructions("Bring broth to a simmer.", "Serve hot."),
 		Health:         "Balanced dinner",
 		DrinkPairing:   "Pinot Noir",
 	}

@@ -769,7 +769,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		Title:          "Sheet Pan Salmon",
 		Description:    "Simple weeknight salmon dinner.",
 		Ingredients:    []ai.Ingredient{{Name: "salmon", Quantity: "1 lb", Price: "$12"}},
-		InstructionsV2: ai.LegacyInstructions("Roast salmon and vegetables until done."),
+		InstructionsV2: ai.SequentialInstructions("Roast salmon and vegetables until done."),
 		Health:         "High protein",
 		DrinkPairing:   "Pinot Noir",
 		OriginHash:     legacyHash,
@@ -820,7 +820,7 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 		Title:          "Legacy Hash Recipe",
 		Description:    "Recipe with legacy origin hash and no params record.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1 lb", Price: "$8"}},
-		InstructionsV2: ai.LegacyInstructions("Cook chicken until done."),
+		InstructionsV2: ai.SequentialInstructions("Cook chicken until done."),
 		Health:         "Protein rich",
 		DrinkPairing:   "Sparkling water",
 	}
@@ -857,7 +857,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 		Title:          "Roast Chicken",
 		Description:    "Crisp skin and herbs.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.LegacyInstructions("Roast until done."),
+		InstructionsV2: ai.SequentialInstructions("Roast until done."),
 		Health:         "High protein",
 		DrinkPairing:   "Pinot noir",
 	}
@@ -909,7 +909,7 @@ func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
 		Title:          "Saved Single Recipe",
 		Description:    "Saved from the list page.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.LegacyInstructions("Roast until done."),
+		InstructionsV2: ai.SequentialInstructions("Roast until done."),
 		Health:         "High protein",
 		DrinkPairing:   "Pinot noir",
 	}
@@ -955,7 +955,7 @@ func TestHandleSingle_GuestSeesSaveButton(t *testing.T) {
 		Title:          "Guest Single Recipe",
 		Description:    "Guests can see save.",
 		Ingredients:    []ai.Ingredient{{Name: "beans", Quantity: "1 can"}},
-		InstructionsV2: ai.LegacyInstructions("Warm gently."),
+		InstructionsV2: ai.SequentialInstructions("Warm gently."),
 		Health:         "Fiber rich",
 		DrinkPairing:   "Sparkling water",
 	}
@@ -1049,7 +1049,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 		Title:          "Original Steak Dinner",
 		Description:    "Original.",
 		Ingredients:    []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
-		InstructionsV2: ai.LegacyInstructions("Cook steak.", "Serve."),
+		InstructionsV2: ai.SequentialInstructions("Cook steak.", "Serve."),
 		OriginHash:     shoppingListHash,
 		ResponseID:     "resp-original",
 	}
@@ -1431,7 +1431,7 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instruc
 		Title:          "Updated Skirt Steak Dinner",
 		Description:    "Updated after questions.",
 		Ingredients:    []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
-		InstructionsV2: ai.LegacyInstructions("Cook the steak.", "Serve."),
+		InstructionsV2: ai.SequentialInstructions("Cook the steak.", "Serve."),
 		ResponseID:     "resp-regenerated",
 	}, nil
 }
@@ -1500,7 +1500,7 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 		Title:          "Roast Chicken",
 		Description:    "Crisp skin and herbs.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.LegacyInstructions("Roast until done."),
+		InstructionsV2: ai.SequentialInstructions("Roast until done."),
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -1638,7 +1638,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 		Title:          "Roast Chicken",
 		Description:    "Crisp skin and herbs.",
 		Ingredients:    []ai.Ingredient{{Name: "chicken", Quantity: "1", Price: "$12"}},
-		InstructionsV2: ai.LegacyInstructions("Roast until done."),
+		InstructionsV2: ai.SequentialInstructions("Roast until done."),
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
@@ -1876,7 +1876,7 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 		Title:          "Recovered Recipe",
 		Description:    "Recipe to recover",
 		Ingredients:    []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-		InstructionsV2: ai.LegacyInstructions("Step 1"),
+		InstructionsV2: ai.SequentialInstructions("Step 1"),
 		Health:         "Healthy",
 		DrinkPairing:   "Water",
 	}
@@ -1928,7 +1928,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 		Title:          "Single Recipe",
 		Description:    "Recipe to save from detail page",
 		Ingredients:    []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-		InstructionsV2: ai.LegacyInstructions("Step 1"),
+		InstructionsV2: ai.SequentialInstructions("Step 1"),
 		Health:         "Healthy",
 		DrinkPairing:   "Water",
 	}

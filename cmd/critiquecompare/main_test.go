@@ -195,7 +195,7 @@ func testRecipe(title string) ai.Recipe {
 			{Name: "Chicken", Quantity: "1 pound", Price: "$8"},
 			{Name: "Greens", Quantity: "1 bunch", Price: "$4"},
 		},
-		InstructionsV2: ai.LegacyInstructions("Chop the greens.", "Cook everything until done.", "Serve warm."),
+		InstructionsV2: ai.SequentialInstructions("Chop the greens.", "Cook everything until done.", "Serve warm."),
 		Health:         "Balanced.",
 		DrinkPairing:   "Water works well.",
 	}

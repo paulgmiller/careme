@@ -58,7 +58,7 @@ func (i Instruction) FlattenedText() string {
 	return strings.TrimSpace(i.Text) + " " + strings.Join(i.Ingredients, "; ")
 }
 
-func LegacyInstructions(texts ...string) []Instruction {
+func SequentialInstructions(texts ...string) []Instruction {
 	instructions := make([]Instruction, 0, len(texts))
 	for index, text := range texts {
 		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
@@ -85,6 +85,9 @@ type Recipe struct {
 }
 
 func (r Recipe) StructuredInstructions() []Instruction {
+	if len(r.Instructions) > 0 && len(r.InstructionsV2) > 0 {
+		panic("recipe contains both instructions and instructionsv2")
+	}
 	if len(r.InstructionsV2) > 0 {
 		return r.InstructionsV2
 	}
@@ -94,14 +97,6 @@ func (r Recipe) StructuredInstructions() []Instruction {
 		instructions = append(instructions, Instruction{Phase: uint(index + 1), Text: text})
 	}
 	return instructions
-}
-
-func flattenInstructions(instructions []Instruction) []string {
-	flattened := make([]string, 0, len(instructions))
-	for _, instruction := range instructions {
-		flattened = append(flattened, instruction.FlattenedText())
-	}
-	return flattened
 }
 
 func (r Recipe) ResponseRef() ResponseRef {
@@ -168,7 +163,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - cook_time: provide the total elapsed recipe time such as "35 minutes"; include prep, cooking, resting, and any other timed instruction steps.
 - cost_estimate: align the range with listed priced ingredients.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
-- instructionsv2: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component. Keep immediate actions on the same ingredient together, such as patting shrimp dry and seasoning it. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. The app derives the legacy instructions string array from this field.
+- instructionsv2: 5 to 8 clear steps; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component. Keep immediate actions on the same ingredient together, such as patting shrimp dry and seasoning it. Put unrelated prep or components in separate steps; if they can happen concurrently, give those separate steps the same phase instead of combining them. Legacy instructions are read-only compatibility data; return only instructionsv2.
   - phase: start at 1 and keep phases contiguous and nondecreasing. Steps with the same phase can be done concurrently. A phase begins only after every step in the preceding phase finishes. Use the same phase only when the steps are genuinely independent.
   - text: state the action clearly. For prep or a mixture that qualifies for an ingredients list, introduce the work without packing every ingredient into one long sentence.
   - ingredients: use this nested list only when the cook must measure, prepare, or combine at least three distinct ingredients in this step and moving them out of the prose makes the action materially easier to scan. List each with its exact amount and relevant preparation, such as "1 green bell pepper, diced". Otherwise return an empty list. Do not use a nested list for ordinary cooking actions, resting, serving, plating, a single primary ingredient, or to restate ingredients or prepared components already established by an earlier step. Do not repeat listed ingredients in text.
@@ -192,7 +187,6 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	if err := validateRecipeInstructions(recipe.InstructionsV2); err != nil {
 		return nil, fmt.Errorf("failed to validate AI response: %w", err)
 	}
-	recipe.Instructions = flattenInstructions(recipe.InstructionsV2)
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")

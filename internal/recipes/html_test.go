@@ -72,7 +72,7 @@ var list = ai.ShoppingList{
 				{Name: "quail", Quantity: "1 cup", Price: "2.00"},
 				{Name: "kohlrabi", Quantity: "2 tbsp", Price: "1.50"},
 			},
-			InstructionsV2: ai.LegacyInstructions(
+			InstructionsV2: ai.SequentialInstructions(
 				"Step 1: Do something.",
 				"Step 2: Do something else.",
 			),
@@ -309,7 +309,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		Title:          "Added Bowl",
 		Description:    "Selected dinner",
 		Ingredients:    []ai.Ingredient{{Name: "Added carrots", Quantity: "2 cups"}},
-		InstructionsV2: ai.LegacyInstructions("Cook."),
+		InstructionsV2: ai.SequentialInstructions("Cook."),
 		Health:         "Balanced",
 		DrinkPairing:   "Water",
 	}
@@ -317,7 +317,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		Title:          "Maybe Pasta",
 		Description:    "Not selected",
 		Ingredients:    []ai.Ingredient{{Name: "Unadded noodles", Quantity: "1 box"}},
-		InstructionsV2: ai.LegacyInstructions("Boil."),
+		InstructionsV2: ai.SequentialInstructions("Boil."),
 		Health:         "Filling",
 		DrinkPairing:   "Tea",
 	}
@@ -355,7 +355,7 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
 			{Name: "Salt", Quantity: "1 tsp"},
 		},
-		InstructionsV2: ai.LegacyInstructions("Cook."),
+		InstructionsV2: ai.SequentialInstructions("Cook."),
 		Health:         "Balanced",
 		DrinkPairing:   "Water",
 	}}}
@@ -711,7 +711,7 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 				Title:       "Recipe One",
 				Description: "First recipe",
 				Ingredients: []ai.Ingredient{{Name: "ingredient1", Quantity: "1 cup", Price: "2.00"}},
-				InstructionsV2: ai.LegacyInstructions(
+				InstructionsV2: ai.SequentialInstructions(
 					"Step 1",
 				),
 				Health:       "Healthy",
@@ -800,7 +800,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		Ingredients: []ai.Ingredient{
 			{Name: "Little gem lettuce", Quantity: "2 heads", Price: ""},
 		},
-		InstructionsV2: ai.LegacyInstructions("Wash and plate."),
+		InstructionsV2: ai.SequentialInstructions("Wash and plate."),
 		Health:         "Light",
 		DrinkPairing:   "Sparkling water",
 		ResponseID:     "resp-123",
@@ -835,7 +835,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 				Ingredients: []ai.Ingredient{
 					{Name: "English peas", Quantity: "1 cup", Price: ""},
 				},
-				InstructionsV2: ai.LegacyInstructions("Boil and toss."),
+				InstructionsV2: ai.SequentialInstructions("Boil and toss."),
 				Health:         "Balanced",
 				DrinkPairing:   "Lemon water",
 			},
@@ -905,7 +905,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 				Title:          "Roast Chicken",
 				Description:    "Simple roast",
 				Ingredients:    []ai.Ingredient{{Name: "Chicken", Quantity: "1", Price: "$10"}},
-				InstructionsV2: ai.LegacyInstructions("Roast"),
+				InstructionsV2: ai.SequentialInstructions("Roast"),
 				Health:         "Protein",
 				DrinkPairing:   "Pinot noir",
 			},
@@ -913,7 +913,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 				Title:          "Pasta",
 				Description:    "Quick pasta",
 				Ingredients:    []ai.Ingredient{{Name: "Pasta", Quantity: "1 box", Price: "$2"}},
-				InstructionsV2: ai.LegacyInstructions("Boil"),
+				InstructionsV2: ai.SequentialInstructions("Boil"),
 				Health:         "Carb-rich",
 				DrinkPairing:   "Sparkling water",
 			},

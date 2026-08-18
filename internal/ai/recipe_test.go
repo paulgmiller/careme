@@ -92,7 +92,7 @@ func TestRecipeStructuredInstructionHashUsesFlattenedContent(t *testing.T) {
 		t.Fatal("nested ingredients should contribute to structured recipe hashes")
 	}
 
-	legacy := Recipe{Instructions: flattenInstructions(base.InstructionsV2)}
+	legacy := Recipe{Instructions: []string{base.InstructionsV2[0].FlattenedText()}}
 	if base.ComputeHash() != legacy.ComputeHash() {
 		t.Fatal("structured and flattened legacy instructions should produce the same hash")
 	}
@@ -121,7 +121,7 @@ func TestRecipeDecodesAndPreservesLegacyInstructions(t *testing.T) {
 	}
 }
 
-func TestRecipeStructuredInstructionsPreferV2(t *testing.T) {
+func TestRecipeStructuredInstructionsPanicsWhenBothVersionsAreSet(t *testing.T) {
 	recipe := Recipe{
 		Instructions: []string{"Legacy step."},
 		InstructionsV2: []Instruction{{
@@ -130,31 +130,30 @@ func TestRecipeStructuredInstructionsPreferV2(t *testing.T) {
 		}},
 	}
 
-	structured := recipe.StructuredInstructions()
-	if len(structured) != 1 || structured[0].Text != "Structured step." {
-		t.Fatalf("expected v2 instructions, got %+v", structured)
-	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected both instruction versions to panic")
+		}
+	}()
+	recipe.StructuredInstructions()
 }
 
-func TestRecipeSerializesLegacyAndV2Instructions(t *testing.T) {
+func TestRecipeSerializesOnlyV2Instructions(t *testing.T) {
 	recipe := Recipe{InstructionsV2: []Instruction{{
 		Phase:       1,
 		Text:        "Prepare the vegetables:",
 		Ingredients: []string{"1 pepper, diced", "2 onions, sliced", "3 garlic cloves, minced"},
 	}}}
-	recipe.Instructions = flattenInstructions(recipe.InstructionsV2)
-
 	encoded, err := json.Marshal(recipe)
 	if err != nil {
 		t.Fatalf("encode structured recipe: %v", err)
 	}
-	for _, want := range []string{
-		`"instructions":["Prepare the vegetables: 1 pepper, diced; 2 onions, sliced; 3 garlic cloves, minced"]`,
-		`"instructionsv2":[{"phase":1,"text":"Prepare the vegetables:","ingredients":["1 pepper, diced","2 onions, sliced","3 garlic cloves, minced"]}]`,
-	} {
-		if !strings.Contains(string(encoded), want) {
-			t.Fatalf("structured recipe JSON should contain %s: %s", want, encoded)
-		}
+	if strings.Contains(string(encoded), `"instructions":`) {
+		t.Fatalf("structured recipe JSON should omit legacy instructions: %s", encoded)
+	}
+	want := `"instructionsv2":[{"phase":1,"text":"Prepare the vegetables:","ingredients":["1 pepper, diced","2 onions, sliced","3 garlic cloves, minced"]}]`
+	if !strings.Contains(string(encoded), want) {
+		t.Fatalf("structured recipe JSON should contain %s: %s", want, encoded)
 	}
 }
 
@@ -263,7 +262,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
 		"do not rely on prep details from the ingredient list alone",
-		"The app derives the legacy instructions string array from this field.",
+		"Legacy instructions are read-only compatibility data; return only instructionsv2.",
 		"provide the total elapsed recipe time",
 		"5 to 8 clear steps",
 		"Each step should cover one coherent task or component.",
@@ -342,8 +341,8 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
 	}
-	if len(got.Instructions) != 1 || got.Instructions[0] != "Prep." || len(got.InstructionsV2) != 1 {
-		t.Fatalf("expected dual instruction representations, got %+v", got)
+	if len(got.Instructions) != 0 || len(got.InstructionsV2) != 1 || got.InstructionsV2[0].Text != "Prep." {
+		t.Fatalf("expected only v2 instructions, got %+v", got)
 	}
 	if got.PromptCacheKey != cacheKey {
 		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)

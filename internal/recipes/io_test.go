@@ -112,7 +112,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 				Title:          "One Pan Chicken",
 				Description:    "Simple weeknight meal",
 				Ingredients:    []ai.Ingredient{{Name: "Chicken", Quantity: "1 lb", Price: "5.99"}},
-				InstructionsV2: ai.LegacyInstructions("Prep ingredients", "Cook chicken"),
+				InstructionsV2: ai.SequentialInstructions("Prep ingredients", "Cook chicken"),
 				Health:         "Balanced",
 				DrinkPairing:   "Chardonnay",
 			},
