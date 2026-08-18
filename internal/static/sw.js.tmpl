@@ -34,56 +34,44 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-function waitForSavedRecipeCacheDelay() {
-  return new Promise((resolve) =>
-    setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS),
-  );
+function fetchAndCache(cache, request) {
+  return fetch(request)
+    .then((response) => {
+      if (!response || !response.ok) {
+        return false;
+      }
+      return cache.put(request, response).then(() => true);
+    })
+    .catch(() => false);
 }
 
 function cacheSavedRecipeURLs(body) {
   const urls = body.split(/\r?\n/).filter(Boolean);
-  return waitForSavedRecipeCacheDelay().then(() =>
-    caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
-      Promise.all(
-        urls.map((url) => {
-          const recipeRequest = new Request(url, {
-            credentials: "same-origin",
-            cache: "reload",
-          });
-          const imageRequest = new Request(`${url}/image`, {
-            credentials: "same-origin",
-            cache: "reload",
-          });
-          // Recipe pages are refreshed on each sync so offline copies pick up
-          // later additions like questions, generated images, and wine pairings.
-          // Ideally the app would trigger this only when one of those changes.
-          return fetch(recipeRequest)
-            .then((response) => {
-              if (response && response.ok) {
-                return cache.put(recipeRequest, response).then(() =>
-                  // Some recipes still may not have an image after the delay. A
-                  // missing image must not prevent its page from working offline.
-                  fetch(imageRequest)
-                    .then((imageResponse) => {
-                      if (imageResponse && imageResponse.ok) {
-                        return cache.put(imageRequest, imageResponse);
-                      }
-                    })
-                    .catch(() => {})
-                    .then(() => true),
-                );
-              }
-              return false;
-            })
-            .catch(() => false);
-        }),
-      ).then((results) => {
-        if (!results.every(Boolean)) {
-          return false;
-        }
-        return cache.put(SAVED_RECIPES_LIST_URL, new Response(body)).then(() => true);
+  return caches.open(SAVED_RECIPES_CACHE_NAME).then((cache) =>
+    Promise.all(
+      urls.map((url) => {
+        const recipeRequest = new Request(url, {
+          credentials: "same-origin",
+          cache: "reload",
+        });
+        const imageRequest = new Request(`${url}/image`, {
+          credentials: "same-origin",
+          cache: "reload",
+        });
+        // Recipe pages are refreshed on each sync so offline copies pick up
+        // later additions like questions, generated images, and wine pairings.
+        // Ideally the app would trigger this only when one of those changes.
+        return Promise.all([
+          fetchAndCache(cache, recipeRequest),
+          fetchAndCache(cache, imageRequest),
+        ]).then(([pageCached]) => pageCached);
       }),
-    ),
+    ).then((results) => {
+      if (!results.every(Boolean)) {
+        return false;
+      }
+      return cache.put(SAVED_RECIPES_LIST_URL, new Response(body)).then(() => true);
+    }),
   );
 }
 
@@ -118,7 +106,9 @@ function syncSavedRecipes() {
         if (!changed) {
           return true;
         }
-        return cacheSavedRecipeURLs(body);
+        return new Promise((resolve) =>
+          setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS),
+        ).then(() => cacheSavedRecipeURLs(body));
       });
     })
     .catch(() => false);
