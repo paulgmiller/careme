@@ -148,33 +148,6 @@ func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
 	}
 }
 
-func TestValidateRecipeInstructions(t *testing.T) {
-	tests := []struct {
-		name         string
-		instructions []string
-		wantError    string
-	}{
-		{name: "valid", instructions: []string{"Prep.", "Cook.", "Plate."}},
-		{name: "empty", wantError: "at least one instruction is required"},
-		{name: "empty text", instructions: []string{"Prep.", "  "}, wantError: "instruction 2 text is required"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateRecipeInstructions(tt.instructions)
-			if tt.wantError == "" {
-				if err != nil {
-					t.Fatalf("validate instructions: %v", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
-				t.Fatalf("expected error containing %q, got %v", tt.wantError, err)
-			}
-		})
-	}
-}
-
 func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	for _, want := range []string{
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",

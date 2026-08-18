@@ -132,9 +132,6 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
-	if err := validateRecipeInstructions(recipe.Instructions); err != nil {
-		return nil, fmt.Errorf("failed to validate AI response: %w", err)
-	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
@@ -142,18 +139,6 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	recipe.ResponseID = resp.ID
 	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
-}
-
-func validateRecipeInstructions(instructions []string) error {
-	if len(instructions) == 0 {
-		return fmt.Errorf("at least one instruction is required")
-	}
-	for index, instruction := range instructions {
-		if strings.TrimSpace(instruction) == "" {
-			return fmt.Errorf("instruction %d text is required", index+1)
-		}
-	}
-	return nil
 }
 
 func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {
