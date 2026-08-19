@@ -38,10 +38,12 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `wine_recommendations/` | Plain text wine recommendation keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
+| `recipe_regenerations/` | JSON single-recipe regeneration status (`state`, optional `new_hash`, `updated_at`) keyed by the URL-safe FNV-128a regeneration ID derived from the old recipe hash and latest response ID | `internal/recipes/regeneration/store.go` via the single-recipe regeneration handlers | `internal/recipes/regeneration/store.go` via `GET /recipe/{hash}/regen/{jobID}` |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
 | `recipe_critiques/` | JSON `ai.RecipeCritique` (`schema_version`, `overall_score`, `summary`, `strengths`, `issues`, `suggested_fixes`, `model`, `critiqued_at`) per recipe hash | `internal/recipes/critique.go` (`SaveCritique`) via `internal/recipes/generator.go` (`GenerateRecipes`) after OpenAI recipe generation/regeneration | `internal/recipes/critique.go` (`CritiqueFromCache`) for internal analysis and future tuning workflows |
-| `recipe_critique_comparisons/` | JSON `ai.RecipeCritique` keyed by `<model>/<recipe_hash>` for ad hoc critique model comparisons | `cmd/geminicritiquecompare` | `cmd/geminicritiquecompare` |
+| `recipe_critique_comparisons/` | JSON `ai.RecipeCritique` keyed by `<model>/<recipe_hash>` for ad hoc critique model comparisons | `cmd/critiquecompare` | `cmd/critiquecompare` |
 | `ingredient_grades/` | JSON `ai.InputIngredient` with embedded `grade` (`score`, `reason`) keyed by `<cache_version>/<ingredient_hash>` | `internal/ingredients/grading/store.go` (`Save`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) during recipe ingredient prioritization and admin inspection | `internal/ingredients/grading/store.go` (`Load`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) and `internal/ingredients/server.go` (`GET /ingredients/{hash}/graded`) |
+| `ingredient_grade_reviews/` | JSON `gradereview.Review` with the graded ingredient snapshot, human verdict (`too_high`, `correct`, or `too_low`), and review time, keyed by the matching `<cache_version>/<ingredient_hash>` | Standalone `cmd/ingredientreview` web app | Offline ingredient-grade evaluation and calibration workflows |
 | `locations/` in the `farmersmarket` backend | JSON shared farmers market metadata (`id`, submitted names, average lat/lon, nearest ZIP, photo count, timestamps) keyed by farmers market location ID | `internal/farmersmarket` upload handler/store | `internal/farmersmarket` location backend and upload merge logic |
 | `inventory/` in the `farmersmarket` backend | JSON `{cached_at, ingredients}` keyed by `<farmersmarket_location_id>/<YYYY-MM-DD>.json`; item brand is the visible farm/stall/store name when available, otherwise `Farmers market` | `internal/farmersmarket` upload handler/store after GPT image extraction | `internal/farmersmarket` staples provider reads the freshest cached list from the last 24 hours via recipe generation |
 | `analysis_jobs/` in the `farmersmarket` backend | JSON farmers market photo analysis progress (`user_id`, `state`, photo/ingredient counts, message, redirect URL, error, timestamps) keyed by random upload job ID | `internal/farmersmarket` htmx upload handler while photo analysis runs | `internal/farmersmarket` status polling endpoint so any web replica can render progress |
@@ -73,6 +75,45 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `wholefoods/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Whole Foods stores (`id`, `lat`, `lon`) | `cmd/wholefoods` rebuilds after sync | `internal/wholefoods` location backend |
 | `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
 
+## Recipe identity and structured properties
+
+`ai.Recipe.ComputeHash` produces the URL-safe, padded Base64 encoding of an FNV-128a content hash. Recipe hashes are identities, not merely cache optimizations: they appear in recipe routes and connect a recipe to its dependent records and user state.
+
+The legacy portion of the hash writes these values in order:
+
+1. Title and description.
+2. Legacy cook-time and cost strings.
+3. Each ingredient's name, quantity, and price, preserving ingredient order.
+4. Each instruction string, preserving instruction order.
+5. Health text and drink pairing.
+
+When any structured recipe property is present, the hash appends this pipe-delimited payload:
+
+```text
+|35|4|21|540|2|stovetop|oven|
+```
+
+Fields are total minutes, servings, estimated total cost in dollars, calories per serving, cooking-method count, and each cooking method in order. The decimal integers and cooking-method enum values cannot contain `|`, so the separators give every value an unambiguous boundary. The method count makes the variable-length tail explicit. Field and cooking-method order are significant.
+
+The suffix is enabled by comparing the complete `RecipeProperties` value with its Go zero value, so adding a property cannot be missed by a hand-maintained presence predicate. That detection does not make a new field part of the payload automatically: adding a hash input requires an explicit format change.
+
+Recipe hashes are used by or stored in:
+
+- `recipe/<hash>` recipe records and `/recipe/{hash}` routes.
+- `recipes/<hash>` in the dedicated `recipe-images` backend.
+- `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
+- `recipe_critique_comparisons/<model>/<hash>` and recipe-regeneration job identity.
+- `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
+- `users/<user_id>` entries in `last_recipes[].hash`.
+
+Compatibility implications:
+
+- Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
+- Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
+- Changing a structured-property value or cooking-method order also produces a new identity.
+- There is no automatic alias or migration from an old hash to a new hash. Dependent images, wine recommendations, threads, feedback, critiques, saved/dismissed selections, and saved-recipe references remain under the old identity unless an explicit migration rewrites every dependent record. During diagnostics, compare the cached recipe's properties and recomputed hash before treating a missing dependent record as data loss.
+- If the structured-property layout changes in the future, introduce an explicit marker such as `recipe-properties-v2` and document its migration behavior here.
+
 ## Notes
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
@@ -101,4 +142,5 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.
+- Recipe records store `instructions` as a string array. Each string may contain the constrained Markdown supported by the instruction renderer: plain paragraphs and `- ` bullet lists.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.

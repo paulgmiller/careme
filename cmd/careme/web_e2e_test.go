@@ -29,13 +29,11 @@ import (
 
 type fakeProduceScorer struct{}
 
-func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *locations.ProduceScore {
+func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *int {
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(loc.ID))
-	return &locations.ProduceScore{
-		Score: int(hash.Sum32()%99) + 1,
-		Date:  time.Now(),
-	}
+	score := int(hash.Sum32()%99) + 1
+	return &score
 }
 
 func TestWebEndToEndFlowWithMocks(t *testing.T) {
@@ -48,12 +46,14 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected /ready to return 200 OK, got %d", resp.StatusCode)
 	}
 
-	// Step 1: query locations for 90005 and ensure it returns a /recipes?location link.
+	// Step 1: query locations for 90005 and find a recipe-generation form.
 	locationsBody := mustGetBody(t, client, srv.URL+"/locations?zip=90005")
 	locationID := extractLocationID(t, locationsBody)
 
-	// Step 2: go to /recipes?location=<id> and follow redirects until recipes render.
-	initialRecipesURL := srv.URL + "/recipes?location=" + url.QueryEscape(locationID)
+	// Step 2: start generation with POST and follow its GET status page until recipes render.
+	initialRecipesURL := mustStartRecipeGeneration(t, client, srv.URL+"/recipes", url.Values{
+		"location": {locationID},
+	})
 	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
@@ -137,34 +137,6 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	// TODO step 6 make sure recipes are saved to user page?
 }
 
-func TestZipFromCoordinatesRedirect(t *testing.T) {
-	srv := newTestServer(t)
-	defer srv.Close()
-
-	client := newNoRedirectClient()
-	req, err := http.NewRequest(http.MethodGet, srv.URL+"/locations/zip-from-coordinates?lat=47.6097&lon=-122.3331", nil)
-	if err != nil {
-		t.Fatalf("failed to build request: %v", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Fatalf("failed to close response body: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
-	}
-	if got := resp.Header.Get("Location"); got != "/locations?zip=98101" {
-		t.Fatalf("expected Location %q, got %q", "/locations?zip=98101", got)
-	}
-}
-
 func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
@@ -178,8 +150,9 @@ func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
 	if !strings.Contains(body, "Favorite store") {
 		t.Fatalf("expected favorite store card on home page, got body: %s", body)
 	}
-	if !strings.Contains(body, `/recipes?location=70500874`) {
-		t.Fatalf("expected home page recipe link to favorite store, got body: %s", body)
+	if !strings.Contains(body, `method="POST" action="/recipes"`) ||
+		!strings.Contains(body, `name="location" value="70500874"`) {
+		t.Fatalf("expected home page recipe form for favorite store, got body: %s", body)
 	}
 	if !strings.Contains(body, "Chef notes") {
 		t.Fatalf("expected chef notes toggle on home page, got body: %s", body)
@@ -250,7 +223,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
-	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}, centroids).Register(appRoutes)
+	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
@@ -263,14 +236,6 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 func newTestClient(t *testing.T) *http.Client {
 	return &http.Client{}
-}
-
-func newNoRedirectClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
 }
 
 func mustGet(t *testing.T, client *http.Client, url string) *http.Response {
@@ -348,6 +313,38 @@ func mustPostFormBody(t *testing.T, client *http.Client, targetURL string, data 
 	return body
 }
 
+func mustStartRecipeGeneration(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		t.Fatalf("POST %s failed to build request: %v", targetURL, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	noRedirectClient := *client
+	noRedirectClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s failed: %v", targetURL, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusSeeOther {
+		body := readAll(t, resp.Body)
+		t.Fatalf("POST %s expected %d, got %d: %s", targetURL, http.StatusSeeOther, resp.StatusCode, body)
+	}
+	location, err := resp.Location()
+	if err != nil {
+		t.Fatalf("POST %s returned an invalid redirect: %v", targetURL, err)
+	}
+	return location.String()
+}
+
 func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL string, data url.Values) string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, targetURL, strings.NewReader(data.Encode()))
@@ -417,10 +414,10 @@ func isSpinner(body string) bool {
 
 func extractLocationID(t *testing.T, body string) string {
 	t.Helper()
-	re := regexp.MustCompile(`href="/recipes\?location=([^"]+)"`)
+	re := regexp.MustCompile(`name="location" value="([^"]+)"`)
 	match := re.FindStringSubmatch(body)
 	if len(match) < 2 {
-		t.Fatalf("expected locations page to include /recipes?location link")
+		t.Fatalf("expected locations page to include a recipe generation form")
 	}
 	return match[1]
 }

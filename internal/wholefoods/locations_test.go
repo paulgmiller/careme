@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 )
 
@@ -46,7 +47,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	_ = reader.Close()
 }
 
-func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
+func TestLocationBackendGetLocationsByCoordinatesUsesDistance(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -68,9 +69,9 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "98101")
+	locs, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6101, Lon: -122.3344})
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
 	if len(locs) != 1 {
 		t.Fatalf("expected 1 nearby location, got %d", len(locs))
@@ -83,7 +84,7 @@ func TestLocationBackendGetLocationsByZipUsesDistance(t *testing.T) {
 	}
 }
 
-func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
+func TestLocationBackendUsesStoreCoordinatesWithoutZIPLookup(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewInMemoryCache()
@@ -102,12 +103,12 @@ func TestLocationBackendReturnsAllWhenZipUnknown(t *testing.T) {
 		t.Fatalf("newLocationBackend returned error: %v", err)
 	}
 
-	locs, err := backend.GetLocationsByZip(context.Background(), "unknown")
+	locs, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6101, Lon: -122.3344})
 	if err != nil {
-		t.Fatalf("GetLocationsByZip returned error: %v", err)
+		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
 	}
-	if len(locs) != 0 {
-		t.Fatalf("expected no locations when zip centroid is unknown, got %d", len(locs))
+	if len(locs) != 1 || locs[0].ID != "wholefoods_10216" {
+		t.Fatalf("expected nearby store from its coordinates, got %+v", locs)
 	}
 }
 

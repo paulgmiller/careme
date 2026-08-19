@@ -1,6 +1,8 @@
+/* Load Tailwind and scan server-rendered templates for utility classes. */
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
 
+/* Display face used by the font-display utility on page and recipe headings. */
 @font-face {
   font-family: "Fraunces";
   font-style: normal;
@@ -10,6 +12,7 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Default UI face used by Tailwind's font-sans family throughout the site. */
 @font-face {
   font-family: "Inter";
   font-style: normal;
@@ -19,10 +22,13 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Expose Careme's fonts and semantic colors as Tailwind utility tokens. */
 @theme {
+  /* Typography tokens used by font-sans and font-display. */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
 
+  /* Seasonal brand values are supplied by tailwind_head.html and offline.html. */
   --color-brand-50: var(--brand-50);
   --color-brand-100: var(--brand-100);
   --color-brand-200: var(--brand-200);
@@ -34,11 +40,13 @@
   --color-brand-800: var(--brand-800);
   --color-brand-900: var(--brand-900);
 
+  /* Neutral copy colors used by the text-ink-* utilities. */
   --color-ink-500: #64748b;
   --color-ink-600: #475569;
   --color-ink-700: #334155;
   --color-ink-900: #0f172a;
 
+  /* Positive-action colors used by save, add, and success controls. */
   --color-action-green-50: #ecfdf5;
   --color-action-green-100: #d1fae5;
   --color-action-green-300: #6ee7b7;
@@ -46,6 +54,7 @@
   --color-action-green-600: #059669;
   --color-action-green-700: #047857;
 
+  /* Destructive-action colors used by hide, remove, and error controls. */
   --color-action-red-50: #fef2f2;
   --color-action-red-100: #fee2e2;
   --color-action-red-300: #fca5a5;
@@ -54,7 +63,9 @@
   --color-action-red-700: #b91c1c;
 }
 
+/* Site-wide element defaults and third-party component tokens. */
 @layer base {
+  /* Theme Clerk's account UI with the same seasonal palette as Careme. */
   :root {
     --clerk-color-primary: light-dark(var(--brand-700), var(--brand-300));
     --clerk-color-primary-foreground: light-dark(#ffffff, #0f172a);
@@ -76,18 +87,22 @@
     --clerk-spacing: 1rem;
   }
 
+  /* Keep app-like pages from rubber-banding or accepting browser zoom gestures. */
   html,
   body {
     overscroll-behavior: none;
     touch-action: pan-x pan-y;
   }
 
+  /* Balance paragraph lines where the browser supports pretty wrapping. */
   p {
     text-wrap: pretty;
   }
 }
 
+/* Prefer perceptually even OKLCH ink and action colors on capable browsers. */
 @supports (color: oklch(62% 0.12 220)) {
+  /* Override the hex fallbacks declared in @theme without changing utility names. */
   :root {
     --color-ink-500: oklch(55.0% 0.032 248);
     --color-ink-600: oklch(46.0% 0.034 248);
@@ -110,31 +125,45 @@
   }
 }
 
+/* Reusable styles whose behavior is more expressive than a utility class list. */
 @layer components {
+  /* Large squircle shell used on primary cards on home and top-level pages. */
   .friendly-card {
     border-radius: 48px;
     corner-shape: squircle;
   }
 
+  /* Smaller squircle used for nested option and summary cards. */
   .friendly-card-soft {
     border-radius: 28px;
     corner-shape: squircle;
   }
 
-  .shopping-wine-details {
-    display: none;
+  /* Let recipe steps follow the finger without interfering with vertical scrolling. */
+  .recipe-step {
+    touch-action: pan-y;
+    transition: opacity 180ms ease, transform 180ms ease;
   }
 
-  .shopping-recipe-card:has(details[open]) .shopping-wine-preview {
-    display: none;
+  /* Direct pointer tracking should not lag behind the user's swipe. */
+  .recipe-step[data-recipe-step-dragging] {
+    transition: none;
+    user-select: none;
   }
 
-  .shopping-recipe-card:has(details[open]) .shopping-wine-details {
-    display: block;
+  /* Honor the platform motion preference for swipe and snap-back transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    .recipe-step {
+      transition: none;
+    }
   }
 }
-/* This seems like not the right way to do this. 
-https://tailwindcss.com/docs/adding-custom-variants#custom-variants 
+
+/*
+Disabled dark-mode experiment. If revived, express it as a Tailwind custom
+variant instead of overriding generated utilities one by one:
+https://tailwindcss.com/docs/adding-custom-variants#custom-variants
+
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 @layer utilities {
@@ -212,25 +241,31 @@ https://tailwindcss.com/docs/adding-custom-variants#custom-variants
 }
 */
 
+/* Simplify recipe pages for paper and PDF output. */
 @media print {
+  /* Leave a consistent printable margin independent of the screen layout. */
   @page {
     margin: 0.6in;
   }
 
+  /* Remove seasonal page colors and force readable print contrast. */
   body {
     background: #fff !important;
     color: #111827 !important;
   }
 
+  /* Omit controls, decoration, images, and executable markup from recipes. */
   .print-hidden,
   script {
     display: none !important;
   }
 
+  /* Remove the screen-only outer gutter from the recipe page. */
   .recipe-page {
     padding: 0 !important;
   }
 
+  /* Flatten recipe cards so borders and shadows do not print as panels. */
   .recipe-shell,
   .printable-recipe {
     border: 0 !important;
@@ -239,30 +274,51 @@ https://tailwindcss.com/docs/adding-custom-variants#custom-variants
     background: #fff !important;
   }
 
+  /* Recover the space normally reserved by nested card padding. */
   .recipe-shell > div,
   .printable-recipe {
     padding: 0 !important;
   }
 
+  /* Keep all printable recipe copy dark even when seasonal colors differ. */
   .printable-recipe {
     color: #111827 !important;
   }
 
+  /* Give the recipe title a compact, print-appropriate heading size. */
   .printable-recipe h2 {
     font-size: 24pt !important;
     line-height: 1.15 !important;
     color: #111827 !important;
   }
 
+  /* Normalize section headings for monochrome print output. */
   .printable-recipe h3 {
     color: #111827 !important;
     letter-spacing: 0.08em !important;
   }
 
+  /* Print ingredients even when the user collapsed their details element. */
+  .recipe-ingredients > ul {
+    display: block !important;
+  }
+
+  /* Temporary cooking progress must never remove steps from a printout. */
+  .recipe-step[hidden] {
+    display: list-item !important;
+  }
+
+  .recipe-step {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Keep each ingredient or instruction from splitting across pages. */
   .printable-recipe li {
     break-inside: avoid;
   }
 
+  /* Turn ingredient cards into compact ruled rows to save paper and ink. */
   .printable-recipe ul li {
     background: transparent !important;
     border-bottom: 1px solid #e5e7eb;

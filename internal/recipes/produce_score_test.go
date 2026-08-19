@@ -1,6 +1,8 @@
 package recipes
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -28,8 +30,7 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
-	assert.Equal(t, 1, score.Score)
-	assert.Equal(t, "2026-01-15", score.Date.Format("2006-01-02"))
+	assert.Equal(t, 1, *score)
 }
 
 func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
@@ -43,8 +44,7 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
-	assert.Equal(t, 1, score.Score)
-	assert.Equal(t, "2026-01-14", score.Date.Format("2006-01-02"))
+	assert.Equal(t, 1, *score)
 }
 
 func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
@@ -55,6 +55,25 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 	score := NewCachedProduceScorer(IO(c)).ProduceScore(t.Context(), *loc)
 
 	assert.Nil(t, score)
+}
+
+func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
+	tests := map[string]error{
+		"canceled":          context.Canceled,
+		"deadline exceeded": context.DeadlineExceeded,
+	}
+
+	for name, contextErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			cache := &canceledIngredientCache{err: contextErr}
+			loc := testProduceScoreLocation()
+
+			score := NewCachedProduceScorer(cache).ProduceScore(t.Context(), *loc)
+
+			assert.Nil(t, score)
+			assert.Equal(t, 1, cache.calls, "should not try yesterday after cancellation")
+		})
+	}
 }
 
 func TestSumIngredientGradesAboveCutoff(t *testing.T) {
@@ -69,10 +88,14 @@ func TestSumIngredientGradesAboveCutoff(t *testing.T) {
 }
 
 func testProduceScoreLocation() *locations.Location {
+	lat := 40.7128
+	lon := -74.006
 	return &locations.Location{
 		ID:      "23456789",
 		Name:    "Test Store",
 		ZipCode: "10001",
+		Lat:     &lat,
+		Lon:     &lon,
 	}
 }
 
@@ -107,4 +130,18 @@ func withNow(t *testing.T, now time.Time) {
 	t.Cleanup(func() {
 		nowFn = oldNowFn
 	})
+}
+
+type canceledIngredientCache struct {
+	err   error
+	calls int
+}
+
+func (c *canceledIngredientCache) SaveIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
+}
+
+func (c *canceledIngredientCache) IngredientsFromCache(context.Context, string) ([]ai.InputIngredient, error) {
+	c.calls++
+	return nil, errors.Join(errors.New("cache read failed"), c.err)
 }

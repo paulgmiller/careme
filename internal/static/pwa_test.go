@@ -41,7 +41,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			name:        "Android asset links",
 			path:        "/.well-known/assetlinks.json",
 			wantType:    "application/json; charset=utf-8",
-			wantSnippet: `"package_name": "cooking.careme.twa"`,
+			wantSnippet: `"package_name": "cooking.careme"`,
 		},
 		{
 			name:        "offline page",
@@ -80,7 +80,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			if tt.wantSnippet != "" && !strings.Contains(rec.Body.String(), tt.wantSnippet) {
 				t.Fatalf("GET %s body missing %q", tt.path, tt.wantSnippet)
 			}
-			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "Careme needs a connection.") {
+			if tt.path == "/offline" && !strings.Contains(rec.Body.String(), "You're offline.") {
 				t.Fatalf("GET %s body missing offline copy", tt.path)
 			}
 		})
@@ -212,7 +212,7 @@ func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
 	}
 }
 
-func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
+func TestOfflinePageResumesOnlineAndShowsCachedRecipeLinks(t *testing.T) {
 	Init()
 	var b strings.Builder
 	err := renderOfflinePage(&b)
@@ -224,15 +224,21 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 	for _, snippet := range []string{
 		`data-offline-recipes-section`,
 		`Saved recipes on this device`,
+		`data-offline-recipes-empty>No recipes yet.`,
+		`Careme will pick up automatically when you're back online.`,
+		`window.addEventListener("online", () => window.location.reload(), { once: true })`,
+		`if (navigator.onLine)`,
+		`window.setTimeout(() => window.location.reload(), 30_000)`,
 		`const savedRecipesCacheName = "careme-saved-recipes-v1";`,
 		`const savedRecipesListURL = "/user/recipes/offline-cache";`,
 		`await cache.match(savedRecipesListURL)`,
 		`body.split(/\r?\n/).filter(Boolean)`,
-		`throw new Error("offline recipe list elements are missing")`,
+		`throw new Error("offline page elements are missing")`,
 		`throw new Error("cached recipe response is missing")`,
 		`return doc.title.trim()`,
 		`list.replaceChildren(...rows)`,
-		`section.classList.remove("hidden")`,
+		`empty.classList.add("hidden")`,
+		`list.classList.remove("hidden")`,
 		`renderRecipeLinks().catch((error) => console.error(error))`,
 	} {
 		if !strings.Contains(rendered, snippet) {
@@ -251,6 +257,11 @@ func TestOfflinePageShowsCachedRecipeLinks(t *testing.T) {
 	}
 	if strings.Contains(rendered, "new Set(recipeURLs)") {
 		t.Fatalf("offline page should not dedupe cached recipe URLs, page: %s", rendered)
+	}
+	for _, misleadingAction := range []string{"your browser", "Back home", "Try again"} {
+		if strings.Contains(rendered, misleadingAction) {
+			t.Fatalf("offline page should not show misleading action %q, page: %s", misleadingAction, rendered)
+		}
 	}
 	titleFunction := rendered[strings.Index(rendered, "const titleFromResponse"):]
 	titleFunction = titleFunction[:strings.Index(titleFunction, "const recipeURLsFromList")]
@@ -351,8 +362,17 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 		`syncSavedRecipes()`,
 		`fetch(SAVED_RECIPES_LIST_URL`,
 		`body.split(/\r?\n/)`,
-		`const request = new Request(url`,
-		`return cache.put(url, response).then(() => true)`,
+		`const SAVED_RECIPE_CACHE_DELAY_MS = 90_000;`,
+		`setTimeout(resolve, SAVED_RECIPE_CACHE_DELAY_MS)`,
+		`).then(() => cacheSavedRecipeURLs(body))`,
+		`function fetchAndCache(cache, url)`,
+		`const request = new Request(url, { cache: "reload" })`,
+		`return cache.put(request, response).then(() => true)`,
+		`fetchAndCache(cache, url)`,
+		"fetchAndCache(cache, `${url}/image`)",
+		`]).then(([pageCached]) => pageCached)`,
+		`url.pathname.startsWith("/recipe/") && url.pathname.endsWith("/image")`,
+		`if (!isStaticAsset && !isRecipeImage)`,
 		`cache.put(SAVED_RECIPES_LIST_URL, new Response(body))`,
 		`savedRecipeListChanged(body)`,
 		`previous !== body`,
@@ -365,7 +385,7 @@ func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
 	if !strings.Contains(rendered, `caches.match(request).then((cached) => cached || caches.match("/offline"))`) {
 		t.Fatalf("service worker should fall back to cached saved recipe navigations before offline page, script: %s", rendered)
 	}
-	for _, removed := range []string{`savedRecipeURL`, `pruneSavedRecipeCache`, `keepURLs`, `event.ports[0].postMessage`} {
+	for _, removed := range []string{`savedRecipeURL`, `pruneSavedRecipeCache`, `keepURLs`, `event.ports[0].postMessage`, `retrySavedRecipeImage`, `imageRetryPromises`, `waitForSavedRecipeCacheDelay`} {
 		if strings.Contains(rendered, removed) {
 			t.Fatalf("service worker should not include %q after simplifying saved recipe caching, script: %s", removed, rendered)
 		}

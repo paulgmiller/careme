@@ -20,14 +20,15 @@ type adminMealPlanPageData struct {
 }
 
 type adminMealPlanListView struct {
-	Hash          string
-	RecipesURL    string
-	ParamsURL     string
-	MenuPromptURL string
-	Store         string
-	Date          string
-	Instructions  string
-	Plans         []ai.RecipePlan
+	Hash           string
+	RecipesURL     string
+	ParamsURL      string
+	MenuPromptURL  string
+	IngredientsURL string
+	Store          string
+	Date           string
+	Instructions   string
+	Plans          []ai.RecipePlan
 }
 
 var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`<!doctype html>
@@ -40,7 +41,6 @@ var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`
 <body>
   <nav>
     <a href="/admin/users">Users</a> |
-    <a href="/admin/critiques">Recipe Critiques</a> |
     <a href="/admin/mealplan/{{.StartHash}}">Meal Plan</a>
   </nav>
   <h1>Meal Plan Chain</h1>
@@ -70,7 +70,8 @@ var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`
     <p>
       <a href="{{.RecipesURL}}">Shopping list</a> |
       <a href="{{.ParamsURL}}">Params JSON</a> |
-      <a href="{{.MenuPromptURL}}">Menu prompt JSON</a>
+      <a href="{{.MenuPromptURL}}">Menu prompt JSON</a> |
+      <a href="{{.IngredientsURL}}">Ingredients JSON</a>
     </p>
     {{if .Plans}}
     <table border="1" cellpadding="6" cellspacing="0">
@@ -182,12 +183,13 @@ func loadAdminMealPlanPageData(ctx context.Context, rio recipeio, startHash stri
 		}
 
 		view := adminMealPlanListView{
-			Hash:          hash,
-			RecipesURL:    "/recipes?h=" + hash,
-			ParamsURL:     "/admin/params/" + hash,
-			MenuPromptURL: "/admin/prompt/menu/" + hash,
-			Date:          params.Date.Format("2006-01-02"),
-			Instructions:  strings.TrimSpace(params.Instructions),
+			Hash:           hash,
+			RecipesURL:     "/recipes?h=" + hash,
+			ParamsURL:      "/admin/params/" + hash,
+			MenuPromptURL:  "/admin/prompt/menu/" + hash,
+			IngredientsURL: "/admin/ingredients/" + hash,
+			Date:           params.Date.Format("2006-01-02"),
+			Instructions:   strings.TrimSpace(params.Instructions),
 		}
 		if params.Location != nil {
 			view.Store = params.Location.Name

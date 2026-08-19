@@ -8,6 +8,22 @@
 <link rel="apple-touch-icon" href="/static/app-icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/static/app-icon-192.png">
 <script>
+  function publishCaremeConversion(eventName) {
+    if (eventName && Array.isArray(window.dataLayer)) {
+      window.dataLayer.push({ event: eventName });
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const url = new URL(window.location.href);
+    const eventName = url.searchParams.get("conversion");
+    if (!eventName) return;
+
+    url.searchParams.delete("conversion");
+    window.history.replaceState({}, "", url);
+    publishCaremeConversion(eventName);
+  });
+
   if ("serviceWorker" in navigator) {
     // The service worker owns the actual offline recipe refresh. This page
     // helper only tells the active worker when a sync should happen.
@@ -29,6 +45,10 @@
     // changes, so the worker refreshes offline recipe pages right away.
     document.addEventListener("careme:saved-recipes-changed", syncSavedRecipesForOffline);
   }
+
+  document.addEventListener("careme:recipe-saved", () => {
+    publishCaremeConversion("{{RecipeSaveConversion}}");
+  });
 
 </script>
 {{end}}

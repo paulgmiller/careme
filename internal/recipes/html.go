@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"careme/internal/ai"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
@@ -30,6 +31,19 @@ type recipeImageView struct {
 	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
 	// used by the image-generation response without duplicating the panel markup.
 	OutOfBand bool
+}
+
+type cookingMethodDisplay struct {
+	Label string
+	Emoji string
+}
+
+type recipePropertyDisplay struct {
+	Time           string
+	Servings       string
+	Cost           string
+	Calories       string
+	CookingMethods []cookingMethodDisplay
 }
 
 // shoppingRecipeView is a thin wrapper around ai.Recipe for the shopping list page.
@@ -48,8 +62,11 @@ type shoppingRecipeView struct {
 	ShoppingListHash   string
 	ServerSignedIn     bool
 	DisplayIngredients []ai.Ingredient // merged food and wine
+	PropertyDisplay    recipePropertyDisplay
+	InstructionsHTML   []template.HTML
 	Saved              bool
 	Dismissed          bool
+	HasImage           bool
 	WineRecommendation *ai.WineSelection
 }
 
@@ -61,7 +78,7 @@ type shoppingListGroup struct {
 // FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
 // should shove wine recs into recipe instead of having them seperate.
 func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage string, writer http.ResponseWriter,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
 	instructions := strings.TrimSpace(p.Instructions)
@@ -75,6 +92,11 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		recipeHash := recipe.ComputeHash()
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
+		instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+		if err != nil {
+			http.Error(writer, "instruction rendering error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 		saved := selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
@@ -82,8 +104,11 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 			ShoppingListHash:   hash,
 			ServerSignedIn:     serverSignedIn,
 			DisplayIngredients: displayIngredients,
+			PropertyDisplay:    newRecipePropertyDisplay(recipe),
+			InstructionsHTML:   instructionsHTML,
 			Saved:              saved,
 			Dismissed:          selection.IsDismissed(recipeHash),
+			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 		})
 		if saved {
@@ -99,6 +124,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		ClarityScript        template.HTML
 		GoogleTagScript      template.HTML
 		Instructions         string
+		PendingInstructions  string
 		HelpMessage          string
 		Hash                 string
 		Recipes              []shoppingRecipeView
@@ -109,6 +135,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User                 *utypes.User
 		AuthReturnTo         string
 		UseTodaysIngredients bool
+		AdminURL             string
 	}{
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
@@ -117,6 +144,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		ClarityScript:        templates.ClarityScript(ctx),
 		GoogleTagScript:      templates.GoogleTagScript(),
 		Instructions:         instructions,
+		PendingInstructions:  pendingInstructions,
 		HelpMessage:          strings.TrimSpace(helpMessage),
 		Hash:                 hash,
 		Recipes:              recipeViews,
@@ -127,9 +155,10 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		User:                 currentUser,
 		AuthReturnTo:         "/recipes?h=" + hash,
 		UseTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		AdminURL:             "/admin/mealplan/" + hash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.ShoppingList.Execute(writer, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -166,6 +195,11 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	recipeHash := recipe.ComputeHash()
+	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+	if err != nil {
+		http.Error(writer, "instruction rendering error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	activeResponseID := recipe.ResponseID
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
 		activeResponseID = threadResponseID
@@ -177,10 +211,13 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript           template.HTML
 		GoogleTagScript         template.HTML
 		Recipe                  ai.Recipe
+		InstructionsHTML        []template.HTML
 		Saved                   bool
 		DisplayIngredients      []ai.Ingredient
+		PropertyDisplay         recipePropertyDisplay
 		OriginHash              string
 		ResponseID              string
+		PromptCacheKey          string
 		WineRecommendation      *ai.WineSelection
 		Thread                  []RecipeThreadEntry
 		Feedback                feedback.Feedback
@@ -194,16 +231,20 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore     *int
 		RecipeCritiqueNeedsCare bool
 		MinimumRecipeScore      int
+		AdminURL                string
 	}{
 		Location:                *p.Location,
 		Date:                    p.Date.Format("2006-01-02"),
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
 		Recipe:                  recipe,
+		InstructionsHTML:        instructionsHTML,
 		Saved:                   saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		PropertyDisplay:         newRecipePropertyDisplay(recipe),
 		OriginHash:              recipe.OriginHash,
 		ResponseID:              activeResponseID,
+		PromptCacheKey:          recipe.PromptCacheKey,
 		WineRecommendation:      wineRecommendation,
 		Thread:                  thread,
 		Feedback:                fb,
@@ -217,9 +258,10 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		RecipeCritiqueScore:     critiqueScore,
 		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
 		MinimumRecipeScore:      critique.MinimumRecipeScore,
+		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.Execute(writer, data); err != nil {
 		http.Error(writer, "recipe template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -234,24 +276,26 @@ func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeIma
 }
 
 // FormatRecipeThreadHTML renders the question thread fragment for HTMX swaps.
-func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, responseID, recipeHash string, writer http.ResponseWriter) {
+func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, response ai.ResponseRef, recipeHash string, writer http.ResponseWriter) {
 	// memory waste because we alwways resort?
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
 		return j.CreatedAt.Compare(i.CreatedAt)
 	})
 	data := struct {
 		ResponseID     string
+		PromptCacheKey string
 		RecipeHash     string
 		Thread         []RecipeThreadEntry
 		ServerSignedIn bool
 	}{
-		ResponseID:     responseID,
+		ResponseID:     response.ID,
+		PromptCacheKey: response.PromptCacheKey,
 		RecipeHash:     recipeHash,
 		Thread:         thread,
 		ServerSignedIn: signedIn,
 	}
 
-	setTextContent(writer)
+	httpx.SetHTMLContentType(writer)
 	if err := templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data); err != nil {
 		http.Error(writer, "recipe thread template error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -270,18 +314,97 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
+	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
+	if err != nil {
+		return err
+	}
 	data := shoppingRecipeView{
 		Recipe:             recipe,
 		Hash:               recipe.ComputeHash(),
 		ShoppingListHash:   shoppingListHash,
 		ServerSignedIn:     true, // have to be signed in to toggle
 		DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
+		PropertyDisplay:    newRecipePropertyDisplay(recipe),
+		InstructionsHTML:   instructionsHTML,
 		Saved:              saved,
 		Dismissed:          !saved,
+		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
+}
+
+// newRecipePropertyDisplay also supports recipes cached before structured properties
+// were introduced. A missing properties object decodes to RecipeProperties' zero value,
+// and ranging over its nil CookingMethods slice is safe; unavailable values render as a
+// dash while legacy time and cost strings remain available as fallbacks.
+func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
+	timeDisplay := strings.TrimSpace(recipe.CookTime)
+	if recipe.Properties.TotalMinutes > 0 {
+		timeDisplay = fmt.Sprintf("%d min", recipe.Properties.TotalMinutes)
+	}
+	if timeDisplay == "" {
+		timeDisplay = "—"
+	}
+
+	servingsDisplay := "—"
+	if recipe.Properties.Servings == 1 {
+		servingsDisplay = "1 serving"
+	} else if recipe.Properties.Servings > 1 {
+		servingsDisplay = fmt.Sprintf("%d servings", recipe.Properties.Servings)
+	}
+
+	costDisplay := strings.TrimSpace(recipe.CostEstimate)
+	if recipe.Properties.EstimatedCostDollars > 0 {
+		costDisplay = fmt.Sprintf("$%d", recipe.Properties.EstimatedCostDollars)
+	}
+	if costDisplay == "" {
+		costDisplay = "—"
+	}
+
+	caloriesDisplay := "—"
+	if recipe.Properties.CaloriesPerServing > 0 {
+		caloriesDisplay = fmt.Sprintf("%d cal", recipe.Properties.CaloriesPerServing)
+	}
+
+	methods := make([]cookingMethodDisplay, 0, len(recipe.Properties.CookingMethods))
+	for _, method := range recipe.Properties.CookingMethods {
+		display := newCookingMethodDisplay(method)
+		if display.Label == "" {
+			continue
+		}
+		methods = append(methods, display)
+	}
+
+	return recipePropertyDisplay{
+		Time:           timeDisplay,
+		Servings:       servingsDisplay,
+		Cost:           costDisplay,
+		Calories:       caloriesDisplay,
+		CookingMethods: methods,
+	}
+}
+
+func newCookingMethodDisplay(method ai.CookingMethod) cookingMethodDisplay {
+	switch method {
+	case ai.CookingMethodStovetop:
+		return cookingMethodDisplay{Label: "Stovetop", Emoji: "🍳"}
+	case ai.CookingMethodOven:
+		return cookingMethodDisplay{Label: "Oven", Emoji: "♨️"}
+	case ai.CookingMethodGrill:
+		return cookingMethodDisplay{Label: "Grill", Emoji: "🔥"}
+	case ai.CookingMethodSlowCooker:
+		return cookingMethodDisplay{Label: "Slow cooker", Emoji: "🍲"}
+	case ai.CookingMethodAirFryer:
+		return cookingMethodDisplay{Label: "Air fryer", Emoji: "🌀"}
+	case ai.CookingMethodNoCook:
+		return cookingMethodDisplay{Label: "No-cook", Emoji: "🥗"}
+	case ai.CookingMethodOther:
+		return cookingMethodDisplay{Label: "Other", Emoji: "❓"}
+	default:
+		return cookingMethodDisplay{}
+	}
 }
 
 // called from single recipe page just swaps save dimiss

@@ -1,0 +1,28 @@
+{{define "recipe_properties"}}
+<section class="space-y-3" aria-label="Recipe details">
+  <ul class="flex flex-wrap gap-2 text-sm text-ink-600">
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Total time">
+      <span class="text-base leading-none" aria-hidden="true">⏱️</span>
+      <span class="sr-only">Total time: </span>{{.Time}}
+    </li>
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Servings">
+      <span class="text-base leading-none" aria-hidden="true">👥</span>
+      <span class="sr-only">Servings: </span>{{.Servings}}
+    </li>
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Estimated total cost">
+      <span class="text-base leading-none" aria-hidden="true">💵</span>
+      <span class="sr-only">Estimated total cost: </span>{{.Cost}}
+    </li>
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Calories per serving">
+      <span class="text-base leading-none" aria-hidden="true">❤️</span>
+      <span class="sr-only">Calories per serving: </span>{{.Calories}}
+    </li>
+    {{range .CookingMethods}}
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Cooking method: {{.Label}}">
+      <span class="text-base leading-none" aria-hidden="true">{{.Emoji}}</span>
+      <span>{{.Label}}</span>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}

@@ -18,28 +18,29 @@
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <div class="border-b border-brand-100 p-8">
           <h1 class="font-display text-4xl font-extrabold tracking-tight text-brand-700">Nearby Stores</h1>
-          <p class="mt-2 text-gray-600">Showing results near ZIP <span class="font-semibold text-brand-700">{{.Zip}}</span>.</p>
-          {{if not .ServerSignedIn}}
-          <p class="mt-2 text-sm text-gray-500">You can browse stores now, but building recipes requires signing in.</p>
-          {{end}}
+          <p class="mt-2 text-gray-600">Showing results near your location.</p>
         </div>
 
+        {{if .Locations}}
         <ul id="locations-list" class="divide-y divide-brand-100">
           {{range .Locations}}
           <li class="px-8 {{if .SupportsStaples}}py-6{{else}}py-4{{end}} {{if not .SupportsStaples}}opacity-60{{end}}">
             <input id="instructions-{{.ID}}" type="checkbox" class="peer/instructions hidden" />
             <div class="flex flex-col {{if .SupportsStaples}}gap-4 sm:flex-row sm:items-center{{else}}gap-2 sm:flex-row sm:items-start{{end}} sm:justify-between">
               {{if .SupportsStaples}}
-              <a href="/recipes?location={{.ID}}"
-                class="flex flex-1 flex-col gap-1 rounded-xl py-2 transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+              <form method="POST" action="/recipes" class="flex flex-1">
+                <input type="hidden" name="location" value="{{.ID}}" />
+                <button type="submit"
+                  class="flex w-full flex-col gap-1 rounded-xl py-2 text-left transition hover:bg-brand-50 focus:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 <span class="flex flex-wrap items-center gap-2 text-lg font-semibold text-brand-700">
                   <span>{{.Name}}</span>
                   {{with .ProduceScore}}
-                  <span title="Sum of ingredient grades above cutoff, divided by 100." aria-label="Produce score: sum of ingredient grades above cutoff, divided by 100." class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">score {{.Score}}</span>
+                  <span title="Sum of ingredient grades above cutoff, divided by 100." aria-label="Produce score: sum of ingredient grades above cutoff, divided by 100." class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">score {{.}}</span>
                   {{end}}
                 </span>
                 <span class="text-sm text-gray-600">{{.Address}}</span>
-              </a>
+                </button>
+              </form>
               {{else}}
               <div class="flex flex-1 flex-col gap-0.5 rounded-xl py-1">
                 <span class="text-base font-semibold text-gray-600">{{.Name}}</span>
@@ -66,10 +67,13 @@
                   </button>
                 </form>
                 {{end}}
-                <a href="/recipes?location={{.ID}}"
-                  class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Recipes!
-                </a>
+                <form method="POST" action="/recipes">
+                  <input type="hidden" name="location" value="{{.ID}}" />
+                  <button type="submit"
+                    class="rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Recipes!
+                  </button>
+                </form>
                 <label for="instructions-{{.ID}}"
                   class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   Chef notes
@@ -81,7 +85,7 @@
             </div>
             {{if .SupportsStaples}}
             <div class="mt-4 hidden rounded-xl border border-brand-100 bg-brand-50/40 p-4 peer-checked/instructions:block">
-              <form method="GET" action="/recipes" class="flex flex-col gap-3">
+              <form method="POST" action="/recipes" class="flex flex-col gap-3">
                 <input type="hidden" name="location" value="{{.ID}}" />
                 <textarea name="instructions" rows="3" aria-label="Recipe instructions" placeholder="Example: No seafood, focus on quick weeknight meals."
                   class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
@@ -97,11 +101,21 @@
           </li>
           {{end}}
         </ul>
+        {{else}}
+        <div id="locations-list" class="px-8 py-10 text-center">
+          <p class="text-lg font-semibold text-brand-700">No nearby stores found.</p>
+          <p class="mt-2 text-sm text-gray-600">Sorry, Careme mostly supports stores in the United States right now.</p>
+          <a href="/"
+            class="mt-5 inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            Search again
+          </a>
+        </div>
+        {{end}}
       </div>
 
       <p class="mt-6 text-center text-sm text-gray-500">
-        Don't see your local store?
-        <a href="https://github.com/paulgmiller/careme/issues/99" class="font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 transition hover:text-brand-800">Request it here</a>.
+        Want your grocery chain supported?
+        <a href="https://github.com/paulgmiller/careme/issues/99" class="font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 transition hover:text-brand-800">Submit it here</a>.
       </p>
     </section>
   </main>

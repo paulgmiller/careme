@@ -15,6 +15,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
@@ -140,7 +141,7 @@ func (s *server) exists(uid string) (bool, error) {
 
 func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -340,7 +341,7 @@ func (s *server) handleFavorite(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if !isHTMXRequest(r) {
+	if !httpx.IsHTMX(r) {
 		http.Error(w, "htmx request required", http.StatusBadRequest)
 		return
 	}
@@ -422,8 +423,4 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("You are unsubscribed from Careme recipe emails."))
-}
-
-func isHTMXRequest(r *http.Request) bool {
-	return strings.EqualFold(r.Header.Get("HX-Request"), "true")
 }

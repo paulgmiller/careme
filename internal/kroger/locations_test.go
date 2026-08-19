@@ -1,13 +1,25 @@
 package kroger
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
+	krogerlocations "careme/internal/kroger/locations"
+	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestClientWithResponsesIsID(t *testing.T) {
 	t.Parallel()
@@ -50,4 +62,29 @@ func TestChainNameIsCanonicalized(t *testing.T) {
 		Address: "10116 NE 8th St",
 	}
 	assert.Equal(t, "kroger", loc.Chain)
+}
+
+func TestGetLocationsByCoordinatesUsesKrogerCoordinateFilter(t *testing.T) {
+	t.Parallel()
+
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		query := req.URL.Query()
+		assert.Equal(t, "47.6097,-122.3331", query.Get("filter.latLong.near"))
+		assert.Equal(t, "20", query.Get("filter.radiusInMiles"))
+		assert.Empty(t, query.Get("filter.zipCode.near"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"data":[]}`)),
+			Request:    req,
+		}, nil
+	})}
+	client, err := krogerlocations.NewClientWithResponses("https://example.test", krogerlocations.WithHTTPClient(httpClient))
+	require.NoError(t, err)
+
+	backend := &LocationBackend{client: client}
+	got, err := backend.GetLocationsByCoordinates(context.Background(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }

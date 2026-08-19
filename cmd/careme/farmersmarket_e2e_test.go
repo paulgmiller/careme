@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -51,15 +52,16 @@ func TestFarmersMarketEndToEndUploadValidation(t *testing.T) {
 	}
 }
 
-func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
+func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToLocations(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
 	client := newTestClient(t)
 	progressBody, _ := mustPostMultipartHTMX(t, client, srv.URL+"/farmersmarket", map[string]string{
-		"name": "Test Market",
-		"lat":  "47.610000",
-		"lon":  "-122.330000",
+		"name":     "Test Market",
+		"lat":      "47.610000",
+		"lon":      "-122.330000",
+		"timezone": "America/Los_Angeles",
 	}, "photos", "market.jpg", jpegBytes(t))
 	for _, want := range []string{
 		`id="farmers-market-work"`,
@@ -72,12 +74,27 @@ func TestFarmersMarketEndToEndSuccessfulUploadRedirectsToRecipes(t *testing.T) {
 	}
 
 	statusPath := extractFarmersMarketStatusPath(t, progressBody)
-	redirect := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
-	if !strings.HasPrefix(redirect, "/recipes?") {
-		t.Fatalf("expected farmers market upload to redirect to recipes, got %q", redirect)
+	locationsURL := waitForFarmersMarketRedirect(t, client, srv.URL+statusPath)
+	parsedLocationsURL, err := url.Parse(locationsURL)
+	if err != nil {
+		t.Fatalf("parse farmers market locations redirect %q: %v", locationsURL, err)
 	}
-	if !strings.Contains(redirect, "location=farmersmarket_") {
-		t.Fatalf("expected farmers market location redirect, got %q", redirect)
+	if parsedLocationsURL.Path != "/locations" {
+		t.Fatalf("expected farmers market locations path, got %q", parsedLocationsURL.Path)
+	}
+	query := parsedLocationsURL.Query()
+	if got, want := query.Get("lat"), "47.61"; got != want {
+		t.Fatalf("expected latitude %q, got %q", want, got)
+	}
+	if got, want := query.Get("lon"), "-122.33"; got != want {
+		t.Fatalf("expected longitude %q, got %q", want, got)
+	}
+	if query.Has("zip") {
+		t.Fatalf("coordinate redirect should not contain ZIP: %q", locationsURL)
+	}
+	locationsBody := mustGetBody(t, client, srv.URL+locationsURL)
+	if !strings.Contains(locationsBody, "Big Willys") {
+		t.Fatalf("expected store locations page after upload, got body: %s", locationsBody)
 	}
 }
 
@@ -137,7 +154,7 @@ func waitForFarmersMarketRedirect(t *testing.T, client *http.Client, statusURL s
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for farmers market redirect from %s", statusURL)
+			t.Fatalf("timed out waiting for farmers market locations redirect from %s", statusURL)
 		}
 		req, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {

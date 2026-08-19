@@ -40,8 +40,16 @@ type generatorParams struct {
 	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
 	// regeneration-only context from the origin params; not hashed
-	PriorSavedHashes           []string `json:"-"`
-	PreviousMenuPlanResponseID string   `json:"previous_menu_plan_response_id,omitempty"`
+	PriorSavedHashes               []string `json:"-"`
+	PreviousMenuPlanResponseID     string   `json:"previous_menu_plan_response_id,omitempty"`
+	PreviousMenuPlanPromptCacheKey string   `json:"previous_menu_plan_prompt_cache_key,omitempty"`
+}
+
+func (g *generatorParams) previousMenuPlanResponse() ai.ResponseRef {
+	return ai.ResponseRef{
+		ID:             g.PreviousMenuPlanResponseID,
+		PromptCacheKey: g.PreviousMenuPlanPromptCacheKey,
+	}
 }
 
 // exist for mail's interface be careful please.
@@ -100,8 +108,8 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
-func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
-	loc := r.URL.Query().Get("location")
+func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
+	loc := r.FormValue("location")
 	if loc == "" {
 		return nil, errors.New("must provide location id")
 	}
@@ -117,7 +125,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 	if err != nil {
 		return nil, err
 	}
-	dateStr := r.URL.Query().Get("date")
+	dateStr := r.FormValue("date")
 	date := defaultRecipeDate(nowFn(), storeLoc)
 	if dateStr != "" {
 		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
@@ -128,7 +136,7 @@ func ParseQueryArgs(ctx context.Context, r *http.Request, ls locServer) (*genera
 	}
 
 	p := DefaultParams(l, date)
-	p.Instructions = r.URL.Query().Get("instructions")
+	p.Instructions = r.FormValue("instructions")
 
 	return p, nil
 }
@@ -137,13 +145,17 @@ func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time
 	if l == nil {
 		return nil, fmt.Errorf("nil location")
 	}
-	tzName, ok := geo.TimezoneNameForZip(l.ZipCode)
+	if l.Lat == nil || l.Lon == nil {
+		return nil, fmt.Errorf("location %s has no coordinates", l.ID)
+	}
+	tzName, ok := geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
+
 	if !ok {
-		return nil, fmt.Errorf("unable to infer timezone from zipcode %s", l.ZipCode)
+		return nil, fmt.Errorf("unable to estimate timezone for location %s", l.ID)
 	}
 	storeLoc, err := time.LoadLocation(tzName)
 	if err != nil {
-		slog.ErrorContext(ctx, "invalid inferred timezone", "location_id", l.ID, "zipcode", l.ZipCode, "timezone", tzName, "error", err)
+		slog.ErrorContext(ctx, "invalid estimated timezone", "location_id", l.ID, "timezone", tzName, "error", err)
 		return nil, err
 	}
 	return storeLoc, nil

@@ -10,13 +10,16 @@ import (
 	"time"
 
 	"github.com/invopop/jsonschema"
-	"google.golang.org/genai"
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
 const (
-	// https://ai.google.dev/gemini-api/docs/models
-	defaultGeminiCritiqueModel = "gemini-3.1-pro-preview" //"gemini-2.5-flash"
+	openRouterBaseURL          = "https://openrouter.ai/api/v1"
+	defaultCritiqueModel       = "google/gemini-3.1-pro-preview"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
+	openRouterApplicationTitle = "Careme"
+	openRouterApplicationURL   = "https://careme.cooking"
 )
 
 const recipeCritiqueSystemInstruction = `
@@ -26,11 +29,20 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - is it realistic to cook as written
 - are the instructions coherent and complete
 - do the instructions begin with preparation before active cooking starts
-- does every mention of an ingredient in the instructions include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- does each step cover one coherent task or component, keeping immediate actions on the same ingredient together and splitting unrelated work into separate steps
+- when an ingredient is first used, does the instruction prose or a bullet include the exact amount used in that step, including pantry ingredients and ingredients divided among steps
+- are bullet lists limited to preparations or mixtures of more than three ingredients, placed where those ingredients enter the action, and separated from surrounding prose by a blank line before and after the list
+- do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate
-- are the timing and cost estimates plausible
-- does the stated cook_time match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- when quantities permit calculation, use these salt amounts as starting points: 1.25% salt by weight for boneless meat, 1.5% for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water
+- do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water; salty ingredients added later may justify reducing finishing salt, but they do not correct food that was underseasoned during cooking
+- account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
+- report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
+- are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
+- does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- do properties.cooking_methods match the instructions, avoid combining no_cook with another method
+- is health empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
@@ -57,53 +69,37 @@ type RecipeCritique struct {
 type critiquer struct {
 	model  string
 	schema map[string]any
-	gem    *genai.Client
+	client openai.Client
 }
 
 func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 	model = strings.TrimSpace(model)
 	if model == "" {
-		model = defaultGeminiCritiqueModel
+		model = defaultCritiqueModel
 	}
 
-	if httpClient == nil {
-		httpClient = http.DefaultClient
+	opts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithBaseURL(openRouterBaseURL),
+		option.WithHeader("HTTP-Referer", openRouterApplicationURL),
+		option.WithHeader("X-OpenRouter-Title", openRouterApplicationTitle),
 	}
-
-	// pass in context and return error? seems like context only used in edge case
-	client, err := genai.NewClient(context.TODO(), &genai.ClientConfig{
-		APIKey:     apiKey,
-		Backend:    genai.BackendGeminiAPI,
-		HTTPClient: httpClient,
-	})
-	if err != nil {
-		panic(err)
+	if httpClient != nil {
+		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
 
 	return &critiquer{
-		gem:    client,
+		client: openai.NewClient(opts...),
 		model:  model,
 		schema: recipeCritiqueJSONSchema(),
 	}
 }
 
 func (c *critiquer) Ready(ctx context.Context) error {
-	for _, err := range c.gem.Models.All(ctx) {
-		return err
+	if err := c.client.Get(ctx, "key", nil, nil); err != nil {
+		return fmt.Errorf("check OpenRouter API key: %w", err)
 	}
-	return fmt.Errorf("model not found: %s", c.model)
-	/* expensive?
-	resp, err := client.Models.GenerateContent(ctx, c.model, genai.Text("Reply with ready."), &genai.GenerateContentConfig{
-		Temperature:     genai.Ptr[float32](0),
-		MaxOutputTokens: 8,
-	})
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(resp.Text()) == "" {
-		return fmt.Errorf("empty response from Gemini critique model")
-	}
-	*/
+	return nil
 }
 
 func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
@@ -112,82 +108,97 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	start := time.Now()
-	resp, err := c.gem.Models.GenerateContent(ctx, c.model, genai.Text(prompt), &genai.GenerateContentConfig{
-		SystemInstruction: genai.NewContentFromText(recipeCritiqueSystemInstruction, genai.RoleUser),
-		// Temperature:        genai.Ptr[float32](0),
-		// MaxOutputTokens:    768,
-		ResponseMIMEType:   "application/json",
-		ResponseJsonSchema: c.schema,
-	})
+	resp, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: c.model,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(recipeCritiqueSystemInstruction),
+			openai.UserMessage(prompt),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+					Name:   "recipe_critique",
+					Schema: c.schema,
+					Strict: openai.Bool(true),
+				},
+			},
+		},
+	}, option.WithJSONSet("provider.require_parameters", true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to critique recipe: %w", err)
 	}
-	slog.InfoContext(ctx, "Gemini critique usage",
+	slog.InfoContext(ctx, "OpenRouter critique usage",
 		"ai_category", aiCategoryCritique,
 		"model", c.model,
-		"model_version", resp.ModelVersion,
-		"response_id", resp.ResponseID,
+		"response_model", resp.Model,
+		"response_id", resp.ID,
 		"latencyMS", time.Since(start).Milliseconds(),
-		geminiUsageLogAttr(c.model, resp.UsageMetadata),
+		openRouterUsageLogAttr(resp),
 	)
 
-	critique, err := parseRecipeCritique(resp.Text())
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("empty response from OpenRouter critique model")
+	}
+	critique, err := parseRecipeCritique(resp.Choices[0].Message.Content)
 	if err != nil {
 		return nil, err
 	}
-	critique.Model = resp.ModelVersion
+	critique.Model = strings.TrimSpace(resp.Model)
+	if critique.Model == "" {
+		critique.Model = c.model
+	}
 	critique.CritiquedAt = time.Now().UTC()
 	return critique, nil
 }
 
-func geminiUsageLogAttr(model string, usage *genai.GenerateContentResponseUsageMetadata) slog.Attr {
-	if usage == nil {
+func openRouterUsageLogAttr(resp *openai.ChatCompletion) slog.Attr {
+	if resp == nil || !resp.JSON.Usage.Valid() {
 		return slog.Group("usage", slog.Bool("available", false))
 	}
-	outputTokens := int64(usage.CandidatesTokenCount + usage.ThoughtsTokenCount)
-
 	attrs := []any{
 		slog.Bool("available", true),
-		slog.Int("cachedContentTokenCount", int(usage.CachedContentTokenCount)),
-		slog.Int("promptTokenCount", int(usage.PromptTokenCount)),
-		slog.Int("candidatesTokenCount", int(usage.CandidatesTokenCount)),
-		slog.Int("thoughtsTokenCount", int(usage.ThoughtsTokenCount)),
-		slog.Int("toolUsePromptTokenCount", int(usage.ToolUsePromptTokenCount)),
-		slog.Int("totalTokenCount", int(usage.TotalTokenCount)),
+		slog.Int64("promptTokenCount", resp.Usage.PromptTokens),
+		slog.Int64("cachedTokenCount", resp.Usage.PromptTokensDetails.CachedTokens),
+		slog.Int64("completionTokenCount", resp.Usage.CompletionTokens),
+		slog.Int64("reasoningTokenCount", resp.Usage.CompletionTokensDetails.ReasoningTokens),
+		slog.Int64("totalTokenCount", resp.Usage.TotalTokens),
 	}
-	if usage.TrafficType != "" {
-		attrs = append(attrs, slog.String("trafficType", string(usage.TrafficType)))
+	if cost, ok := openRouterResponseCost(resp.RawJSON()); ok {
+		attrs = append(attrs, slog.Float64("costCredits", cost))
 	}
-	attrs = append(attrs, estimatedSpendLogAttr(estimateGeminiSpend(
-		model,
-		int64(usage.PromptTokenCount+usage.ToolUsePromptTokenCount),
-		int64(usage.CachedContentTokenCount),
-		outputTokens,
-	)))
 
 	return slog.Group("usage", attrs...)
+}
+
+func openRouterResponseCost(body string) (float64, bool) {
+	var response struct {
+		Usage struct {
+			Cost *float64 `json:"cost"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal([]byte(body), &response); err != nil || response.Usage.Cost == nil {
+		return 0, false
+	}
+	return *response.Usage.Cost, true
 }
 
 func parseRecipeCritique(body string) (*RecipeCritique, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return nil, fmt.Errorf("empty critique response from Gemini")
+		return nil, fmt.Errorf("empty critique response from OpenRouter")
 	}
 	var critique RecipeCritique
 	if err := json.Unmarshal([]byte(body), &critique); err != nil {
-		return nil, fmt.Errorf("failed to parse Gemini critique: %w", err)
+		return nil, fmt.Errorf("failed to parse OpenRouter critique: %w", err)
 	}
 	critique.SchemaVersion = recipeCritiqueSchemaV1
 
 	if critique.Summary == "" {
-		return nil, fmt.Errorf("gemini critique summary is required")
+		return nil, fmt.Errorf("OpenRouter critique summary is required")
 	}
 	if critique.OverallScore < 1 || critique.OverallScore > 10 {
-		return nil, fmt.Errorf("gemini critique overall score must be between 1 and 10")
+		return nil, fmt.Errorf("OpenRouter critique overall score must be between 1 and 10")
 	}
 	return &critique, nil
 }

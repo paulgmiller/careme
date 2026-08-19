@@ -1,5 +1,8 @@
 export default [
   {
+    ignores: ["internal/static/htmx@*.js"],
+  },
+  {
     files: ["internal/static/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,

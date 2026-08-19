@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"careme/internal/auth"
+	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -23,6 +24,8 @@ var fakes = map[string]Location{
 		Address: "1 willy ave",
 		State:   "North Dakota",
 		ZipCode: "58102",
+		Lat:     float64Pointer(46.8772),
+		Lon:     float64Pointer(-96.7898),
 	},
 	"70505000": {
 		ID:      "70505000",
@@ -30,7 +33,13 @@ var fakes = map[string]Location{
 		Address: "20 somewhere st",
 		State:   "North Carolina",
 		ZipCode: "28104",
+		Lat:     float64Pointer(35.0074),
+		Lon:     float64Pointer(-80.7381),
 	},
+}
+
+func float64Pointer(value float64) *float64 {
+	return &value
 }
 
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
@@ -41,15 +50,8 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 	return &l, nil
 }
 
-func (m mock) GetLocationsByZip(ctx context.Context, zipcode string) ([]Location, error) {
+func (m mock) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
 	return lo.Values(fakes), nil
-}
-
-func (m mock) NearestZIPToCoordinates(lat, lon float64) (string, bool) {
-	for _, location := range fakes {
-		return location.ZipCode, true
-	}
-	return "", false
 }
 
 func (mock) HasInventory(locationID string) bool {
