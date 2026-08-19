@@ -196,51 +196,13 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
 	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
-	recipe.Properties.CookingMethods = normalizeCookingMethods(recipe.Properties.CookingMethods)
-	recipe.Health = strings.TrimSpace(recipe.Health)
+	recipe.Properties.CookingMethods = lo.Uniq(recipe.Properties.CookingMethods)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}
 	recipe.ResponseID = resp.ID
 	recipe.PromptCacheKey = promptCacheKey
 	return &recipe, nil
-}
-
-func normalizeCookingMethods(methods []CookingMethod) []CookingMethod {
-	allowed := map[CookingMethod]struct{}{
-		CookingMethodStovetop:   {},
-		CookingMethodOven:       {},
-		CookingMethodGrill:      {},
-		CookingMethodSlowCooker: {},
-		CookingMethodAirFryer:   {},
-		CookingMethodNoCook:     {},
-		CookingMethodOther:      {},
-	}
-	cleaned := make([]CookingMethod, 0, len(methods))
-	seen := make(map[CookingMethod]struct{}, len(methods))
-	for _, method := range methods {
-		if _, ok := allowed[method]; !ok {
-			continue
-		}
-		if _, ok := seen[method]; ok {
-			continue
-		}
-		seen[method] = struct{}{}
-		cleaned = append(cleaned, method)
-	}
-	if len(cleaned) == 0 {
-		return nil
-	}
-	if len(cleaned) > 1 {
-		withoutNoCook := cleaned[:0]
-		for _, method := range cleaned {
-			if method != CookingMethodNoCook {
-				withoutNoCook = append(withoutNoCook, method)
-			}
-		}
-		cleaned = withoutNoCook
-	}
-	return cleaned
 }
 
 func (c *client) Regenerate(ctx context.Context, instructions []string, previous ResponseRef) (*Recipe, error) {

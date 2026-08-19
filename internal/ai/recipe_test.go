@@ -262,18 +262,6 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 	}
 }
 
-func TestNormalizeCookingMethodsRemovesUnknownDuplicatesAndContradictoryNoCook(t *testing.T) {
-	methods := normalizeCookingMethods([]CookingMethod{
-		CookingMethodNoCook,
-		CookingMethodStovetop,
-		CookingMethod("microwave"),
-		CookingMethodStovetop,
-		CookingMethodOther,
-	})
-
-	assert.Equal(t, []CookingMethod{CookingMethodStovetop, CookingMethodOther}, methods)
-}
-
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	var requestBody string
