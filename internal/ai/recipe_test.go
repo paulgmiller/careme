@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/openai/openai-go/v3/responses"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecipeComputeHash(t *testing.T) {
@@ -66,6 +68,40 @@ func TestRecipeHashLength(t *testing.T) {
 	if len(hash) != 24 {
 		t.Fatalf("expected hash length of 24, got %d", len(hash))
 	}
+}
+
+func TestRecipeComputeHashIncludesStructuredPropertiesWithoutChangingLegacyHash(t *testing.T) {
+	legacy := Recipe{
+		Title:        "Test Recipe",
+		Description:  "A delicious test recipe",
+		CookTime:     "35 minutes",
+		CostEstimate: "$18-24",
+		Ingredients: []Ingredient{
+			{Name: "Ingredient 1", Quantity: "1 cup", Price: "2.99"},
+			{Name: "Ingredient 2", Quantity: "2 tbsp", Price: "0.99"},
+		},
+		Instructions: []string{"Step 1", "Step 2"},
+		Health:       "Healthy",
+		DrinkPairing: "Red Wine",
+	}
+	require.Equal(t, "YK2TFI6O3tGLPAxPjqMPEw==", legacy.ComputeHash())
+
+	structured := legacy
+	structured.Properties = RecipeProperties{
+		TotalMinutes:         35,
+		Servings:             4,
+		EstimatedCostDollars: 21,
+		CaloriesPerServing:   540,
+		CookingMethods:       []CookingMethod{CookingMethodStovetop, CookingMethodOven},
+	}
+	assert.NotEqual(t, legacy.ComputeHash(), structured.ComputeHash())
+}
+
+func TestRecipeComputeHashSeparatesAdjacentStructuredPropertyValues(t *testing.T) {
+	first := Recipe{Properties: RecipeProperties{TotalMinutes: 3, Servings: 54}}
+	second := Recipe{Properties: RecipeProperties{TotalMinutes: 35, Servings: 4}}
+
+	assert.NotEqual(t, first.ComputeHash(), second.ComputeHash())
 }
 
 func TestRecipeInstructionMarkdownContributesToHash(t *testing.T) {
@@ -138,6 +174,45 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 	}
 }
 
+func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
+	client := NewClient("test-key", "ignored", nil, nil)
+	properties := schemaProperties(t, client.recipeSchema)
+
+	assert.Contains(t, properties, "properties")
+	assert.NotContains(t, properties, "cook_time")
+	assert.NotContains(t, properties, "cost_estimate")
+	assert.Contains(t, properties, "health")
+	assert.Contains(t, schemaRequired(t, client.recipeSchema), "health")
+
+	recipeProperties := schemaObject(t, properties["properties"])
+	fields := schemaProperties(t, recipeProperties)
+	for _, name := range []string{
+		"total_minutes",
+		"servings",
+		"estimated_cost_dollars",
+		"calories_per_serving",
+		"cooking_methods",
+	} {
+		assert.Contains(t, fields, name)
+		assert.Contains(t, schemaRequired(t, recipeProperties), name)
+	}
+	assert.NotContains(t, fields, "health_note")
+	for _, name := range []string{"total_minutes", "servings", "estimated_cost_dollars", "calories_per_serving"} {
+		field := schemaObject(t, fields[name])
+		assert.Equal(t, "integer", field["type"])
+		assert.Equal(t, float64(1), field["minimum"])
+	}
+
+	methods := schemaObject(t, fields["cooking_methods"])
+	assert.Equal(t, float64(1), methods["minItems"])
+	assert.NotContains(t, methods, "uniqueItems")
+	methodItems := schemaObject(t, methods["items"])
+	enum, ok := methodItems["enum"].([]any)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []any{"stovetop", "oven", "grill", "slow_cooker", "air_fryer", "no_cook", "other"}, enum)
+	assert.NotContains(t, enum, "microwave")
+}
+
 func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
 	client := NewClient("test-key", "ignored", nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
@@ -153,6 +228,15 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking",
 		"do not rely on prep details from the ingredient list alone",
 		"provide the total elapsed recipe time",
+		"Ensure properties.total_minutes reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.",
+		"properties.servings: provide the integer number of people served",
+		"properties.estimated_cost_dollars: provide one integer estimate",
+		"properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving",
+		"choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other",
+		"Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide.",
+		"health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
+		"otherwise return an empty string",
+		"Do not imply that gluten-free food is inherently healthier.",
 		"use as many clear steps as the work requires",
 		"Each step should cover one coherent task or component whose actions are naturally done together.",
 		"Do not combine unrelated work to limit the number of steps.",
@@ -163,7 +247,6 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Do not use lists for cooking, resting, serving, plating, one primary ingredient",
 		"Do not use HTML or other Markdown.",
 		"later steps should refer to that component by name without restating its ingredients or their amounts",
-		"Ensure cook_time reflects the total elapsed time implied by every instruction step, including prep, resting, and passive cooking.",
 		"set id to the exact ProductId",
 		"Set quantity to the total amount needed across the entire recipe",
 		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet.",
@@ -207,7 +290,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"cook_time\":\"35 minutes\",\"cost_estimate\":\"$12\",\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"Balanced.\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"]},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],
@@ -232,6 +315,8 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 		t.Fatalf("unexpected recipe: %+v", got)
 	}
+	assert.Equal(t, 35, got.Properties.TotalMinutes)
+	assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
 	if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
 		t.Fatalf("unexpected instructions: %+v", got.Instructions)
 	}

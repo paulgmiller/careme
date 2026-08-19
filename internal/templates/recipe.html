@@ -92,6 +92,8 @@
 
             <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
 
+            {{template "recipe_properties" .PropertyDisplay}}
+
             <div class="grid gap-6 md:grid-cols-2">
               <details id="recipe-ingredients"
                        class="recipe-ingredients group"
@@ -148,14 +150,10 @@
               </div>
             </div>
 
-            <div class="space-y-2 text-sm text-gray-600">
-              {{if .Recipe.CookTime}}
-              <p><span class="font-semibold text-brand-700">Total time:</span> {{.Recipe.CookTime}}</p>
+            <div class="space-y-3 text-sm text-gray-600">
+              {{if .Recipe.Health}}
+              <p><span class="font-semibold text-brand-700">Health:</span> {{.Recipe.Health}}</p>
               {{end}}
-              {{if .Recipe.CostEstimate}}
-              <p><span class="font-semibold text-brand-700">Estimated cost:</span> {{.Recipe.CostEstimate}}</p>
-              {{end}}
-              <p><span class="font-semibold text-brand-700">Health notes:</span> {{.Recipe.Health}}</p>
               <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
               {{template "recipe_wine" .}}
             </div>
