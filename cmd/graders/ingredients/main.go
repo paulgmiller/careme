@@ -21,9 +21,10 @@ type expectation struct {
 }
 
 type promptfooContext struct {
-	Cases []EvalCase `json:"cases"`
+	Vars struct {
+		Cases []EvalCase `json:"cases"`
+	} `json:"vars"`
 }
-
 type EvalCase struct {
 	// only expecting Brand, Descirption and maybe size from hard coded entries.
 	Ingredient ai.InputIngredient `json:"ingredient"`
@@ -56,14 +57,14 @@ func main() {
 
 	var ings []ai.InputIngredient
 	expectations := map[string]expectation{}
-	for i, eval := range pf.Cases {
+	for i, eval := range pf.Vars.Cases {
 		ing := eval.Ingredient
 		if ing.ProductID == "" {
 			ing.ProductID = strconv.Itoa(i)
 		}
 
 		if eval.Expect.Max == 0 {
-			eval.Expect.Min = 10
+			eval.Expect.Max = 10
 		}
 		ings = append(ings, ing)
 		expectations[ing.ProductID] = eval.Expect
@@ -82,6 +83,7 @@ func main() {
 				score,
 				expect.Max,
 			)
+			continue
 		}
 
 		if score < expect.Min {
