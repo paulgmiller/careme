@@ -75,6 +75,45 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `wholefoods/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Whole Foods stores (`id`, `lat`, `lon`) | `cmd/wholefoods` rebuilds after sync | `internal/wholefoods` location backend |
 | `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
 
+## Recipe identity and structured properties
+
+`ai.Recipe.ComputeHash` produces the URL-safe, padded Base64 encoding of an FNV-128a content hash. Recipe hashes are identities, not merely cache optimizations: they appear in recipe routes and connect a recipe to its dependent records and user state.
+
+The legacy portion of the hash writes these values in order:
+
+1. Title and description.
+2. Legacy cook-time and cost strings.
+3. Each ingredient's name, quantity, and price, preserving ingredient order.
+4. Each instruction string, preserving instruction order.
+5. Health text and drink pairing.
+
+When any structured recipe property is present, the hash appends this pipe-delimited payload:
+
+```text
+|35|4|21|540|2|stovetop|oven|
+```
+
+Fields are total minutes, servings, estimated total cost in dollars, calories per serving, cooking-method count, and each cooking method in order. The decimal integers and cooking-method enum values cannot contain `|`, so the separators give every value an unambiguous boundary. The method count makes the variable-length tail explicit. Field and cooking-method order are significant.
+
+The suffix is enabled by comparing the complete `RecipeProperties` value with its Go zero value, so adding a property cannot be missed by a hand-maintained presence predicate. That detection does not make a new field part of the payload automatically: adding a hash input requires an explicit format change.
+
+Recipe hashes are used by or stored in:
+
+- `recipe/<hash>` recipe records and `/recipe/{hash}` routes.
+- `recipes/<hash>` in the dedicated `recipe-images` backend.
+- `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
+- `recipe_critique_comparisons/<model>/<hash>` and recipe-regeneration job identity.
+- `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
+- `users/<user_id>` entries in `last_recipes[].hash`.
+
+Compatibility implications:
+
+- Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
+- Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
+- Changing a structured-property value or cooking-method order also produces a new identity.
+- There is no automatic alias or migration from an old hash to a new hash. Dependent images, wine recommendations, threads, feedback, critiques, saved/dismissed selections, and saved-recipe references remain under the old identity unless an explicit migration rewrites every dependent record. During diagnostics, compare the cached recipe's properties and recomputed hash before treating a missing dependent record as data loss.
+- If the structured-property layout changes in the future, introduce an explicit marker such as `recipe-properties-v2` and document its migration behavior here.
+
 ## Notes
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).

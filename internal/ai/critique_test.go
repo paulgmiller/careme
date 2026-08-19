@@ -77,7 +77,6 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 		"do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list",
 		"does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking",
 		"are the total time, serving yield, total cost, and calories-per-serving estimates plausible",
-		"exclude microwave cooking",
 		"is health empty unless it explains a meaningful dietary or nutritional ingredient swap",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)

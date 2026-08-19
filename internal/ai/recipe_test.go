@@ -97,6 +97,13 @@ func TestRecipeComputeHashIncludesStructuredPropertiesWithoutChangingLegacyHash(
 	assert.NotEqual(t, legacy.ComputeHash(), structured.ComputeHash())
 }
 
+func TestRecipeComputeHashSeparatesAdjacentStructuredPropertyValues(t *testing.T) {
+	first := Recipe{Properties: RecipeProperties{TotalMinutes: 3, Servings: 54}}
+	second := Recipe{Properties: RecipeProperties{TotalMinutes: 35, Servings: 4}}
+
+	assert.NotEqual(t, first.ComputeHash(), second.ComputeHash())
+}
+
 func TestRecipeInstructionMarkdownContributesToHash(t *testing.T) {
 	base := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 1 tablespoon olive oil"}}
 	different := Recipe{Instructions: []string{"Prepare the sauce:\n\n- 2 tablespoons olive oil"}}
@@ -227,7 +234,6 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving",
 		"choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other",
 		"Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide.",
-		"Never recommend microwave cooking.",
 		"health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap",
 		"otherwise return an empty string",
 		"Do not imply that gluten-free food is inherently healthier.",

@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -111,25 +112,27 @@ func (r *Recipe) ComputeHash() string {
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
-	if r.hasStructuredProperties() {
-		lo.Must(io.WriteString(fnv, "recipe-properties-v1"))
-		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.TotalMinutes)))
-		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.Servings)))
-		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.EstimatedCostDollars)))
-		lo.Must(io.WriteString(fnv, strconv.Itoa(r.Properties.CaloriesPerServing)))
-		for _, method := range r.Properties.CookingMethods {
-			lo.Must(io.WriteString(fnv, string(method)))
+	// Reflection keeps presence detection aligned with RecipeProperties when fields
+	// are added. The payload below remains explicit because its field order is part
+	// of the recipe identity contract.
+	if !reflect.ValueOf(r.Properties).IsZero() {
+		values := []string{
+			strconv.Itoa(r.Properties.TotalMinutes),
+			strconv.Itoa(r.Properties.Servings),
+			strconv.Itoa(r.Properties.EstimatedCostDollars),
+			strconv.Itoa(r.Properties.CaloriesPerServing),
+			strconv.Itoa(len(r.Properties.CookingMethods)),
 		}
+		for _, method := range r.Properties.CookingMethods {
+			values = append(values, string(method))
+		}
+		for _, value := range values {
+			lo.Must(io.WriteString(fnv, "|"))
+			lo.Must(io.WriteString(fnv, value))
+		}
+		lo.Must(io.WriteString(fnv, "|"))
 	}
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
-}
-
-func (r Recipe) hasStructuredProperties() bool {
-	return r.Properties.TotalMinutes != 0 ||
-		r.Properties.Servings != 0 ||
-		r.Properties.EstimatedCostDollars != 0 ||
-		r.Properties.CaloriesPerServing != 0 ||
-		len(r.Properties.CookingMethods) != 0
 }
 
 // now we can reuse first recipes and people can go off in different directions.
@@ -161,7 +164,6 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Pantry items are allowed when common and inexpensive.
 - Presalting meat and salting pasta or blanching water season food during cooking. Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead. Account for meat that is already brined or cured and for user requests to reduce sodium.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
-- Never recommend microwave cooking.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
 
 # Field Guidance
