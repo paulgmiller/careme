@@ -1,0 +1,23 @@
+escription: Ingredient grader regression tests
+
+prompts:
+  - "{{ingredient}}"
+
+providers:
+  - id: "exec:go run ../../cmd/eval-ingredient"
+    label: current-ingredient-grader
+
+tests:
+  - description: Mixed produce and prepared foods
+    vars:
+      expectations:
+        fresh broccoli:
+          min: 0.8
+        spinach:
+          min: 0.8
+        breaded broccoli bites:
+          max: 0.3
+        broccoli in cheese sauce:
+          max: 0.4
+        dry quinoa:
+          min: 0.75
