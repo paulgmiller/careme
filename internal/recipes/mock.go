@@ -46,6 +46,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Glue Pizza",
 		Description: "Sticky sauce trash style",
+		Properties:  ai.RecipeProperties{TotalMinutes: 35, Servings: 4, EstimatedCostDollars: 510, CaloriesPerServing: 620, CookingMethods: []ai.CookingMethod{ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "dough", Quantity: "1 lb", Price: "$5"},
 			{Name: "Tomato Sauce", Quantity: "8 oz", Price: "$1"},
@@ -62,6 +63,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Grilled Chicken Marinade",
 		Description: "Simple marinated grilled chicken",
+		Properties:  ai.RecipeProperties{TotalMinutes: 145, Servings: 4, EstimatedCostDollars: 16, CaloriesPerServing: 430, CookingMethods: []ai.CookingMethod{ai.CookingMethodGrill}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Chicken Breast", Quantity: "2 lbs", Price: "$8"},
 			{Name: "Olive Oil", Quantity: "1/4 cup", Price: "$3"},
@@ -77,6 +79,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Spaghetti Carbonara",
 		Description: "Classic Italian pasta dish",
+		Properties:  ai.RecipeProperties{TotalMinutes: 30, Servings: 4, EstimatedCostDollars: 16, CaloriesPerServing: 680, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Spaghetti", Quantity: "1 lb", Price: "$2"},
 			{Name: "Bacon", Quantity: "8 oz", Price: "$6"},
@@ -93,6 +96,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Beef Tacos",
 		Description: "Seasoned ground beef tacos",
+		Properties:  ai.RecipeProperties{TotalMinutes: 35, Servings: 4, EstimatedCostDollars: 17, CaloriesPerServing: 590, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Ground Beef", Quantity: "1 lb", Price: "$7"},
 			{Name: "Taco Shells", Quantity: "12", Price: "$3"},
@@ -110,6 +114,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Caesar Salad",
 		Description: "Classic Caesar salad with homemade dressing",
+		Properties:  ai.RecipeProperties{TotalMinutes: 20, Servings: 4, EstimatedCostDollars: 16, CaloriesPerServing: 410, CookingMethods: []ai.CookingMethod{ai.CookingMethodNoCook}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Romaine Lettuce", Quantity: "2 heads", Price: "$4"},
 			{Name: "Caesar Dressing", Quantity: "1 cup", Price: "$5"},
@@ -126,6 +131,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Salmon Teriyaki",
 		Description: "Pan-seared salmon with teriyaki glaze",
+		Properties:  ai.RecipeProperties{TotalMinutes: 30, Servings: 4, EstimatedCostDollars: 22, CaloriesPerServing: 520, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Salmon Fillets", Quantity: "2 lbs", Price: "$15"},
 			{Name: "Teriyaki Sauce", Quantity: "1/2 cup", Price: "$4"},
@@ -142,6 +148,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Veggie Stir Fry",
 		Description: "Colorful vegetable stir fry",
+		Properties:  ai.RecipeProperties{TotalMinutes: 25, Servings: 4, EstimatedCostDollars: 12, CaloriesPerServing: 390, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Mixed Vegetables", Quantity: "3 cups", Price: "$6"},
 			{Name: "Soy Sauce", Quantity: "1/4 cup", Price: "$2"},
@@ -158,6 +165,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Mushroom Risotto",
 		Description: "Creamy Italian rice dish",
+		Properties:  ai.RecipeProperties{TotalMinutes: 50, Servings: 4, EstimatedCostDollars: 23, CaloriesPerServing: 610, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Arborio Rice", Quantity: "1.5 cups", Price: "$4"},
 			{Name: "Mushrooms", Quantity: "8 oz", Price: "$5"},
@@ -175,6 +183,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "BBQ Pulled Pork",
 		Description: "Slow-cooked pulled pork with BBQ sauce",
+		Properties:  ai.RecipeProperties{TotalMinutes: 500, Servings: 8, EstimatedCostDollars: 24, CaloriesPerServing: 570, CookingMethods: []ai.CookingMethod{ai.CookingMethodSlowCooker}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Pork Shoulder", Quantity: "3 lbs", Price: "$12"},
 			{Name: "BBQ Sauce", Quantity: "2 cups", Price: "$5"},
@@ -191,6 +200,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Greek Salad",
 		Description: "Fresh Mediterranean salad",
+		Properties:  ai.RecipeProperties{TotalMinutes: 20, Servings: 4, EstimatedCostDollars: 20, CaloriesPerServing: 360, CookingMethods: []ai.CookingMethod{ai.CookingMethodNoCook}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Tomatoes", Quantity: "4", Price: "$3"},
 			{Name: "Cucumber", Quantity: "2", Price: "$2"},
@@ -208,6 +218,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Chicken Curry",
 		Description: "Spicy Indian curry with chicken",
+		Properties:  ai.RecipeProperties{TotalMinutes: 45, Servings: 4, EstimatedCostDollars: 19, CaloriesPerServing: 640, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Chicken Thighs", Quantity: "2 lbs", Price: "$9"},
 			{Name: "Curry Paste", Quantity: "3 tbsp", Price: "$4"},
@@ -224,6 +235,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Margherita Pizza",
 		Description: "Classic Italian pizza",
+		Properties:  ai.RecipeProperties{TotalMinutes: 40, Servings: 4, EstimatedCostDollars: 13, CaloriesPerServing: 590, CookingMethods: []ai.CookingMethod{ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Pizza Dough", Quantity: "1 lb", Price: "$3"},
 			{Name: "Tomato Sauce", Quantity: "1 cup", Price: "$2"},
@@ -240,6 +252,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Beef Stew",
 		Description: "Hearty slow-cooked beef stew",
+		Properties:  ai.RecipeProperties{TotalMinutes: 150, Servings: 6, EstimatedCostDollars: 22, CaloriesPerServing: 560, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Beef Chuck", Quantity: "2 lbs", Price: "$12"},
 			{Name: "Potatoes", Quantity: "4", Price: "$3"},
@@ -257,6 +270,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Shrimp Scampi",
 		Description: "Garlic butter shrimp over pasta",
+		Properties:  ai.RecipeProperties{TotalMinutes: 30, Servings: 4, EstimatedCostDollars: 26, CaloriesPerServing: 650, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Shrimp", Quantity: "1 lb", Price: "$12"},
 			{Name: "Linguine", Quantity: "1 lb", Price: "$2"},
@@ -274,6 +288,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Vegetable Soup",
 		Description: "Healthy mixed vegetable soup",
+		Properties:  ai.RecipeProperties{TotalMinutes: 50, Servings: 6, EstimatedCostDollars: 14, CaloriesPerServing: 310, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Mixed Vegetables", Quantity: "4 cups", Price: "$6"},
 			{Name: "Vegetable Broth", Quantity: "6 cups", Price: "$4"},
@@ -290,6 +305,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Fish Tacos",
 		Description: "Crispy fish tacos with slaw",
+		Properties:  ai.RecipeProperties{TotalMinutes: 40, Servings: 4, EstimatedCostDollars: 19, CaloriesPerServing: 560, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "White Fish", Quantity: "1.5 lbs", Price: "$10"},
 			{Name: "Tortillas", Quantity: "12", Price: "$3"},
@@ -307,6 +323,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Lasagna",
 		Description: "Layered Italian pasta bake",
+		Properties:  ai.RecipeProperties{TotalMinutes: 90, Servings: 8, EstimatedCostDollars: 25, CaloriesPerServing: 710, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Lasagna Noodles", Quantity: "1 lb", Price: "$3"},
 			{Name: "Ground Beef", Quantity: "1 lb", Price: "$7"},
@@ -324,6 +341,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Pad Thai",
 		Description: "Thai stir-fried noodles",
+		Properties:  ai.RecipeProperties{TotalMinutes: 35, Servings: 4, EstimatedCostDollars: 24, CaloriesPerServing: 690, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Rice Noodles", Quantity: "8 oz", Price: "$4"},
 			{Name: "Shrimp or Chicken", Quantity: "1 lb", Price: "$10"},
@@ -341,6 +359,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Chili Con Carne",
 		Description: "Spicy beef and bean chili",
+		Properties:  ai.RecipeProperties{TotalMinutes: 75, Servings: 6, EstimatedCostDollars: 22, CaloriesPerServing: 580, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Ground Beef", Quantity: "2 lbs", Price: "$14"},
 			{Name: "Kidney Beans", Quantity: "2 cans", Price: "$3"},
@@ -358,6 +377,7 @@ var mockRecipes = []ai.Recipe{
 	{
 		Title:       "Chicken Parmesan",
 		Description: "Breaded chicken with marinara and cheese",
+		Properties:  ai.RecipeProperties{TotalMinutes: 55, Servings: 4, EstimatedCostDollars: 22, CaloriesPerServing: 720, CookingMethods: []ai.CookingMethod{ai.CookingMethodStovetop, ai.CookingMethodOven}},
 		Ingredients: []ai.Ingredient{
 			{Name: "Chicken Breast", Quantity: "4 pieces", Price: "$8"},
 			{Name: "Bread Crumbs", Quantity: "2 cups", Price: "$3"},

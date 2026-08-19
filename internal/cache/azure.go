@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -99,7 +98,6 @@ func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error)
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
 			return nil, ErrNotFound
 		}
-		log.Printf("failed to download blob: %v", err)
 		return nil, err
 	}
 

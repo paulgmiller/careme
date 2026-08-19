@@ -23,6 +23,7 @@ import (
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
+	"careme/internal/recipes/regeneration"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -85,7 +86,7 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 	s.notFound(t.Context(), rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "That took longer than expected.")
+	assert.Contains(t, rr.Body.String(), "Let's give that another go.")
 	assert.Contains(t, rr.Body.String(), "Try again, chef")
 	assert.Contains(t, rr.Body.String(), `method="POST"`)
 	assert.Contains(t, rr.Body.String(), "/recipes/"+p.Hash()+"/retry")
@@ -1079,9 +1080,43 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	s.handleRegenerateSingleRecipe(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	newLocation := rr.Header().Get("Location")
+	spinLocation := rr.Header().Get("Location")
+	jobID := regeneration.ID(originalHash, "resp-question")
+	require.Equal(t, "/recipe/"+url.PathEscape(originalHash)+"/regen/"+jobID, spinLocation)
+	require.NotContains(t, spinLocation, "resp-question")
+
+	require.Eventually(t, func() bool {
+		newHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
+		return loadErr == nil && newHash != ""
+	}, time.Second, 10*time.Millisecond)
+	regeneratedHash, timedOut, err := s.regenerations.Load(t.Context(), jobID)
+	require.NoError(t, err)
+	assert.NotEmpty(t, regeneratedHash)
+	assert.False(t, timedOut)
+	pollServer := newTestServer(t, withTestCache(cacheStore))
+
+	htmxSpinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
+	htmxSpinReq.Header.Set("HX-Request", "true")
+	htmxSpinReq.SetPathValue("hash", originalHash)
+	htmxSpinReq.SetPathValue("jobID", jobID)
+	htmxSpinRR := httptest.NewRecorder()
+	pollServer.handleSingleRecipeRegeneration(htmxSpinRR, htmxSpinReq)
+	require.Equal(t, http.StatusOK, htmxSpinRR.Code)
+	htmxLocation := htmxSpinRR.Header().Get("HX-Redirect")
+	require.Contains(t, htmxLocation, "/recipe/")
+	require.NotContains(t, htmxLocation, "start=")
+
+	spinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
+	spinReq.SetPathValue("hash", originalHash)
+	spinReq.SetPathValue("jobID", jobID)
+	spinRR := httptest.NewRecorder()
+	pollServer.handleSingleRecipeRegeneration(spinRR, spinReq)
+	require.Equal(t, http.StatusSeeOther, spinRR.Code)
+	newLocation := spinRR.Header().Get("Location")
+	require.Equal(t, newLocation, htmxLocation)
 	require.Contains(t, newLocation, "/recipe/")
-	newHash := strings.TrimPrefix(newLocation, "/recipe/")
+	newHash, err := url.PathUnescape(strings.TrimPrefix(newLocation, "/recipe/"))
+	require.NoError(t, err)
 	require.NotEqual(t, originalHash, newHash)
 
 	updatedUser, err := storage.GetByID("mock-clerk-user-id")
@@ -1099,6 +1134,38 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	require.NoError(t, err)
 	require.Len(t, shoppingList.Recipes, 1)
 	assert.Equal(t, originalHash, shoppingList.Recipes[0].ComputeHash())
+
+	duplicateRR := httptest.NewRecorder()
+	s.handleRegenerateSingleRecipe(duplicateRR, req)
+	require.Equal(t, http.StatusSeeOther, duplicateRR.Code)
+	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
+	assert.Equal(t, 1, generator.regenerateCalls)
+
+	s.regenerations = regeneration.TimeoutStore(cacheStore)
+	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.Unconditional()))
+	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
+	timedOutReq.Header.Set("HX-Request", "true")
+	timedOutReq.SetPathValue("hash", originalHash)
+	timedOutReq.SetPathValue("jobID", jobID)
+	timedOutRR := httptest.NewRecorder()
+	s.handleSingleRecipeRegeneration(timedOutRR, timedOutReq)
+	require.Equal(t, http.StatusOK, timedOutRR.Code)
+	retryPath := "/recipe/" + url.PathEscape(originalHash) + "/regenerate"
+	assert.Contains(t, timedOutRR.Body.String(), retryPath)
+	assert.Contains(t, timedOutRR.Body.String(), "Try again, chef")
+
+	retryReq := httptest.NewRequest(http.MethodPost, retryPath, nil)
+	retryReq.SetPathValue("hash", originalHash)
+	retryRR := httptest.NewRecorder()
+	s.handleRegenerateSingleRecipe(retryRR, retryReq)
+	require.Equal(t, http.StatusSeeOther, retryRR.Code)
+	assert.Equal(t, spinLocation, retryRR.Header().Get("Location"))
+	require.Eventually(t, func() bool {
+		retryHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
+		return loadErr == nil && retryHash != ""
+	}, time.Second, 10*time.Millisecond)
+	assert.Equal(t, 2, generator.regenerateCalls)
+	assert.Equal(t, "resp-question", generator.lastResponse.ID)
 }
 
 type captureKickgenerationGenerator struct {
@@ -1340,10 +1407,11 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 }
 
 type captureQuestionGenerator struct {
-	lastQuestion   string
-	lastResponseID string
-	lastResponse   ai.ResponseRef
-	lastWinePick   struct {
+	lastQuestion    string
+	lastResponseID  string
+	lastResponse    ai.ResponseRef
+	regenerateCalls int
+	lastWinePick    struct {
 		recipeTitle string
 		date        time.Time
 	}
@@ -1357,6 +1425,7 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 }
 
 func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	c.regenerateCalls++
 	c.lastResponse = previous
 	return &ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
