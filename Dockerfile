@@ -1,6 +1,6 @@
 # Multi-stage build for careme service
 # Stage 1: build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /src
 ARG CMD_PATH=./cmd/careme
 # Go invokes Git to populate the standard vcs.* build settings. Git remains in
