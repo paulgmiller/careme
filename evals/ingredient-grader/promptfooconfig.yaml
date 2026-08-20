@@ -180,3 +180,552 @@ tests:
             size: 12 oz
           expect:
             max: 3
+
+  - description: Raw meat vs seasoned and fully prepared meat
+    vars:
+      cases:
+        - ingredient:
+            description: Boneless Skinless Chicken Thighs
+            size: 2 lb
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: 80% Lean Ground Beef
+            size: 1 lb
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Garlic Herb Marinated Chicken Breasts
+            size: 1.5 lb
+          expect:
+            min: 6
+            max: 8
+
+        - ingredient:
+            description: Fully Cooked Breaded Chicken Breast Tenders
+            size: 20 oz
+          expect:
+            max: 3
+
+  - description: Raw, cooked, and snack-format seafood
+    vars:
+      cases:
+        - ingredient:
+            description: Atlantic Salmon Fillet
+            size: 1 lb
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Raw Peeled and Deveined Shrimp
+            size: 16 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Cooked Tail-Off Shrimp
+            size: 12 oz
+          expect:
+            min: 7
+            max: 8
+
+        - ingredient:
+            description: Smoked Salmon Snack Pack with Cream Cheese
+            size: 4 oz
+          expect:
+            max: 3
+
+  - description: Uncommon vegetables remain strong ingredients
+    vars:
+      cases:
+        - ingredient:
+            description: Fresh Rutabaga
+            size: 1 each
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Collard Greens
+            size: 1 bunch
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Yuca Root
+            size: 1 lb
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Globe Artichokes
+            size: 2 count
+          expect:
+            min: 9
+            max: 10
+
+  - description: Organ meats and bones are valid cooking ingredients
+    vars:
+      cases:
+        - ingredient:
+            description: Fresh Chicken Livers
+            size: 1 lb
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Beef Soup Bones
+            size: 2 lb
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Fresh Beef Heart
+            size: 1.5 lb
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Pork Neck Bones
+            size: 2 lb
+          expect:
+            min: 7
+            max: 9
+
+  - description: Flexible dairy and eggs
+    vars:
+      cases:
+        - ingredient:
+            description: Large Grade A Eggs
+            size: 12 count
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Whole Milk
+            size: 1 gal
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Unsalted Butter
+            size: 16 oz
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Plain Whole Milk Greek Yogurt
+            size: 32 oz
+          expect:
+            min: 7
+            max: 9
+
+  - description: Dry legumes vs convenient prepared legumes
+    vars:
+      cases:
+        - ingredient:
+            description: Dry Green Lentils
+            size: 16 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Dried Chickpeas
+            size: 16 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: No Salt Added Canned Black Beans
+            size: 15 oz
+          expect:
+            min: 6
+            max: 8
+
+        - ingredient:
+            description: Seasoned Refried Beans with Lime
+            size: 16 oz
+          expect:
+            min: 3
+            max: 5
+
+  - description: Herbs and spices vs seasoning mixes
+    vars:
+      cases:
+        - ingredient:
+            description: Fresh Basil
+            size: 1 bunch
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Cilantro
+            size: 1 bunch
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Ground Cumin
+            size: 2 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Cheesy Taco Seasoning Mix
+            size: 1 oz
+          expect:
+            min: 3
+            max: 5
+
+  - description: Explicit dry pasta score anchors
+    vars:
+      cases:
+        - ingredient:
+            brand: Store Brand
+            description: Standard Dry Spaghetti
+            size: 16 oz
+          expect:
+            min: 6
+            max: 7
+
+        - ingredient:
+            brand: De Cecco
+            description: Bronze-Cut Slow-Dried Rigatoni
+            size: 16 oz
+          expect:
+            min: 8
+            max: 9
+
+        - ingredient:
+            description: Red Lentil Penne Pasta
+            size: 8 oz
+          expect:
+            min: 5
+            max: 6
+
+        - ingredient:
+            description: Gluten-Free Brown Rice Spaghetti
+            size: 12 oz
+          expect:
+            min: 5
+            max: 6
+
+  - description: Real pasta quality signals vs generic marketing claims
+    vars:
+      cases:
+        - ingredient:
+            brand: Rummo
+            description: High-Protein Durum Semolina Penne Rigate
+            size: 16 oz
+          expect:
+            min: 8
+            max: 9
+
+        - ingredient:
+            brand: Felicetti
+            description: Bronze-Die Spaghetti
+            size: 16 oz
+          expect:
+            min: 8
+            max: 9
+
+        - ingredient:
+            brand: Store Brand
+            description: Premium Quality Organic Non-GMO Traditional Spaghetti
+            size: 16 oz
+          expect:
+            min: 6
+            max: 7
+
+        - ingredient:
+            brand: Store Brand
+            description: Dry Spaghetti
+            size: 16 oz
+          expect:
+            min: 6
+            max: 7
+
+  - description: Grain cooking signals vs instant flavored mixes
+    vars:
+      cases:
+        - ingredient:
+            description: Pearled Farro
+            size: 16 oz
+          expect:
+            min: 8
+            max: 9
+
+        - ingredient:
+            description: Hulled Barley
+            size: 24 oz
+          expect:
+            min: 8
+            max: 9
+
+        - ingredient:
+            description: Plain Cracked Freekeh
+            size: 16 oz
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Instant Chicken-Flavored Rice Mix
+            size: 6.8 oz
+          expect:
+            min: 3
+            max: 5
+
+  - description: Bread and prepared sauce anchors
+    vars:
+      cases:
+        - ingredient:
+            description: 100% Whole Wheat Sandwich Bread
+            size: 20 oz
+          expect:
+            min: 5
+            max: 6
+
+        - ingredient:
+            description: Artisan Sourdough Bread
+            size: 18 oz
+          expect:
+            min: 5
+            max: 6
+
+        - ingredient:
+            description: Prepared Marinara Pasta Sauce
+            size: 24 oz
+          expect:
+            max: 6
+
+        - ingredient:
+            description: Four Cheese Alfredo Pasta Sauce
+            size: 15 oz
+          expect:
+            max: 6
+
+  - description: Ready-to-eat meals, kits, bowls, and trays
+    vars:
+      cases:
+        - ingredient:
+            description: Ready-to-Eat Chicken Caesar Salad Bowl
+            size: 6.5 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Taco Dinner Meal Kit
+            size: 24 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Cheese and Crackers Snack Tray
+            size: 3.2 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Vegetable Party Tray with Ranch Dip
+            size: 40 oz
+          expect:
+            max: 3
+
+  - description: Dips, gravies, mixes, and prepared sides
+    vars:
+      cases:
+        - ingredient:
+            description: Seven Layer Party Dip
+            size: 16 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Ready-to-Serve Turkey Gravy
+            size: 12 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Loaded Mashed Potatoes Prepared Side
+            size: 20 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Instant Cheddar Broccoli Rice Mix
+            size: 6 oz
+          expect:
+            min: 3
+            max: 5
+
+  - description: Whole, pre-cut, and cooking-friendly fruit formats
+    vars:
+      cases:
+        - ingredient:
+            description: Whole Fresh Pineapple
+            size: 1 each
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Pineapple Spears
+            size: 12 oz
+          expect:
+            min: 4
+            max: 6
+
+        - ingredient:
+            description: Frozen Unsweetened Sliced Peaches
+            size: 16 oz
+          expect:
+            min: 6
+            max: 8
+
+        - ingredient:
+            description: Sliced Apple Snack Pouch with Caramel Dip
+            size: 4 oz
+          expect:
+            max: 3
+
+  - description: Diverse flexible ingredients that are difficult to make at home
+    vars:
+      cases:
+        - ingredient:
+            description: Extra-Firm Tofu
+            size: 14 oz
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Paneer Cheese
+            size: 12 oz
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: Dried Shiitake Mushrooms
+            size: 5 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Masa Harina Corn Flour
+            size: 4 lb
+          expect:
+            min: 7
+            max: 9
+
+  - description: Plain ground meat vs sausage and cured meat
+    vars:
+      cases:
+        - ingredient:
+            description: Fresh Ground Pork
+            size: 1 lb
+          expect:
+            min: 9
+            max: 10
+
+        - ingredient:
+            description: Fresh Mild Italian Pork Sausage
+            size: 16 oz
+          expect:
+            min: 7
+            max: 8
+
+        - ingredient:
+            description: Cured Sliced Pepperoni
+            size: 6 oz
+          expect:
+            max: 4
+
+        - ingredient:
+            description: Fully Cooked Maple Breakfast Sausage Links
+            size: 12 oz
+          expect:
+            max: 4
+
+  - description: Seasonal produce remains a strong ingredient
+    vars:
+      cases:
+        - ingredient:
+            description: Fresh Rhubarb Stalks
+            size: 1 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Fresh Fuyu Persimmons
+            size: 1 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Whole Delicata Squash
+            size: 1 each
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Fresh Cranberries
+            size: 12 oz
+          expect:
+            min: 8
+            max: 10
+
+  - description: Minimally processed staples vs sauced versions
+    vars:
+      cases:
+        - ingredient:
+            description: Plain Frozen Green Peas
+            size: 12 oz
+          expect:
+            min: 7
+            max: 9
+
+        - ingredient:
+            description: No Salt Added Canned Diced Tomatoes
+            size: 14.5 oz
+          expect:
+            min: 6
+            max: 8
+
+        - ingredient:
+            description: Plain Tomato Paste
+            size: 6 oz
+          expect:
+            min: 5
+            max: 7
+
+        - ingredient:
+            description: Frozen Stir-Fry Vegetables with Teriyaki Sauce
+            size: 16 oz
+          expect:
+            max: 4

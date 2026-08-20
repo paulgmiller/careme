@@ -80,6 +80,12 @@ tasks:
     cmds:
       - go test ./...
 
+  evals:
+    desc: Run ingredient grader evaluations
+    dir: evals/ingredient-grader
+    cmds:
+      - npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval
+
   css:
     desc: Rebuild Tailwind output
     cmds:
