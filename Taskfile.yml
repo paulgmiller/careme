@@ -84,7 +84,7 @@ tasks:
     desc: Run ingredient grader evaluations
     dir: evals/ingredient-grader
     cmds:
-      - npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --env-file secrets/envtest
+      - npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval
 
   css:
     desc: Rebuild Tailwind output
