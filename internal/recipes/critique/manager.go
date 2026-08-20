@@ -70,15 +70,13 @@ func (mc *waitingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe
 
 func (mc *waitingCritiquer) CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), backgroundCritiqueTimeout)
-	mc.wg.Add(1)
-	go func() {
-		defer mc.wg.Done()
+	mc.wg.Go(func() {
 		defer cancel()
 		_, err := mc.CritiqueRecipe(ctx, recipe)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to critique recipe", "hash", recipe.ComputeHash(), "title", recipe.Title, "error", err)
 		}
-	}()
+	})
 }
 
 func (mc *waitingCritiquer) Wait() {

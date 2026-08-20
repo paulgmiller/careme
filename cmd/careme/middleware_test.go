@@ -180,9 +180,7 @@ func TestWithMiddlewareProvidesTraceAndSessionContext(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "http://careme.cooking/about", nil)
 	req = req.WithContext(clerk.ContextWithSessionClaims(req.Context(), &clerk.SessionClaims{
-		RegisteredClaims: clerk.RegisteredClaims{
-			Subject: "user-123",
-		},
+		Subject: "user-123",
 	}))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
