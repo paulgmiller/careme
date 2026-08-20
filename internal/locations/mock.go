@@ -38,11 +38,6 @@ var fakes = map[string]Location{
 	},
 }
 
-//go:fix inline
-func float64Pointer(value float64) *float64 {
-	return new(value)
-}
-
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	l, ok := fakes[locationID]
 	if !ok {
