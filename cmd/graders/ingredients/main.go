@@ -79,7 +79,7 @@ func main() {
 		expect := expectations[g.ProductID]
 		score := g.Grade.Score
 		if score > expect.Max {
-			fmt.Printf("FAIL grade=%d>%d reason=%s",
+			fmt.Printf("FAIL grade=%d>%d reason=%s\n",
 				score,
 				expect.Max,
 				g.Grade.Reason,
@@ -88,7 +88,7 @@ func main() {
 		}
 
 		if score < expect.Min {
-			fmt.Printf("FAIL grade=%d<%d reason=%s",
+			fmt.Printf("FAIL grade=%d<%d reason=%s\n",
 				score,
 				expect.Max,
 				g.Grade.Reason,
@@ -97,7 +97,7 @@ func main() {
 		}
 
 		fmt.Printf(
-			"PASS grade=%.d expected=%d..%d",
+			"PASS grade=%.d expected=%d..%d\n",
 			score,
 			expect.Min,
 			expect.Max,
