@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
@@ -45,9 +44,7 @@ func NewBlobCache(container string, transport http.RoundTripper) (*BlobCache, er
 
 	// The service URL for blob endpoints is usually in the form: http(s)://<account>.blob.core.windows.net/
 	client, err := azblob.NewClientWithSharedKeyCredential(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName), cred, &azblob.ClientOptions{
-		ClientOptions: policy.ClientOptions{
-			Transport: &http.Client{Transport: transport},
-		},
+		Transport: &http.Client{Transport: transport},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blob client: %w", err)

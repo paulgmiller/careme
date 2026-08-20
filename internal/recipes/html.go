@@ -543,8 +543,8 @@ func parseShoppingQuantity(raw string) (float64, string, bool) {
 }
 
 func beforeFirstComma(value string) string {
-	if index := strings.Index(value, ","); index >= 0 {
-		return strings.TrimSpace(value[:index])
+	if before, _, ok := strings.Cut(value, ","); ok {
+		return strings.TrimSpace(before)
 	}
 	return strings.TrimSpace(value)
 }

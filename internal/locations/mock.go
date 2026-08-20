@@ -24,8 +24,8 @@ var fakes = map[string]Location{
 		Address: "1 willy ave",
 		State:   "North Dakota",
 		ZipCode: "58102",
-		Lat:     float64Pointer(46.8772),
-		Lon:     float64Pointer(-96.7898),
+		Lat:     new(46.8772),
+		Lon:     new(-96.7898),
 	},
 	"70505000": {
 		ID:      "70505000",
@@ -33,13 +33,9 @@ var fakes = map[string]Location{
 		Address: "20 somewhere st",
 		State:   "North Carolina",
 		ZipCode: "28104",
-		Lat:     float64Pointer(35.0074),
-		Lon:     float64Pointer(-80.7381),
+		Lat:     new(35.0074),
+		Lon:     new(-80.7381),
 	},
-}
-
-func float64Pointer(value float64) *float64 {
-	return &value
 }
 
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {

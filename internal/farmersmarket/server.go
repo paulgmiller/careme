@@ -285,7 +285,6 @@ func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor 
 	results := make(chan result, len(photos))
 	var wg sync.WaitGroup
 	for _, photo := range photos {
-		photo := photo
 		wg.Go(func() {
 			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
 			slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))

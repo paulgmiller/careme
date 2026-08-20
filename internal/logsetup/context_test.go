@@ -61,9 +61,7 @@ func TestContextHandlerFallsBackToClerkUserID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(newContextHandler(slog.NewTextHandler(&buf, nil)))
 	ctx := clerk.ContextWithSessionClaims(context.Background(), &clerk.SessionClaims{
-		RegisteredClaims: clerk.RegisteredClaims{
-			Subject: "clerk-user-123",
-		},
+		Subject: "clerk-user-123",
 	})
 
 	logger.InfoContext(ctx, "hello")
@@ -78,9 +76,7 @@ func TestContextHandlerPrefersExplicitUserID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(newContextHandler(slog.NewTextHandler(&buf, nil)))
 	ctx := clerk.ContextWithSessionClaims(context.Background(), &clerk.SessionClaims{
-		RegisteredClaims: clerk.RegisteredClaims{
-			Subject: "clerk-user-123",
-		},
+		Subject: "clerk-user-123",
 	})
 	ctx = WithUserID(ctx, "explicit-user-123")
 

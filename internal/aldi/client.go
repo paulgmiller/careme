@@ -382,7 +382,7 @@ func addressWordMatchScore(summaryAddress, shopAddress string) int {
 	}
 
 	score := 0
-	for _, word := range strings.Fields(normalizeComparable(shopAddress)) {
+	for word := range strings.FieldsSeq(normalizeComparable(shopAddress)) {
 		if summaryWords[word] {
 			score++
 			delete(summaryWords, word)
