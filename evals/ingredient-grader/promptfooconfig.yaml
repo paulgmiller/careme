@@ -1,0 +1,182 @@
+description: Ingredient grading eval
+
+# The Go binary ignores the rendered prompt, but the exec provider
+# still receives one as argv[1].
+prompts:
+  - ingredient-grading-eval
+
+providers:
+  - id: "exec:go run ../../cmd/graders/ingredients"
+    label: ingredient-grader
+
+defaultTest:
+  options:
+    # `cases` is intentionally one batch. Without this, Promptfoo
+    # expands array-valued vars into individual test cases.
+    disableVarExpansion: true
+
+  assert:
+    # Make sure we actually received at least one successful result.
+    - type: contains
+      value: PASS
+      metric: ingredient-grading
+
+    # Any failed ingredient fails the whole Promptfoo test.
+    - type: not-contains
+      value: FAIL
+      metric: ingredient-grading
+
+tests:
+  - description: Fresh vegetables vs prepared vegetables
+    vars:
+      cases:
+        - ingredient:
+            description: Broccoli Crowns
+            size: 1 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Fresh Baby Spinach
+            size: 5 oz
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            brand: Green Giant
+            description: Broccoli & Cheese Bites
+            size: 10 oz
+          expect:
+            max: 3
+
+        - ingredient:
+            description: Broccoli Florets in Cheese Sauce
+            size: 12 oz
+          expect:
+            max: 4
+
+  - description: Whole grains vs prepared grains
+    vars:
+      cases:
+        - ingredient:
+            description: Organic Quinoa
+            size: 16 oz
+          expect:
+            min: 7
+            max: 10
+
+        - ingredient:
+            brand: Royal
+            description: Basmati Rice
+            size: 32 oz
+          expect:
+            min: 7
+            max: 10
+
+        - ingredient:
+            brand: Ben's Original
+            description: Ready Rice Jasmine Rice
+            size: 8.8 oz
+          expect:
+            max: 5
+
+        - ingredient:
+            description: Old Fashioned Rolled Oats
+            size: 42 oz
+          expect:
+            min: 7
+            max: 10
+
+  - description: Fresh fruit vs prepared fruit
+    vars:
+      cases:
+        - ingredient:
+            description: Yellow Peaches
+            size: 1 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            description: Honeycrisp Apples
+            size: 3 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            brand: Del Monte
+            description: Sliced Peaches in Heavy Syrup
+            size: 15.25 oz
+          expect:
+            max: 4
+
+        - ingredient:
+            description: Pre-Cut Mixed Fruit Bowl
+            size: 12 oz
+          expect:
+            min: 4
+            max: 7
+
+  - description: Plain vegetables vs increasingly prepared forms
+    vars:
+      cases:
+        - ingredient:
+            description: Whole Carrots
+            size: 2 lb
+          expect:
+            min: 8
+            max: 10
+
+        - ingredient:
+            brand: Birds Eye
+            description: Steamfresh Carrots
+            size: 10.8 oz
+          expect:
+            min: 6
+            max: 10
+
+        - ingredient:
+            brand: Birds Eye
+            description: Brown Sugar Glazed Carrots
+            size: 12 oz
+          expect:
+            max: 4
+
+        - ingredient:
+            description: Breaded Cauliflower Bites
+            size: 12 oz
+          expect:
+            max: 4
+
+  - description: Pasta and convenience foods
+    vars:
+      cases:
+        - ingredient:
+            brand: Barilla
+            description: Spaghetti Pasta
+            size: 16 oz
+          expect:
+            min: 7
+            max: 10
+
+        - ingredient:
+            description: Whole Wheat Penne Pasta
+            size: 16 oz
+          expect:
+            min: 7
+            max: 10
+
+        - ingredient:
+            description: Chickpea Rotini Pasta
+            size: 8 oz
+          expect:
+            max: 6
+
+        - ingredient:
+            description: Frozen Macaroni and Cheese
+            size: 12 oz
+          expect:
+            max: 3
