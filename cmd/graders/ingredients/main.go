@@ -82,6 +82,7 @@ func main() {
 			fmt.Printf("FAIL grade=%d>%d reason=%s",
 				score,
 				expect.Max,
+				g.Grade.Reason,
 			)
 			continue
 		}
@@ -90,6 +91,7 @@ func main() {
 			fmt.Printf("FAIL grade=%d<%d reason=%s",
 				score,
 				expect.Max,
+				g.Grade.Reason,
 			)
 			continue
 		}
