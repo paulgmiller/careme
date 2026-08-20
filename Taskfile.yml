@@ -212,6 +212,6 @@ tasks:
   golangci-lint:
     internal: true
     status:
-      - test -x ./bin/golangci-lint
+      - bash -c 'source tools/versions.sh; ./bin/golangci-lint version | grep -Fq "version ${GOLANGCI_LINT_VERSION#v} "'
     cmds:
       - bash tools/install-golangci-lint.sh

@@ -822,7 +822,7 @@ func categoryProductsPageJSON(prefix string, start, count, total int, searchCont
 		_, _ = fmt.Fprintf(&b, `"searchContextToken":%q,`, searchContextToken)
 	}
 	b.WriteString(`"items":[`)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if i > 0 {
 			b.WriteByte(',')
 		}

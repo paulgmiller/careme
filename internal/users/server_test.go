@@ -64,7 +64,7 @@ func TestHandleOfflineRecipeCacheReturnsLatestTenSavedRecipes(t *testing.T) {
 			{Title: "Oldest", Hash: "oldest", CreatedAt: now.Add(-13 * time.Hour)},
 		},
 	}
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		user.LastRecipes = append(user.LastRecipes, utypes.Recipe{
 			Title:     "Recipe " + strconv.Itoa(i),
 			Hash:      "hash-" + strconv.Itoa(i),

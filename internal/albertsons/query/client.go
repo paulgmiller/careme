@@ -95,10 +95,7 @@ func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, 
 	}
 
 	wantedRows := opts.Rows
-	pageRows := wantedRows
-	if pageRows > maxSearchPageRows {
-		pageRows = maxSearchPageRows
-	}
+	pageRows := min(wantedRows, maxSearchPageRows)
 
 	var products []PathwaySearchProduct
 	for start := opts.Start; ; start += pageRows {

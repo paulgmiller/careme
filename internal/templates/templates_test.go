@@ -184,7 +184,7 @@ func firstElementClasses(node *html.Node, element string) (map[string]bool, bool
 			if attr.Key != "class" {
 				continue
 			}
-			for _, class := range strings.Fields(attr.Val) {
+			for class := range strings.FieldsSeq(attr.Val) {
 				classes[class] = true
 			}
 			return classes, true

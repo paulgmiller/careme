@@ -84,8 +84,8 @@ func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
 	const prefix = "For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "
 	var inspiration string
 	for _, message := range messages {
-		if strings.HasPrefix(message.Content, prefix) {
-			inspiration = strings.TrimPrefix(message.Content, prefix)
+		if after, ok := strings.CutPrefix(message.Content, prefix); ok {
+			inspiration = after
 			break
 		}
 	}
