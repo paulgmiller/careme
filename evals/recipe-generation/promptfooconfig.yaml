@@ -1,0 +1,47 @@
+description: Recipe generation eval
+evaluateOptions:
+  maxConcurrency: 1
+
+# The Go provider ignores the rendered prompt and reads the test variables.
+prompts:
+  - recipe-generation-eval
+
+providers:
+  - id: 'file://provider.go'
+    label: recipe-generation
+
+defaultTest:
+  assert:
+    - type: is-json
+      metric: recipe-json
+    - type: javascript
+      value: |
+        const recipe = JSON.parse(output);
+        return Boolean(
+          recipe.title
+          && recipe.description
+          && recipe.ingredients?.length
+          && recipe.instructions?.length
+          && recipe.properties?.total_minutes > 0
+          && recipe.properties?.servings > 0
+        );
+      metric: complete-recipe
+
+tests:
+  # Generate real cases with:
+  # go run ./cmd/evalcase -hash HASH -secret-file secrets/envprod
+  - description: Yucatecan grilled chicken from cached menu plan
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Yucatecan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            technique: grill
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            fancy: false
+            recipe_instructions:
+              - Keep total time under 1 hour.
+              - Serve 2 people.
+        chef_note_suggestion: skip the scallop splurge
+        response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
+        prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
