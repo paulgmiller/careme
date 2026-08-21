@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
+	"strings"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -31,7 +31,7 @@ type EvalCase struct {
 	Expect     expectation        `json:"expect"`
 }
 
-func main() {
+/*func main() {
 	// Promptfoo exec args:
 	// 1: rendered prompt
 	// 2: provider options JSON
@@ -40,9 +40,19 @@ func main() {
 		log.Fatalf("expected promptfoo arguments")
 	}
 
+	var ctxmap map[string]any
+
+	lo.Must0(json.Unmarshal([]byte(os.Args[3]), &ctxmap))
+	out := lo.Must(CallApi("", nil, ctxmap))
+	fmt.Println(lo.Must(json.Marshal(out)))
+
+}*/
+
+func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load configuration: %s", err)
+		return nil, fmt.Errorf("failed to load configuration: %s", err)
 	}
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
@@ -51,8 +61,12 @@ func main() {
 	grader := grading.NewManager(cfg, cacheStore, http.DefaultClient)
 
 	var pf promptfooContext
-	if err := json.Unmarshal([]byte(os.Args[3]), &pf); err != nil {
-		log.Fatalf("parse promptfoo context: %v", err)
+	b, err := json.Marshal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &pf); err != nil {
+		return nil, err
 	}
 
 	var ings []ai.InputIngredient
@@ -74,34 +88,36 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	var failures []string
 	for _, g := range grades {
 		expect := expectations[g.ProductID]
 		score := g.Grade.Score
 		if score > expect.Max {
-			fmt.Printf("FAIL grade=%d>%d reason=%s\n",
+			failures = append(failures, fmt.Sprintf("grade=%d>%d reason=%s\n",
 				score,
 				expect.Max,
 				g.Grade.Reason,
-			)
+			))
 			continue
 		}
 
 		if score < expect.Min {
-			fmt.Printf("FAIL grade=%d<%d reason=%s\n",
+			failures = append(failures, fmt.Sprintf("grade=%d<%d reason=%s\n",
 				score,
 				expect.Max,
 				g.Grade.Reason,
-			)
+			))
 			continue
 		}
-
-		fmt.Printf(
-			"PASS grade=%.d expected=%d..%d\n",
-			score,
-			expect.Min,
-			expect.Max,
-		)
-
 	}
+	if len(failures) == 0 {
+		return map[string]interface{}{
+			"output": "PASS",
+		}, nil
+	}
+
+	return map[string]interface{}{
+		"output": strings.Join(failures, "\n"),
+	}, nil
+
 }

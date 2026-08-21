@@ -6,7 +6,7 @@ prompts:
   - ingredient-grading-eval
 
 providers:
-  - id: "exec:go run ../../cmd/graders/ingredients"
+  - id: 'file://../../cmd/graders/ingredients/main.go'
     label: ingredient-grader
 
 defaultTest:
