@@ -1,0 +1,46 @@
+description: Menu plan generation eval
+evaluateOptions:
+  maxConcurrency: 1
+
+# The Go provider ignores the rendered prompt and reads the test variables.
+prompts:
+  - menu-plan-eval
+
+providers:
+  - id: 'file://provider.go'
+    label: menu-plan
+
+defaultTest:
+  assert:
+    - type: is-json
+      metric: menu-plan-json
+    - type: javascript
+      value: |
+        const plan = JSON.parse(output);
+        if (plan.plans?.length !== 1) return false;
+        const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
+        const recipe = plan.plans[0];
+        return available.has(recipe.anchor_ingredient.toLowerCase())
+          && available.has(recipe.side_vegetable.toLowerCase());
+      metric: available-menu-ingredients
+
+tests:
+  - description: One quick seasonal chicken dinner
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 1
+      instructions: Keep dinner under 45 minutes.
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+        - id: broccoli
+          description: Broccoli Crowns
+          size: 1 lb
+        - id: jasmine-rice
+          description: Jasmine Rice
+          size: 2 lb
