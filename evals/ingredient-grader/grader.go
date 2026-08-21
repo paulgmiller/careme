@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,6 +30,10 @@ type EvalCase struct {
 	Expect     expectation        `json:"expect"`
 }
 
+type ingredientGrader interface {
+	GradeIngredients(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
+}
+
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,10 +41,13 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	}
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
-		log.Fatalf("failed to create cache for ingredient grading: %s", err)
+		return nil, fmt.Errorf("failed to create cache for ingredient grading: %w", err)
 	}
 	grader := grading.NewManager(cfg, cacheStore, http.DefaultClient)
+	return runEval(ctx, grader)
+}
 
+func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]interface{}, error) {
 	var pf promptfooContext
 	b, err := json.Marshal(ctx)
 	if err != nil {
@@ -68,7 +74,7 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 
 	grades, err := grader.GradeIngredients(context.Background(), ings)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
 	var failures []string
 	for _, g := range grades {
@@ -87,7 +93,7 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 		if score < expect.Min {
 			failures = append(failures, fmt.Sprintf("grade=%d<%d desc=%s reason=%s\n",
 				score,
-				expect.Max,
+				expect.Min,
 				g.Description,
 				g.Grade.Reason,
 			))
