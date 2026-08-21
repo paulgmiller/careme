@@ -227,6 +227,14 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if client.last == nil || !strings.Contains(client.last.Content[1].Value, "Unsubscribe") {
 		t.Fatalf("expected sent message to contain unsubscribe link %s", client.last.Content[1].Value)
 	}
+	wantOneClickURL := "<https://careme.cooking/user/unsubscribe/one-click?token=" +
+		users.FakeUnsubscribeTokenFactory().UnsubscribeToken("user-1") + "&user=user-1>"
+	if got := client.last.Headers["List-Unsubscribe"]; got != wantOneClickURL {
+		t.Fatalf("expected List-Unsubscribe header %q, got %q", wantOneClickURL, got)
+	}
+	if got := client.last.Headers["List-Unsubscribe-Post"]; got != "List-Unsubscribe=One-Click" {
+		t.Fatalf("expected one-click List-Unsubscribe-Post header, got %q", got)
+	}
 }
 
 func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {

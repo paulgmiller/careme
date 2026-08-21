@@ -230,10 +230,12 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 
 	var buf bytes.Buffer
-	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + url.Values{
+	unsubscribeParams := url.Values{
 		"user":  []string{user.ID},
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
+	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
+	oneClickUnsubscribeURL := m.publicOrigin + "/user/unsubscribe/one-click?" + unsubscribeParams
 	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		slog.ErrorContext(ctx, "failed to format mail", "error", err)
 		return
@@ -247,6 +249,8 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
+	message.SetHeader("List-Unsubscribe", "<"+oneClickUnsubscribeURL+">")
+	message.SetHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	for _, e := range user.Email[1:] {
 		p := mail.NewPersonalization()
 		p.AddTos(mail.NewEmail(e, e))
