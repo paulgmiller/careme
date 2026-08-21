@@ -31,25 +31,7 @@ type EvalCase struct {
 	Expect     expectation        `json:"expect"`
 }
 
-/*func main() {
-	// Promptfoo exec args:
-	// 1: rendered prompt
-	// 2: provider options JSON
-	// 3: test context JSON
-	if len(os.Args) < 4 {
-		log.Fatalf("expected promptfoo arguments")
-	}
-
-	var ctxmap map[string]any
-
-	lo.Must0(json.Unmarshal([]byte(os.Args[3]), &ctxmap))
-	out := lo.Must(CallApi("", nil, ctxmap))
-	fmt.Println(lo.Must(json.Marshal(out)))
-
-}*/
-
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %s", err)
@@ -121,5 +103,4 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	return map[string]interface{}{
 		"output": strings.Join(failures, "\n"),
 	}, nil
-
 }

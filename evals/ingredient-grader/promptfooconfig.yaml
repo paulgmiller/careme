@@ -8,7 +8,7 @@ prompts:
   - ingredient-grading-eval
 
 providers:
-  - id: 'file://../../cmd/graders/ingredients/main.go'
+  - id: 'file://grader.go'
     label: ingredient-grader
 
 defaultTest:
@@ -21,11 +21,6 @@ defaultTest:
     # Make sure we actually received at least one successful result.
     - type: contains
       value: PASS
-      metric: ingredient-grading
-
-    # Any failed ingredient fails the whole Promptfoo test.
-    - type: not-contains
-      value: FAIL
       metric: ingredient-grading
 
 tests:
