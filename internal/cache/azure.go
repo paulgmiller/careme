@@ -150,7 +150,7 @@ func MakeCache() (ListCache, error) {
 func EnsureCache(container string) (ListCache, error) {
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
-		slog.Info("Using Azure Blob Storage for cache", "container", container)
+		slog.Debug("Using Azure Blob Storage for cache", "container", container)
 		// can pas in  otelhttp.NewTransport(http.DefaultTransport) but it creates a lot of noise
 		return NewBlobCache(container, http.DefaultTransport)
 	}

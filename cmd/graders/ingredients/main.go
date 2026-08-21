@@ -93,18 +93,20 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 		expect := expectations[g.ProductID]
 		score := g.Grade.Score
 		if score > expect.Max {
-			failures = append(failures, fmt.Sprintf("grade=%d>%d reason=%s\n",
+			failures = append(failures, fmt.Sprintf("grade=%d>%d  desc=%s reason=%s\n",
 				score,
 				expect.Max,
+				g.Description,
 				g.Grade.Reason,
 			))
 			continue
 		}
 
 		if score < expect.Min {
-			failures = append(failures, fmt.Sprintf("grade=%d<%d reason=%s\n",
+			failures = append(failures, fmt.Sprintf("grade=%d<%d desc=%s reason=%s\n",
 				score,
 				expect.Max,
+				g.Description,
 				g.Grade.Reason,
 			))
 			continue
