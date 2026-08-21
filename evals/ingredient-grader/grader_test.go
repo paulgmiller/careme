@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -22,6 +23,13 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 	return s.grades, s.err
 }
 
+func promptfooContextFromJSON(t *testing.T, value string) map[string]interface{} {
+	t.Helper()
+	var ctx map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(value), &ctx))
+	return ctx
+}
+
 func TestRunEvalPassesScoresWithinInclusiveBounds(t *testing.T) {
 	grader := &stubIngredientGrader{
 		grades: []ai.InputIngredient{
@@ -37,20 +45,20 @@ func TestRunEvalPassesScoresWithinInclusiveBounds(t *testing.T) {
 			},
 		},
 	}
-	ctx := map[string]interface{}{
-		"vars": map[string]interface{}{
-			"cases": []interface{}{
-				map[string]interface{}{
-					"ingredient": map[string]interface{}{"description": "Broccoli Crowns"},
-					"expect":     map[string]interface{}{"min": 8},
+	ctx := promptfooContextFromJSON(t, `{
+		"vars": {
+			"cases": [
+				{
+					"ingredient": {"description": "Broccoli Crowns"},
+					"expect": {"min": 8}
 				},
-				map[string]interface{}{
-					"ingredient": map[string]interface{}{"id": "rice", "description": "Ready Rice"},
-					"expect":     map[string]interface{}{"max": 6},
-				},
-			},
-		},
-	}
+				{
+					"ingredient": {"id": "rice", "description": "Ready Rice"},
+					"expect": {"max": 6}
+				}
+			]
+		}
+	}`)
 
 	result, err := runEval(ctx, grader)
 	require.NoError(t, err)
@@ -75,20 +83,20 @@ func TestRunEvalReportsScoresOutsideBounds(t *testing.T) {
 			},
 		},
 	}
-	ctx := map[string]interface{}{
-		"vars": map[string]interface{}{
-			"cases": []interface{}{
-				map[string]interface{}{
-					"ingredient": map[string]interface{}{"id": "low"},
-					"expect":     map[string]interface{}{"min": 5, "max": 7},
+	ctx := promptfooContextFromJSON(t, `{
+		"vars": {
+			"cases": [
+				{
+					"ingredient": {"id": "low"},
+					"expect": {"min": 5, "max": 7}
 				},
-				map[string]interface{}{
-					"ingredient": map[string]interface{}{"id": "high"},
-					"expect":     map[string]interface{}{"min": 5, "max": 7},
-				},
-			},
-		},
-	}
+				{
+					"ingredient": {"id": "high"},
+					"expect": {"min": 5, "max": 7}
+				}
+			]
+		}
+	}`)
 
 	result, err := runEval(ctx, grader)
 	require.NoError(t, err)
