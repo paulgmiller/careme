@@ -20,10 +20,10 @@ import (
 const recipePlanModel = defaultRecipeModel
 
 type MenuPlan struct {
-	Plans              []RecipePlan `json:"plans"`
-	ChefNoteSuggestion string       `json:"chef_note_suggestion"`
-	ResponseID         string       `json:"response_id,omitempty" jsonschema:"-"`
-	PromptCacheKey     string       `json:"prompt_cache_key,omitempty" jsonschema:"-"`
+	Plans              []RecipePlan `json:"plans" yaml:"plans"`
+	ChefNoteSuggestion string       `json:"chef_note_suggestion" yaml:"chef_note_suggestion"`
+	ResponseID         string       `json:"response_id,omitempty" yaml:"response_id,omitempty" jsonschema:"-"`
+	PromptCacheKey     string       `json:"prompt_cache_key,omitempty" yaml:"prompt_cache_key,omitempty" jsonschema:"-"`
 }
 
 func (p MenuPlan) ResponseRef() ResponseRef {
@@ -41,13 +41,13 @@ func (p MenuPlan) String() string {
 }
 
 type RecipePlan struct {
-	Cuisine          string `json:"cuisine"`
-	AnchorIngredient string `json:"anchor_ingredient"`
-	Technique        string `json:"technique"`
-	SideVegetable    string `json:"side_vegetable"`
-	Fancy            bool   `json:"fancy"`
+	Cuisine          string `json:"cuisine" yaml:"cuisine"`
+	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
+	Technique        string `json:"technique" yaml:"technique"`
+	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
+	Fancy            bool   `json:"fancy" yaml:"fancy"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
-	RecipeInstructions []string `json:"recipe_instructions"`
+	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
 }
 
 func (p RecipePlan) Instructions() []string {
