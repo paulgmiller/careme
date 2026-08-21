@@ -24,21 +24,21 @@ func (s *stubRecipeGenerator) GenerateRecipe(_ context.Context, instructions []s
 	return s.recipe, s.recipeErr
 }
 
-func validRecipeContext() map[string]interface{} {
-	return map[string]interface{}{"vars": map[string]interface{}{
-		"menu_plan": map[string]interface{}{
-			"plans": []interface{}{map[string]interface{}{
-				"cuisine":             "Italian",
-				"anchor_ingredient":   "Chicken Thighs",
-				"technique":           "sheet pan",
-				"side_vegetable":      "Broccoli",
-				"recipe_instructions": []interface{}{"Keep dinner quick"},
-			}},
-			"response_id":      "resp-menu",
-			"prompt_cache_key": "cache-key",
-		},
-	}}
-}
+const validRecipeContext = `{
+	"vars": {
+		"menu_plan": {
+			"plans": [{
+				"cuisine": "Italian",
+				"anchor_ingredient": "Chicken Thighs",
+				"technique": "sheet pan",
+				"side_vegetable": "Broccoli",
+				"recipe_instructions": ["Keep dinner quick"]
+			}],
+			"response_id": "resp-menu",
+			"prompt_cache_key": "cache-key"
+		}
+	}
+}`
 
 func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 	generator := &stubRecipeGenerator{
@@ -51,7 +51,7 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 		},
 	}
 
-	result, err := runEval(validRecipeContext(), generator)
+	result, err := runEval([]byte(validRecipeContext), generator)
 	require.NoError(t, err)
 
 	output, ok := result["output"].(string)
@@ -70,10 +70,7 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 }
 
 func TestRunEvalRejectsEmptyMenuPlan(t *testing.T) {
-	ctx := validRecipeContext()
-	ctx["vars"].(map[string]interface{})["menu_plan"] = map[string]interface{}{
-		"response_id": "resp-menu",
-	}
+	ctx := []byte(`{"vars":{"menu_plan":{"response_id":"resp-menu"}}}`)
 
 	result, err := runEval(ctx, &stubRecipeGenerator{})
 
@@ -82,10 +79,14 @@ func TestRunEvalRejectsEmptyMenuPlan(t *testing.T) {
 }
 
 func TestRunEvalRejectsMultipleRecipePlans(t *testing.T) {
-	ctx := validRecipeContext()
-	menu := ctx["vars"].(map[string]interface{})["menu_plan"].(map[string]interface{})
-	plans := menu["plans"].([]interface{})
-	menu["plans"] = append(plans, plans[0])
+	ctx := []byte(`{
+		"vars": {
+			"menu_plan": {
+				"plans": [{}, {}],
+				"response_id": "resp-menu"
+			}
+		}
+	}`)
 
 	result, err := runEval(ctx, &stubRecipeGenerator{})
 
@@ -94,9 +95,7 @@ func TestRunEvalRejectsMultipleRecipePlans(t *testing.T) {
 }
 
 func TestRunEvalRejectsMissingMenuResponseID(t *testing.T) {
-	ctx := validRecipeContext()
-	menu := ctx["vars"].(map[string]interface{})["menu_plan"].(map[string]interface{})
-	delete(menu, "response_id")
+	ctx := []byte(`{"vars":{"menu_plan":{"plans":[{}]}}}`)
 
 	result, err := runEval(ctx, &stubRecipeGenerator{})
 
@@ -107,8 +106,15 @@ func TestRunEvalRejectsMissingMenuResponseID(t *testing.T) {
 func TestRunEvalReturnsRecipeError(t *testing.T) {
 	generator := &stubRecipeGenerator{recipeErr: errors.New("model unavailable")}
 
-	result, err := runEval(validRecipeContext(), generator)
+	result, err := runEval([]byte(validRecipeContext), generator)
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "failed to generate recipe: model unavailable")
+}
+
+func TestRunEvalRejectsInvalidJSON(t *testing.T) {
+	result, err := runEval([]byte(`{"vars":`), &stubRecipeGenerator{})
+
+	assert.Nil(t, result)
+	require.ErrorContains(t, err, "failed to decode Promptfoo context")
 }

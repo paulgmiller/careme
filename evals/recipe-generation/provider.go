@@ -24,19 +24,20 @@ type recipeGenerator interface {
 }
 
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 	generator := ai.NewClient(cfg.AI.APIKey, "", http.DefaultClient, nil)
-	return runEval(ctx, generator)
+	return runEval(body, generator)
 }
 
-func runEval(ctx map[string]interface{}, generator recipeGenerator) (map[string]interface{}, error) {
-	body, err := json.Marshal(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
-	}
+func runEval(body []byte, generator recipeGenerator) (map[string]interface{}, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return nil, fmt.Errorf("failed to decode Promptfoo context: %w", err)

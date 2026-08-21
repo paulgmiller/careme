@@ -31,16 +31,21 @@ type menuPlanner interface {
 }
 
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 	planner := ai.NewClient(cfg.AI.APIKey, "", http.DefaultClient, nil)
-	return runEval(ctx, planner)
+	return runEval(body, planner)
 }
 
-func runEval(ctx map[string]interface{}, planner menuPlanner) (map[string]interface{}, error) {
-	testCase, err := decodeEvalCase(ctx)
+func runEval(body []byte, planner menuPlanner) (map[string]interface{}, error) {
+	testCase, err := decodeEvalCase(body)
 	if err != nil {
 		return nil, err
 	}
@@ -77,11 +82,7 @@ func runEval(ctx map[string]interface{}, planner menuPlanner) (map[string]interf
 	return map[string]interface{}{"output": string(output)}, nil
 }
 
-func decodeEvalCase(ctx map[string]interface{}) (evalCase, error) {
-	body, err := json.Marshal(ctx)
-	if err != nil {
-		return evalCase{}, fmt.Errorf("failed to encode Promptfoo context: %w", err)
-	}
+func decodeEvalCase(body []byte) (evalCase, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return evalCase{}, fmt.Errorf("failed to decode Promptfoo context: %w", err)
