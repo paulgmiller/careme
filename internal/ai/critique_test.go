@@ -99,6 +99,19 @@ func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T
 	assert.NotContains(t, recipeCritiqueSystemInstruction, "dough")
 }
 
+func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testing.T) {
+	for _, want := range []string{
+		"recommend the doneness that best suits the dish with one concise target or pull temperature",
+		"do not require an intact whole cut to include an alternate regulatory temperature",
+		"continue to flag genuinely unsafe temperatures for poultry, ground meat, reheating, and other high-risk preparations",
+		"Careme links a separate temperature guide beside the recipe",
+		"treat it as a clarity issue and suggest a concise cooking instruction",
+		"do not name the FDA, USDA, or other government agencies or reproduce official temperature guidance in any critique field",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
 func TestParseRecipeCritique(t *testing.T) {
 	critique, err := parseRecipeCritique(`{
 		"schema_version": "recipe-critique-v1",

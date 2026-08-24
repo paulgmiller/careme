@@ -39,6 +39,11 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water; salty ingredients added later may justify reducing finishing salt, but they do not correct food that was underseasoned during cooking
 - account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
 - report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
+- when doneness matters, does the recipe recommend the doneness that best suits the dish with one concise target or pull temperature and a brief rest when useful
+- do not require an intact whole cut to include an alternate regulatory temperature when its chef-recommended doneness is clear; continue to flag genuinely unsafe temperatures for poultry, ground meat, reheating, and other high-risk preparations
+- does the recipe avoid naming the FDA, USDA, or other government agencies; quoting official food-safety guidance; comparing its recommendation with regulatory temperatures; or adding a temperature disclaimer; Careme links a separate temperature guide beside the recipe
+- if temperature guidance is verbose, treat it as a clarity issue and suggest a concise cooking instruction that preserves the appropriate chef-recommended doneness
+- do not name the FDA, USDA, or other government agencies or reproduce official temperature guidance in any critique field, especially suggested_fixes
 - are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
 - does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - do properties.cooking_methods match the instructions, avoid combining no_cook with another method

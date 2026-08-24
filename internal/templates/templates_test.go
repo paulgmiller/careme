@@ -352,6 +352,37 @@ func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing
 	}
 }
 
+func TestTemperatureGuideTemplateRendersSourcedMinimums(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := TemperatureGuide.Execute(&buf, NewTemperatureGuidePageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("TemperatureGuide.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("temperature guide rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, want := range []string{
+		"Cooking temperatures",
+		"Pull temperature and resting",
+		"U.S. safe minimum temperatures",
+		"Whole cuts of beef, pork, veal, and lamb",
+		"145°F, then rest at least 3 minutes",
+		"Poultry, including ground poultry",
+		"165°F",
+		"https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/safe-temperature-chart",
+		"https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-fresh-and-frozen-seafood-safely",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("temperature guide should include %q, body: %s", want, rendered)
+		}
+	}
+}
+
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"

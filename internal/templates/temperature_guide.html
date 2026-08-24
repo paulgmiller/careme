@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="description" content="A concise guide to cooking temperatures, resting food, and using a kitchen thermometer." />
+  <title>Temperature Guide · Careme</title>
+
+  {{template "app_head" .Style}}
+</head>
+<body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-gray-700 antialiased">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 px-4 py-10">
+    <article class="mx-auto w-full max-w-4xl overflow-hidden rounded-2xl border border-brand-100 bg-white/95 shadow-xl">
+      <header class="border-b border-brand-100 p-6 sm:p-8">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Careme kitchen guide</p>
+            <h1 class="font-display mt-1 text-4xl font-extrabold tracking-tight text-brand-700">Cooking temperatures</h1>
+            <p class="mt-3 max-w-2xl leading-7 text-gray-600">
+              Recipes give the doneness and temperature that best fit each dish. Use this page when you want the broader food-safety reference.
+            </p>
+          </div>
+          <a href="/"
+             class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            Back Home
+          </a>
+        </div>
+      </header>
+
+      <div class="space-y-10 p-6 sm:p-8">
+        <section aria-labelledby="thermometer-heading">
+          <h2 id="thermometer-heading" class="text-2xl font-bold text-brand-700">Check the center</h2>
+          <p class="mt-3 leading-7">
+            Measure in the thickest part, away from bone, fat, and gristle. For a thin burger or chop, insert the thermometer through the side so the tip reaches the center. Clean the probe after each use.
+          </p>
+        </section>
+
+        <section aria-labelledby="resting-heading" class="rounded-2xl border border-brand-200 bg-brand-50/70 p-5">
+          <h2 id="resting-heading" class="text-2xl font-bold text-brand-700">Pull temperature and resting</h2>
+          <p class="mt-3 leading-7">
+            A recipe may tell you to pull food from the heat before its desired serving temperature because it can keep warming as it rests. The amount of carryover depends on the food's size and cooking method, so check again before serving.
+          </p>
+        </section>
+
+        <section aria-labelledby="minimums-heading">
+          <h2 id="minimums-heading" class="text-2xl font-bold text-brand-700">U.S. safe minimum temperatures</h2>
+          <div class="mt-4 overflow-x-auto rounded-xl border border-brand-100">
+            <table class="w-full border-collapse text-left text-sm">
+              <thead class="bg-brand-50 text-brand-700">
+                <tr>
+                  <th scope="col" class="px-4 py-3 font-semibold">Food</th>
+                  <th scope="col" class="px-4 py-3 font-semibold">Internal temperature</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-brand-100">
+                <tr>
+                  <td class="px-4 py-3">Whole cuts of beef, pork, veal, and lamb</td>
+                  <td class="px-4 py-3">145°F, then rest at least 3 minutes</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Ground beef, pork, veal, and lamb</td>
+                  <td class="px-4 py-3">160°F</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Poultry, including ground poultry</td>
+                  <td class="px-4 py-3">165°F</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Fish and shellfish</td>
+                  <td class="px-4 py-3">145°F</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Egg dishes</td>
+                  <td class="px-4 py-3">160°F</td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-3">Leftovers and casseroles</td>
+                  <td class="px-4 py-3">165°F</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="mt-4 text-sm leading-6 text-gray-600">
+            These minimums come from the
+            <a href="https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/safe-temperature-chart" class="font-medium text-brand-700 underline underline-offset-4" target="_blank" rel="noreferrer">USDA Food Safety and Inspection Service</a>.
+            See the
+            <a href="https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-fresh-and-frozen-seafood-safely" class="font-medium text-brand-700 underline underline-offset-4" target="_blank" rel="noreferrer">FDA seafood guide</a>
+            for visual doneness cues for fish and shellfish.
+          </p>
+        </section>
+      </div>
+    </article>
+  </main>
+</body>
+</html>

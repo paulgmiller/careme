@@ -39,6 +39,7 @@ var Home,
 	Critique,
 	About,
 	Privacy,
+	TemperatureGuide,
 	Location,
 	FarmersMarket,
 	Mail *template.Template
@@ -78,6 +79,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")
 	Privacy = ensure(tmpls, "privacy.html")
+	TemperatureGuide = ensure(tmpls, "temperature_guide.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")
