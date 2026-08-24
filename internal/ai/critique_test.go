@@ -102,11 +102,23 @@ func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T
 func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testing.T) {
 	for _, want := range []string{
 		"recommend the doneness that best suits the dish with one concise target or pull temperature",
+		"Careme's temperature guide as context",
+		"intact beef or lamb 125-130 for medium-rare and 135-140 for medium",
+		"pork loin or chops 140-145 and pork shoulder 195-205",
+		"ground beef, pork, veal, or lamb 160",
+		"all poultry 165 for safety, with breast pulled near 160 and rested to 165",
+		"legs or thighs taken to 175-185",
+		"salmon 125-130 and lean white fish 135-140",
+		"egg dishes 160",
+		"flag instructions to serve ground beef, pork, veal, or lamb below 160, poultry below 165 after any stated rest, or egg dishes below 160 as high-severity safety issues",
+		"keep the overall score below 8",
+		"unless the recipe gives a validated time-at-temperature method that achieves equivalent safety",
+		"do not use the preferred doneness ranges for intact beef, lamb, pork, or fish as automatic safety cutoffs",
 		"evaluate temperature instructions in the context of the full cooking method, including time at temperature, carryover cooking, and whether the food is an intact or ground cut",
 		"do not flag a temperature merely because it differs from a conventional or government-agency target",
 		"Careme links a separate temperature guide beside the recipe",
 		"treat it as a clarity issue and suggest a concise cooking instruction",
-		"do not name the FDA, USDA, or other government agencies or reproduce official temperature guidance in any critique field",
+		"do not name the FDA, USDA, or other government agencies, quote official temperature guidance",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
