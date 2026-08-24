@@ -70,6 +70,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
+	mux.HandleFunc("POST /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
 }
 
@@ -391,6 +392,10 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	// keep scrapers from unsubscribing people
 	if r.Method == http.MethodHead {
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method == http.MethodPost && r.FormValue("List-Unsubscribe") != "One-Click" {
+		http.Error(w, "invalid unsubscribe request", http.StatusBadRequest)
 		return
 	}
 
