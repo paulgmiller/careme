@@ -131,7 +131,7 @@
               </details>
               <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done. ↔</p>
+                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>On a touchscreen, swipe a step aside when it’s done.</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
                   {{range $index, $instruction := .InstructionsHTML}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
@@ -281,7 +281,7 @@
       </div>
     </section>
   </main>
-  <script src="/static/recipe.js"></script>
+  <script src="/static/recipe.js?v=touch-swipe"></script>
   <script src="/static/htmx@2.0.8.js"></script>
   <script src="/static/share.js"></script>
   {{template "clerk_refresh.html" .}}

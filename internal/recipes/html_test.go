@@ -611,8 +611,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.NotContains(t, html, `Show all steps`)
 	assert.NotContains(t, html, `data-recipe-step-status`)
 	assert.NotContains(t, html, `data-recipe-step-message`)
-	assert.Contains(t, html, `Swipe or drag a step aside when it’s done. ↔`)
-	assert.Contains(t, html, `<script src="/static/recipe.js"></script>`)
+	assert.Contains(t, html, `On a touchscreen, swipe a step aside when it’s done.`)
+	assert.Contains(t, html, `<script src="/static/recipe.js?v=touch-swipe"></script>`)
 	assert.NotContains(t, html, `initializeRecipeSteps`)
 	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group"[^>]*\sopen>`, html)
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
