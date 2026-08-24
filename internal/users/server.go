@@ -70,7 +70,7 @@ func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
-	mux.HandleFunc("POST /user/unsubscribe/one-click", s.handleOneClickUnsubscribe)
+	mux.HandleFunc("POST /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
 }
 
@@ -394,6 +394,10 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	if r.Method == http.MethodPost && r.FormValue("List-Unsubscribe") != "One-Click" {
+		http.Error(w, "invalid unsubscribe request", http.StatusBadRequest)
+		return
+	}
 
 	userID := strings.TrimSpace(r.FormValue("user"))
 	token := strings.TrimSpace(r.FormValue("token"))
@@ -424,16 +428,4 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("You are unsubscribed from Careme recipe emails."))
-}
-
-func (s *server) handleOneClickUnsubscribe(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid unsubscribe request", http.StatusBadRequest)
-		return
-	}
-	if r.FormValue("List-Unsubscribe") != "One-Click" {
-		http.Error(w, "invalid unsubscribe request", http.StatusBadRequest)
-		return
-	}
-	s.handleUnsubscribe(w, r)
 }

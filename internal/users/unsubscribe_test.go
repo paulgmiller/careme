@@ -108,7 +108,7 @@ func TestOneClickUnsubscribeDisablesMailOptInOnPost(t *testing.T) {
 	}
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/user/unsubscribe/one-click?"+params.Encode(),
+		"/user/unsubscribe?"+params.Encode(),
 		strings.NewReader("List-Unsubscribe=One-Click"),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -135,7 +135,7 @@ func TestOneClickUnsubscribeRejectsInvalidPostBody(t *testing.T) {
 	s := NewHandler(nil, nil, auth.DefaultMock(), FakeUnsubscribeTokenFactory(), "http://example.com")
 	req := httptest.NewRequest(
 		http.MethodPost,
-		"/user/unsubscribe/one-click?user=u-1&token=token",
+		"/user/unsubscribe?user=u-1&token=token",
 		strings.NewReader("List-Unsubscribe=No"),
 	)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
