@@ -255,6 +255,9 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount",
 		"Presalting meat and salting pasta or blanching water season food during cooking.",
 		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
+		"recommend the doneness that best suits the dish and give one concise target or pull temperature",
+		"Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer.",
+		"Careme provides a separate temperature guide beside the recipe.",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)

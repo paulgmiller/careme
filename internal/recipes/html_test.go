@@ -120,6 +120,8 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("shopping list HTML should no longer use the old wrapped ingredient row layout")
 	}
+	assert.Contains(t, html, `href="/temperature-guide"`)
+	assert.Contains(t, html, `>See the temperature guide</a>`)
 	if !strings.Contains(html, `id="finalize-help"`) {
 		t.Error("shopping list HTML should include helper text for disabled finalize state")
 	}
@@ -611,6 +613,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.NotContains(t, html, `Show all steps`)
 	assert.NotContains(t, html, `data-recipe-step-status`)
 	assert.NotContains(t, html, `data-recipe-step-message`)
+	assert.Contains(t, html, `href="/temperature-guide"`)
+	assert.Contains(t, html, `>See the temperature guide</a>`)
 	assert.Contains(t, html, `Swipe a step aside or click its number when it’s done.`)
 	assert.Contains(t, html, `<script src="/static/recipe.js?v=step-number-click"></script>`)
 	assert.NotContains(t, html, `initializeRecipeSteps`)

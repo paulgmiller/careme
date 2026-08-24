@@ -166,6 +166,14 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+	appRoutes.HandleFunc("GET /temperature-guide", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		data := templates.NewTemperatureGuidePageData(seasons.GetCurrentStyle())
+		if err := templates.TemperatureGuide.Execute(w, data); err != nil {
+			slog.ErrorContext(ctx, "temperature guide template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
 	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.

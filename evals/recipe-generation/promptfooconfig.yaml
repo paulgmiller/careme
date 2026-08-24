@@ -26,6 +26,16 @@ defaultTest:
           && recipe.properties?.servings > 0
         );
       metric: complete-recipe
+    # This assertion is intentionally generic, but it was prompted by recipe
+    # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA== from shopping list JcpTfxJ5UMM. The exact stored
+    # menu plan and its associated doneness eval are included below.
+    - type: javascript
+      value: |
+        const recipe = JSON.parse(output);
+        const instructions = recipe.instructions.join(' ');
+        const regulatoryAside = /\b(?:FDA|USDA)\b|government agency|official (?:food[- ]safety|temperature) guidance|safe minimum|regulatory temperature|guidance recommends/i;
+        return !regulatoryAside.test(instructions);
+      metric: concise-temperature-guidance
 
 tests:
   # Generate real cases with:
@@ -45,3 +55,35 @@ tests:
         chef_note_suggestion: skip the scallop splurge
         response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
         prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+  # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA==
+  - description: Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Korean
+            anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
+            technique: marinate and grill
+            side_vegetable: Cucumber
+            fancy: false
+            recipe_instructions:
+              - Use the grill; serve 2; finish within 1 hour.
+              - Prioritize August WA produce.
+              - Avoid coffee crust and corn.
+        chef_note_suggestion: less sweet marinades
+        response_id: resp_0bce0de54c56c531006a838d24ae388198851b394bbcd0ae8e
+        prompt_cache_key: careme:store-day:v1:56417411224e2f1690f701fc
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const instructions = recipe.instructions.join(' ');
+          const fahrenheit = /(?:°\s*F|degrees?\s+F(?:ahrenheit)?)/i;
+          const mediumRareLabel = /medium[- ]rare/i.test(instructions) && fahrenheit.test(instructions);
+          const mediumRareTemperature = Array.from(
+            instructions.matchAll(/\b(\d{2,3})(?:\s*(?:-|–|to)\s*(\d{2,3}))?\s*(?:°\s*F|degrees?\s+F(?:ahrenheit)?)/gi),
+          ).some((match) => {
+            const temperatures = match[2] ? [Number(match[1]), Number(match[2])] : [Number(match[1])];
+            return temperatures.every((temperature) => temperature >= 125 && temperature <= 135);
+          });
+          return mediumRareLabel || mediumRareTemperature;
+        metric: chef-recommended-doneness

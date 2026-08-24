@@ -352,6 +352,47 @@ func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing
 	}
 }
 
+func TestTemperatureGuideTemplateRendersChefGuidance(t *testing.T) {
+	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := TemperatureGuide.Execute(&buf, NewTemperatureGuidePageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("TemperatureGuide.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("temperature guide rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, want := range []string{
+		"Heat and doneness",
+		"Beef and lamb",
+		"125 to 130°F",
+		"Pork",
+		"Ground meat",
+		"160°F",
+		"Poultry",
+		"165°F",
+		"Fish and shellfish",
+		"Eggs",
+		"https://www.fda.gov/media/107000/download",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("temperature guide should include %q, body: %s", want, rendered)
+		}
+	}
+	for _, unwanted := range []string{
+		"U.S. safe minimum temperatures",
+		"<table",
+	} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("temperature guide should not include %q, body: %s", unwanted, rendered)
+		}
+	}
+}
+
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
