@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="description" content="A concise guide to cooking temperatures, resting food, and using a kitchen thermometer." />
-  <title>Temperature Guide · Careme</title>
+  <meta name="description" content="A cook's guide to heat, doneness, and making every kind of protein delicious." />
+  <title>Heat and Doneness · Careme</title>
 
   {{template "app_head" .Style}}
 </head>
@@ -16,10 +16,7 @@
         <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p class="text-sm font-semibold uppercase tracking-wide text-brand-600">Careme kitchen guide</p>
-            <h1 class="font-display mt-1 text-4xl font-extrabold tracking-tight text-brand-700">Cooking temperatures</h1>
-            <p class="mt-3 max-w-2xl leading-7 text-gray-600">
-              Recipes give the doneness and temperature that best fit each dish. Use this page when you want the broader food-safety reference.
-            </p>
+            <h1 class="font-display mt-1 text-4xl font-extrabold tracking-tight text-brand-700">Heat and doneness</h1>
           </div>
           <a href="/"
              class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -28,67 +25,54 @@
         </div>
       </header>
 
-      <div class="space-y-10 p-6 sm:p-8">
-        <section aria-labelledby="thermometer-heading">
-          <h2 id="thermometer-heading" class="text-2xl font-bold text-brand-700">Check the center</h2>
+      <div class="space-y-6 p-6 sm:p-8">
+        <section aria-labelledby="beef-lamb-heading" class="rounded-2xl border border-brand-100 bg-white p-5 shadow-sm">
+          <h2 id="beef-lamb-heading" class="text-2xl font-bold text-brand-700">Beef and lamb</h2>
           <p class="mt-3 leading-7">
-            Measure in the thickest part, away from bone, fat, and gristle. For a thin burger or chop, insert the thermometer through the side so the tip reaches the center. Clean the probe after each use.
+            Tender steaks and chops love a fierce fire and a little nerve. For a rosy medium-rare center, pull them around 125 to 130°F; while the meat rests, the heat will keep walking inward. Medium lives around 135 to 140°F. Slide the thermometer in from the side toward the thickest part, then give the meat 5 to 10 quiet minutes before you slice it.
           </p>
         </section>
 
-        <section aria-labelledby="resting-heading" class="rounded-2xl border border-brand-200 bg-brand-50/70 p-5">
-          <h2 id="resting-heading" class="text-2xl font-bold text-brand-700">Pull temperature and resting</h2>
+        <section aria-labelledby="pork-heading" class="rounded-2xl border border-brand-100 bg-brand-50/50 p-5 shadow-sm">
+          <h2 id="pork-heading" class="text-2xl font-bold text-brand-700">Pork</h2>
           <p class="mt-3 leading-7">
-            A recipe may tell you to pull food from the heat before its desired serving temperature because it can keep warming as it rests. The amount of carryover depends on the food's size and cooking method, so check again before serving.
+            A pork chop does not need to turn gray to be done. Loin and chops stay juicy with the faintest blush at 140 to 145°F; pull at the low end and let them rest for 3 to 5 minutes. Shoulder is another creature entirely. Keep cooking it toward 195 to 205°F, until its tough connective tissue melts and a fork meets almost no resistance.
           </p>
         </section>
 
-        <section aria-labelledby="minimums-heading">
-          <h2 id="minimums-heading" class="text-2xl font-bold text-brand-700">U.S. safe minimum temperatures</h2>
-          <div class="mt-4 overflow-x-auto rounded-xl border border-brand-100">
-            <table class="w-full border-collapse text-left text-sm">
-              <thead class="bg-brand-50 text-brand-700">
-                <tr>
-                  <th scope="col" class="px-4 py-3 font-semibold">Food</th>
-                  <th scope="col" class="px-4 py-3 font-semibold">Internal temperature</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-brand-100">
-                <tr>
-                  <td class="px-4 py-3">Whole cuts of beef, pork, veal, and lamb</td>
-                  <td class="px-4 py-3">145°F, then rest at least 3 minutes</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Ground beef, pork, veal, and lamb</td>
-                  <td class="px-4 py-3">160°F</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Poultry, including ground poultry</td>
-                  <td class="px-4 py-3">165°F</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Fish and shellfish</td>
-                  <td class="px-4 py-3">145°F</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Egg dishes</td>
-                  <td class="px-4 py-3">160°F</td>
-                </tr>
-                <tr>
-                  <td class="px-4 py-3">Leftovers and casseroles</td>
-                  <td class="px-4 py-3">165°F</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="mt-4 text-sm leading-6 text-gray-600">
-            These minimums come from the
-            <a href="https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/safe-temperature-chart" class="font-medium text-brand-700 underline underline-offset-4" target="_blank" rel="noreferrer">USDA Food Safety and Inspection Service</a>.
-            See the
-            <a href="https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-fresh-and-frozen-seafood-safely" class="font-medium text-brand-700 underline underline-offset-4" target="_blank" rel="noreferrer">FDA seafood guide</a>
-            for visual doneness cues for fish and shellfish.
+        <section aria-labelledby="ground-meat-heading" class="rounded-2xl border border-brand-100 bg-white p-5 shadow-sm">
+          <h2 id="ground-meat-heading" class="text-2xl font-bold text-brand-700">Ground meat</h2>
+          <p class="mt-3 leading-7">
+            Grinding changes the bargain: everything that began on the surface is mixed through the middle. Take ground beef, pork, veal, and lamb to 160°F, and ground poultry to 165°F. For a juicy burger or meatball, choose meat with enough fat, season it well, and stop cooking as soon as it reaches the mark.
           </p>
         </section>
+
+        <section aria-labelledby="poultry-heading" class="rounded-2xl border border-brand-100 bg-brand-50/50 p-5 shadow-sm">
+          <h2 id="poultry-heading" class="text-2xl font-bold text-brand-700">Poultry</h2>
+          <p class="mt-3 leading-7">
+            Breast meat is lean and asks for attention. Pull it near 160°F, rest it, and make sure it coasts to 165°F before slicing. Legs and thighs are safe at the same temperature but grow silkier around 175 to 185°F, when their connective tissue finally softens. Probe the deepest part of the meat without touching bone.
+          </p>
+        </section>
+
+        <section aria-labelledby="fish-heading" class="rounded-2xl border border-brand-100 bg-white p-5 shadow-sm">
+          <h2 id="fish-heading" class="text-2xl font-bold text-brand-700">Fish and shellfish</h2>
+          <p class="mt-3 leading-7">
+            Fish moves from tender to dry in a blink, so begin checking early. Salmon is lush around 125 to 130°F; lean white fish is often happiest around 135 to 140°F, when it has just turned opaque and yields in broad, moist flakes. Shrimp are ready when they curl into a loose C and turn pearly. A tight O is an overcooked shrimp asking for mercy.
+          </p>
+        </section>
+
+        <section aria-labelledby="eggs-heading" class="rounded-2xl border border-brand-100 bg-brand-50/50 p-5 shadow-sm">
+          <h2 id="eggs-heading" class="text-2xl font-bold text-brand-700">Eggs</h2>
+          <p class="mt-3 leading-7">
+            An egg is a collection of textures, not a single finish line. For fried and scrambled eggs, trust your eyes: set whites, softly mounded curds, and yolks cooked as you like them. Pull scrambled eggs while they still look a little glossy. For a frittata, quiche, or other egg dish, aim for 160°F and take it from the oven when the center has only just stopped trembling.
+          </p>
+        </section>
+
+        <p class="px-1 text-sm leading-6 text-gray-600">
+          Cooking for someone who needs extra care, or simply want the official word? Keep the
+          <a href="https://www.fda.gov/media/107000/download" class="font-medium text-brand-700 underline underline-offset-4" target="_blank" rel="noreferrer">FDA safe-temperature chart</a>
+          close by.
+        </p>
       </div>
     </article>
   </main>

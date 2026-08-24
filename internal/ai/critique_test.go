@@ -102,8 +102,8 @@ func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T
 func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testing.T) {
 	for _, want := range []string{
 		"recommend the doneness that best suits the dish with one concise target or pull temperature",
-		"do not require an intact whole cut to include an alternate regulatory temperature",
-		"continue to flag genuinely unsafe temperatures for poultry, ground meat, reheating, and other high-risk preparations",
+		"evaluate temperature instructions in the context of the full cooking method, including time at temperature, carryover cooking, and whether the food is an intact or ground cut",
+		"do not flag a temperature merely because it differs from a conventional or government-agency target",
 		"Careme links a separate temperature guide beside the recipe",
 		"treat it as a clarity issue and suggest a concise cooking instruction",
 		"do not name the FDA, USDA, or other government agencies or reproduce official temperature guidance in any critique field",

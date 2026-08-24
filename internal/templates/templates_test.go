@@ -352,7 +352,7 @@ func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing
 	}
 }
 
-func TestTemperatureGuideTemplateRendersSourcedMinimums(t *testing.T) {
+func TestTemperatureGuideTemplateRendersChefGuidance(t *testing.T) {
 	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
@@ -367,18 +367,28 @@ func TestTemperatureGuideTemplateRendersSourcedMinimums(t *testing.T) {
 		t.Fatalf("temperature guide rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
 	for _, want := range []string{
-		"Cooking temperatures",
-		"Pull temperature and resting",
-		"U.S. safe minimum temperatures",
-		"Whole cuts of beef, pork, veal, and lamb",
-		"145°F, then rest at least 3 minutes",
-		"Poultry, including ground poultry",
+		"Heat and doneness",
+		"Beef and lamb",
+		"125 to 130°F",
+		"Pork",
+		"Ground meat",
+		"160°F",
+		"Poultry",
 		"165°F",
-		"https://www.fsis.usda.gov/food-safety/safe-food-handling-and-preparation/food-safety-basics/safe-temperature-chart",
-		"https://www.fda.gov/food/buy-store-serve-safe-food/selecting-and-serving-fresh-and-frozen-seafood-safely",
+		"Fish and shellfish",
+		"Eggs",
+		"https://www.fda.gov/media/107000/download",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("temperature guide should include %q, body: %s", want, rendered)
+		}
+	}
+	for _, unwanted := range []string{
+		"U.S. safe minimum temperatures",
+		"<table",
+	} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("temperature guide should not include %q, body: %s", unwanted, rendered)
 		}
 	}
 }

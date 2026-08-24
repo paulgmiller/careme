@@ -27,7 +27,7 @@ defaultTest:
         );
       metric: complete-recipe
     # This assertion is intentionally generic, but it was prompted by recipe
-    # MnMrPhOaMIhdNVeTptogQg== from shopping list JcpTfxJ5UMM. The exact stored
+    # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA== from shopping list JcpTfxJ5UMM. The exact stored
     # menu plan and its associated doneness eval are included below.
     - type: javascript
       value: |
@@ -55,6 +55,7 @@ tests:
         chef_note_suggestion: skip the scallop splurge
         response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
         prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+  # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA==
   - description: Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside
     vars:
       menu_plan:
