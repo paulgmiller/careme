@@ -166,6 +166,9 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 		!strings.Contains(rec.Body.String(), `event.pointerType !== "pen"`) {
 		t.Fatal("recipe step swiping should only start for touch or pen pointers")
 	}
+	if !strings.Contains(rec.Body.String(), "data-recipe-step-done") {
+		t.Fatal("recipe js should support clicking a step number to complete it")
+	}
 }
 
 func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {

@@ -71,6 +71,7 @@ function initializeRecipeSteps() {
     undoButton.classList.toggle("hidden", completedSteps.length === 0);
   });
   steps.forEach((step) => {
+    const doneButton = step.querySelector("[data-recipe-step-done]");
     let pointerID = null;
     let startX = 0;
     let startY = 0;
@@ -85,8 +86,14 @@ function initializeRecipeSteps() {
       restoreStepStyles(step);
     }
 
+    if (doneButton) {
+      doneButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+      doneButton.addEventListener("click", () => completeStep(step));
+    }
+
     step.addEventListener("pointerdown", (event) => {
-      if ((event.pointerType !== "touch" && event.pointerType !== "pen") || !event.isPrimary) return;
+      if (!event.isPrimary) return;
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
       pointerID = event.pointerId;
       startX = event.clientX;
       startY = event.clientY;
