@@ -108,6 +108,9 @@ func withRetries(baseClient *http.Client) *http.Client {
 }
 
 func krogerRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	// probably a bug on kroger side but we got a 404 that was intermittent
+	// category=beef exception_message=got 404 code from kroger :  exception_type=*errors.errorString location=70100122 session_id=dc81f610-f772-4bc7-a25f-b595e6f79340
+	// another option is to keep failing fast but let user retry. Making new issue on that.
 	if resp != nil && resp.StatusCode == http.StatusNotFound && ctx.Err() == nil {
 		return true, nil
 	}
