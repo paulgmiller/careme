@@ -1142,7 +1142,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	s.spin(ctx, w, r, hashParam)
-	return
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
