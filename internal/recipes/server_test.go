@@ -1340,7 +1340,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	s.kickgeneration(t.Context(), params)
 
 	select {
 	case <-generator.called:
@@ -1364,7 +1364,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	s.kickgeneration(t.Context(), params)
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1380,7 +1380,7 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	s.kickgeneration(t.Context(), params)
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1399,7 +1399,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	s.kickgeneration(t.Context(), params)
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1482,11 +1482,13 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	require.NoError(t, err)
 	err = s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
+	genstatus, err := s.generationStatuses.Load(t.Context(), hash)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 
-	s.spin(t.Context(), rr, req, hash)
+	s.spin(t.Context(), rr, req, genstatus)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -1506,12 +1508,14 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 	require.NoError(t, err)
 	err = s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
+	genstatus, err := s.generationStatuses.Load(t.Context(), hash)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 	req.Header.Set("HX-Request", "true")
 
-	s.spin(t.Context(), rr, req, hash)
+	s.spin(t.Context(), rr, req, genstatus)
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()

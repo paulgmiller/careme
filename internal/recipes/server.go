@@ -524,7 +524,8 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		s.renderRecipeRegenerationRetry(ctx, w, r, hash)
 		return
 	}
-	s.spin(ctx, w, r, hash)
+
+	s.spin(ctx, w, r, generationStatus{})
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -958,11 +959,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	if err := s.kickgeneration(ctx, p); err != nil {
-		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
-		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
-		return
-	}
+	s.kickgeneration(ctx, p)
 	redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
 }
 
@@ -1123,9 +1120,15 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 
 	status, err := s.generationStatuses.Load(ctx, hashParam)
 	if err != nil {
-		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
+		if errors.Is(err, cache.ErrNotFound) {
+			err = s.generationStatuses.Start(ctx, hashParam)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to restart generateion status", "error", err)
+			}
+			s.spin(ctx, w, r, generationStatus{})
+
 		}
+		slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
 		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
 		return
 	}
@@ -1141,7 +1144,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.spin(ctx, w, r, hashParam)
+	s.spin(ctx, w, r, status)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1319,12 +1322,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	if err := s.kickgeneration(ctx, p); err != nil {
-		slog.ErrorContext(ctx, "failed to start recipe generation", "hash", hash, "error", err)
-		http.Error(w, "failed to start recipe generation", http.StatusInternalServerError)
-		return
-	}
-
+	s.kickgeneration(ctx, p)
 	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
@@ -1355,11 +1353,7 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.kickgeneration(ctx, p); err != nil {
-		slog.ErrorContext(ctx, "failed to restart recipe generation", "hash", hash, "error", err)
-		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
-		return
-	}
+	s.kickgeneration(ctx, p)
 	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
@@ -1398,10 +1392,11 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 	})
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	hash := p.Hash()
 	if err := s.generationStatuses.Start(ctx, hash); err != nil {
-		return fmt.Errorf("start generation status: %w", err)
+		//we'll retry this on GET recipes/
+		slog.ErrorContext(ctx, "start generation status", "error", err)
 	}
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
@@ -1423,7 +1418,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
 			return
 		}
 	})
-	return nil
 }
 
 // Almost same as kick generation except
@@ -1488,13 +1482,8 @@ func newSpinnerData(ctx context.Context) spinnerData {
 	}
 }
 
-func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status generationStatus) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-
-	status, err := s.generationStatuses.Load(ctx, hash)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
-	}
 
 	data := newSpinnerData(ctx)
 	data.RefreshInterval = "10" // seconds
