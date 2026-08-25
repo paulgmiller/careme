@@ -1114,7 +1114,7 @@ const (
 // spinner while work is in progress and the retry page after failure or timeout.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	hashParam := r.URL.Query().Get(queryArgHash)
-	//both params and status are require
+	// both params and status are require
 	_, err := s.ParamsFromCache(ctx, hashParam)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -1132,7 +1132,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
 		if errors.Is(err, cache.ErrNotFound) {
-			//allow them to try again but we shouldn't ever really get here
+			// allow them to try again but we shouldn't ever really get here
 			generationFailed(ctx, w, r, hashParam, "recipe start failure")
 			return
 		}
