@@ -29,7 +29,6 @@ import (
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/recipes/regeneration"
-	recipestatus "careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -94,17 +93,16 @@ type regens interface {
 type server struct {
 	recipeio
 	imageio
-	imagegen      ImageGen
-	statusReader  statusReader
-	statusWriter  statusWriter
-	cfg           *config.Config
-	storage       *users.Storage
-	generator     generator
-	locServer     locServer
-	wg            sync.WaitGroup
-	clerk         auth.AuthClient
-	critiques     critiqueStore
-	regenerations regens
+	imagegen           ImageGen
+	generationStatuses *statusStore
+	cfg                *config.Config
+	storage            *users.Storage
+	generator          generator
+	locServer          locServer
+	wg                 sync.WaitGroup
+	clerk              auth.AuthClient
+	critiques          critiqueStore
+	regenerations      regens
 }
 
 type critiqueStore interface {
@@ -116,18 +114,17 @@ type critiqueStore interface {
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
 	statusStore := StatusStore(c)
 	return &server{
-		recipeio:      IO(c),
-		imageio:       imageio{Cache: imageCache},
-		imagegen:      imagegen,
-		statusReader:  statusStore,
-		statusWriter:  statusStore,
-		cfg:           cfg,
-		storage:       storage,
-		generator:     generator,
-		locServer:     locServer,
-		clerk:         clerkClient,
-		critiques:     critique.NewStore(c),
-		regenerations: regeneration.NewStore(c),
+		recipeio:           IO(c),
+		imageio:            imageio{Cache: imageCache},
+		imagegen:           imagegen,
+		generationStatuses: statusStore,
+		cfg:                cfg,
+		storage:            storage,
+		generator:          generator,
+		locServer:          locServer,
+		clerk:              clerkClient,
+		critiques:          critique.NewStore(c),
+		regenerations:      regeneration.NewStore(c),
 	}
 }
 
@@ -961,8 +958,12 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	s.kickgeneration(ctx, p)
-	redirectToHash(w, r, newHash, queryArgStart)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
+		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
+		return
+	}
+	redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
 }
 
 func shoppingListArgs(args map[string]string) string {
@@ -1100,49 +1101,47 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash         = "h"
-	queryArgStart        = "start"
-	queryArgConversion   = "conversion"
-	queryArgInstructions = "instructions"
+	queryArgHash            = "h"
+	queryArgConversion      = "conversion"
+	queryArgInstructions    = "instructions"
+	recipeGenerationTimeout = 10 * time.Minute
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
 
 // notFound handles a missing generated shopping list by showing the generation
-// spinner while work is in progress and the retry page after generation times out.
+// spinner while work is in progress and the retry page after failure or timeout.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
-	// okay give them a new start time.
-	if startArg == "" {
-		// don't restart clock if we don't have the params. How did we even get here though.
-		_, err := s.ParamsFromCache(ctx, hashParam)
-		if err != nil {
-			// not erroring because any rando on internet can send us things AND we seem to be missing
-			// at least http://careme.cooking/recipes?h=3i3rbrZv0mk seems permabroke but very old
-			// but a high level of these could signal a bug.
-			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
-			return
-		}
-		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
-		return
-	}
-
-	// TODO use time in params
-	startTime, err := time.Parse(time.RFC3339Nano, startArg)
+	_, err := s.ParamsFromCache(ctx, hashParam)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to parse start time", "time", startArg, "error", err)
-		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
+		// Random or expired hashes can reach this public endpoint without indicating an app bug.
+		slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+		http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 		return
 	}
 
-	if time.Since(startTime) < 10*time.Minute {
-		s.spin(ctx, w, r, hashParam)
+	status, err := s.generationStatuses.Load(ctx, hashParam)
+	if err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
+		}
+		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
 		return
 	}
-	slog.WarnContext(ctx, "recipe generation timed out", "time", startArg, "hash", hashParam)
-	generationTimedOut(ctx, w, r, hashParam)
+
+	if status.Error != "" {
+		generationFailed(ctx, w, r, hashParam, status.Error)
+		return
+	}
+
+	if time.Since(status.StartedAt) >= recipeGenerationTimeout {
+		slog.WarnContext(ctx, "recipe generation timed out", "started_at", status.StartedAt, "hash", hashParam)
+		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
+		return
+	}
+
+	s.spin(ctx, w, r, hashParam)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1193,10 +1192,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 		http.Error(w, "invalid recipe", http.StatusInternalServerError)
-		return
-	}
-	if r.URL.Query().Has(queryArgStart) {
-		redirectToHashWithConversion(w, r, hashParam, templates.RecipeGenerationConversion)
 		return
 	}
 
@@ -1324,9 +1319,13 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	s.kickgeneration(ctx, p)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to start recipe generation", "hash", hash, "error", err)
+		http.Error(w, "failed to start recipe generation", http.StatusInternalServerError)
+		return
+	}
 
-	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
+	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
 func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
@@ -1356,9 +1355,12 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeGenerationStatus(ctx, hash, "Trying again, chef.")
-	s.kickgeneration(ctx, p)
-	redirectToHash(w, r, hash, queryArgStart, QueryArgHelp)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to restart recipe generation", "hash", hash, "error", err)
+		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
+		return
+	}
+	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
 // best effort attempt to set favorite store if non is thre
@@ -1396,23 +1398,32 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 	})
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
 	hash := p.Hash()
+	if err := s.generationStatuses.Start(ctx, hash); err != nil {
+		return fmt.Errorf("start generation status: %w", err)
+	}
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
-			s.writeGenerationStatus(ctx, hash, recipestatus.Error(err))
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 	})
+	return nil
 }
 
 // Almost same as kick generation except
@@ -1456,15 +1467,6 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 	})
 }
 
-func (s *server) writeGenerationStatus(ctx context.Context, hash, status string) {
-	if s.statusWriter == nil || strings.TrimSpace(hash) == "" {
-		return
-	}
-	if err := s.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
-		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
-	}
-}
-
 type spinnerData struct {
 	ClarityScript   template.HTML
 	GoogleTagScript template.HTML
@@ -1474,6 +1476,7 @@ type spinnerData struct {
 	ServerSignedIn  bool
 	CurrentPath     string
 	RetryPath       string
+	GenerationError string
 }
 
 func newSpinnerData(ctx context.Context) spinnerData {
@@ -1488,14 +1491,14 @@ func newSpinnerData(ctx context.Context) spinnerData {
 func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
-	status, err := s.statusReader.GenerationStatusFromCache(ctx, hash)
+	status, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
 	}
 
 	data := newSpinnerData(ctx)
 	data.RefreshInterval = "10" // seconds
-	data.StatusMessage = status
+	data.StatusMessage = status.Message
 	data.CurrentPath = r.URL.RequestURI()
 
 	if httpx.IsHTMX(r) {
@@ -1514,21 +1517,22 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 
 func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regenerate"}
-	renderGenerationRetry(ctx, w, r, retryURL.String())
+	renderGenerationRetry(ctx, w, r, retryURL.String(), "")
 }
 
-func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+func generationFailed(ctx context.Context, w http.ResponseWriter, r *http.Request, hash, generationError string) {
 	retryURL := url.URL{Path: "/recipes/" + hash + "/retry"}
 	retryQuery := url.Values{}
 	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	retryURL.RawQuery = retryQuery.Encode()
 
-	renderGenerationRetry(ctx, w, r, retryURL.String())
+	renderGenerationRetry(ctx, w, r, retryURL.String(), generationError)
 }
 
-func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath string) {
+func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath, generationError string) {
 	data := newSpinnerData(ctx)
 	data.RetryPath = retryPath
+	data.GenerationError = generationError
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	if httpx.IsHTMX(r) {
@@ -1547,9 +1551,6 @@ func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.R
 // redirectToHash keeps only query arguments explicitly named by the caller.
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToKeep ...string) {
 	args := url.Values{} // intentionally clear other args
-	if slices.Contains(argsToKeep, queryArgStart) {
-		args.Set(queryArgStart, time.Now().Format(time.RFC3339Nano))
-	}
 	if slices.Contains(argsToKeep, QueryArgHelp) {
 		args.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	}

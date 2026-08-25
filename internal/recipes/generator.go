@@ -44,6 +44,10 @@ type recipeCritiquer interface {
 	CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe)
 }
 
+type statusWriter interface {
+	Update(ctx context.Context, hash string, message string) error
+}
+
 type generatorService struct {
 	aiClient     aiClient
 	critiquer    recipeCritiquer
@@ -379,7 +383,7 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	if strings.TrimSpace(hash) == "" {
 		return
 	}
-	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
+	if err := g.statusWriter.Update(ctx, hash, status); err != nil {
 		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWithRetries_KrogerStatusPolicy(t *testing.T) {
+func TestWithRetries_UsesDefaultStatusPolicy(t *testing.T) {
 	client := withRetries(&http.Client{})
 	transport, ok := client.Transport.(*retryablehttp.RoundTripper)
 	require.True(t, ok)
@@ -20,7 +20,7 @@ func TestWithRetries_KrogerStatusPolicy(t *testing.T) {
 		statusCode int
 		wantRetry  bool
 	}{
-		{name: "not found", statusCode: http.StatusNotFound, wantRetry: true},
+		{name: "not found", statusCode: http.StatusNotFound, wantRetry: false},
 		{name: "bad request", statusCode: http.StatusBadRequest, wantRetry: false},
 		{name: "too many requests", statusCode: http.StatusTooManyRequests, wantRetry: true},
 		{name: "service unavailable", statusCode: http.StatusServiceUnavailable, wantRetry: true},
@@ -35,11 +35,14 @@ func TestWithRetries_KrogerStatusPolicy(t *testing.T) {
 	}
 }
 
-func TestKrogerRetryPolicy_DoesNotRetryCanceledRequest(t *testing.T) {
+func TestWithRetries_DoesNotRetryCanceledRequest(t *testing.T) {
+	client := withRetries(&http.Client{})
+	transport, ok := client.Transport.(*retryablehttp.RoundTripper)
+	require.True(t, ok)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	got, err := krogerRetryPolicy(ctx, &http.Response{StatusCode: http.StatusNotFound}, nil)
+	got, err := transport.Client.CheckRetry(ctx, &http.Response{StatusCode: http.StatusNotFound}, nil)
 
 	assert.False(t, got)
 	assert.ErrorIs(t, err, context.Canceled)
