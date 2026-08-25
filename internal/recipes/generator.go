@@ -44,6 +44,10 @@ type recipeCritiquer interface {
 	CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe)
 }
 
+type statusWriter interface {
+	Update(ctx context.Context, hash string, message string) error
+}
+
 type generatorService struct {
 	aiClient     aiClient
 	critiquer    recipeCritiquer

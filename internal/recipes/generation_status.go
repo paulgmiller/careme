@@ -3,7 +3,6 @@ package recipes
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,17 +27,11 @@ type generationStatus struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-type statusWriter interface {
-	Update(ctx context.Context, hash string, status string) error
-}
-
 type statusStore struct {
 	mu    sync.Mutex
 	cache cache.Cache
 	now   func() time.Time
 }
-
-var _ statusWriter = &statusStore{}
 
 func StatusStore(c cache.Cache) *statusStore {
 	return &statusStore{cache: c, now: time.Now}
@@ -55,33 +48,26 @@ func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
 	if err == nil {
 		return fmt.Errorf("generation failure is required")
 	}
-	reportedError := err.Error()
 
 	status, loadErr := ss.Load(ctx, hash)
 	if loadErr != nil {
 		return loadErr
 	}
-	status.Error = reportedError
+	status.Error = err.Error()
+	//could get overwritten by parallel update
 	return ss.save(ctx, hash, status)
 }
 
 func (ss *statusStore) Update(ctx context.Context, hash, message string) error {
 
 	//this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
+	// should be using etags
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
 	status, err := ss.Load(ctx, hash)
 	if err != nil {
-		if !errors.Is(err, cache.ErrNotFound) {
-			return err
-		}
-		status = generationStatus{
-			StartedAt: ss.now().UTC(),
-		}
-	}
-	if status.StartedAt.IsZero() {
-		status.StartedAt = ss.now().UTC()
+		return err
 	}
 	status.Message = prependStatus(message, status.Message)
 	return ss.save(ctx, hash, status)
@@ -98,7 +84,7 @@ func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus,
 		}
 	}()
 
-	//buffer whole thing ratehr than
+	//buffer whole thing only for back compat below. Afetr that we can stream
 	raw, err := io.ReadAll(statusReader)
 	if err != nil {
 		return generationStatus{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)

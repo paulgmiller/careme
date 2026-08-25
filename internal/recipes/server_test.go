@@ -1499,7 +1499,9 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 	hash := "spinner-hash"
 	status := "Baby we working"
-	err := s.generationStatuses.Update(t.Context(), hash, status)
+	err := s.generationStatuses.Start(t.Context(), hash)
+	require.NoError(t, err)
+	err = s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
@@ -1521,7 +1523,9 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 
 	hash := "spinner-hash"
 	status := "Still chopping"
-	err := s.generationStatuses.Update(t.Context(), hash, status)
+	err := s.generationStatuses.Start(t.Context(), hash)
+	require.NoError(t, err)
+	err = s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
