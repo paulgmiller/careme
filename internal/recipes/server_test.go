@@ -128,10 +128,12 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 		setup     func(testing.TB, *server, string)
 		wantRetry bool
 		wantText  string
+		wantError string
 	}{
 		{
 			name:      "failed",
 			wantRetry: true,
+			wantError: "store returned 404",
 			setup: func(t testing.TB, s *server, hash string) {
 				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
 				require.NoError(t, s.generationStatuses.Fail(t.Context(), hash, errors.New("store returned 404")))
@@ -178,6 +180,9 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 			require.Equal(t, http.StatusOK, rr.Code)
 			if tt.wantRetry {
 				assert.Contains(t, rr.Body.String(), "Try again, chef")
+				if tt.wantError != "" {
+					assert.Contains(t, rr.Body.String(), tt.wantError)
+				}
 			} else {
 				assert.Contains(t, rr.Body.String(), tt.wantText)
 				assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)

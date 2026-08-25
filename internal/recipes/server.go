@@ -1126,18 +1126,23 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
 		}
-		generationTimedOut(ctx, w, r, hashParam)
+		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
 		return
 	}
 
-	if status.Error == "" && !status.StartedAt.IsZero() && time.Since(status.StartedAt) < recipeGenerationTimeout {
-		s.spin(ctx, w, r, hashParam)
+	if status.Error != "" {
+		generationFailed(ctx, w, r, hashParam, status.Error)
 		return
 	}
-	if status.Error == "" && !status.StartedAt.IsZero() {
+
+	if time.Since(status.StartedAt) >= recipeGenerationTimeout {
 		slog.WarnContext(ctx, "recipe generation timed out", "started_at", status.StartedAt, "hash", hashParam)
+		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
+		return
 	}
-	generationTimedOut(ctx, w, r, hashParam)
+
+	s.spin(ctx, w, r, hashParam)
+	return
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1472,6 +1477,7 @@ type spinnerData struct {
 	ServerSignedIn  bool
 	CurrentPath     string
 	RetryPath       string
+	GenerationError string
 }
 
 func newSpinnerData(ctx context.Context) spinnerData {
@@ -1512,21 +1518,22 @@ func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Reques
 
 func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regenerate"}
-	renderGenerationRetry(ctx, w, r, retryURL.String())
+	renderGenerationRetry(ctx, w, r, retryURL.String(), "")
 }
 
-func generationTimedOut(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
+func generationFailed(ctx context.Context, w http.ResponseWriter, r *http.Request, hash, generationError string) {
 	retryURL := url.URL{Path: "/recipes/" + hash + "/retry"}
 	retryQuery := url.Values{}
 	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	retryURL.RawQuery = retryQuery.Encode()
 
-	renderGenerationRetry(ctx, w, r, retryURL.String())
+	renderGenerationRetry(ctx, w, r, retryURL.String(), generationError)
 }
 
-func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath string) {
+func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath, generationError string) {
 	data := newSpinnerData(ctx)
 	data.RetryPath = retryPath
+	data.GenerationError = generationError
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	if httpx.IsHTMX(r) {
