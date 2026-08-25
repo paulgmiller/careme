@@ -1122,7 +1122,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	status, err := s.generationStatuses.GenerationStatusFromCache(ctx, hashParam)
+	status, err := s.generationStatuses.Load(ctx, hashParam)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
@@ -1491,7 +1491,7 @@ func newSpinnerData(ctx context.Context) spinnerData {
 func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
-	status, err := s.generationStatuses.GenerationStatusFromCache(ctx, hash)
+	status, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hash, "error", err)
 	}

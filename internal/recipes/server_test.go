@@ -104,7 +104,7 @@ func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash()))
-	require.NoError(t, s.generationStatuses.SaveGenerationStatus(t.Context(), p.Hash(), "Still chopping"))
+	require.NoError(t, s.generationStatuses.Update(t.Context(), p.Hash(), "Still chopping"))
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&generation=pending", nil)
 	req.Header.Set("HX-Request", "true")
@@ -208,7 +208,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 		t.Fatal("timed out waiting for retried generation")
 	}
 	s.Wait()
-	status, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), p.Hash())
+	status, err := s.generationStatuses.Load(t.Context(), p.Hash())
 	require.NoError(t, err)
 	assert.Empty(t, status.Error)
 	assert.True(t, status.StartedAt.Equal(retriedAt))
@@ -1388,7 +1388,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
-	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
+	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
 	require.NoError(t, err)
 	assert.Equal(t, "plan exploded", got.Error)
 }
@@ -1404,7 +1404,7 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
-	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
+	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
 	require.NoError(t, err)
 	assert.Empty(t, got.Error)
 	assert.False(t, got.StartedAt.IsZero())
@@ -1423,7 +1423,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
-	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
+	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
 	require.NoError(t, err)
 	assert.Contains(t, got.Error, "shopping list save exploded")
 }
@@ -1499,7 +1499,7 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 	hash := "spinner-hash"
 	status := "Baby we working"
-	err := s.generationStatuses.SaveGenerationStatus(t.Context(), hash, status)
+	err := s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
@@ -1521,7 +1521,7 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 
 	hash := "spinner-hash"
 	status := "Still chopping"
-	err := s.generationStatuses.SaveGenerationStatus(t.Context(), hash, status)
+	err := s.generationStatuses.Update(t.Context(), hash, status)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()

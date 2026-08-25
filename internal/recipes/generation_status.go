@@ -28,22 +28,13 @@ type generationStatus struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-// generationStatusWithState supports records written briefly while the
-// generation status model represented inferred running and completion states.
-type generationStatusWithState struct {
-	Message   string    `json:"message,omitempty"`
-	StartedAt time.Time `json:"started_at"`
-	Error     string    `json:"error,omitempty"`
-	State     string    `json:"state,omitempty"`
-}
-
 type statusWriter interface {
-	SaveGenerationStatus(ctx context.Context, hash string, status string) error
+	Update(ctx context.Context, hash string, status string) error
 }
 
 type statusStore struct {
-	cache cache.Cache
 	mu    sync.Mutex
+	cache cache.Cache
 	now   func() time.Time
 }
 
@@ -53,10 +44,8 @@ func StatusStore(c cache.Cache) *statusStore {
 	return &statusStore{cache: c, now: time.Now}
 }
 
+// Start  creates or resets an existing
 func (ss *statusStore) Start(ctx context.Context, hash string) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-
 	return ss.save(ctx, hash, generationStatus{
 		StartedAt: ss.now().UTC(),
 	})
@@ -67,10 +56,8 @@ func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
 		return fmt.Errorf("generation failure is required")
 	}
 	reportedError := err.Error()
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
 
-	status, loadErr := ss.load(ctx, hash)
+	status, loadErr := ss.Load(ctx, hash)
 	if loadErr != nil {
 		return loadErr
 	}
@@ -78,18 +65,13 @@ func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
 	return ss.save(ctx, hash, status)
 }
 
-func (ss *statusStore) GenerationStatusFromCache(ctx context.Context, hash string) (generationStatus, error) {
+func (ss *statusStore) Update(ctx context.Context, hash, message string) error {
+
+	//this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
-	return ss.load(ctx, hash)
-}
-
-func (ss *statusStore) SaveGenerationStatus(ctx context.Context, hash, message string) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-
-	status, err := ss.load(ctx, hash)
+	status, err := ss.Load(ctx, hash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
 			return err
@@ -105,7 +87,7 @@ func (ss *statusStore) SaveGenerationStatus(ctx context.Context, hash, message s
 	return ss.save(ctx, hash, status)
 }
 
-func (ss *statusStore) load(ctx context.Context, hash string) (generationStatus, error) {
+func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus, error) {
 	statusReader, err := ss.cache.Get(ctx, generationStatusCachePrefix+hash)
 	if err != nil {
 		return generationStatus{}, fmt.Errorf("get generation status for hash %s: %w", hash, err)
@@ -116,36 +98,20 @@ func (ss *statusStore) load(ctx context.Context, hash string) (generationStatus,
 		}
 	}()
 
+	//buffer whole thing ratehr than
 	raw, err := io.ReadAll(statusReader)
 	if err != nil {
 		return generationStatus{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)
 	}
 
-	var stored generationStatusWithState
+	var stored generationStatus
 	if err := json.Unmarshal(raw, &stored); err == nil {
-		status := generationStatus{
-			Message:   stored.Message,
-			StartedAt: stored.StartedAt,
-			Error:     stored.Error,
-		}
-		switch stored.State {
-		case "", "running", "complete":
-		case "failed":
-			if status.Error == "" {
-				status.Error = strings.TrimSpace(strings.TrimPrefix(status.Message, "Something went wrong:"))
-			}
-		default:
-			return generationStatus{}, fmt.Errorf("invalid legacy generation status state %q", stored.State)
-		}
-		return status, nil
+		return stored, nil
 	}
 
+	//back compat its all just strings Remove after a couple of days?
 	message := strings.TrimSpace(string(raw))
-	reportedError := ""
-	if strings.HasPrefix(message, "Something went wrong:") {
-		reportedError = strings.TrimSpace(strings.TrimPrefix(message, "Something went wrong:"))
-	}
-	return generationStatus{Message: message, Error: reportedError}, nil
+	return generationStatus{Message: message}, nil
 }
 
 func (ss *statusStore) save(ctx context.Context, hash string, status generationStatus) error {
