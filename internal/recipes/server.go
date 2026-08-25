@@ -959,7 +959,11 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	s.kickgeneration(ctx, p)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
+		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
+		return
+	}
 	redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
 }
 
@@ -1110,26 +1114,29 @@ const (
 // spinner while work is in progress and the retry page after failure or timeout.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	hashParam := r.URL.Query().Get(queryArgHash)
+	//both params and status are require
 	_, err := s.ParamsFromCache(ctx, hashParam)
 	if err != nil {
-		// Random or expired hashes can reach this public endpoint without indicating an app bug.
-		slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
-		http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
+		if errors.Is(err, cache.ErrNotFound) {
+			// Random or expired hashes can reach this public endpoint without indicating an app bug.
+			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
+			http.Error(w, "shoppinglist not found", http.StatusNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load params", "hash", hashParam, "error", err)
+		http.Error(w, "failed to load status", http.StatusInternalServerError)
 		return
 	}
 
 	status, err := s.generationStatuses.Load(ctx, hashParam)
 	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			err = s.generationStatuses.Start(ctx, hashParam)
-			if err != nil {
-				slog.ErrorContext(ctx, "failed to restart generateion status", "error", err)
-			}
-			s.spin(ctx, w, r, generationStatus{})
-
-		}
 		slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
-		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
+		if errors.Is(err, cache.ErrNotFound) {
+			//allow them to try again but we shouldn't ever really get here
+			generationFailed(ctx, w, r, hashParam, "recipe start failure")
+			return
+		}
+		http.Error(w, "failed to load status", http.StatusInternalServerError)
 		return
 	}
 
@@ -1322,7 +1329,11 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	hash := p.Hash()
 
-	s.kickgeneration(ctx, p)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
+		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
+		return
+	}
 	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
@@ -1353,7 +1364,11 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.kickgeneration(ctx, p)
+	if err := s.kickgeneration(ctx, p); err != nil {
+		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
+		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
+		return
+	}
 	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
@@ -1392,11 +1407,10 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 	})
 }
 
-func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
+func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
 	hash := p.Hash()
 	if err := s.generationStatuses.Start(ctx, hash); err != nil {
-		// we'll retry this on GET recipes/
-		slog.ErrorContext(ctx, "start generation status", "error", err)
+		return fmt.Errorf("start generation status %w", err)
 	}
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
@@ -1418,6 +1432,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 			return
 		}
 	})
+	return nil
 }
 
 // Almost same as kick generation except
