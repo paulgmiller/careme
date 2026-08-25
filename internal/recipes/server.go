@@ -963,7 +963,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
 		return
 	}
-	redirectToHash(w, r, newHash, queryArgGenerationPending)
+	redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
 }
 
 func shoppingListArgs(args map[string]string) string {
@@ -1101,11 +1101,10 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash              = "h"
-	queryArgGenerationPending = "generation"
-	queryArgConversion        = "conversion"
-	queryArgInstructions      = "instructions"
-	recipeGenerationTimeout   = 10 * time.Minute
+	queryArgHash            = "h"
+	queryArgConversion      = "conversion"
+	queryArgInstructions    = "instructions"
+	recipeGenerationTimeout = 10 * time.Minute
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1189,10 +1188,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.ErrorContext(ctx, "failed to load recipe list for hash", "hash", hashParam, "error", err)
 		http.Error(w, "invalid recipe", http.StatusInternalServerError)
-		return
-	}
-	if r.URL.Query().Has(queryArgGenerationPending) {
-		redirectToHashWithConversion(w, r, hashParam, templates.RecipeGenerationConversion)
 		return
 	}
 
@@ -1326,7 +1321,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redirectToHash(w, r, hash, queryArgGenerationPending, QueryArgHelp)
+	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
 func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
@@ -1361,7 +1356,7 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
 		return
 	}
-	redirectToHash(w, r, hash, queryArgGenerationPending, QueryArgHelp)
+	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
 // best effort attempt to set favorite store if non is thre
@@ -1550,9 +1545,6 @@ func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.R
 // redirectToHash keeps only query arguments explicitly named by the caller.
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToKeep ...string) {
 	args := url.Values{} // intentionally clear other args
-	if slices.Contains(argsToKeep, queryArgGenerationPending) {
-		args.Set(queryArgGenerationPending, "pending")
-	}
 	if slices.Contains(argsToKeep, QueryArgHelp) {
 		args.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
 	}

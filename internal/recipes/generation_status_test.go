@@ -114,6 +114,8 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 func TestGenerationStatusDecodesLegacyText(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	statuses := StatusStore(cacheStore)
+	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.UTC)
+	statuses.now = func() time.Time { return startedAt }
 	require.NoError(t, cacheStore.Put(t.Context(), generationStatusCachePrefix+"running", "Still chopping", cache.Unconditional()))
 	require.NoError(t, cacheStore.Put(t.Context(), generationStatusCachePrefix+"failed", "Something went wrong: store returned 404", cache.Unconditional()))
 
@@ -121,9 +123,9 @@ func TestGenerationStatusDecodesLegacyText(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Still chopping", running.Message)
 	assert.Empty(t, running.Error)
+	assert.Equal(t, startedAt, running.StartedAt)
 
 	failed, err := statuses.Load(t.Context(), "failed")
 	require.NoError(t, err)
 	assert.Equal(t, "Something went wrong: store returned 404", failed.Message)
-
 }

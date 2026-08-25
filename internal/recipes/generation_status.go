@@ -54,13 +54,12 @@ func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
 		return loadErr
 	}
 	status.Error = err.Error()
-	//could get overwritten by parallel update
+	// could get overwritten by parallel update
 	return ss.save(ctx, hash, status)
 }
 
 func (ss *statusStore) Update(ctx context.Context, hash, message string) error {
-
-	//this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
+	// this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
 	// should be using etags
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
@@ -84,7 +83,7 @@ func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus,
 		}
 	}()
 
-	//buffer whole thing only for back compat below. Afetr that we can stream
+	// buffer whole thing only for back compat below. Afetr that we can stream
 	raw, err := io.ReadAll(statusReader)
 	if err != nil {
 		return generationStatus{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)
@@ -95,9 +94,9 @@ func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus,
 		return stored, nil
 	}
 
-	//back compat its all just strings Remove after a couple of days?
+	// back compat its all just strings Remove after a couple of days?
 	message := strings.TrimSpace(string(raw))
-	return generationStatus{Message: message}, nil
+	return generationStatus{Message: message, StartedAt: ss.now()}, nil
 }
 
 func (ss *statusStore) save(ctx context.Context, hash string, status generationStatus) error {

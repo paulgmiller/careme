@@ -41,7 +41,7 @@ func TestRedirectToHash(t *testing.T) {
 	req := httptest.NewRequest("GET", "/dummy", nil)
 
 	hash := "testhash"
-	redirectToHash(rr, req, hash, queryArgGenerationPending)
+	redirectToHash(rr, req, hash)
 
 	// Check the status code
 	if status := rr.Code; status != http.StatusSeeOther {
@@ -49,7 +49,7 @@ func TestRedirectToHash(t *testing.T) {
 	}
 
 	// Check the Location header
-	expectedLocation := fmt.Sprintf("/recipes?generation=pending&h=%s", hash)
+	expectedLocation := fmt.Sprintf("/recipes?h=%s", hash)
 	location := rr.Header().Get("Location")
 	if location != expectedLocation {
 		t.Errorf("handler returned wrong location: got %v want %v", location, expectedLocation)
@@ -60,7 +60,7 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&help=Save+two+dinners", nil)
 
-	redirectToHash(rr, req, "testhash", queryArgGenerationPending, QueryArgHelp)
+	redirectToHash(rr, req, "testhash", QueryArgHelp)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	location := rr.Header().Get("Location")
@@ -68,7 +68,6 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/recipes", u.Path)
 	assert.Equal(t, "testhash", u.Query().Get("h"))
-	assert.Equal(t, "pending", u.Query().Get(queryArgGenerationPending))
 	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
@@ -106,7 +105,7 @@ func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash()))
 	require.NoError(t, s.generationStatuses.Update(t.Context(), p.Hash(), "Still chopping"))
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash()+"&generation=pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
@@ -123,20 +122,24 @@ func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	}
 }
 
-func TestNotFoundReportedErrorOrUnknownGenerationShowsRetry(t *testing.T) {
+func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T) {
 	tests := []struct {
-		name  string
-		setup func(testing.TB, *server, string)
+		name      string
+		setup     func(testing.TB, *server, string)
+		wantRetry bool
+		wantText  string
 	}{
 		{
-			name: "failed",
+			name:      "failed",
+			wantRetry: true,
 			setup: func(t testing.TB, s *server, hash string) {
 				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
 				require.NoError(t, s.generationStatuses.Fail(t.Context(), hash, errors.New("store returned 404")))
 			},
 		},
 		{
-			name: "untimed legacy progress",
+			name:     "untimed legacy progress",
+			wantText: "Still chopping",
 			setup: func(t testing.TB, s *server, hash string) {
 				require.NoError(t, s.generationStatuses.cache.Put(
 					t.Context(),
@@ -147,7 +150,8 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsRetry(t *testing.T) {
 			},
 		},
 		{
-			name: "corrupt structured status",
+			name:      "corrupt structured status",
+			wantRetry: true,
 			setup: func(t testing.TB, s *server, hash string) {
 				require.NoError(t, s.generationStatuses.cache.Put(
 					t.Context(),
@@ -157,7 +161,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsRetry(t *testing.T) {
 				))
 			},
 		},
-		{name: "status missing", setup: func(testing.TB, *server, string) {}},
+		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
 	}
 
 	for _, tt := range tests {
@@ -172,7 +176,13 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsRetry(t *testing.T) {
 			s.notFound(t.Context(), rr, req)
 
 			require.Equal(t, http.StatusOK, rr.Code)
-			assert.Contains(t, rr.Body.String(), "Try again, chef")
+			if tt.wantRetry {
+				assert.Contains(t, rr.Body.String(), "Try again, chef")
+			} else {
+				assert.Contains(t, rr.Body.String(), tt.wantText)
+				assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)
+				assert.NotContains(t, rr.Body.String(), "Try again, chef")
+			}
 		})
 	}
 }
@@ -200,7 +210,6 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	redirect, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
 	assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
-	assert.Equal(t, "pending", redirect.Query().Get(queryArgGenerationPending))
 	assert.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
 	select {
 	case <-generator.called:
@@ -239,7 +248,6 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	assert.Equal(t, "/recipes", canonical.Path)
 	assert.Equal(t, p.Hash(), canonical.Query().Get(queryArgHash))
 	assert.Equal(t, "Save two dinners", canonical.Query().Get(QueryArgHelp))
-	assert.Empty(t, canonical.Query().Get(queryArgGenerationPending))
 
 	followReq := httptest.NewRequest(http.MethodGet, canonical.String(), nil)
 	followRR := httptest.NewRecorder()
@@ -378,37 +386,6 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	require.Contains(t, body, `Restore`)
 	require.Contains(t, body, `/recipes/`+originHash+`/finalize`)
 	require.NotContains(t, body, `Add at least one recipe`)
-}
-
-func TestHandleRecipes_TracksCompletedGeneration(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
-
-	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	hash := p.Hash()
-	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
-		Recipes: []ai.Recipe{{Title: "Fresh Recipe", Description: "Just generated"}},
-	}, hash))
-
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(hash)+"&generation=pending&help=Save+two+dinners", nil)
-	rr := httptest.NewRecorder()
-
-	s.handleRecipes(rr, req)
-
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	redirect, err := url.Parse(rr.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, hash, redirect.Query().Get(queryArgHash))
-	require.Equal(t, string(templates.RecipeGenerationConversion), redirect.Query().Get(queryArgConversion))
-	require.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
-
-	followReq := httptest.NewRequest(http.MethodGet, redirect.String(), nil)
-	followRR := httptest.NewRecorder()
-	s.handleRecipes(followRR, followReq)
-	require.Equal(t, http.StatusOK, followRR.Code)
-	require.Contains(t, followRR.Body.String(), `.get("conversion")`)
-	require.Contains(t, followRR.Body.String(), `url.searchParams.delete("conversion")`)
 }
 
 func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
@@ -609,7 +586,7 @@ func TestHandleGenerate_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to parse redirect location %q: %v", location, err)
 	}
-	if u.Path != "/recipes" || u.Query().Get("h") == "" || u.Query().Get(queryArgGenerationPending) != "pending" {
+	if u.Path != "/recipes" || u.Query().Get("h") == "" || u.Query().Get(queryArgConversion) != "recipe_generation" {
 		t.Fatalf("expected redirect to started recipe generation, got %q", location)
 	}
 	cookies := rr.Result().Cookies()
@@ -761,9 +738,6 @@ func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 	}
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
-	}
-	if u.Query().Has(queryArgGenerationPending) {
-		t.Fatalf("expected guest cache hit redirect without pending generation marker, got %q", location)
 	}
 }
 
@@ -1505,7 +1479,7 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&generation=pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 
 	s.spin(t.Context(), rr, req, hash)
 
@@ -1513,7 +1487,7 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	assert.Contains(t, rr.Body.String(), status)
-	assert.Contains(t, rr.Body.String(), `hx-get="/recipes?h=`+hash+`&amp;generation=pending"`)
+	assert.Contains(t, rr.Body.String(), `hx-get="/recipes?h=`+hash+`"`)
 	assert.NotContains(t, rr.Body.String(), `http-equiv="refresh"`)
 }
 
@@ -1529,7 +1503,7 @@ func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&generation=pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 	req.Header.Set("HX-Request", "true")
 
 	s.spin(t.Context(), rr, req, hash)
