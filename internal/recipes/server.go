@@ -1109,12 +1109,13 @@ const (
 )
 
 // notFound handles a missing generated shopping list by showing the generation
-// spinner while work is in progress and offering a retry when generation is no
-// longer being actively polled.
+// spinner while work is in progress and the retry page after generation times out.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	startArg := r.URL.Query().Get(queryArgStart)
 	hashParam := r.URL.Query().Get(queryArgHash)
+	// okay give them a new start time.
 	if startArg == "" {
+		// don't restart clock if we don't have the params. How did we even get here though.
 		_, err := s.ParamsFromCache(ctx, hashParam)
 		if err != nil {
 			// not erroring because any rando on internet can send us things AND we seem to be missing
@@ -1124,7 +1125,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "shoppinglist not found or expired", http.StatusNotFound)
 			return
 		}
-		generationTimedOut(ctx, w, r, hashParam)
+		redirectToHash(w, r, hashParam, queryArgStart, QueryArgHelp)
 		return
 	}
 
@@ -1172,18 +1173,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 		if currentUser != nil {
 			p.Directive = currentUser.Directive
-		}
-		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
-			if errors.Is(err, cache.ErrNotFound) {
-				// Keep GET read-only. The confirmation form posts the original
-				// generation query through handleGenerate, which performs the usual
-				// account/guest checks before saving params and starting work.
-				renderGenerationRetry(ctx, w, r, r.URL.RequestURI())
-				return
-			}
-			slog.ErrorContext(ctx, "failed to check recipe params", "hash", p.Hash(), "error", err)
-			http.Error(w, "unable to load recipe parameters", http.StatusInternalServerError)
-			return
 		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
