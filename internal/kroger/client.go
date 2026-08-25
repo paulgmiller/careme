@@ -102,8 +102,16 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
+	retryClient.CheckRetry = krogerRetryPolicy
 	retryClient.RequestLogHook = httpretry.LogRetry("kroger")
 	return retryClient.StandardClient()
+}
+
+func krogerRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if resp != nil && resp.StatusCode == http.StatusNotFound && ctx.Err() == nil {
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
 
 func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
