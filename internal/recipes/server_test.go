@@ -98,7 +98,7 @@ func TestNotFoundTimedOutShowsRetryButton(t *testing.T) {
 	}
 }
 
-func TestNotFoundRunningGenerationShowsSpinner(t *testing.T) {
+func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t, withTestGenerator(generator))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
@@ -123,7 +123,7 @@ func TestNotFoundRunningGenerationShowsSpinner(t *testing.T) {
 	}
 }
 
-func TestNotFoundTerminalOrUnknownGenerationShowsRetry(t *testing.T) {
+func TestNotFoundReportedErrorOrUnknownGenerationShowsRetry(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func(testing.TB, *server, string)
@@ -133,13 +133,6 @@ func TestNotFoundTerminalOrUnknownGenerationShowsRetry(t *testing.T) {
 			setup: func(t testing.TB, s *server, hash string) {
 				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
 				require.NoError(t, s.generationStatuses.Fail(t.Context(), hash, errors.New("store returned 404")))
-			},
-		},
-		{
-			name: "complete output missing",
-			setup: func(t testing.TB, s *server, hash string) {
-				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
-				require.NoError(t, s.generationStatuses.Complete(t.Context(), hash))
 			},
 		},
 		{
@@ -217,7 +210,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	s.Wait()
 	status, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), p.Hash())
 	require.NoError(t, err)
-	assert.Equal(t, generationComplete, status.State)
+	assert.Empty(t, status.Error)
 	assert.True(t, status.StartedAt.Equal(retriedAt))
 	assert.NotContains(t, status.Message, "first attempt failed")
 }
@@ -1397,11 +1390,10 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 
 	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
-	assert.Equal(t, generationFailed, got.State)
-	assert.Equal(t, "Something went wrong: plan exploded", got.Message)
+	assert.Equal(t, "plan exploded", got.Error)
 }
 
-func TestKickgeneration_CompletesStatusAfterSavingShoppingList(t *testing.T) {
+func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -1414,7 +1406,7 @@ func TestKickgeneration_CompletesStatusAfterSavingShoppingList(t *testing.T) {
 
 	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
-	assert.Equal(t, generationComplete, got.State)
+	assert.Empty(t, got.Error)
 	assert.False(t, got.StartedAt.IsZero())
 	_, err = s.FromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
@@ -1433,8 +1425,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 
 	got, err := s.generationStatuses.GenerationStatusFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
-	assert.Equal(t, generationFailed, got.State)
-	assert.Contains(t, got.Message, "shopping list save exploded")
+	assert.Contains(t, got.Error, "shopping list save exploded")
 }
 
 func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {

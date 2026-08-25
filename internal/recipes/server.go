@@ -1131,11 +1131,11 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if status.State == generationRunning && !status.StartedAt.IsZero() && time.Since(status.StartedAt) < recipeGenerationTimeout {
+	if status.Error == "" && !status.StartedAt.IsZero() && time.Since(status.StartedAt) < recipeGenerationTimeout {
 		s.spin(ctx, w, r, hashParam)
 		return
 	}
-	if status.State == generationRunning && !status.StartedAt.IsZero() {
+	if status.Error == "" && !status.StartedAt.IsZero() {
 		slog.WarnContext(ctx, "recipe generation timed out", "started_at", status.StartedAt, "hash", hashParam)
 	}
 	generationTimedOut(ctx, w, r, hashParam)
@@ -1422,9 +1422,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
 				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", hash, "error", statusErr)
 			}
 			return
-		}
-		if err := s.generationStatuses.Complete(ctx, hash); err != nil {
-			slog.ErrorContext(ctx, "failed to complete recipe generation status", "hash", hash, "error", err)
 		}
 	})
 	return nil
