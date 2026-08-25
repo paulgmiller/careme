@@ -1340,7 +1340,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
-	s.kickgeneration(t.Context(), params)
+	require.NoError(t, s.kickgeneration(t.Context(), params))
 
 	select {
 	case <-generator.called:
@@ -1364,7 +1364,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	s.kickgeneration(t.Context(), params)
+	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1380,7 +1380,7 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	s.kickgeneration(t.Context(), params)
+	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1399,7 +1399,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	s.kickgeneration(t.Context(), params)
+	require.NoError(t, s.kickgeneration(t.Context(), params))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
