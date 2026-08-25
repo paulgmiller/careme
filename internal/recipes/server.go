@@ -1395,7 +1395,7 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams) {
 	hash := p.Hash()
 	if err := s.generationStatuses.Start(ctx, hash); err != nil {
-		//we'll retry this on GET recipes/
+		// we'll retry this on GET recipes/
 		slog.ErrorContext(ctx, "start generation status", "error", err)
 	}
 	ctx = context.WithoutCancel(ctx)
