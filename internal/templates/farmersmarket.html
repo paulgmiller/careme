@@ -42,43 +42,162 @@
       const form = document.getElementById("farmers-market-form");
       const submit = document.getElementById("farmers-market-submit");
       const status = document.getElementById("farmers-market-location-status");
+      const photos = document.getElementById("photos");
       const lat = document.getElementById("lat");
       const lon = document.getElementById("lon");
-      if (!form || !submit || !status || !lat || !lon) {
+      if (!form || !submit || !status || !photos || !lat || !lon) {
         return;
       }
-      if (!("geolocation" in navigator)) {
+
+      const maxPhotoDimension = 2048;
+      const resizeThresholdBytes = 2 * 1024 * 1024;
+      let photosPrepared = false;
+      let preparing = false;
+
+      photos.addEventListener("change", () => {
+        photosPrepared = false;
+      });
+
+      const decodePhoto = async (file) => {
+        if ("createImageBitmap" in window) {
+          const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+          return {
+            image: bitmap,
+            width: bitmap.width,
+            height: bitmap.height,
+            close: () => bitmap.close(),
+          };
+        }
+
+        const objectURL = URL.createObjectURL(file);
+        const image = new Image();
+        try {
+          await new Promise((resolve, reject) => {
+            image.addEventListener("load", resolve, { once: true });
+            image.addEventListener("error", reject, { once: true });
+            image.src = objectURL;
+          });
+          return {
+            image,
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+            close: () => URL.revokeObjectURL(objectURL),
+          };
+        } catch (error) {
+          URL.revokeObjectURL(objectURL);
+          throw error;
+        }
+      };
+
+      const resizePhoto = async (file) => {
+        if (!file.type.startsWith("image/")) {
+          return file;
+        }
+
+        const decoded = await decodePhoto(file);
+        try {
+          const longestSide = Math.max(decoded.width, decoded.height);
+          if (longestSide <= maxPhotoDimension && file.size <= resizeThresholdBytes) {
+            return file;
+          }
+
+          const scale = Math.min(1, maxPhotoDimension / longestSide);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(decoded.width * scale));
+          canvas.height = Math.max(1, Math.round(decoded.height * scale));
+          const context = canvas.getContext("2d");
+          if (!context) {
+            return file;
+          }
+          context.fillStyle = "#ffffff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(decoded.image, 0, 0, canvas.width, canvas.height);
+
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+          canvas.width = 1;
+          canvas.height = 1;
+          if (!blob || blob.size >= file.size) {
+            return file;
+          }
+          const stem = file.name.replace(/\.[^.]+$/, "") || "market-photo";
+          return new File([blob], `${stem}.jpg`, { type: "image/jpeg", lastModified: file.lastModified });
+        } finally {
+          decoded.close();
+        }
+      };
+
+      const preparePhotos = async () => {
+        if (!("DataTransfer" in window)) {
+          return;
+        }
+        const selected = Array.from(photos.files || []);
+        let prepared;
+        try {
+          prepared = new DataTransfer();
+        } catch (_) {
+          return;
+        }
+        for (let index = 0; index < selected.length; index += 1) {
+          status.textContent = `Preparing photo ${index + 1} of ${selected.length}...`;
+          try {
+            prepared.items.add(await resizePhoto(selected[index]));
+          } catch (_) {
+            prepared.items.add(selected[index]);
+          }
+        }
+        photos.files = prepared.files;
+      };
+
+      const geolocationAvailable = "geolocation" in navigator;
+      const findLocation = () => new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject,
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+      });
+
+      if (!geolocationAvailable) {
         status.textContent = "Current location is not available in this browser.";
-        return;
       }
-      form.addEventListener("submit", (event) => {
-        if (lat.value !== "" && lon.value !== "") {
+
+      form.addEventListener("submit", async (event) => {
+        const needsPhotos = !photosPrepared;
+        const needsLocation = geolocationAvailable && (lat.value === "" || lon.value === "");
+        if (!needsPhotos && !needsLocation) {
           return;
         }
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (preparing) {
+          return;
+        }
+        preparing = true;
         submit.disabled = true;
         const originalText = submit.textContent;
-        submit.textContent = "Finding your location...";
-        status.textContent = "Finding your current location...";
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
+        try {
+          if (needsPhotos) {
+            submit.textContent = "Preparing your photos...";
+            await preparePhotos();
+            photosPrepared = true;
+          }
+          if (needsLocation) {
+            submit.textContent = "Finding your location...";
+            status.textContent = "Finding your current location...";
+            const position = await findLocation();
             lat.value = position.coords.latitude.toFixed(6);
             lon.value = position.coords.longitude.toFixed(6);
-            status.textContent = "";
-            submit.disabled = false;
-            submit.textContent = originalText;
-            form.requestSubmit();
-          },
-          () => {
-            lat.value = "";
-            lon.value = "";
-            status.textContent = "Could not use current location.";
-            submit.disabled = false;
-            submit.textContent = originalText;
-          },
-          { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
-        );
+          }
+          status.textContent = "Uploading your market photos...";
+          submit.disabled = false;
+          submit.textContent = originalText;
+          preparing = false;
+          form.requestSubmit();
+        } catch (_) {
+          lat.value = "";
+          lon.value = "";
+          status.textContent = "Could not use current location.";
+          submit.disabled = false;
+          submit.textContent = originalText;
+          preparing = false;
+        }
       }, true);
     })();
   </script>
@@ -111,6 +230,7 @@
       <label for="photos" class="block text-sm font-semibold text-ink-700">Market photos</label>
       <input id="photos" name="photos" type="file" accept="image/*" multiple required
         class="mt-2 block w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-ink-700 shadow-sm file:mr-4 file:rounded-md file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-300" />
+      <p class="mt-2 text-sm text-ink-500">Large photos are resized before upload to keep things quick.</p>
     </div>
 
     <input id="lat" name="lat" type="hidden" />

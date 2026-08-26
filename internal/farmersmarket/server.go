@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -29,14 +30,13 @@ import (
 )
 
 const (
-	// TODO: Revisit upload memory before raising these caps. A max-size upload keeps
-	// multipart data plus base64 data URLs in memory, and concurrent uploads can
-	// pressure the 750Mi production pod limit.
-	maxUploadBytes      = 90 << 20
-	maxPhotoBytes       = 10 << 20
-	maxPhotoCount       = 32
-	storeDayStartHour   = 9
-	farmersMarketAction = "/farmersmarket"
+	maxUploadBytes = 90 << 20
+	// ParseMultipartForm spills file bodies beyond this small allowance to disk.
+	multipartMemoryBytes = 1 << 20
+	maxPhotoBytes        = 10 << 20
+	maxPhotoCount        = 32
+	storeDayStartHour    = 9
+	farmersMarketAction  = "/farmersmarket"
 )
 
 type IngredientExtractor interface {
@@ -59,12 +59,35 @@ type Handler struct {
 
 type Photo struct {
 	contentType string
-	content     []byte
+	path        string
+	size        int64
 }
 
-// who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
-func (p Photo) dataURL() string {
-	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
+// data URLs let the AI client send an image without first publishing it.
+func (p Photo) dataURL() (string, error) {
+	source, err := os.Open(p.path)
+	if err != nil {
+		return "", fmt.Errorf("open staged photo: %w", err)
+	}
+
+	prefix := "data:" + p.contentType + ";base64,"
+	var encoded strings.Builder
+	encoded.Grow(len(prefix) + base64.StdEncoding.EncodedLen(int(p.size)))
+	encoded.WriteString(prefix)
+	encoder := base64.NewEncoder(base64.StdEncoding, &encoded)
+	_, copyErr := io.Copy(encoder, source)
+	encodeCloseErr := encoder.Close()
+	sourceCloseErr := source.Close()
+	if copyErr != nil {
+		return "", fmt.Errorf("encode staged photo: %w", copyErr)
+	}
+	if encodeCloseErr != nil {
+		return "", fmt.Errorf("finish encoding staged photo: %w", encodeCloseErr)
+	}
+	if sourceCloseErr != nil {
+		return "", fmt.Errorf("close staged photo: %w", sourceCloseErr)
+	}
+	return encoded.String(), nil
 }
 
 func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor) *Handler {
@@ -136,10 +159,15 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
-	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+	if err := r.ParseMultipartForm(multipartMemoryBytes); err != nil {
 		renderError(ctx, w, "Could not read those photos. Try fewer or smaller images.")
 		return
 	}
+	defer func() {
+		if err := r.MultipartForm.RemoveAll(); err != nil {
+			slog.WarnContext(ctx, "failed to remove multipart upload files", "error", err)
+		}
+	}()
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
@@ -151,6 +179,12 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		renderError(ctx, w, err.Error())
 		return
 	}
+	photosOwnedByJob := false
+	defer func() {
+		if !photosOwnedByJob {
+			removePhotos(ctx, photos)
+		}
+	}()
 	coord, err := resolveMarketLocation(r)
 	if err != nil {
 		renderError(ctx, w, err.Error())
@@ -175,6 +209,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		jobCtx := context.WithoutCancel(ctx)
 		h.runAnalysisJob(jobCtx, status, name, photos, coord)
 	})
+	photosOwnedByJob = true
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	if err := renderFarmersMarketProgress(w, status); err != nil {
@@ -183,6 +218,8 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate) {
+	defer removePhotos(ctx, photos)
+
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -278,37 +315,23 @@ func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientEx
 
 func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor IngredientExtractor, photos []Photo, progress func(int, []ai.InputIngredient)) ([]ai.InputIngredient, error) {
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
-	type result struct {
-		ingredients []ai.InputIngredient
-		err         error
-	}
-	results := make(chan result, len(photos))
-	var wg sync.WaitGroup
-	for _, photo := range photos {
-		wg.Go(func() {
-			ingredients, err := extractor.ExtractFarmersMarketIngredients(ctx, photo.dataURL())
-			slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(ingredients))
-			results <- result{ingredients: ingredients, err: err}
-		})
-	}
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
 	ingredients := make([]ai.InputIngredient, 0)
 	errs := make([]error, 0)
-	photosAnalyzed := 0
-	for r := range results {
-		photosAnalyzed++
-		if r.err != nil {
-			errs = append(errs, r.err)
-		} else {
-			ingredients = append(ingredients, r.ingredients...)
+	for i, photo := range photos {
+		imageDataURL, err := photo.dataURL()
+		if err == nil {
+			var extracted []ai.InputIngredient
+			extracted, err = extractor.ExtractFarmersMarketIngredients(ctx, imageDataURL)
+			ingredients = append(ingredients, extracted...)
+			slog.InfoContext(ctx, "finished farmers market photo analysis", "ingredient_count", len(extracted))
 		}
-		ingredients = uniqueIngredients(ingredients)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			ingredients = uniqueIngredients(ingredients)
+		}
 		if progress != nil {
-			progress(photosAnalyzed, slices.Clone(ingredients))
+			progress(i+1, slices.Clone(ingredients))
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
@@ -346,32 +369,79 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 	photos := make([]Photo, 0, len(files))
 	for i, header := range files {
 		if header.Size > maxPhotoBytes {
+			removePhotos(ctx, photos)
 			return nil, fmt.Errorf("keep each photo under 10 MB")
 		}
 		file, err := header.Open()
 		if err != nil {
+			removePhotos(ctx, photos)
 			return nil, fmt.Errorf("could not open one of those photos")
 		}
-		data, readErr := io.ReadAll(io.LimitReader(file, maxPhotoBytes+1))
+		staged, err := os.CreateTemp("", "careme-farmers-market-photo-*")
+		if err != nil {
+			_ = file.Close()
+			removePhotos(ctx, photos)
+			return nil, fmt.Errorf("could not prepare one of those photos")
+		}
+		path := staged.Name()
+		size, readErr := io.Copy(staged, io.LimitReader(file, maxPhotoBytes+1))
+		stageCloseErr := staged.Close()
 		closeErr := file.Close()
-		if readErr != nil {
+		if readErr != nil || stageCloseErr != nil || closeErr != nil {
+			_ = os.Remove(path)
+			removePhotos(ctx, photos)
 			return nil, fmt.Errorf("could not read one of those photos")
 		}
-		if closeErr != nil {
-			return nil, fmt.Errorf("could not read one of those photos")
-		}
-		if len(data) > maxPhotoBytes {
+		if size > maxPhotoBytes {
+			_ = os.Remove(path)
+			removePhotos(ctx, photos)
 			return nil, fmt.Errorf("keep each photo under 10 MB")
 		}
-		contentType := http.DetectContentType(data)
+		contentType, err := stagedPhotoContentType(path)
+		if err != nil {
+			_ = os.Remove(path)
+			removePhotos(ctx, photos)
+			return nil, fmt.Errorf("could not read one of those photos")
+		}
 		if !strings.HasPrefix(contentType, "image/") {
+			_ = os.Remove(path)
+			removePhotos(ctx, photos)
 			return nil, fmt.Errorf("upload image files only")
 		}
 
-		photos = append(photos, Photo{contentType: contentType, content: data})
-		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType)
+		photos = append(photos, Photo{contentType: contentType, path: path, size: size})
+		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", size, "content_type", contentType)
 	}
 	return photos, nil
+}
+
+func stagedPhotoContentType(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+
+	header := make([]byte, 512)
+	n, readErr := file.Read(header)
+	closeErr := file.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return "", readErr
+	}
+	if closeErr != nil {
+		return "", closeErr
+	}
+	return http.DetectContentType(header[:n]), nil
+}
+
+func removePhotos(ctx context.Context, photos []Photo) {
+	for _, photo := range photos {
+		if photo.path == "" {
+			continue
+		}
+		if err := os.Remove(photo.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.WarnContext(ctx, "failed to remove staged farmers market photo", "error", err)
+		}
+	}
 }
 
 func farmersMarketDate(now time.Time, coordinates geo.Coordinate) (time.Time, error) {

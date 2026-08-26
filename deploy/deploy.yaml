@@ -88,10 +88,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 500Mi
+              memory: 250Mi
             limits:
               cpu: 500m
-              memory: 750Mi
+              memory: 1Gi
       volumes:
         - name: recipes
           emptyDir: {}
