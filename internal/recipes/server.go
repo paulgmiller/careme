@@ -1136,7 +1136,9 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			generationFailed(ctx, w, r, hashParam, "recipe start failure")
 			return
 		}
-		http.Error(w, "failed to load status", http.StatusInternalServerError)
+		s.spin(ctx, w, r, generationStatus{
+			Message: "We couldn't check progress just now. We'll try again automatically.",
+		})
 		return
 	}
 
