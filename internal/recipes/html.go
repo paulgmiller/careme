@@ -73,7 +73,7 @@ type shoppingRecipeView struct {
 type mailRecipeView struct {
 	ai.Recipe
 	Hash            string
-	ImageContentID  string
+	HasImage        bool
 	PropertyDisplay recipePropertyDisplay
 }
 
@@ -452,14 +452,14 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 	return FormatMailWithImages(p, l, publicOrigin, unsubscribeURL, nil, writer)
 }
 
-// FormatMailWithImages renders a recipe email whose imageContentIDs refer to
-// inline MIME attachments keyed by recipe hash.
+// FormatMailWithImages renders a recipe email with public image URLs for the
+// recipe hashes marked as available.
 func FormatMailWithImages(
 	p *generatorParams,
 	l ai.ShoppingList,
 	publicOrigin string,
 	unsubscribeURL string,
-	imageContentIDs map[string]string,
+	availableImages map[string]bool,
 	writer io.Writer,
 ) error {
 	recipeViews := make([]mailRecipeView, 0, len(l.Recipes))
@@ -470,7 +470,7 @@ func FormatMailWithImages(
 		recipeViews = append(recipeViews, mailRecipeView{
 			Recipe:          recipe,
 			Hash:            hash,
-			ImageContentID:  imageContentIDs[hash],
+			HasImage:        availableImages[hash],
 			PropertyDisplay: propertyDisplay,
 		})
 	}

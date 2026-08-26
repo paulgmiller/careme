@@ -282,14 +282,22 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if got := client.last.Subject; got != "🍽️ Test Recipe" {
 		t.Fatalf("expected dynamic recipe subject, got %q", got)
 	}
-	if len(client.last.Attachments) != 1 {
-		t.Fatalf("expected one inline recipe image, got %d", len(client.last.Attachments))
-	}
-	if got := client.last.Attachments[0].ContentID; got != "careme-recipe-1" {
-		t.Fatalf("expected inline image content id, got %q", got)
+	if len(client.last.Attachments) != 0 {
+		t.Fatalf("expected no image attachments, got %d", len(client.last.Attachments))
 	}
 	htmlContent := client.last.Content[1].Value
-	for _, want := range []string{"cid:careme-recipe-1", "⏱️", "30 min", "👥&nbsp;4</span>", "💵", "$18", "❤️", "520 cal", "♨️", "Oven"} {
+	recipe := ai.Recipe{
+		Title: "Test Recipe",
+		Properties: ai.RecipeProperties{
+			TotalMinutes:         30,
+			Servings:             4,
+			EstimatedCostDollars: 18,
+			CaloriesPerServing:   520,
+			CookingMethods:       []ai.CookingMethod{ai.CookingMethodOven},
+		},
+	}
+	recipeHash := recipe.ComputeHash()
+	for _, want := range []string{"https://careme.cooking/recipe/" + recipeHash + "/image", "⏱️", "30 min", "👥&nbsp;4</span>", "💵", "$18", "❤️", "520 cal", "♨️", "Oven"} {
 		if !strings.Contains(htmlContent, want) {
 			t.Fatalf("expected email HTML to contain %q", want)
 		}

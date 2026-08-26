@@ -6,11 +6,9 @@ package mail
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	netmail "net/mail"
@@ -69,7 +67,6 @@ type imageGenerator interface {
 
 type imageStore interface {
 	RecipeImageExists(ctx context.Context, hash string) (bool, error)
-	RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error)
 	SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error
 }
 
@@ -284,11 +281,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool)
 		}
 	}
 
-	inlineImages := m.prepareRecipeImages(ctx, shoppingList.Recipes)
-	imageContentIDs := make(map[string]string, len(inlineImages))
-	for _, image := range inlineImages {
-		imageContentIDs[image.recipeHash] = image.contentID
-	}
+	availableImages := m.prepareRecipeImages(ctx, shoppingList.Recipes)
 
 	var buf bytes.Buffer
 	unsubscribeParams := url.Values{
@@ -296,7 +289,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool)
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMailWithImages(p, *shoppingList, m.publicOrigin, unsubscribeURL, imageContentIDs, &buf); err != nil {
+	if err := recipes.FormatMailWithImages(p, *shoppingList, m.publicOrigin, unsubscribeURL, availableImages, &buf); err != nil {
 		return fmt.Errorf("format recipe email: %w", err)
 	}
 
@@ -308,14 +301,6 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool)
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
-	for _, image := range inlineImages {
-		message.AddAttachment(mail.NewAttachment().
-			SetContent(image.content).
-			SetType(image.contentType).
-			SetFilename(image.filename).
-			SetDisposition("inline").
-			SetContentID(image.contentID))
-	}
 	message.SetHeader("List-Unsubscribe", "<"+unsubscribeURL+">")
 	message.SetHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	for _, e := range user.Email[1:] {
@@ -355,89 +340,47 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool)
 	return nil
 }
 
-type inlineRecipeImage struct {
-	recipeHash  string
-	contentID   string
-	content     string
-	contentType string
-	filename    string
-}
-
-func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) []inlineRecipeImage {
-	images := make([]inlineRecipeImage, len(recipeList))
+func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) map[string]bool {
+	imageHashes := make([]string, len(recipeList))
 	var wg sync.WaitGroup
 	for i, recipe := range recipeList {
 		wg.Go(func() {
-			image, err := m.prepareRecipeImage(ctx, recipe, i)
-			if err != nil {
+			if err := m.prepareRecipeImage(ctx, recipe); err != nil {
 				slog.WarnContext(ctx, "recipe image omitted from email", "recipe", recipe.Title, "error", err)
 				return
 			}
-			images[i] = image
+			imageHashes[i] = recipe.ComputeHash()
 		})
 	}
 	wg.Wait()
 
-	return lo.Filter(images, func(image inlineRecipeImage, _ int) bool {
-		return image.contentID != ""
-	})
+	availableImages := make(map[string]bool, len(imageHashes))
+	for _, hash := range imageHashes {
+		if hash != "" {
+			availableImages[hash] = true
+		}
+	}
+	return availableImages
 }
 
-func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe, index int) (inlineRecipeImage, error) {
+func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error {
 	hash := recipe.ComputeHash()
 	exists, err := m.imageStore.RecipeImageExists(ctx, hash)
 	if err != nil {
-		return inlineRecipeImage{}, fmt.Errorf("check image cache: %w", err)
+		return fmt.Errorf("check image cache: %w", err)
 	}
-	if !exists {
-		generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe)
-		if err != nil {
-			return inlineRecipeImage{}, fmt.Errorf("generate image: %w", err)
-		}
-		if err := m.imageStore.SaveRecipeImage(ctx, hash, generated); err != nil {
-			return inlineRecipeImage{}, fmt.Errorf("save image: %w", err)
-		}
+	if exists {
+		return nil
 	}
 
-	reader, err := m.imageStore.RecipeImageFromCache(ctx, hash)
+	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe)
 	if err != nil {
-		return inlineRecipeImage{}, fmt.Errorf("load image: %w", err)
+		return fmt.Errorf("generate image: %w", err)
 	}
-	defer func() {
-		if err := reader.Close(); err != nil {
-			slog.WarnContext(ctx, "failed to close cached recipe image", "recipe", recipe.Title, "error", err)
-		}
-	}()
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return inlineRecipeImage{}, fmt.Errorf("read image: %w", err)
+	if err := m.imageStore.SaveRecipeImage(ctx, hash, generated); err != nil {
+		return fmt.Errorf("save image: %w", err)
 	}
-	contentType := http.DetectContentType(body)
-	if !strings.HasPrefix(contentType, "image/") {
-		return inlineRecipeImage{}, fmt.Errorf("unexpected content type %q", contentType)
-	}
-
-	contentID := fmt.Sprintf("careme-recipe-%d", index+1)
-	return inlineRecipeImage{
-		recipeHash:  hash,
-		contentID:   contentID,
-		content:     base64.StdEncoding.EncodeToString(body),
-		contentType: contentType,
-		filename:    contentID + imageExtension(contentType),
-	}, nil
-}
-
-func imageExtension(contentType string) string {
-	switch contentType {
-	case "image/webp":
-		return ".webp"
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	default:
-		return ".img"
-	}
+	return nil
 }
 
 func recipeEmailSubject(shoppingList ai.ShoppingList) string {

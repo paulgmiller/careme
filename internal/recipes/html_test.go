@@ -407,8 +407,8 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
 	recipeHash := list.Recipes[0].ComputeHash()
-	if err := FormatMailWithImages(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", map[string]string{
-		recipeHash: "careme-recipe-1",
+	if err := FormatMailWithImages(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", map[string]bool{
+		recipeHash: true,
 	}, &w); err != nil {
 		t.Fatalf("FormatMailWithImages() error = %v", err)
 	}
@@ -416,7 +416,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 
 	isValidHTML(t, html)
 	for _, want := range []string{
-		"Test Recipe", "cid:careme-recipe-1", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
+		"Test Recipe", "https://careme.cooking/recipe/" + recipeHash + "/image", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("mail HTML should contain %q", want)
