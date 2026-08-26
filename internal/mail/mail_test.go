@@ -115,6 +115,7 @@ type fakeMailClient struct {
 	response *rest.Response
 	err      error
 	last     *sgmail.SGMailV3
+	ctx      context.Context
 }
 
 type fakeMailUserStore struct {
@@ -135,7 +136,8 @@ func (s *fakeMailUserStore) GetByEmail(email string) (*utypes.User, error) {
 	return s.user, s.err
 }
 
-func (f *fakeMailClient) Send(msg *sgmail.SGMailV3) (*rest.Response, error) {
+func (f *fakeMailClient) SendWithContext(ctx context.Context, msg *sgmail.SGMailV3) (*rest.Response, error) {
+	f.ctx = ctx
 	f.last = msg
 	return f.response, f.err
 }
@@ -235,6 +237,34 @@ func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("expected error to contain %q, got %q", want, err)
 		}
+	}
+}
+
+func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
+	fc := newFakeMailCache(t)
+	fc.shoppingListJSON = `{"recipes":[]}`
+	location := testMailLocation()
+	client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+	m := &mailer{
+		cache:     fc,
+		locServer: &fakeMailLocServer{location: location},
+		client:    client,
+	}
+	configureFakeMailImages(m)
+
+	err := m.deliverEmail(context.Background(), utypes.User{
+		ID:            "user-1",
+		Email:         []string{"u1@example.com"},
+		FavoriteStore: "123",
+	}, recipes.DefaultParams(location, time.Now()))
+	if err == nil {
+		t.Fatal("expected empty shopping list error")
+	}
+	if !strings.Contains(err.Error(), "contains no recipes") {
+		t.Fatalf("expected no-recipes error, got %q", err)
+	}
+	if client.last != nil {
+		t.Fatal("did not expect an empty shopping list to be sent")
 	}
 }
 
@@ -365,8 +395,11 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if got := client.last.Headers["List-Unsubscribe-Post"]; got != "List-Unsubscribe=One-Click" {
 		t.Fatalf("expected one-click List-Unsubscribe-Post header, got %q", got)
 	}
-	if got := client.last.Subject; got != "🍽️ Test Recipe" {
+	if got := client.last.Subject; got != "Test Recipe" {
 		t.Fatalf("expected dynamic recipe subject, got %q", got)
+	}
+	if _, ok := client.ctx.Deadline(); !ok {
+		t.Fatal("expected SendGrid request to receive the per-email deadline")
 	}
 	if len(client.last.Attachments) != 0 {
 		t.Fatalf("expected no image attachments, got %d", len(client.last.Attachments))
@@ -473,6 +506,9 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 	if client.last == nil {
 		t.Fatal("expected recipe email to be sent")
 	}
+	if _, ok := client.ctx.Deadline(); !ok {
+		t.Fatal("expected forced SendGrid request to receive the per-email deadline")
+	}
 	if len(client.last.Personalizations) != 1 || len(client.last.Personalizations[0].To) != 1 {
 		t.Fatalf("expected one recipient, got %#v", client.last.Personalizations)
 	}
@@ -499,13 +535,9 @@ func TestRecipeEmailSubjectIsDynamicAndShort(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "no recipes",
-			expected: "🍽️ Your recipes",
-		},
-		{
 			name:     "one recipe",
 			recipes:  []ai.Recipe{{Title: "Chicken piccata"}},
-			expected: "🍽️ Chicken piccata",
+			expected: "Chicken piccata",
 		},
 		{
 			name: "multiple recipes",
@@ -514,7 +546,7 @@ func TestRecipeEmailSubjectIsDynamicAndShort(t *testing.T) {
 				{Title: "Spring pasta"},
 				{Title: "Salmon bowls"},
 			},
-			expected: "🍽️ Chicken piccata +2",
+			expected: "Chicken piccata +2",
 		},
 	}
 

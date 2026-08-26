@@ -41,7 +41,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const mailSentPrefix = "mail/sent/"
+const (
+	mailSentPrefix       = "mail/sent/"
+	emailDeliveryTimeout = 10 * time.Minute
+)
 
 type mailSentClaim struct {
 	SentAt     time.Time `json:"sent_at"`
@@ -54,7 +57,7 @@ type locServer interface {
 }
 
 type emailClient interface {
-	Send(message *mail.SGMailV3) (*rest.Response, error)
+	SendWithContext(ctx context.Context, message *mail.SGMailV3) (*rest.Response, error)
 }
 
 type generator interface {
@@ -165,6 +168,8 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	defer cancel()
 
 	p, err := m.emailParams(ctx, user)
 	if err != nil {
@@ -202,6 +207,8 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 // the requested address and does not record a sent-mail claim.
 func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	defer m.wait()
+	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	defer cancel()
 
 	address, err := netmail.ParseAddress(recipient)
 	if err != nil {
@@ -286,6 +293,9 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 		}
 	}
+	if len(shoppingList.Recipes) == 0 {
+		return fmt.Errorf("shopping list %q contains no recipes", paramsHash)
+	}
 
 	if err := m.prepareRecipeImages(ctx, shoppingList.Recipes); err != nil {
 		return fmt.Errorf("prepare recipe images: %w", err)
@@ -318,7 +328,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	}
 	// client.Request, _ = sendgrid.SetDataResidency(client.Request, "eu")
 	// uncomment the above line if you are sending mail using a regional EU subuser
-	response, err := m.client.Send(message)
+	response, err := m.client.SendWithContext(ctx, message)
 	if err != nil {
 		return fmt.Errorf("send email to %q: %w", user.Email[0], err)
 	}
@@ -381,15 +391,9 @@ func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error
 	return nil
 }
 
+// recipeEmailSubject formats a subject for a validated, non-empty shopping list.
 func recipeEmailSubject(shoppingList ai.ShoppingList) string {
-	const (
-		prefix          = "🍽️ "
-		maxSubjectRunes = 60
-	)
-	if len(shoppingList.Recipes) == 0 {
-		return prefix + "Your recipes"
-	}
-
+	const maxSubjectRunes = 60
 	title := strings.TrimSpace(shoppingList.Recipes[0].Title)
 	if title == "" {
 		title = "Your recipes"
@@ -398,11 +402,11 @@ func recipeEmailSubject(shoppingList ai.ShoppingList) string {
 	if remaining := len(shoppingList.Recipes) - 1; remaining > 0 {
 		suffix = fmt.Sprintf(" +%d", remaining)
 	}
-	available := maxSubjectRunes - utf8.RuneCountInString(prefix+suffix)
+	available := maxSubjectRunes - utf8.RuneCountInString(suffix)
 	if utf8.RuneCountInString(title) > available {
 		titleRunes := []rune(title)
 		title = string(titleRunes[:available-1]) + "…"
 	}
 
-	return prefix + title + suffix
+	return title + suffix
 }
