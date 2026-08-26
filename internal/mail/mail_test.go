@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -143,9 +144,14 @@ type capturingMailGenerator struct {
 	ctx context.Context
 }
 
-type fakeMailImageGenerator struct{}
+type fakeMailImageGenerator struct {
+	err error
+}
 
-func (fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
+func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	return &ai.GeneratedImage{Body: bytes.NewReader([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})}, nil
 }
 
@@ -211,6 +217,23 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	for key := range fc.data {
 		if strings.HasPrefix(key, mailSentPrefix) {
 			t.Fatalf("did not expect sent claim to be recorded for non-success status; got key %q", key)
+		}
+	}
+}
+
+func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
+	m := &mailer{
+		imageGenerator: fakeMailImageGenerator{err: errors.New("image service unavailable")},
+		imageStore:     recipes.NewImageStore(cache.NewInMemoryCache()),
+	}
+
+	err := m.prepareRecipeImages(context.Background(), []ai.Recipe{{Title: "Test Recipe"}})
+	if err == nil {
+		t.Fatal("expected image generation error")
+	}
+	for _, want := range []string{"Test Recipe", "image service unavailable"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error to contain %q, got %q", want, err)
 		}
 	}
 }
@@ -413,52 +436,7 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	}
 }
 
-func TestForceSendBypassesPreferencesAndDoesNotRecordSentClaim(t *testing.T) {
-	fc := newFakeMailCache(t)
-	location := testMailLocation()
-	client := &fakeMailClient{
-		response: &rest.Response{StatusCode: 202, Body: "accepted"},
-	}
-	waited := false
-	m := &mailer{
-		cache: fc,
-		locServer: &fakeMailLocServer{
-			location: location,
-		},
-		client:             client,
-		publicOrigin:       "https://careme.cooking",
-		wait:               func() { waited = true },
-		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
-	}
-	configureFakeMailImages(m)
-
-	err := m.ForceSend(context.Background(), utypes.User{
-		ID:            "user-1",
-		MailOptIn:     false,
-		Email:         []string{"u1@example.com"},
-		FavoriteStore: "123",
-		ShoppingDay:   "not today",
-	})
-	if err != nil {
-		t.Fatalf("ForceSend() error = %v", err)
-	}
-	if client.last == nil {
-		t.Fatal("expected forced email to be sent")
-	}
-	if fc.existsCalls != 0 {
-		t.Fatalf("expected forced email to skip sent-mail lookup, got %d lookups", fc.existsCalls)
-	}
-	for key := range fc.data {
-		if strings.HasPrefix(key, mailSentPrefix) {
-			t.Fatalf("did not expect forced email to record sent claim; got key %q", key)
-		}
-	}
-	if !waited {
-		t.Fatal("expected ForceSend to wait for background recipe work")
-	}
-}
-
-func TestForceSendToEmailUsesProfileAndTargetsOnlyRequestedAddress(t *testing.T) {
+func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T) {
 	fc := newFakeMailCache(t)
 	location := testMailLocation()
 	client := &fakeMailClient{
@@ -471,6 +449,7 @@ func TestForceSendToEmailUsesProfileAndTargetsOnlyRequestedAddress(t *testing.T)
 		FavoriteStore: "123",
 		ShoppingDay:   "not today",
 	}}
+	waited := false
 	m := &mailer{
 		cache:       fc,
 		userStorage: store,
@@ -479,7 +458,7 @@ func TestForceSendToEmailUsesProfileAndTargetsOnlyRequestedAddress(t *testing.T)
 		},
 		client:             client,
 		publicOrigin:       "https://careme.cooking",
-		wait:               func() {},
+		wait:               func() { waited = true },
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
 	configureFakeMailImages(m)
@@ -499,6 +478,17 @@ func TestForceSendToEmailUsesProfileAndTargetsOnlyRequestedAddress(t *testing.T)
 	}
 	if got := client.last.Personalizations[0].To[0].Address; got != "u1@example.com" {
 		t.Fatalf("expected only requested recipient, got %q", got)
+	}
+	if fc.existsCalls != 0 {
+		t.Fatalf("expected forced email to skip sent-mail lookup, got %d lookups", fc.existsCalls)
+	}
+	for key := range fc.data {
+		if strings.HasPrefix(key, mailSentPrefix) {
+			t.Fatalf("did not expect forced email to record sent claim; got key %q", key)
+		}
+	}
+	if !waited {
+		t.Fatal("expected ForceSendToEmail to wait for background recipe work")
 	}
 }
 

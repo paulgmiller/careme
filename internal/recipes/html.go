@@ -73,7 +73,6 @@ type shoppingRecipeView struct {
 type mailRecipeView struct {
 	ai.Recipe
 	Hash            string
-	HasImage        bool
 	PropertyDisplay recipePropertyDisplay
 }
 
@@ -449,19 +448,6 @@ func latestThreadResponseID(thread []RecipeThreadEntry) string {
 
 // drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsubscribeURL string, writer io.Writer) error {
-	return FormatMailWithImages(p, l, publicOrigin, unsubscribeURL, nil, writer)
-}
-
-// FormatMailWithImages renders a recipe email with public image URLs for the
-// recipe hashes marked as available.
-func FormatMailWithImages(
-	p *generatorParams,
-	l ai.ShoppingList,
-	publicOrigin string,
-	unsubscribeURL string,
-	availableImages map[string]bool,
-	writer io.Writer,
-) error {
 	recipeViews := make([]mailRecipeView, 0, len(l.Recipes))
 	for _, recipe := range l.Recipes {
 		hash := recipe.ComputeHash()
@@ -470,7 +456,6 @@ func FormatMailWithImages(
 		recipeViews = append(recipeViews, mailRecipeView{
 			Recipe:          recipe,
 			Hash:            hash,
-			HasImage:        availableImages[hash],
 			PropertyDisplay: propertyDisplay,
 		})
 	}

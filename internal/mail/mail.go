@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -25,6 +24,7 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	"careme/internal/parallelism"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
@@ -197,23 +197,12 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 }
 
-// ForceSend sends the current recipe email without checking the user's opt-in,
-// shopping day, or sent-mail claim. It does not record a sent-mail claim, so an
-// admin test cannot suppress the user's normally scheduled message.
-func (m *mailer) ForceSend(ctx context.Context, user utypes.User) error {
+// ForceSendToEmail sends today's recipe email to an existing Careme user,
+// regardless of their opt-in, shopping day, or sent-mail claim. It targets only
+// the requested address and does not record a sent-mail claim.
+func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	defer m.wait()
 
-	p, err := m.emailParams(ctx, user)
-	if err != nil {
-		return err
-	}
-	return m.deliverEmail(ctx, user, p)
-}
-
-// ForceSendToEmail sends today's recipe email to an existing Careme user,
-// targeting only the requested address even when the profile has more household
-// recipients.
-func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	address, err := netmail.ParseAddress(recipient)
 	if err != nil {
 		return fmt.Errorf("invalid recipient email %q: %w", recipient, err)
@@ -225,7 +214,11 @@ func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 
 	forcedUser := *user
 	forcedUser.Email = []string{address.Address}
-	return m.ForceSend(ctx, forcedUser)
+	p, err := m.emailParams(ctx, forcedUser)
+	if err != nil {
+		return err
+	}
+	return m.deliverEmail(ctx, forcedUser, p)
 }
 
 func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.GeneratorParams, error) {
@@ -294,7 +287,9 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		}
 	}
 
-	availableImages := m.prepareRecipeImages(ctx, shoppingList.Recipes)
+	if err := m.prepareRecipeImages(ctx, shoppingList.Recipes); err != nil {
+		return fmt.Errorf("prepare recipe images: %w", err)
+	}
 
 	var buf bytes.Buffer
 	unsubscribeParams := url.Values{
@@ -302,7 +297,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMailWithImages(p, *shoppingList, m.publicOrigin, unsubscribeURL, availableImages, &buf); err != nil {
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		return fmt.Errorf("format recipe email: %w", err)
 	}
 
@@ -356,27 +351,14 @@ func sentMailKey(userID, paramsHash string) string {
 	return mailSentPrefix + paramsHash + "/" + userID
 }
 
-func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) map[string]bool {
-	imageHashes := make([]string, len(recipeList))
-	var wg sync.WaitGroup
-	for i, recipe := range recipeList {
-		wg.Go(func() {
-			if err := m.prepareRecipeImage(ctx, recipe); err != nil {
-				slog.WarnContext(ctx, "recipe image omitted from email", "recipe", recipe.Title, "error", err)
-				return
-			}
-			imageHashes[i] = recipe.ComputeHash()
-		})
-	}
-	wg.Wait()
-
-	availableImages := make(map[string]bool, len(imageHashes))
-	for _, hash := range imageHashes {
-		if hash != "" {
-			availableImages[hash] = true
+func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) error {
+	_, err := parallelism.MapWithErrors(recipeList, func(recipe ai.Recipe) (struct{}, error) {
+		if err := m.prepareRecipeImage(ctx, recipe); err != nil {
+			return struct{}{}, fmt.Errorf("%q: %w", recipe.Title, err)
 		}
-	}
-	return availableImages
+		return struct{}{}, nil
+	})
+	return err
 }
 
 func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error {
