@@ -525,7 +525,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	s.spin(ctx, w, r, generationStatus{})
+	spin(ctx, w, r, generationStatus{})
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1136,7 +1136,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			generationFailed(ctx, w, r, hashParam, "recipe start failure")
 			return
 		}
-		s.spin(ctx, w, r, generationStatus{
+		spin(ctx, w, r, generationStatus{
 			Message: "We couldn't check progress just now. We'll try again automatically.",
 		})
 		return
@@ -1153,7 +1153,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	s.spin(ctx, w, r, status)
+	spin(ctx, w, r, status)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1499,7 +1499,7 @@ func newSpinnerData(ctx context.Context) spinnerData {
 	}
 }
 
-func (s *server) spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status generationStatus) {
+func spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status generationStatus) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	data := newSpinnerData(ctx)
