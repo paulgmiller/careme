@@ -32,6 +32,9 @@
 - For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
 - Nothing is used outside of this repository so if a method is only used in tests it can be removed even if its public
 - Do not use variadic parameters to fake optional constructor arguments. Pass dependencies explicitly, or introduce a config/options struct when a constructor needs several optional settings.
+- Prefer a single, strong success contract over partial-success plumbing. If an output component is required, return a contextual error when it cannot be produced; do not silently omit it, substitute a fallback, or add availability flags unless partial success is an explicit product requirement.
+- Once an upstream function guarantees an invariant, let downstream code assume it. Remove redundant presence maps, booleans, nil checks, conditional template branches, and fallback paths.
+- Reserve best-effort behavior for explicitly optional work, and make that optionality clear in names, types, and tests.
 
 ## Testing Guidelines
 - Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.

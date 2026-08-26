@@ -49,6 +49,16 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
+## Mail placement tests
+
+Send today's real recipe email through the production sender to test Gmail placement:
+
+```sh
+go run ./cmd/mailtest -to you@gmail.com
+```
+
+This requires `SENDGRID_API_KEY` and an existing Careme profile for the address with a favorite store. It sends only to the requested address, ignoring the profile's opt-in, shopping day, and previous-send record without changing the next scheduled send.
+
 ## Ingredient grade review
 
 Run the small local review app with:

@@ -92,7 +92,7 @@ type regens interface {
 
 type server struct {
 	recipeio
-	imageio
+	ImageStore
 	imagegen           ImageGen
 	generationStatuses *statusStore
 	cfg                *config.Config
@@ -115,7 +115,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	statusStore := StatusStore(c)
 	return &server{
 		recipeio:           IO(c),
-		imageio:            imageio{Cache: imageCache},
+		ImageStore:         NewImageStore(imageCache),
 		imagegen:           imagegen,
 		generationStatuses: statusStore,
 		cfg:                cfg,
@@ -1438,9 +1438,8 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams) error {
 }
 
 // Almost same as kick generation except
-// 1 doesn't bother to write status.
-// 2 saves params and skips if already there
-// 3 generate images.
+// 1 saves params and skips if already there.
+// 2 generates images.
 // Could try and consolidate and
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
 	s.wg.Go(func() {
@@ -1456,16 +1455,26 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 			return
 		}
 		hash := p.Hash()
+		if err := s.generationStatuses.Start(ctx, hash); err != nil {
+			slog.ErrorContext(ctx, "failed to start campaign recipe generation", "hash", hash, "error", err)
+			return
+		}
 
 		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record campaign recipe generation failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record campaign shopping list save failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 
