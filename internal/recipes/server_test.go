@@ -1474,19 +1474,21 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 
 func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
 
 	hash := "spinner-hash"
 	status := "Baby we working"
-	err := s.generationStatuses.Start(t.Context(), hash)
+	statusStore := StatusStore(cacheStore)
+	err := statusStore.Start(t.Context(), hash)
 	require.NoError(t, err)
-	err = s.generationStatuses.Update(t.Context(), hash, status)
+	err = statusStore.Update(t.Context(), hash, status)
+	require.NoError(t, err)
+	genstatus, err := statusStore.Load(t.Context(), hash)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 
-	s.spin(t.Context(), rr, req, hash)
+	spin(t.Context(), rr, req, genstatus)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -1498,20 +1500,23 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
 
 	hash := "spinner-hash"
 	status := "Still chopping"
-	err := s.generationStatuses.Start(t.Context(), hash)
+	statusStore := StatusStore(cacheStore)
+
+	err := statusStore.Start(t.Context(), hash)
 	require.NoError(t, err)
-	err = s.generationStatuses.Update(t.Context(), hash, status)
+	err = statusStore.Update(t.Context(), hash, status)
+	require.NoError(t, err)
+	genstatus, err := statusStore.Load(t.Context(), hash)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 	req.Header.Set("HX-Request", "true")
 
-	s.spin(t.Context(), rr, req, hash)
+	spin(t.Context(), rr, req, genstatus)
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
