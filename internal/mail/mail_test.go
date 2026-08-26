@@ -144,6 +144,22 @@ func (f *fakeMailClient) SendWithContext(ctx context.Context, msg *sgmail.SGMail
 
 type capturingMailGenerator struct {
 	ctx context.Context
+	err error
+}
+
+type fakeGenerationStatusStore struct {
+	startedHash string
+	failedErr   error
+}
+
+func (f *fakeGenerationStatusStore) Start(_ context.Context, hash string) error {
+	f.startedHash = hash
+	return nil
+}
+
+func (f *fakeGenerationStatusStore) Fail(_ context.Context, _ string, err error) error {
+	f.failedErr = err
+	return nil
 }
 
 type fakeMailImageGenerator struct {
@@ -164,6 +180,9 @@ func configureFakeMailImages(m *mailer) {
 
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, _ *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 	g.ctx = ctx
+	if g.err != nil {
+		return nil, g.err
+	}
 	return &ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{Title: "Generated Test Recipe"},
@@ -265,6 +284,32 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 	}
 	if client.last != nil {
 		t.Fatal("did not expect an empty shopping list to be sent")
+	}
+}
+
+func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
+	fc := newFakeMailCache(t)
+	fc.missShoppingList = true
+	location := testMailLocation()
+	generationErr := errors.New("plan exploded")
+	generationStatuses := &fakeGenerationStatusStore{}
+	m := &mailer{
+		cache:              fc,
+		generator:          &capturingMailGenerator{err: generationErr},
+		generationStatuses: generationStatuses,
+	}
+
+	err := m.deliverEmail(context.Background(), utypes.User{
+		ID: "user-1",
+	}, recipes.DefaultParams(location, time.Now()))
+	if !errors.Is(err, generationErr) {
+		t.Fatalf("expected generation error, got %v", err)
+	}
+	if generationStatuses.startedHash == "" {
+		t.Fatal("expected generation status to be started")
+	}
+	if !errors.Is(generationStatuses.failedErr, generationErr) {
+		t.Fatalf("expected generation failure to be recorded, got %v", generationStatuses.failedErr)
 	}
 }
 
@@ -428,8 +473,10 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	fc.missShoppingList = true
 	location := testMailLocation()
 	generator := &capturingMailGenerator{}
+	generationStatuses := &fakeGenerationStatusStore{}
 	m := &mailer{
-		cache: fc,
+		cache:              fc,
+		generationStatuses: generationStatuses,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
@@ -452,6 +499,9 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 
 	if generator.ctx == nil {
 		t.Fatal("expected generator to be called")
+	}
+	if generationStatuses.startedHash == "" {
+		t.Fatal("expected generation status to be started before generating recipes")
 	}
 	sessionID, ok := logsetup.SessionIDFromContext(generator.ctx)
 	if !ok {

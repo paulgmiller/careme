@@ -64,6 +64,11 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error)
 }
 
+type generationStatusStore interface {
+	Start(ctx context.Context, hash string) error
+	Fail(ctx context.Context, hash string, err error) error
+}
+
 type imageGenerator interface {
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 }
@@ -82,6 +87,7 @@ type mailer struct {
 	cache              cache.Cache
 	userStorage        userStore
 	generator          generator // interface requires making params public
+	generationStatuses generationStatusStore
 	imageGenerator     imageGenerator
 	imageStore         imageStore
 	locServer          locServer
@@ -110,9 +116,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
-	ss := recipes.StatusStore(cacheStore)
+	generationStatuses := recipes.StatusStore(cacheStore)
 	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cacheStore))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -134,6 +140,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		cache:              cacheStore,
 		userStorage:        userStorage,
 		generator:          generator,
+		generationStatuses: generationStatuses,
 		imageGenerator:     aiClient,
 		imageStore:         recipes.NewImageStore(imageCache),
 		locServer:          locationserver,
@@ -270,6 +277,9 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
 		}
+		if err := m.generationStatuses.Start(ctx, paramsHash); err != nil {
+			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
+		}
 
 		// TODO refactor with recipes/server.go
 		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
@@ -287,9 +297,15 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
+			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", paramsHash, "error", statusErr)
+			}
 			return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
 		}
 		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
+			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", paramsHash, "error", statusErr)
+			}
 			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 		}
 	}

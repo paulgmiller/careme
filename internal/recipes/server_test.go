@@ -1447,6 +1447,9 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err := s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
+	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.False(t, status.StartedAt.IsZero())
 }
 
 func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *testing.T) {
