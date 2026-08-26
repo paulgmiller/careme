@@ -215,6 +215,69 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	}
 }
 
+func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
+	t.Run("not opted in", func(t *testing.T) {
+		m := &mailer{}
+		m.sendEmail(context.Background(), utypes.User{ID: "user-1"})
+	})
+
+	location := testMailLocation()
+	today, err := recipes.StoreToDate(context.Background(), time.Now(), location)
+	if err != nil {
+		t.Fatalf("failed to resolve store date: %v", err)
+	}
+
+	t.Run("wrong shopping day", func(t *testing.T) {
+		fc := newFakeMailCache(t)
+		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+		m := &mailer{
+			cache:     fc,
+			locServer: &fakeMailLocServer{location: location},
+			client:    client,
+		}
+		m.sendEmail(context.Background(), utypes.User{
+			ID:            "user-1",
+			MailOptIn:     true,
+			Email:         []string{"u1@example.com"},
+			FavoriteStore: "123",
+			ShoppingDay:   today.AddDate(0, 0, 1).Weekday().String(),
+		})
+
+		if client.last != nil {
+			t.Fatal("did not expect an email on the wrong shopping day")
+		}
+		if fc.existsCalls != 0 {
+			t.Fatalf("expected shopping-day check before sent-mail lookup, got %d lookups", fc.existsCalls)
+		}
+	})
+
+	t.Run("already sent", func(t *testing.T) {
+		fc := newFakeMailCache(t)
+		paramsHash := recipes.DefaultParams(location, today).Hash()
+		fc.data[sentMailKey("user-1", paramsHash)] = "already sent"
+		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+		m := &mailer{
+			cache:     fc,
+			locServer: &fakeMailLocServer{location: location},
+			client:    client,
+		}
+		m.sendEmail(context.Background(), utypes.User{
+			ID:            "user-1",
+			MailOptIn:     true,
+			Email:         []string{"u1@example.com"},
+			FavoriteStore: "123",
+			ShoppingDay:   today.Weekday().String(),
+		})
+
+		if client.last != nil {
+			t.Fatal("did not expect an already-sent email to be delivered again")
+		}
+		if fc.existsCalls != 1 {
+			t.Fatalf("expected one sent-mail lookup, got %d", fc.existsCalls)
+		}
+	})
+}
+
 func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	fc := newFakeMailCache(t)
 	location := testMailLocation()

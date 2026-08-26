@@ -161,8 +161,39 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
-	if err := m.deliverEmail(ctx, user, false); err != nil {
+	if !user.MailOptIn {
+		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
+		return
+	}
+
+	p, err := m.emailParams(ctx, user)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to prepare user email", "user", user.ID, "error", err)
+		return
+	}
+
+	shoppingDay, _ := utypes.ParseWeekday(user.ShoppingDay)
+	if p.Date.Weekday() != shoppingDay {
+		return
+	}
+
+	paramsHash := p.Hash()
+	alreadySent, err := m.cache.Exists(ctx, sentMailKey(user.ID, paramsHash))
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to check sent-mail status", "user", user.ID, "params_hash", paramsHash, "error", err)
+		return
+	}
+	if alreadySent {
+		slog.InfoContext(ctx, "already emailed user for params hash", "user", user.ID, "params_hash", paramsHash)
+		return
+	}
+
+	if err := m.deliverEmail(ctx, user, p); err != nil {
 		slog.ErrorContext(ctx, "failed to send user email", "user", user.ID, "error", err)
+		return
+	}
+	if err := m.recordSentClaim(ctx, user.ID, paramsHash); err != nil {
+		slog.ErrorContext(ctx, "failed to record sent-mail claim", "user", user.ID, "params_hash", paramsHash, "error", err)
 	}
 }
 
@@ -172,7 +203,11 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 func (m *mailer) ForceSend(ctx context.Context, user utypes.User) error {
 	defer m.wait()
 
-	return m.deliverEmail(ctx, user, true)
+	p, err := m.emailParams(ctx, user)
+	if err != nil {
+		return err
+	}
+	return m.deliverEmail(ctx, user, p)
 }
 
 // ForceSendToEmail sends today's recipe email to an existing Careme user,
@@ -193,58 +228,36 @@ func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	return m.ForceSend(ctx, forcedUser)
 }
 
-func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool) error {
+func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.GeneratorParams, error) {
+	if len(user.Email) == 0 {
+		return nil, fmt.Errorf("user %q has no email", user.ID)
+	}
+	if user.FavoriteStore == "" {
+		return nil, fmt.Errorf("user %q has no favorite store", user.ID)
+	}
+
+	l, err := m.locServer.GetLocationByID(ctx, user.FavoriteStore)
+	if err != nil {
+		return nil, fmt.Errorf("get location %q: %w", user.FavoriteStore, err)
+	}
+
+	date, err := recipes.StoreToDate(ctx, time.Now(), l)
+	if err != nil {
+		return nil, fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
+	}
+	return recipes.DefaultParams(l, date), nil
+}
+
+func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
 	ctx = logsetup.WithSessionID(ctx, "mail")
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
-	if !force && !user.MailOptIn {
-		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
-		return nil
-	}
-
-	if len(user.Email) == 0 {
-		return fmt.Errorf("user %q has no email", user.ID)
-	}
-
-	if user.FavoriteStore == "" {
-		return fmt.Errorf("user %q has no favorite store", user.ID)
-	}
-
-	l, err := m.locServer.GetLocationByID(ctx, user.FavoriteStore)
-	if err != nil {
-		return fmt.Errorf("get location %q: %w", user.FavoriteStore, err)
-	}
-
-	date, err := recipes.StoreToDate(ctx, time.Now(), l)
-	if err != nil {
-		return fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
-	}
-
-	uday, _ := utypes.ParseWeekday(user.ShoppingDay)
-
-	if !force && date.Weekday() != uday {
-		return nil
-	}
-
-	p := recipes.DefaultParams(l, date)
 	// p.UserID = user.ID
 
 	paramsHash := p.Hash()
-	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
-	if !force {
-		alreadySent, err := m.cache.Exists(ctx, sentKey)
-		if err != nil {
-			return fmt.Errorf("check sent-mail status for user %q: %w", user.ID, err)
-		}
-		if alreadySent {
-			slog.InfoContext(ctx, "already emailed user for params hash", "user", user.ID, "params_hash", paramsHash)
-			return nil
-		}
-	}
-
 	rio := recipes.IO(m.cache)
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
@@ -321,23 +334,26 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool)
 		return fmt.Errorf("SendGrid rejected email to %q with status %d: %s", user.Email[0], response.StatusCode, response.Body)
 	}
 	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
-	if force {
-		return nil
-	}
+	return nil
+}
 
+func (m *mailer) recordSentClaim(ctx context.Context, userID, paramsHash string) error {
 	sentClaim, err := json.Marshal(mailSentClaim{
 		SentAt:     time.Now().UTC(),
-		UserID:     user.ID,
+		UserID:     userID,
 		ParamsHash: paramsHash,
 	})
 	if err != nil {
-		return fmt.Errorf("encode sent-mail claim for user %q: %w", user.ID, err)
+		return fmt.Errorf("encode claim: %w", err)
 	}
-	if err := m.cache.Put(ctx, sentKey, string(sentClaim), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
-		return fmt.Errorf("record sent-mail claim for user %q: %w", user.ID, err)
+	if err := m.cache.Put(ctx, sentMailKey(userID, paramsHash), string(sentClaim), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		return err
 	}
-
 	return nil
+}
+
+func sentMailKey(userID, paramsHash string) string {
+	return mailSentPrefix + paramsHash + "/" + userID
 }
 
 func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) map[string]bool {
