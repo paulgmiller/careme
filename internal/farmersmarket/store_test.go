@@ -3,7 +3,7 @@ package farmersmarket
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"image"
 	"image/color"

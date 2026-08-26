@@ -3,7 +3,7 @@ package brightdata
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -178,7 +178,7 @@ type scrapePayload struct {
 type deliverSnapshotPayload struct {
 	Deliver   azureDeliveryPayload `json:"deliver"`
 	Compress  bool                 `json:"compress"`
-	BatchSize int                  `json:"batch_size,omitempty"`
+	BatchSize int                  `json:"batch_size,omitempty,omitzero"`
 }
 
 type azureDeliveryPayload struct {

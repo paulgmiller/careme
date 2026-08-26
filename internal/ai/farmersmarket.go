@@ -2,7 +2,7 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -101,8 +101,25 @@ func farmersMarketIngredientSchema() map[string]any {
 		ExpandedStruct: true,
 	}
 	schema := r.Reflect(&farmersMarketIngredientResponse{})
-	raw, _ := json.Marshal(schema)
+	ingredientsSchema, ok := schema.Properties.Get("ingredients")
+	if !ok || ingredientsSchema.Items == nil || ingredientsSchema.Items.Properties == nil {
+		panic("farmers market ingredient array schema is missing")
+	}
+	priceSchema, ok := ingredientsSchema.Items.Properties.Get("price")
+	if !ok {
+		panic("farmers market price schema is missing")
+	}
+	// jsonschema_extras represents the nullable type as an override. Clear the
+	// reflected scalar type so the dependency emits one valid JSON member rather
+	// than duplicate "type" names, which JSON v2 intentionally rejects.
+	priceSchema.Type = ""
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		panic(fmt.Sprintf("marshal farmers market ingredient schema: %v", err))
+	}
 	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		panic(fmt.Sprintf("unmarshal farmers market ingredient schema: %v", err))
+	}
 	return out
 }

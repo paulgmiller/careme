@@ -3,7 +3,7 @@ package wholefoods
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -15,7 +15,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
+var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples(), json.Deterministic(true)))
 
 type CategoryClient interface {
 	Category(ctx context.Context, queryterm, store string) ([]product, error)

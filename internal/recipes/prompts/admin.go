@@ -2,7 +2,8 @@ package prompts
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -69,9 +70,7 @@ func adminPromptJSON(c cache.Cache, kind string, responseIDFromRequest func(*htt
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(record); err != nil {
+		if err := json.MarshalWrite(w, record, jsontext.WithIndent("  ")); err != nil {
 			slog.ErrorContext(r.Context(), "failed to encode prompt for admin json", "kind", kind, "hash", r.PathValue("hash"), "response_id", responseID, "error", err)
 		}
 	})
@@ -114,7 +113,7 @@ func promptRecordFromCache(ctx context.Context, c cache.Cache, responseID string
 	}()
 
 	var record ai.PromptRecord
-	if err := json.NewDecoder(promptReader).Decode(&record); err != nil {
+	if err := json.UnmarshalRead(promptReader, &record); err != nil {
 		return nil, fmt.Errorf("failed to decode prompt record: %w", err)
 	}
 	return &record, nil

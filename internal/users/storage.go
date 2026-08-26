@@ -2,7 +2,7 @@ package users
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -65,10 +65,8 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 			slog.Error("failed to close user reader", "error", err)
 		}
 	}()
-	decoder := json.NewDecoder(userBytes)
-
 	var user utypes.User
-	if err := decoder.Decode(&user); err != nil {
+	if err := json.UnmarshalRead(userBytes, &user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
 	return &user, nil

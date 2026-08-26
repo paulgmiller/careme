@@ -2,7 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"time"
 
@@ -32,7 +32,7 @@ func (rio recipeio) ThreadFromCache(ctx context.Context, hash string) ([]RecipeT
 	}()
 
 	var entries []RecipeThreadEntry
-	if err := json.NewDecoder(thread).Decode(&entries); err != nil {
+	if err := json.UnmarshalRead(thread, &entries); err != nil {
 		return nil, err
 	}
 	return entries, nil

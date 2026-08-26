@@ -3,7 +3,7 @@ package publix
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -149,7 +149,7 @@ func (c *SearchClient) StoreProductsSavings(ctx context.Context, opts StoreProdu
 	}
 
 	var graphQLResp storeProductsSavingsGraphQLResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 2*1024*1024)).Decode(&graphQLResp); err != nil {
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, 2*1024*1024), &graphQLResp); err != nil {
 		return nil, fmt.Errorf("decode publix savings response: %w", err)
 	}
 	if len(graphQLResp.Errors) > 0 {

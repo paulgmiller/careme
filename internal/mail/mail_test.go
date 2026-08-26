@@ -2,7 +2,7 @@ package mail
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"strings"

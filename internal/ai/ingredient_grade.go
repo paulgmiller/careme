@@ -3,7 +3,8 @@ package ai
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -232,7 +233,7 @@ func buildIngredientGradePrompt(items []InputIngredient) (string, error) {
 	}
 
 	// TSV here instead?
-	body, err := json.MarshalIndent(promptItems, "", "  ")
+	body, err := json.Marshal(promptItems, jsontext.WithIndent("  "))
 	if err != nil {
 		return "", fmt.Errorf("marshal ingredient batch: %w", err)
 	}

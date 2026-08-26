@@ -2,7 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -45,7 +45,7 @@ func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recip
 	}()
 
 	var singleRecipe ai.Recipe
-	err = json.NewDecoder(recipe).Decode(&singleRecipe)
+	err = json.UnmarshalRead(recipe, &singleRecipe)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 	}()
 
 	var list ai.ShoppingList
-	err = json.NewDecoder(shoppinglist).Decode(&list)
+	err = json.UnmarshalRead(shoppinglist, &list)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to read cached recipe for hash", "hash", hash, "error", err)
 		return nil, err
@@ -89,7 +89,7 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 	}()
 
 	var params generatorParams
-	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
+	if err := json.UnmarshalRead(paramsReader, &params); err != nil {
 		return nil, fmt.Errorf("failed to decode params: %w", err)
 	}
 	return &params, nil
@@ -108,7 +108,7 @@ func (rio recipeio) IngredientsFromCache(ctx context.Context, hash string) ([]ai
 	}()
 
 	var ingredients []ai.InputIngredient
-	if err := json.NewDecoder(ingredientBlob).Decode(&ingredients); err != nil {
+	if err := json.UnmarshalRead(ingredientBlob, &ingredients); err != nil {
 		return nil, err
 	}
 	return ingredients, nil

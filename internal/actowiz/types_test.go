@@ -1,7 +1,7 @@
 package actowiz
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"testing"
 )

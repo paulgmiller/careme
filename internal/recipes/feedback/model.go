@@ -2,7 +2,7 @@ package feedback
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"time"
@@ -15,7 +15,7 @@ import (
 
 type Feedback struct {
 	Cooked    bool      `json:"cooked"`
-	Stars     int       `json:"stars,omitempty"`
+	Stars     int       `json:"stars,omitempty,omitzero"`
 	Comment   string    `json:"comment,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -54,7 +54,7 @@ func (fio FeedbackIO) FeedbackFromCache(ctx context.Context, hash string) (*Feed
 	}()
 
 	var state Feedback
-	if err := json.NewDecoder(feedbackBlob).Decode(&state); err != nil {
+	if err := json.UnmarshalRead(feedbackBlob, &state); err != nil {
 		return nil, err
 	}
 	return &state, nil

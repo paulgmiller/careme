@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,7 +23,7 @@ type evalCase struct {
 	Instructions string               `json:"instructions,omitempty"`
 	Date         string               `json:"date"`
 	LastRecipes  []string             `json:"last_recipes,omitempty"`
-	Count        int                  `json:"count,omitempty"`
+	Count        int                  `json:"count,omitempty,omitzero"`
 }
 
 type menuPlanner interface {

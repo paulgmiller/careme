@@ -2,7 +2,7 @@ package publix
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -53,7 +53,7 @@ func LoadMissingStoreIDs(ctx context.Context, c cache.Cache) (map[string]struct{
 	}()
 
 	var stored []string
-	if err := json.NewDecoder(reader).Decode(&stored); err != nil {
+	if err := json.UnmarshalRead(reader, &stored); err != nil {
 		return nil, fmt.Errorf("decode missing store ids cache: %w", err)
 	}
 
@@ -118,7 +118,7 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 	}()
 
 	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return locationtypes.Location{}, fmt.Errorf("decode publix store summary: %w", err)
 	}
 	return locationtypes.Location{

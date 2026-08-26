@@ -5,7 +5,8 @@ package products
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -497,7 +498,7 @@ type ClientInterface interface {
 
 	// ProductGetID request
 	ProductGetID(ctx context.Context, id struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
@@ -514,7 +515,7 @@ func (c *Client) ProductGet(ctx context.Context, params *ProductGetParams, reqEd
 }
 
 func (c *Client) ProductGetID(ctx context.Context, id struct {
-	union json.RawMessage
+	Union jsontext.Value `json:",embed"`
 }, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProductGetIDRequest(c.Server, id, params)
 	if err != nil {
@@ -674,7 +675,7 @@ func NewProductGetRequest(server string, params *ProductGetParams) (*http.Reques
 
 // NewProductGetIDRequest generates requests for ProductGetID
 func NewProductGetIDRequest(server string, id struct {
-	union json.RawMessage
+	Union jsontext.Value `json:",embed"`
 }, params *ProductGetIDParams) (*http.Request, error) {
 	var err error
 
@@ -778,7 +779,7 @@ type ClientWithResponsesInterface interface {
 
 	// ProductGetIDWithResponse request
 	ProductGetIDWithResponse(ctx context.Context, id struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error)
 }
 
@@ -787,7 +788,7 @@ type ProductGetResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *ProductsProductsPayloadModel
 	JSON400      *struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}
 	JSON401 *APIErrorUnauthorized
 	JSON403 *APIErrorForbidden
@@ -815,7 +816,7 @@ type ProductGetIDResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *ProductsProductPayloadModel
 	JSON400      *struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}
 	JSON401 *APIErrorUnauthorized
 	JSON403 *APIErrorForbidden
@@ -849,7 +850,7 @@ func (c *ClientWithResponses) ProductGetWithResponse(ctx context.Context, params
 
 // ProductGetIDWithResponse request returning *ProductGetIDResponse
 func (c *ClientWithResponses) ProductGetIDWithResponse(ctx context.Context, id struct {
-	union json.RawMessage
+	Union jsontext.Value `json:",embed"`
 }, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error) {
 	rsp, err := c.ProductGetID(ctx, id, params, reqEditors...)
 	if err != nil {
@@ -881,7 +882,7 @@ func ParseProductGetResponse(rsp *http.Response) (*ProductGetResponse, error) {
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			union json.RawMessage
+			Union jsontext.Value `json:",embed"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -937,7 +938,7 @@ func ParseProductGetIDResponse(rsp *http.Response) (*ProductGetIDResponse, error
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			union json.RawMessage
+			Union jsontext.Value `json:",embed"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

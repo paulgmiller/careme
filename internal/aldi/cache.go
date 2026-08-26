@@ -2,7 +2,7 @@ package aldi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -46,7 +46,7 @@ func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup stor
 		}
 
 		var summary StoreSummary
-		decodeErr := json.NewDecoder(reader).Decode(&summary)
+		decodeErr := json.UnmarshalRead(reader, &summary)
 		_ = reader.Close()
 		if decodeErr != nil {
 			return fmt.Errorf("decode cached store summary: %w", decodeErr)
@@ -84,7 +84,7 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 	}()
 
 	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return locationtypes.Location{}, fmt.Errorf("decode ALDI store summary: %w", err)
 	}
 	return locationtypes.Location{

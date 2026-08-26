@@ -2,7 +2,7 @@ package heb
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -39,7 +39,7 @@ const (
 	seafoodStapleLimit = 60
 )
 
-var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+var defaultHEBStaplesSignature = lo.Must(json.Marshal(StapleCategories(), json.Deterministic(true)))
 
 type StapleCategory struct {
 	Name     string

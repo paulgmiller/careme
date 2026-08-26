@@ -5,7 +5,8 @@ package locations
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -628,7 +629,7 @@ type SearchLocationsResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *LocationsLocationSearchResponse
 	JSON400      *struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}
 	JSON401 *APIErrorUnauthorized
 	JSON404 *APIErrorNotFound
@@ -656,7 +657,7 @@ type LocationsGetByIDResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *LocationsLocationResponse
 	JSON400      *struct {
-		union json.RawMessage
+		Union jsontext.Value `json:",embed"`
 	}
 	JSON401 *APIErrorUnauthorized
 	JSON404 *APIErrorNotFound
@@ -720,7 +721,7 @@ func ParseSearchLocationsResponse(rsp *http.Response) (*SearchLocationsResponse,
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			union json.RawMessage
+			Union jsontext.Value `json:",embed"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -776,7 +777,7 @@ func ParseLocationsGetByIDResponse(rsp *http.Response) (*LocationsGetByIDRespons
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest struct {
-			union json.RawMessage
+			Union jsontext.Value `json:",embed"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

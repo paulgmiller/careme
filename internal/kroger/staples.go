@@ -2,7 +2,8 @@ package kroger
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,12 +18,12 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
+var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples(), json.Deterministic(true))))
 
 type staplesFilter struct {
 	Term   string   `json:"term,omitempty"`
 	Brands []string `json:"brands,omitempty"`
-	Frozen bool     `json:"frozen,omitempty"`
+	Frozen bool     `json:"frozen,omitempty,omitzero"`
 }
 
 type identityProvider struct{}
@@ -262,7 +263,7 @@ func productSearchErrorPayload(resp *products.ProductGetResponse) any {
 		return nil
 	}
 	if len(resp.Body) != 0 {
-		return json.RawMessage(resp.Body)
+		return jsontext.Value(resp.Body)
 	}
 	if resp.JSON400 != nil {
 		return resp.JSON400
@@ -277,7 +278,7 @@ func productSearchErrorPayload(resp *products.ProductGetResponse) any {
 }
 
 func mustJSONSignature(value any) string {
-	signature, err := json.Marshal(value)
+	signature, err := json.Marshal(value, json.Deterministic(true))
 	if err != nil {
 		panic(fmt.Errorf("marshal staples signature: %w", err))
 	}

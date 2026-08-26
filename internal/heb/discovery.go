@@ -3,7 +3,7 @@ package heb
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	htmlstd "html"
 	"io"
@@ -749,8 +749,6 @@ func numericString(value any) string {
 		if isDigits(v) {
 			return v
 		}
-	case json.Number:
-		return numericString(v.String())
 	case float64:
 		if math.Mod(v, 1) == 0 {
 			return strconv.FormatInt(int64(v), 10)
@@ -781,8 +779,6 @@ func stringValue(value any) string {
 		return ""
 	case string:
 		return strings.TrimSpace(v)
-	case json.Number:
-		return v.String()
 	case float64:
 		if math.Mod(v, 1) == 0 {
 			return strconv.FormatInt(int64(v), 10)
@@ -803,12 +799,6 @@ func numberPtr(value any) *float64 {
 		return nil
 	case float64:
 		f := v
-		return &f
-	case json.Number:
-		f, err := v.Float64()
-		if err != nil {
-			return nil
-		}
 		return &f
 	case string:
 		return parseFloat(v)

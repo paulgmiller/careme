@@ -3,12 +3,11 @@ package ai
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"reflect"
 	"strconv"
 	"strings"
 
@@ -112,10 +111,14 @@ func (r *Recipe) ComputeHash() string {
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
-	// Reflection keeps presence detection aligned with RecipeProperties when fields
-	// are added. The payload below remains explicit because its field order is part
-	// of the recipe identity contract.
-	if !reflect.ValueOf(r.Properties).IsZero() {
+	// Treat nil and empty cooking-method slices as the same recipe. JSON v2
+	// encodes nil slices as empty arrays, so storage round trips must not change
+	// recipe identity.
+	if r.Properties.TotalMinutes != 0 ||
+		r.Properties.Servings != 0 ||
+		r.Properties.EstimatedCostDollars != 0 ||
+		r.Properties.CaloriesPerServing != 0 ||
+		len(r.Properties.CookingMethods) != 0 {
 		values := []string{
 			strconv.Itoa(r.Properties.TotalMinutes),
 			strconv.Itoa(r.Properties.Servings),

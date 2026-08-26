@@ -2,7 +2,7 @@ package wegmans
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -106,7 +106,7 @@ func (c *Client) StoreSummary(ctx context.Context, storeNumber int) (*StoreSumma
 	}
 
 	var payload StoreResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &payload); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", endpoint, err)
 	}
 	slog.Info("fetched wegmans store summary", "store_number", storeNumber, "name", payload.Name)

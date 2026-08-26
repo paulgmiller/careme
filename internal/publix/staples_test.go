@@ -2,7 +2,7 @@ package publix
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"slices"
@@ -18,7 +18,7 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	t.Parallel()
 
 	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(StapleCategories())
+	want, err := json.Marshal(StapleCategories(), json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("marshal staple categories: %v", err)
 	}

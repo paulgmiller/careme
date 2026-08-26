@@ -2,7 +2,7 @@ package publix
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"path"
@@ -110,7 +110,7 @@ func LoadLatestAbck(ctx context.Context, c cache.Cache) (*AbckRecord, error) {
 	}()
 
 	var record AbckRecord
-	if err := json.NewDecoder(reader).Decode(&record); err != nil {
+	if err := json.UnmarshalRead(reader, &record); err != nil {
 		return nil, fmt.Errorf("decode abck record: %w", err)
 	}
 	record.Cookie = strings.TrimSpace(record.Cookie)

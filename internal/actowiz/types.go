@@ -2,7 +2,8 @@ package actowiz
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 )
@@ -24,17 +25,17 @@ type SafewayProduct struct {
 // custom marshalling mostly to handle fact that prices get "N/A" sometimes
 func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
 	type rawSafewayProduct struct {
-		StoreName          string          `json:"Store Name"`
-		ZipCode            string          `json:"Zip-Code"`
-		ProductName        string          `json:"Product Name"`
-		ID                 int64           `json:"ID"`
-		URL                string          `json:"URL"`
-		ProductDescription string          `json:"Product Description"`
-		MRP                json.RawMessage `json:"MRP"`
-		DiscountedPrice    json.RawMessage `json:"Discounted Price"`
-		Category           string          `json:"Category"`
-		SubCategory        string          `json:"Sub-Category"`
-		Availability       bool            `json:"Availability"`
+		StoreName          string         `json:"Store Name"`
+		ZipCode            string         `json:"Zip-Code"`
+		ProductName        string         `json:"Product Name"`
+		ID                 int64          `json:"ID"`
+		URL                string         `json:"URL"`
+		ProductDescription string         `json:"Product Description"`
+		MRP                jsontext.Value `json:"MRP"`
+		DiscountedPrice    jsontext.Value `json:"Discounted Price"`
+		Category           string         `json:"Category"`
+		SubCategory        string         `json:"Sub-Category"`
+		Availability       bool           `json:"Availability"`
 	}
 
 	var raw rawSafewayProduct
@@ -64,7 +65,7 @@ func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func float64Ptr(data json.RawMessage) (*float64, error) {
+func float64Ptr(data jsontext.Value) (*float64, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, nil

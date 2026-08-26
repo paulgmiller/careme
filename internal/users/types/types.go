@@ -22,7 +22,7 @@ type User struct {
 	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
 	FavoriteStore string    `json:"favorite_store,omitempty"`
 	ShoppingDay   string    `json:"shopping_day,omitempty"`
-	MailOptIn     bool      `json:"mail_opt_in,omitempty"`
+	MailOptIn     bool      `json:"mail_opt_in,omitempty,omitzero"`
 	Directive     string    `json:"directive,omitempty"`
 }
 

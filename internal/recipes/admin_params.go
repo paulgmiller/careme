@@ -1,7 +1,8 @@
 package recipes
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -29,9 +30,7 @@ func AdminParamsJSON(c cache.Cache) http.Handler {
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(params); err != nil {
+		if err := json.MarshalWrite(w, params, jsontext.WithIndent("  ")); err != nil {
 			slog.ErrorContext(r.Context(), "failed to encode params for admin json", "hash", hash, "error", err)
 		}
 	})

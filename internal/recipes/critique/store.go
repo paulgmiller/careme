@@ -2,7 +2,7 @@ package critique
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"careme/internal/ai"
@@ -36,7 +36,7 @@ func (s store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error
 	}()
 
 	var critique ai.RecipeCritique
-	err = json.NewDecoder(critiqueReader).Decode(&critique)
+	err = json.UnmarshalRead(critiqueReader, &critique)
 	return &critique, err
 }
 

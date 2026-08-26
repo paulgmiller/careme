@@ -2,7 +2,7 @@ package albertsons
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,7 +23,7 @@ var defaultStaplesSignature = lo.Must(json.Marshal(struct {
 }{
 	Categories: query.StapleCategories(),
 	Rows:       stapleRows,
-}))
+}, json.Deterministic(true)))
 
 type searchClient interface {
 	SearchAll(ctx context.Context, storeID, category string, opts query.SearchOptions) ([]query.PathwaySearchProduct, error)

@@ -2,7 +2,7 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"

@@ -2,7 +2,7 @@ package aldi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,7 +16,7 @@ func TestStoreSummariesBuildsRequestAndNormalizesResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedReq = r
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		if err := json.MarshalWrite(w, map[string]any{
 			"status": "SUCCESS",
 			"response": map[string]any{
 				"locations": []SourceLocation{
@@ -139,7 +139,7 @@ func TestInStoreShopIDInitializesSessionAndMatchesStoreAddress(t *testing.T) {
 			if got := r.URL.Query().Get("postal_code"); got != "40222" {
 				t.Fatalf("unexpected postal_code: %q", got)
 			}
-			if err := json.NewEncoder(w).Encode(map[string]any{
+			if err := json.MarshalWrite(w, map[string]any{
 				"shops": []Shop{
 					{
 						ID:                "38764",
@@ -208,7 +208,7 @@ func TestInStoreShopIDFallsBackWhenNoInstoreMatch(t *testing.T) {
 		case "/idp/v1/init":
 			w.WriteHeader(http.StatusOK)
 		case "/idp/v1/shops":
-			if err := json.NewEncoder(w).Encode(map[string]any{
+			if err := json.MarshalWrite(w, map[string]any{
 				"shops": []Shop{
 					{
 						ID:                "38764",

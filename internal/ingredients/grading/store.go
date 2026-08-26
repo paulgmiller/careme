@@ -2,7 +2,7 @@ package grading
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"careme/internal/ai"
@@ -40,7 +40,7 @@ func (s store) Load(ctx context.Context, key string) (*ai.InputIngredient, error
 	}()
 
 	var ingredient ai.InputIngredient
-	if err := json.NewDecoder(reader).Decode(&ingredient); err != nil {
+	if err := json.UnmarshalRead(reader, &ingredient); err != nil {
 		return nil, err
 	}
 	return &ingredient, nil

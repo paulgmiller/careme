@@ -2,7 +2,7 @@ package albertsons
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -70,7 +70,7 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 	}()
 
 	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return locationtypes.Location{}, fmt.Errorf("decode albertsons store summary: %w", err)
 	}
 	return locationtypes.Location{

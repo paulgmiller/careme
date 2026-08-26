@@ -2,7 +2,8 @@ package ingredients
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -51,9 +52,7 @@ func (s *server) handleIngredients(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(ingredients); err != nil {
+	if err := json.MarshalWrite(w, ingredients, jsontext.WithIndent("  ")); err != nil {
 		http.Error(w, "failed to encode ingredients", http.StatusInternalServerError)
 		return
 	}

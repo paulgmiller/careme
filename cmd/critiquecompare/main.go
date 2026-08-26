@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -469,7 +469,7 @@ func (s benchmarkStore) Load(ctx context.Context, hash string) (*ai.RecipeCritiq
 	}()
 
 	var critique ai.RecipeCritique
-	if err := json.NewDecoder(reader).Decode(&critique); err != nil {
+	if err := json.UnmarshalRead(reader, &critique); err != nil {
 		return nil, err
 	}
 	return &critique, nil

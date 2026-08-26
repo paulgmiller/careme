@@ -8,7 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
@@ -83,7 +83,7 @@ func NewClient(cfg config.WalmartConfig) (*Client, error) {
 
 // docshttps://walmart.io/docs/affiliates/v1/taxonomy
 // example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/taxonomy
-func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
+func (c *Client) Taxonomy(ctx context.Context) (jsontext.Value, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/taxonomy", nil)
 	if err != nil {
 		return nil, fmt.Errorf("build taxonomy request: %w", err)
@@ -111,7 +111,7 @@ func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("taxonomy request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if !json.Valid(body) {
+	if !jsontext.Value(body).IsValid() {
 		return nil, fmt.Errorf("taxonomy request succeeded but response was not valid JSON: %s", strings.TrimSpace(string(body)))
 	}
 
@@ -139,7 +139,7 @@ func (c *Client) SearchStores(ctx context.Context, coordinates geo.Coordinate) (
 	return stores, nil
 }
 
-func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) (json.RawMessage, error) {
+func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) (jsontext.Value, error) {
 	storesURL, err := url.Parse(c.baseURL + "/stores")
 	if err != nil {
 		return nil, fmt.Errorf("parse stores URL: %w", err)
@@ -177,7 +177,7 @@ func (c *Client) searchStoresWithParams(ctx context.Context, params url.Values) 
 	// this response means there are no nearby Walmart stores.
 	if resp.StatusCode == http.StatusBadRequest {
 		slog.InfoContext(ctx, "Walmart store search returned no stores", "status", resp.StatusCode)
-		return json.RawMessage(`[]`), nil
+		return jsontext.Value(`[]`), nil
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		slog.ErrorContext(ctx, "received Walmart stores response", "status", resp.StatusCode)

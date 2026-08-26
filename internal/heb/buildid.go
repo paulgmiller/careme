@@ -3,7 +3,7 @@ package heb
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	htmlstd "html"
@@ -127,7 +127,7 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 	}()
 
 	var record BuildIDRecord
-	if err := json.NewDecoder(reader).Decode(&record); err != nil {
+	if err := json.UnmarshalRead(reader, &record); err != nil {
 		return "", fmt.Errorf("decode heb build id record: %w", err)
 	}
 	buildID := strings.TrimSpace(record.BuildID)

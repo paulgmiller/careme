@@ -62,7 +62,7 @@ func TestRunEvalReturnsMenuPlanJSON(t *testing.T) {
 	output, ok := result["output"].(string)
 	require.True(t, ok)
 	assert.JSONEq(t, `{
-		"plans":[{"cuisine":"Italian","anchor_ingredient":"Chicken Thighs","technique":"sheet pan","side_vegetable":"Broccoli","fancy":false,"recipe_instructions":null}],
+		"plans":[{"cuisine":"Italian","anchor_ingredient":"Chicken Thighs","technique":"sheet pan","side_vegetable":"Broccoli","fancy":false,"recipe_instructions":[]}],
 		"chef_note_suggestion":"faster dinners"
 	}`, output)
 	assert.Equal(t, "store-1", planner.location.ID)

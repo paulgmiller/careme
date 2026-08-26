@@ -3,7 +3,7 @@ package aldi
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -262,7 +262,7 @@ func (c *Client) shopJSON(ctx context.Context, method, endpoint string, body io.
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+	if err := json.UnmarshalRead(resp.Body, dest); err != nil {
 		return fmt.Errorf("decode %s: %w", endpoint, err)
 	}
 	return nil
@@ -510,7 +510,7 @@ func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		return fmt.Errorf("fetch %s: status %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+	if err := json.UnmarshalRead(resp.Body, dest); err != nil {
 		return fmt.Errorf("decode %s: %w", endpoint, err)
 	}
 	return nil

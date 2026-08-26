@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -203,7 +203,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	}
 
 	var payload CollectionProductsPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &payload); err != nil {
 		return nil, fmt.Errorf("decode collection products response: %w", err)
 	}
 	slog.DebugContext(
@@ -276,7 +276,7 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 	}
 
 	var payload ItemsPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &payload); err != nil {
 		return nil, fmt.Errorf("decode items response: %w", err)
 	}
 	slog.DebugContext(ctx, "aldi graphql decoded", "operation", itemsOperationName, "items", len(payload.Data.Items), "errors", len(payload.Errors))

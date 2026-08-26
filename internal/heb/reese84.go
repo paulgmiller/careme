@@ -2,7 +2,7 @@ package heb
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"path"
@@ -64,7 +64,7 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*Reese84Record, erro
 	}()
 
 	var record Reese84Record
-	if err := json.NewDecoder(reader).Decode(&record); err != nil {
+	if err := json.UnmarshalRead(reader, &record); err != nil {
 		return nil, fmt.Errorf("decode heb reese84 record: %w", err)
 	}
 	record.Cookie = strings.TrimSpace(record.Cookie)

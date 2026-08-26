@@ -2,7 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -64,7 +64,7 @@ func (rio recipeio) loadRecipeSelection(ctx context.Context, userID, originHash 
 	}()
 
 	var selection recipeSelection
-	if err := json.NewDecoder(reader).Decode(&selection); err != nil {
+	if err := json.UnmarshalRead(reader, &selection); err != nil {
 		return recipeSelection{}, fmt.Errorf("failed to decode recipe selection: %w", err)
 	}
 	return selection, nil
