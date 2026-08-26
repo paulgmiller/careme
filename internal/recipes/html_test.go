@@ -405,13 +405,22 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	w := httptest.NewRecorder()
-	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
-	html := assertHTTPSuccess(t, w)
+	var w bytes.Buffer
+	recipeHash := list.Recipes[0].ComputeHash()
+	if err := FormatMailWithImages(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", map[string]string{
+		recipeHash: "careme-recipe-1",
+	}, &w); err != nil {
+		t.Fatalf("FormatMailWithImages() error = %v", err)
+	}
+	html := w.String()
 
 	isValidHTML(t, html)
-	if !strings.Contains(html, "quail") {
-		t.Error("HTML should contain 'quail'")
+	for _, want := range []string{
+		"Test Recipe", "cid:careme-recipe-1", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("mail HTML should contain %q", want)
+		}
 	}
 }
 

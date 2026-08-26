@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -34,13 +36,23 @@ type fakeMailCache struct {
 	shoppingListJSON string
 	missShoppingList bool
 	data             map[string]string
+	existsCalls      int
 }
 
 func newFakeMailCache(t *testing.T) *fakeMailCache {
 	t.Helper()
 	listJSON, err := json.Marshal(ai.ShoppingList{
 		Recipes: []ai.Recipe{
-			{Title: "Test Recipe"},
+			{
+				Title: "Test Recipe",
+				Properties: ai.RecipeProperties{
+					TotalMinutes:         30,
+					Servings:             4,
+					EstimatedCostDollars: 18,
+					CaloriesPerServing:   520,
+					CookingMethods:       []ai.CookingMethod{ai.CookingMethodOven},
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -67,6 +79,7 @@ func (c *fakeMailCache) Get(_ context.Context, key string) (io.ReadCloser, error
 }
 
 func (c *fakeMailCache) Exists(_ context.Context, key string) (bool, error) {
+	c.existsCalls++
 	_, ok := c.data[key]
 	return ok, nil
 }
@@ -103,6 +116,24 @@ type fakeMailClient struct {
 	last     *sgmail.SGMailV3
 }
 
+type fakeMailUserStore struct {
+	user        *utypes.User
+	lookupEmail string
+	err         error
+}
+
+func (s *fakeMailUserStore) List(_ context.Context) ([]utypes.User, error) {
+	if s.user == nil {
+		return nil, s.err
+	}
+	return []utypes.User{*s.user}, s.err
+}
+
+func (s *fakeMailUserStore) GetByEmail(email string) (*utypes.User, error) {
+	s.lookupEmail = email
+	return s.user, s.err
+}
+
 func (f *fakeMailClient) Send(msg *sgmail.SGMailV3) (*rest.Response, error) {
 	f.last = msg
 	return f.response, f.err
@@ -110,6 +141,17 @@ func (f *fakeMailClient) Send(msg *sgmail.SGMailV3) (*rest.Response, error) {
 
 type capturingMailGenerator struct {
 	ctx context.Context
+}
+
+type fakeMailImageGenerator struct{}
+
+func (fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
+	return &ai.GeneratedImage{Body: bytes.NewReader([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})}, nil
+}
+
+func configureFakeMailImages(m *mailer) {
+	m.imageGenerator = fakeMailImageGenerator{}
+	m.imageStore = recipes.NewImageStore(cache.NewInMemoryCache())
 }
 
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, _ *recipes.GeneratorParams) (*ai.ShoppingList, error) {
@@ -156,6 +198,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 		},
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
+	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -187,6 +230,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		publicOrigin:       "https://careme.cooking",
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
+	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -235,6 +279,21 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if got := client.last.Headers["List-Unsubscribe-Post"]; got != "List-Unsubscribe=One-Click" {
 		t.Fatalf("expected one-click List-Unsubscribe-Post header, got %q", got)
 	}
+	if got := client.last.Subject; got != "🍽️ Test Recipe" {
+		t.Fatalf("expected dynamic recipe subject, got %q", got)
+	}
+	if len(client.last.Attachments) != 1 {
+		t.Fatalf("expected one inline recipe image, got %d", len(client.last.Attachments))
+	}
+	if got := client.last.Attachments[0].ContentID; got != "careme-recipe-1" {
+		t.Fatalf("expected inline image content id, got %q", got)
+	}
+	htmlContent := client.last.Content[1].Value
+	for _, want := range []string{"cid:careme-recipe-1", "⏱️", "30 min", "👥&nbsp;4</span>", "💵", "$18", "❤️", "520 cal", "♨️", "Oven"} {
+		if !strings.Contains(htmlContent, want) {
+			t.Fatalf("expected email HTML to contain %q", want)
+		}
+	}
 }
 
 func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
@@ -254,6 +313,7 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 		publicOrigin:       "https://careme.cooking",
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
+	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -279,5 +339,142 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	}
 	if userID != "user-1" {
 		t.Fatalf("expected user id user-1, got %q", userID)
+	}
+}
+
+func TestForceSendBypassesPreferencesAndDoesNotRecordSentClaim(t *testing.T) {
+	fc := newFakeMailCache(t)
+	location := testMailLocation()
+	client := &fakeMailClient{
+		response: &rest.Response{StatusCode: 202, Body: "accepted"},
+	}
+	waited := false
+	m := &mailer{
+		cache: fc,
+		locServer: &fakeMailLocServer{
+			location: location,
+		},
+		client:             client,
+		publicOrigin:       "https://careme.cooking",
+		wait:               func() { waited = true },
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+	configureFakeMailImages(m)
+
+	err := m.ForceSend(context.Background(), utypes.User{
+		ID:            "user-1",
+		MailOptIn:     false,
+		Email:         []string{"u1@example.com"},
+		FavoriteStore: "123",
+		ShoppingDay:   "not today",
+	})
+	if err != nil {
+		t.Fatalf("ForceSend() error = %v", err)
+	}
+	if client.last == nil {
+		t.Fatal("expected forced email to be sent")
+	}
+	if fc.existsCalls != 0 {
+		t.Fatalf("expected forced email to skip sent-mail lookup, got %d lookups", fc.existsCalls)
+	}
+	for key := range fc.data {
+		if strings.HasPrefix(key, mailSentPrefix) {
+			t.Fatalf("did not expect forced email to record sent claim; got key %q", key)
+		}
+	}
+	if !waited {
+		t.Fatal("expected ForceSend to wait for background recipe work")
+	}
+}
+
+func TestForceSendToEmailUsesProfileAndTargetsOnlyRequestedAddress(t *testing.T) {
+	fc := newFakeMailCache(t)
+	location := testMailLocation()
+	client := &fakeMailClient{
+		response: &rest.Response{StatusCode: 202, Body: "accepted"},
+	}
+	store := &fakeMailUserStore{user: &utypes.User{
+		ID:            "user-1",
+		MailOptIn:     false,
+		Email:         []string{"u1@example.com", "household@example.com"},
+		FavoriteStore: "123",
+		ShoppingDay:   "not today",
+	}}
+	m := &mailer{
+		cache:       fc,
+		userStorage: store,
+		locServer: &fakeMailLocServer{
+			location: location,
+		},
+		client:             client,
+		publicOrigin:       "https://careme.cooking",
+		wait:               func() {},
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+	configureFakeMailImages(m)
+
+	err := m.ForceSendToEmail(context.Background(), "Paul <u1@example.com>")
+	if err != nil {
+		t.Fatalf("ForceSendToEmail() error = %v", err)
+	}
+	if store.lookupEmail != "u1@example.com" {
+		t.Fatalf("expected normalized parsed lookup email, got %q", store.lookupEmail)
+	}
+	if client.last == nil {
+		t.Fatal("expected recipe email to be sent")
+	}
+	if len(client.last.Personalizations) != 1 || len(client.last.Personalizations[0].To) != 1 {
+		t.Fatalf("expected one recipient, got %#v", client.last.Personalizations)
+	}
+	if got := client.last.Personalizations[0].To[0].Address; got != "u1@example.com" {
+		t.Fatalf("expected only requested recipient, got %q", got)
+	}
+}
+
+func TestRecipeEmailSubjectIsDynamicAndShort(t *testing.T) {
+	tests := []struct {
+		name     string
+		recipes  []ai.Recipe
+		expected string
+	}{
+		{
+			name:     "no recipes",
+			expected: "🍽️ Your recipes",
+		},
+		{
+			name:     "one recipe",
+			recipes:  []ai.Recipe{{Title: "Chicken piccata"}},
+			expected: "🍽️ Chicken piccata",
+		},
+		{
+			name: "multiple recipes",
+			recipes: []ai.Recipe{
+				{Title: "Chicken piccata"},
+				{Title: "Spring pasta"},
+				{Title: "Salmon bowls"},
+			},
+			expected: "🍽️ Chicken piccata +2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := recipeEmailSubject(ai.ShoppingList{Recipes: tt.recipes})
+			if got != tt.expected {
+				t.Fatalf("recipeEmailSubject() = %q, want %q", got, tt.expected)
+			}
+			if utf8.RuneCountInString(got) > 60 {
+				t.Fatalf("subject has %d runes, want at most 60: %q", utf8.RuneCountInString(got), got)
+			}
+		})
+	}
+
+	longTitle := strings.Repeat("Delicious dinner ", 10)
+	got := recipeEmailSubject(ai.ShoppingList{Recipes: []ai.Recipe{{Title: longTitle}, {Title: "Second"}}})
+	if utf8.RuneCountInString(got) != 60 {
+		t.Fatalf("truncated subject has %d runes, want 60: %q", utf8.RuneCountInString(got), got)
+	}
+	if !strings.HasSuffix(got, "… +1") {
+		t.Fatalf("expected truncated subject to preserve remaining count, got %q", got)
 	}
 }

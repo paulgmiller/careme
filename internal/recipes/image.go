@@ -18,19 +18,25 @@ func recipeImageCacheKey(hash string) string {
 	return recipeImagesCachePrefix + hash
 }
 
-type imageio struct {
-	Cache cache.Cache
+// ImageStore reads and writes generated recipe images in their dedicated cache.
+type ImageStore struct {
+	cache cache.Cache
 }
 
-func (iio imageio) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
-	return iio.Cache.Exists(ctx, recipeImageCacheKey(hash))
+// NewImageStore creates a recipe image store backed by c.
+func NewImageStore(c cache.Cache) ImageStore {
+	return ImageStore{cache: c}
 }
 
-func (iio imageio) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
-	return iio.Cache.Get(ctx, recipeImageCacheKey(hash))
+func (iio ImageStore) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
+	return iio.cache.Exists(ctx, recipeImageCacheKey(hash))
 }
 
-func (iio imageio) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
+func (iio ImageStore) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
+	return iio.cache.Get(ctx, recipeImageCacheKey(hash))
+}
+
+func (iio ImageStore) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
 	if image == nil {
 		return fmt.Errorf("recipe image is required")
 	}
@@ -38,5 +44,5 @@ func (iio imageio) SaveRecipeImage(ctx context.Context, hash string, image *ai.G
 		return fmt.Errorf("recipe image body is required")
 	}
 	// TODO store content meta data somewher?
-	return iio.Cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
+	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }

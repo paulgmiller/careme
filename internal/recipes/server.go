@@ -92,7 +92,7 @@ type regens interface {
 
 type server struct {
 	recipeio
-	imageio
+	ImageStore
 	imagegen           ImageGen
 	generationStatuses *statusStore
 	cfg                *config.Config
@@ -115,7 +115,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	statusStore := StatusStore(c)
 	return &server{
 		recipeio:           IO(c),
-		imageio:            imageio{Cache: imageCache},
+		ImageStore:         NewImageStore(imageCache),
 		imagegen:           imagegen,
 		generationStatuses: statusStore,
 		cfg:                cfg,

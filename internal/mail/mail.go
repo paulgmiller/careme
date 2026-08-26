@@ -6,14 +6,20 @@ package mail
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	netmail "net/mail"
 	"net/url"
 	"os"
+	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -57,10 +63,27 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error)
 }
 
+type imageGenerator interface {
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+}
+
+type imageStore interface {
+	RecipeImageExists(ctx context.Context, hash string) (bool, error)
+	RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error)
+	SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error
+}
+
+type userStore interface {
+	List(ctx context.Context) ([]utypes.User, error)
+	GetByEmail(email string) (*utypes.User, error)
+}
+
 type mailer struct {
 	cache              cache.Cache
-	userStorage        *users.Storage
+	userStorage        userStore
 	generator          generator // interface requires making params public
+	imageGenerator     imageGenerator
+	imageStore         imageStore
 	locServer          locServer
 	client             emailClient
 	publicOrigin       string
@@ -70,29 +93,33 @@ type mailer struct {
 
 // TODO share some of this with web.go? good for mocking?
 func NewMailer(cfg *config.Config) (*mailer, error) {
-	cache, err := cache.MakeCache()
+	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
 	}
+	imageCache, err := cache.EnsureCache(recipes.RecipeImagesContainer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create recipe image cache: %w", err)
+	}
 
-	userStorage := users.NewStorage(cache)
+	userStorage := users.NewStorage(cacheStore)
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	mc := critique.NewManager(cfg, cache, aiHTTPClient)
-	ig := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cache, ig)
+	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
+	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
+	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, ig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
-	ss := recipes.StatusStore(cache)
-	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cache))
+	ss := recipes.StatusStore(cacheStore)
+	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, ss, recipes.IO(cacheStore))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := locations.New(cfg, cache, centroids)
+	locationserver, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -104,9 +131,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	}
 
 	return &mailer{
-		cache:              cache,
+		cache:              cacheStore,
 		userStorage:        userStorage,
 		generator:          generator,
+		imageGenerator:     aiClient,
+		imageStore:         recipes.NewImageStore(imageCache),
 		locServer:          locationserver,
 		client:             sendgrid.NewSendClient(sendgridkey),
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
@@ -135,43 +164,72 @@ func (m *mailer) RunOnce(ctx context.Context) {
 }
 
 func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
+	if err := m.deliverEmail(ctx, user, false); err != nil {
+		slog.ErrorContext(ctx, "failed to send user email", "user", user.ID, "error", err)
+	}
+}
+
+// ForceSend sends the current recipe email without checking the user's opt-in,
+// shopping day, or sent-mail claim. It does not record a sent-mail claim, so an
+// admin test cannot suppress the user's normally scheduled message.
+func (m *mailer) ForceSend(ctx context.Context, user utypes.User) error {
+	defer m.wait()
+
+	return m.deliverEmail(ctx, user, true)
+}
+
+// ForceSendToEmail sends today's recipe email to an existing Careme user,
+// targeting only the requested address even when the profile has more household
+// recipients.
+func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
+	address, err := netmail.ParseAddress(recipient)
+	if err != nil {
+		return fmt.Errorf("invalid recipient email %q: %w", recipient, err)
+	}
+	user, err := m.userStorage.GetByEmail(address.Address)
+	if err != nil {
+		return fmt.Errorf("find Careme user by email %q: %w", address.Address, err)
+	}
+
+	forcedUser := *user
+	forcedUser.Email = []string{address.Address}
+	return m.ForceSend(ctx, forcedUser)
+}
+
+func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, force bool) error {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
 	ctx = logsetup.WithSessionID(ctx, "mail")
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
-	if !user.MailOptIn {
+	if !force && !user.MailOptIn {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
-		return
+		return nil
 	}
 
 	if len(user.Email) == 0 {
-		slog.ErrorContext(ctx, "user has no email", "user", user.ID)
-		return
+		return fmt.Errorf("user %q has no email", user.ID)
 	}
 
 	if user.FavoriteStore == "" {
-		slog.InfoContext(ctx, "no favorite store", "user", user.ID)
-		return
+		return fmt.Errorf("user %q has no favorite store", user.ID)
 	}
 
 	l, err := m.locServer.GetLocationByID(ctx, user.FavoriteStore)
 	if err != nil {
-		slog.ErrorContext(ctx, "error getting location", "location", user.FavoriteStore, "error", err.Error())
-		return
+		return fmt.Errorf("get location %q: %w", user.FavoriteStore, err)
 	}
 
 	date, err := recipes.StoreToDate(ctx, time.Now(), l)
 	if err != nil {
-		slog.ErrorContext(ctx, "error getting location timezone", "location", user.FavoriteStore, "error", err.Error())
-		return
+		return fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
 	}
 
 	uday, _ := utypes.ParseWeekday(user.ShoppingDay)
 
-	if date.Weekday() != uday {
-		return
+	if !force && date.Weekday() != uday {
+		return nil
 	}
 
 	p := recipes.DefaultParams(l, date)
@@ -179,28 +237,27 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 	paramsHash := p.Hash()
 	sentKey := mailSentPrefix + paramsHash + "/" + user.ID
-	alreadySent, err := m.cache.Exists(ctx, sentKey)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to check mail sent status", "user", user.ID, "params_hash", paramsHash, "error", err)
-		return
-	}
-	if alreadySent {
-		slog.InfoContext(ctx, "already emailed user for params hash", "user", user.ID, "params_hash", paramsHash)
-		return
+	if !force {
+		alreadySent, err := m.cache.Exists(ctx, sentKey)
+		if err != nil {
+			return fmt.Errorf("check sent-mail status for user %q: %w", user.ID, err)
+		}
+		if alreadySent {
+			slog.InfoContext(ctx, "already emailed user for params hash", "user", user.ID, "params_hash", paramsHash)
+			return nil
+		}
 	}
 
 	rio := recipes.IO(m.cache)
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
-			slog.ErrorContext(ctx, "failed to read shopping list from cache", "user", user.ID, "params_hash", paramsHash, "error", err)
-			return
+			return fmt.Errorf("read shopping list %q from cache: %w", paramsHash, err)
 		}
 
 		if err := rio.SaveParams(ctx, p); err != nil {
 			if !errors.Is(err, recipes.ErrAlreadyExists) {
-				slog.ErrorContext(ctx, "failed to save params", "user", user.ID, "params_hash", paramsHash, "error", err)
-				return
+				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
 		}
 
@@ -220,13 +277,17 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to generate recipes for user", "user", user.ID, "params_hash", paramsHash, "error", err)
-			return
+			return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
 		}
 		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
-			slog.ErrorContext(ctx, "failed to save shopping list", "user", user.ID, "params_hash", paramsHash, "error", err)
-			return
+			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 		}
+	}
+
+	inlineImages := m.prepareRecipeImages(ctx, shoppingList.Recipes)
+	imageContentIDs := make(map[string]string, len(inlineImages))
+	for _, image := range inlineImages {
+		imageContentIDs[image.recipeHash] = image.contentID
 	}
 
 	var buf bytes.Buffer
@@ -235,19 +296,26 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
-		slog.ErrorContext(ctx, "failed to format mail", "error", err)
-		return
+	if err := recipes.FormatMailWithImages(p, *shoppingList, m.publicOrigin, unsubscribeURL, imageContentIDs, &buf); err != nil {
+		return fmt.Errorf("format recipe email: %w", err)
 	}
 
 	from := mail.NewEmail("Chef", "chef@careme.cooking")
-	subject := "Your new recipes are ready!"
+	subject := recipeEmailSubject(*shoppingList)
 
 	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash +
 		"\n\n Unsubscribe from these emails: " + unsubscribeURL
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
 	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
+	for _, image := range inlineImages {
+		message.AddAttachment(mail.NewAttachment().
+			SetContent(image.content).
+			SetType(image.contentType).
+			SetFilename(image.filename).
+			SetDisposition("inline").
+			SetContentID(image.contentID))
+	}
 	message.SetHeader("List-Unsubscribe", "<"+unsubscribeURL+">")
 	message.SetHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	for _, e := range user.Email[1:] {
@@ -259,18 +327,18 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	// uncomment the above line if you are sending mail using a regional EU subuser
 	response, err := m.client.Send(message)
 	if err != nil {
-		slog.ErrorContext(ctx, "mail error", "error", err.Error(), "user", user.Email[0])
-		return
+		return fmt.Errorf("send email to %q: %w", user.Email[0], err)
 	}
 	if response == nil {
-		slog.ErrorContext(ctx, "mail error", "error", "nil sendgrid response", "user", user.Email[0])
-		return
+		return fmt.Errorf("send email to %q: nil SendGrid response", user.Email[0])
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		slog.ErrorContext(ctx, "mail rejected by sendgrid", "status", response.StatusCode, "body", response.Body, "headers", response.Headers, "user", user.Email[0])
-		return
+		return fmt.Errorf("SendGrid rejected email to %q with status %d: %s", user.Email[0], response.StatusCode, response.Body)
 	}
 	slog.InfoContext(ctx, "status", slog.Int("status", response.StatusCode), "body", response.Body, "headers", response.Headers)
+	if force {
+		return nil
+	}
 
 	sentClaim, err := json.Marshal(mailSentClaim{
 		SentAt:     time.Now().UTC(),
@@ -278,10 +346,122 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		ParamsHash: paramsHash,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to encode sent claim", "user", user.ID, "params_hash", paramsHash, "error", err)
-		return
+		return fmt.Errorf("encode sent-mail claim for user %q: %w", user.ID, err)
 	}
 	if err := m.cache.Put(ctx, sentKey, string(sentClaim), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
-		slog.ErrorContext(ctx, "failed to record sent mail claim", "user", user.ID, "params_hash", paramsHash, "error", err)
+		return fmt.Errorf("record sent-mail claim for user %q: %w", user.ID, err)
 	}
+
+	return nil
+}
+
+type inlineRecipeImage struct {
+	recipeHash  string
+	contentID   string
+	content     string
+	contentType string
+	filename    string
+}
+
+func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) []inlineRecipeImage {
+	images := make([]inlineRecipeImage, len(recipeList))
+	var wg sync.WaitGroup
+	for i, recipe := range recipeList {
+		wg.Go(func() {
+			image, err := m.prepareRecipeImage(ctx, recipe, i)
+			if err != nil {
+				slog.WarnContext(ctx, "recipe image omitted from email", "recipe", recipe.Title, "error", err)
+				return
+			}
+			images[i] = image
+		})
+	}
+	wg.Wait()
+
+	return lo.Filter(images, func(image inlineRecipeImage, _ int) bool {
+		return image.contentID != ""
+	})
+}
+
+func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe, index int) (inlineRecipeImage, error) {
+	hash := recipe.ComputeHash()
+	exists, err := m.imageStore.RecipeImageExists(ctx, hash)
+	if err != nil {
+		return inlineRecipeImage{}, fmt.Errorf("check image cache: %w", err)
+	}
+	if !exists {
+		generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe)
+		if err != nil {
+			return inlineRecipeImage{}, fmt.Errorf("generate image: %w", err)
+		}
+		if err := m.imageStore.SaveRecipeImage(ctx, hash, generated); err != nil {
+			return inlineRecipeImage{}, fmt.Errorf("save image: %w", err)
+		}
+	}
+
+	reader, err := m.imageStore.RecipeImageFromCache(ctx, hash)
+	if err != nil {
+		return inlineRecipeImage{}, fmt.Errorf("load image: %w", err)
+	}
+	defer func() {
+		if err := reader.Close(); err != nil {
+			slog.WarnContext(ctx, "failed to close cached recipe image", "recipe", recipe.Title, "error", err)
+		}
+	}()
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return inlineRecipeImage{}, fmt.Errorf("read image: %w", err)
+	}
+	contentType := http.DetectContentType(body)
+	if !strings.HasPrefix(contentType, "image/") {
+		return inlineRecipeImage{}, fmt.Errorf("unexpected content type %q", contentType)
+	}
+
+	contentID := fmt.Sprintf("careme-recipe-%d", index+1)
+	return inlineRecipeImage{
+		recipeHash:  hash,
+		contentID:   contentID,
+		content:     base64.StdEncoding.EncodeToString(body),
+		contentType: contentType,
+		filename:    contentID + imageExtension(contentType),
+	}, nil
+}
+
+func imageExtension(contentType string) string {
+	switch contentType {
+	case "image/webp":
+		return ".webp"
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	default:
+		return ".img"
+	}
+}
+
+func recipeEmailSubject(shoppingList ai.ShoppingList) string {
+	const (
+		prefix          = "🍽️ "
+		maxSubjectRunes = 60
+	)
+	if len(shoppingList.Recipes) == 0 {
+		return prefix + "Your recipes"
+	}
+
+	title := strings.TrimSpace(shoppingList.Recipes[0].Title)
+	if title == "" {
+		title = "Your recipes"
+	}
+	suffix := ""
+	if remaining := len(shoppingList.Recipes) - 1; remaining > 0 {
+		suffix = fmt.Sprintf(" +%d", remaining)
+	}
+	available := maxSubjectRunes - utf8.RuneCountInString(prefix+suffix)
+	if utf8.RuneCountInString(title) > available {
+		titleRunes := []rune(title)
+		title = string(titleRunes[:available-1]) + "…"
+	}
+
+	return prefix + title + suffix
 }
