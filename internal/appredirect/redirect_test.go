@@ -22,26 +22,26 @@ func TestAppURLForUserAgent(t *testing.T) {
 		{
 			name:      "iPhone shows Apple coming soon",
 			userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
-			want:      appleComingSoonURL,
+			want:      installPageURL,
 		},
 		{
 			name:      "iPad desktop user agent shows Apple coming soon",
 			userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1",
-			want:      appleComingSoonURL,
+			want:      installPageURL,
 		},
 		{
-			name:      "Windows opens desktop PWA",
+			name:      "Windows opens install section",
 			userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
-			want:      desktopPWAURL,
+			want:      installPageURL,
 		},
 		{
-			name:      "Mac opens desktop PWA",
+			name:      "Mac opens install section",
 			userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.6 Safari/605.1.15",
-			want:      desktopPWAURL,
+			want:      installPageURL,
 		},
 		{
-			name: "unknown clients open desktop PWA",
-			want: desktopPWAURL,
+			name: "unknown clients open install section",
+			want: installPageURL,
 		},
 	}
 
