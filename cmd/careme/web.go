@@ -13,6 +13,7 @@ import (
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/ai"
+	"careme/internal/appredirect"
 	"careme/internal/auth"
 	"careme/internal/campaigns"
 	"careme/internal/config"
@@ -64,6 +65,7 @@ func runServer(cfg *config.Config, addr string) error {
 	authClient.Register(appRoutes)
 	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
+	appredirect.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}

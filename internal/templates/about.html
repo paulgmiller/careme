@@ -38,6 +38,7 @@
             <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Album</a>
             <a href="#ethos" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Ethos</a>
             <a href="#follow" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Follow</a>
+            <a href="#install" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Install</a>
             <a href="#faq" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">FAQ</a>
             <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
             <a href="/privacy" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Privacy</a>
@@ -108,6 +109,23 @@
                class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
               {{template "icon_bluesky" .}}
             </a>
+          </div>
+        </section>
+
+        <section id="install" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">Install the app</h2>
+          <p class="mt-2 text-gray-600">Plan recipes, take your shopping list with you, and keep saved recipes available offline.</p>
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <a href="https://play.google.com/store/apps/details?id=cooking.careme" target="_blank" rel="noreferrer" aria-label="Get Careme on Google Play"
+               class="inline-flex h-14 items-center">
+              <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
+                   alt="Get it on Google Play" class="h-14 w-auto" />
+            </a>
+            <div aria-disabled="true"
+                 class="inline-flex h-14 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 text-gray-400">
+              {{template "icon_apple" .}}
+              <span class="text-sm font-semibold">Coming soon for Apple</span>
+            </div>
           </div>
         </section>
 
