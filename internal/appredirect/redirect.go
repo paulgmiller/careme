@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	googlePlayAppURL   = "https://play.google.com/store/apps/details?id=cooking.careme"
-	appleComingSoonURL = "/about#install"
-	desktopPWAURL      = "/"
+	googlePlayAppURL = "https://play.google.com/store/apps/details?id=cooking.careme"
+	installPageURL   = "/about#install"
 )
 
 // Register adds the platform-aware app destination route.
@@ -28,12 +27,7 @@ func appURLForUserAgent(userAgent string) string {
 	switch {
 	case strings.Contains(userAgent, "android"):
 		return googlePlayAppURL
-	case strings.Contains(userAgent, "iphone"),
-		strings.Contains(userAgent, "ipad"),
-		strings.Contains(userAgent, "ipod"),
-		strings.Contains(userAgent, "macintosh") && strings.Contains(userAgent, "mobile/"):
-		return appleComingSoonURL
 	default:
-		return desktopPWAURL
+		return installPageURL
 	}
 }
