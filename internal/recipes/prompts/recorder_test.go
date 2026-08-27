@@ -2,7 +2,7 @@ package prompts
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 	"time"

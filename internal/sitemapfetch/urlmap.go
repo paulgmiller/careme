@@ -2,7 +2,7 @@ package sitemapfetch
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"careme/internal/cache"
@@ -29,7 +29,7 @@ func LoadURLMap(ctx context.Context, c cache.Cache, cacheKey string) (map[string
 	}()
 
 	var urlMap map[string]string
-	if err := json.NewDecoder(reader).Decode(&urlMap); err != nil {
+	if err := json.UnmarshalRead(reader, &urlMap); err != nil {
 		return nil, fmt.Errorf("decode url map cache: %w", err)
 	}
 	return urlMap, nil

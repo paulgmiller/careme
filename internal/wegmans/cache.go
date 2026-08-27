@@ -2,7 +2,7 @@ package wegmans
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strconv"
@@ -67,7 +67,7 @@ func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Loc
 	}()
 
 	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return locationtypes.Location{}, fmt.Errorf("decode wegmans store summary: %w", err)
 	}
 	return locationtypes.Location{

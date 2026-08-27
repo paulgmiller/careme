@@ -1,7 +1,8 @@
 package walmart
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 )
 
@@ -61,8 +62,8 @@ func ParseStores(data []byte) ([]Store, error) {
 	}
 
 	var wrapped struct {
-		Results json.RawMessage `json:"results"`
-		Stores  json.RawMessage `json:"stores"`
+		Results jsontext.Value `json:"results"`
+		Stores  jsontext.Value `json:"stores"`
 	}
 	if err := json.Unmarshal(data, &wrapped); err == nil {
 		if len(wrapped.Results) > 0 {

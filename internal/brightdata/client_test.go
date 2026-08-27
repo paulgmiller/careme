@@ -2,7 +2,7 @@ package brightdata
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -26,14 +26,14 @@ func TestScrape_BuildsRequestAndReturnsRawBody(t *testing.T) {
 		URL      string `json:"url"`
 		ZipCode  string `json:"zip_code"`
 		StoreID  string `json:"store_id"`
-		MaxItems int    `json:"max_items,omitempty"`
+		MaxItems int    `json:"max_items,omitempty,omitzero"`
 	}
 
 	var capturedReq *http.Request
 	var capturedBody scrapePayload
 	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
 		capturedReq = r
-		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+		if err := json.UnmarshalRead(r.Body, &capturedBody); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
 		return jsonHTTPResponse(http.StatusOK, `[{"name":"Red Bull"},{"name":"OLIPOP"}]`), nil
@@ -116,7 +116,7 @@ func TestTrigger_BuildsRawInputArray(t *testing.T) {
 	var capturedBody []map[string]any
 	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
 		capturedReq = r
-		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+		if err := json.UnmarshalRead(r.Body, &capturedBody); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
 		return jsonHTTPResponse(http.StatusOK, `{"snapshot_id":"s_async"}`), nil
@@ -210,7 +210,7 @@ func TestDeliverToAzure_BuildsDeliveryRequest(t *testing.T) {
 	var capturedBody map[string]any
 	client := newTestClient(t, func(r *http.Request) (*http.Response, error) {
 		capturedReq = r
-		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+		if err := json.UnmarshalRead(r.Body, &capturedBody); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
 		return jsonHTTPResponse(http.StatusOK, `{"delivery_id":"d_123"}`), nil

@@ -2,7 +2,7 @@ package recipes
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"careme/internal/ai"
@@ -24,7 +24,7 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 		_ = wineReader.Close()
 	}()
 	var selection ai.WineSelection
-	err = json.NewDecoder(wineReader).Decode(&selection)
+	err = json.UnmarshalRead(wineReader, &selection)
 	return &selection, err
 }
 

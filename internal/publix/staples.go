@@ -2,7 +2,7 @@ package publix
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -40,7 +40,7 @@ const (
 	maxPage  = 100
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories(), json.Deterministic(true)))
 
 type StapleCategory struct {
 	Name  string

@@ -3,7 +3,7 @@ package wholefoods
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -64,8 +64,8 @@ type breadcrumb struct {
 
 type product struct {
 	RegularPrice         float64 `json:"regularPrice"`
-	SalePrice            float64 `json:"salePrice,omitempty"`
-	IncrementalSalePrice float64 `json:"incrementalSalePrice,omitempty"`
+	SalePrice            float64 `json:"salePrice,omitempty,omitzero"`
+	IncrementalSalePrice float64 `json:"incrementalSalePrice,omitempty,omitzero"`
 	SaleStartDate        string  `json:"saleStartDate,omitempty"`
 	SaleEndDate          string  `json:"saleEndDate,omitempty"`
 	Name                 string  `json:"name"`
@@ -248,7 +248,7 @@ func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		return fmt.Errorf("request failed: status %d: %s", resp.StatusCode, buf)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+	if err := json.UnmarshalRead(resp.Body, dest); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil

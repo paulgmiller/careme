@@ -2,7 +2,7 @@ package wholefoods
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strconv"
@@ -91,7 +91,7 @@ func loadCachedStoreSummaryByID(ctx context.Context, c cache.Cache, locationID s
 	}()
 
 	var summary StoreSummaryResponse
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return nil, fmt.Errorf("decode whole foods store summary: %w", err)
 	}
 	return &summary, nil

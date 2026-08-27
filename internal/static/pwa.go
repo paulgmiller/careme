@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	_ "embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"html/template"
 	"io"

@@ -2,7 +2,7 @@ package googleads
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,7 +25,7 @@ func TestClientSearchCampaignProximitiesSendsHeadersAndParsesStringMicrodegrees(
 			assert.Equal(t, "dev-token", r.Header.Get("developer-token"))
 			assert.Equal(t, "9998887777", r.Header.Get("login-customer-id"))
 			var req searchRequest
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			require.NoError(t, json.UnmarshalRead(r.Body, &req))
 			assert.Contains(t, req.Query, "campaign.id = 456")
 			_, _ = w.Write([]byte(`{
 				"results": [{
@@ -87,7 +87,7 @@ func TestClientCreateAndRemoveCampaignCriteriaRequestShapes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"access_token":"token-1","expires_in":3600}`))
 		case "/v24/customers/123/campaignCriteria:mutate":
 			var raw map[string][]map[string]any
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			require.NoError(t, json.UnmarshalRead(r.Body, &raw))
 			ops := raw["operations"]
 			require.Len(t, ops, 1)
 			if create, ok := ops[0]["create"].(map[string]any); ok {
@@ -140,7 +140,7 @@ func TestClientSearchAdGroups(t *testing.T) {
 		case "/v24/customers/123/googleAds:search":
 			sawSearch = true
 			var req searchRequest
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+			require.NoError(t, json.UnmarshalRead(r.Body, &req))
 			assert.Contains(t, req.Query, "campaign.id = 456")
 			assert.Contains(t, req.Query, "ad_group.status != REMOVED")
 			_, _ = w.Write([]byte(`{
@@ -178,7 +178,7 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"access_token":"token-1","expires_in":3600}`))
 		case "/v24/customers/123/adGroups:mutate":
 			var raw map[string][]map[string]any
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			require.NoError(t, json.UnmarshalRead(r.Body, &raw))
 			create := raw["operations"][0]["create"].(map[string]any)
 			assert.Equal(t, "customers/123/campaigns/456", create["campaign"])
 			assert.Equal(t, "Careme Store 11111111 Kroger One", create["name"])
@@ -186,7 +186,7 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroups/77"}]}`))
 		case "/v24/customers/123/adGroupCriteria:mutate":
 			var raw map[string][]map[string]any
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			require.NoError(t, json.UnmarshalRead(r.Body, &raw))
 			create := raw["operations"][0]["create"].(map[string]any)
 			assert.Equal(t, "customers/123/adGroups/77", create["adGroup"])
 			if proximity, ok := create["proximity"].(map[string]any); ok {
@@ -200,7 +200,7 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"results":[{"resourceName":"customers/123/adGroupCriteria/77~89"}]}`))
 		case "/v24/customers/123/adGroupAds:mutate":
 			var raw map[string][]map[string]any
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&raw))
+			require.NoError(t, json.UnmarshalRead(r.Body, &raw))
 			create := raw["operations"][0]["create"].(map[string]any)
 			assert.Equal(t, "customers/123/adGroups/77", create["adGroup"])
 			assert.Equal(t, "PAUSED", create["status"])

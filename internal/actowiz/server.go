@@ -2,7 +2,7 @@ package actowiz
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http"
 
@@ -96,7 +96,7 @@ func (s *server) handleStores(w http.ResponseWriter, r *http.Request) {
 			ScrapeIntervalDays: scrapeIntervalDays,
 		}
 	})
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.MarshalWrite(w, response); err != nil {
 		http.Error(w, "failed to encode stores", http.StatusInternalServerError)
 	}
 }

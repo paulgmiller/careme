@@ -3,7 +3,7 @@ package users
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"html/template"
@@ -120,7 +120,7 @@ func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(w).Encode(struct {
+	if err := json.MarshalWrite(w, struct {
 		Exists bool `json:"exists"`
 	}{
 		Exists: exists,

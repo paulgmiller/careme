@@ -3,7 +3,7 @@ package farmersmarket
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -162,7 +162,7 @@ func (s *store) loadMarketByKey(ctx context.Context, key string) (Market, error)
 		_ = reader.Close()
 	}()
 	var market Market
-	if err := json.NewDecoder(reader).Decode(&market); err != nil {
+	if err := json.UnmarshalRead(reader, &market); err != nil {
 		return Market{}, fmt.Errorf("decode farmers market: %w", err)
 	}
 	if err := market.Valid(); err != nil {
@@ -217,7 +217,7 @@ func (s *store) loadInventoryByDate(ctx context.Context, locationID string, date
 	}()
 
 	var record inventoryRecord
-	if err := json.NewDecoder(reader).Decode(&record); err == nil && len(record.Ingredients) > 0 {
+	if err := json.UnmarshalRead(reader, &record); err == nil && len(record.Ingredients) > 0 {
 		return record.Ingredients, nil
 	}
 	return nil, fmt.Errorf("decode farmers market inventory")

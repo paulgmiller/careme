@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"careme/internal/aldi"
@@ -89,7 +89,7 @@ func TestSyncLocationsCachesResolvedInstoreShopID(t *testing.T) {
 	}()
 
 	var summary aldi.StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		t.Fatalf("decode cached summary: %v", err)
 	}
 	if summary.InstoreShopID != "516286" {

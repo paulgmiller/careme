@@ -3,7 +3,7 @@ package storeindex
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 
@@ -82,7 +82,7 @@ func Load(ctx context.Context, c cache.Cache, key string) ([]Entry, error) {
 	}()
 
 	var entries []Entry
-	if err := json.NewDecoder(reader).Decode(&entries); err != nil {
+	if err := json.UnmarshalRead(reader, &entries); err != nil {
 		return nil, fmt.Errorf("decode index: %w", err)
 	}
 	if len(entries) == 0 {
@@ -109,7 +109,7 @@ func RebuildFromStoreSummaries[T any](ctx context.Context, c cache.ListCache, st
 		}()
 
 		var summary T
-		decodeErr := json.NewDecoder(reader).Decode(&summary)
+		decodeErr := json.UnmarshalRead(reader, &summary)
 		if decodeErr != nil {
 			return nil, fmt.Errorf("decode cached store summary: %w", decodeErr)
 		}

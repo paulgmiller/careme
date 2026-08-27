@@ -3,7 +3,7 @@ package gradereview
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync"
@@ -217,7 +217,7 @@ func (s *Store) loadIngredient(ctx context.Context, gradeKey string) (*ai.InputI
 	}()
 
 	var ingredient ai.InputIngredient
-	if err := json.NewDecoder(reader).Decode(&ingredient); err != nil {
+	if err := json.UnmarshalRead(reader, &ingredient); err != nil {
 		return nil, fmt.Errorf("decode ingredient grade %q: %w", gradeKey, err)
 	}
 	if ingredient.Grade == nil {

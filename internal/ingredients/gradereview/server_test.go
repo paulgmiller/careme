@@ -2,7 +2,7 @@ package gradereview
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -64,7 +64,7 @@ func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reviewReader.Close()) }()
 	var review Review
-	require.NoError(t, json.NewDecoder(reviewReader).Decode(&review))
+	require.NoError(t, json.UnmarshalRead(reviewReader, &review))
 	assert.Equal(t, VerdictTooHigh, review.Verdict)
 	assert.Equal(t, "Asparagus", review.Ingredient.Description)
 	assert.False(t, review.ReviewedAt.IsZero())

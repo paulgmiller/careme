@@ -8,7 +8,7 @@ import (
 type PromptMessage struct {
 	Role                  string `json:"role"`
 	Content               string `json:"content"`
-	PromptCacheBreakpoint bool   `json:"prompt_cache_breakpoint,omitempty"`
+	PromptCacheBreakpoint bool   `json:"prompt_cache_breakpoint,omitempty,omitzero"`
 }
 
 // ResponseRef identifies stored model state and the prompt-cache namespace needed

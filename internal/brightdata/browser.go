@@ -3,7 +3,8 @@ package brightdata
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math"
@@ -49,12 +50,12 @@ type BrowserCookie struct {
 }
 
 type cdpMessage struct {
-	ID        int64           `json:"id,omitempty"`
-	Method    string          `json:"method,omitempty"`
-	Params    json.RawMessage `json:"params,omitempty"`
-	Result    json.RawMessage `json:"result,omitempty"`
-	SessionID string          `json:"sessionId,omitempty"`
-	Error     *cdpError       `json:"error,omitempty"`
+	ID        int64          `json:"id,omitempty,omitzero"`
+	Method    string         `json:"method,omitempty"`
+	Params    jsontext.Value `json:"params,omitempty"`
+	Result    jsontext.Value `json:"result,omitempty"`
+	SessionID string         `json:"sessionId,omitempty"`
+	Error     *cdpError      `json:"error,omitempty"`
 }
 
 type cdpError struct {

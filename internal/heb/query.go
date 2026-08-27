@@ -2,7 +2,7 @@ package heb
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -51,7 +51,7 @@ type CategoryPage struct {
 	Products           []Product `json:"products"`
 	Page               int       `json:"page"`
 	SearchContextToken string    `json:"searchContextToken,omitempty"`
-	Total              int       `json:"total,omitempty"`
+	Total              int       `json:"total,omitempty,omitzero"`
 }
 
 type CategoryHTTPError struct {
@@ -349,7 +349,7 @@ func (opts CategoryOptions) validate() error {
 
 func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 	var payload categoryResponse
-	if err := json.NewDecoder(r).Decode(&payload); err != nil {
+	if err := json.UnmarshalRead(r, &payload); err != nil {
 		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 

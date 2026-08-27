@@ -2,7 +2,7 @@ package locations
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -242,7 +242,7 @@ func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID str
 	}()
 
 	var loc Location
-	if err := json.NewDecoder(blob).Decode(&loc); err != nil {
+	if err := json.UnmarshalRead(blob, &loc); err != nil {
 		slog.WarnContext(ctx, "failed to parse cached location blob", "location_id", locationID, "error", err)
 		return Location{}, false
 	}
@@ -290,7 +290,7 @@ func (l *locationStorage) RequestStore(ctx context.Context, storeID string) erro
 			_ = current.Close()
 		}()
 		var existingRequest locationRequest
-		if err := json.NewDecoder(current).Decode(&existingRequest); err != nil {
+		if err := json.UnmarshalRead(current, &existingRequest); err != nil {
 			return fmt.Errorf("parse existing store request: %w", err)
 		}
 		request = existingRequest

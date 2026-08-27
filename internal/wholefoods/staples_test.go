@@ -3,7 +3,7 @@ package wholefoods
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"slices"
@@ -14,7 +14,7 @@ import (
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(defaultStaples())
+	want, err := json.Marshal(defaultStaples(), json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("marshal default staples: %v", err)
 	}

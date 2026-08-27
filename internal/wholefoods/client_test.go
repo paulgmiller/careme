@@ -3,7 +3,7 @@ package wholefoods
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -393,7 +393,7 @@ func TestCategory_PaginatesUntilShortPage(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
+		if err := json.MarshalWrite(w, resp); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
 	}))

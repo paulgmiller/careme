@@ -2,7 +2,7 @@ package query
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -178,7 +178,7 @@ func (c *SearchClient) search(ctx context.Context, storeID, category string, opt
 	}
 
 	var payload PathwaySearchPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &payload); err != nil {
 		return nil, fmt.Errorf("decode json response: %w", err)
 	}
 	return &payload, nil

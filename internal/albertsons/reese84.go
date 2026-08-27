@@ -2,7 +2,7 @@ package albertsons
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"path"
@@ -67,7 +67,7 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error
 	}()
 
 	var record CookieRecord
-	if err := json.NewDecoder(reader).Decode(&record); err != nil {
+	if err := json.UnmarshalRead(reader, &record); err != nil {
 		return nil, fmt.Errorf("decode reese84 record: %w", err)
 	}
 	record.Cookie = strings.TrimSpace(record.Cookie)

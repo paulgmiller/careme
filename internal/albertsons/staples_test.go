@@ -2,7 +2,7 @@ package albertsons
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,7 +24,7 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	}{
 		Categories: query.StapleCategories(),
 		Rows:       stapleRows,
-	})
+	}, json.Deterministic(true))
 	if err != nil {
 		t.Fatalf("marshal staple categories: %v", err)
 	}

@@ -2,7 +2,7 @@ package aldi
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,7 +25,7 @@ const (
 	produceStapleTake = 250
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories(), json.Deterministic(true)))
 
 type StapleCategory struct {
 	Name  string `json:"name"`
@@ -141,7 +141,7 @@ func (p staplesProvider) storeSummary(ctx context.Context, locationID string) (S
 	}()
 
 	var summary StoreSummary
-	if err := json.NewDecoder(reader).Decode(&summary); err != nil {
+	if err := json.UnmarshalRead(reader, &summary); err != nil {
 		return StoreSummary{}, fmt.Errorf("decode ALDI store summary for %q: %w", locationID, err)
 	}
 	if strings.TrimSpace(summary.InstoreShopID) == "" {

@@ -2,7 +2,7 @@ package grader
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"testing"
 
@@ -123,6 +123,7 @@ func TestRunEvalRejectsContextThatCannotBeEncoded(t *testing.T) {
 
 	assert.Nil(t, result)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported type")
+	assert.Contains(t, err.Error(), "marshal")
+	assert.Contains(t, err.Error(), "chan struct")
 	assert.Empty(t, grader.inputs)
 }

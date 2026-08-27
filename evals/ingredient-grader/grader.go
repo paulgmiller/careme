@@ -2,7 +2,7 @@ package grader
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -15,8 +15,8 @@ import (
 )
 
 type expectation struct {
-	Min int `json:"min,omitempty"`
-	Max int `json:"max,omitempty"`
+	Min int `json:"min,omitempty,omitzero"`
+	Max int `json:"max,omitempty,omitzero"`
 }
 
 type promptfooContext struct {

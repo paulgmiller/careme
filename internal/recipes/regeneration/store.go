@@ -5,7 +5,7 @@ package regeneration
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -87,7 +87,7 @@ func (s *store) Load(ctx context.Context, id string) (newHash string, timedOut b
 	}()
 
 	var stored job
-	if err := json.NewDecoder(r).Decode(&stored); err != nil {
+	if err := json.UnmarshalRead(r, &stored); err != nil {
 		return "", false, fmt.Errorf("decode recipe regeneration: %w", err)
 	}
 
