@@ -18,25 +18,25 @@ func recipeImageCacheKey(hash string) string {
 	return recipeImagesCachePrefix + hash
 }
 
-// ImageStore reads and writes generated recipe images in their dedicated cache.
-type ImageStore struct {
+// imageStore reads and writes generated recipe images in their dedicated cache.
+type imageStore struct {
 	cache cache.Cache
 }
 
-// NewImageStore creates a recipe image store backed by c.
-func NewImageStore(c cache.Cache) ImageStore {
-	return ImageStore{cache: c}
+// NewimageStore creates a recipe image store backed by c.
+func NewImageStore(c cache.Cache) imageStore {
+	return imageStore{cache: c}
 }
 
-func (iio ImageStore) RecipeImageExists(ctx context.Context, hash string) (bool, error) {
+func (iio imageStore) Exists(ctx context.Context, hash string) (bool, error) {
 	return iio.cache.Exists(ctx, recipeImageCacheKey(hash))
 }
 
-func (iio ImageStore) RecipeImageFromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
+func (iio imageStore) FromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
 	return iio.cache.Get(ctx, recipeImageCacheKey(hash))
 }
 
-func (iio ImageStore) SaveRecipeImage(ctx context.Context, hash string, image *ai.GeneratedImage) error {
+func (iio imageStore) Save(ctx context.Context, hash string, image *ai.GeneratedImage) error {
 	if image == nil {
 		return fmt.Errorf("recipe image is required")
 	}
