@@ -265,12 +265,12 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="faq"`, `id="github"`} {
+	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="install"`, `id="faq"`, `id="github"`} {
 		if !strings.Contains(rendered, sectionID) {
 			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
 		}
 	}
-	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">Install the app</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
 		if !strings.Contains(rendered, heading) {
 			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
 		}
@@ -279,15 +279,21 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 		"https://github.com/paulgmiller/careme/issues/472",
 		"https://www.facebook.com/careme.cooking",
 		"https://bsky.app/profile/northbriton.net",
+		"https://play.google.com/store/apps/details?id=cooking.careme",
 		"https://github.com/paulgmiller/careme",
 	} {
 		if !strings.Contains(rendered, link) {
 			t.Fatalf("about page should include %q link, body: %s", link, rendered)
 		}
 	}
-	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`} {
+	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`, `alt="Get it on Google Play"`} {
 		if !strings.Contains(rendered, label) {
 			t.Fatalf("about page should include %s social label, body: %s", label, rendered)
+		}
+	}
+	for _, appCopy := range []string{"keep saved recipes available offline", "Coming soon for Apple"} {
+		if !strings.Contains(rendered, appCopy) {
+			t.Fatalf("about page should include %q app copy, body: %s", appCopy, rendered)
 		}
 	}
 	if strings.Contains(rendered, `id="privacy"`) {
