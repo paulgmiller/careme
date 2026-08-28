@@ -319,7 +319,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", err)
 		return recipe, nil
 	}
-	if c.OverallScore >= critique.MinimumRecipeScore {
+	if c.OverallScore >= critique.MinimumRecipeScoreForModel(c.Model) {
 		return recipe, nil
 	}
 

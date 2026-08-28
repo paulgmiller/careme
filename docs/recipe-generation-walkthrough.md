@@ -37,9 +37,9 @@ flowchart TD
     P2 --> R2["CritiqueRecipe"]
     P3 --> R3["CritiqueRecipe"]
 
-    R1 --> S1{"score at least 8?"}
-    R2 --> S2{"score at least 8?"}
-    R3 --> S3{"score at least 8?"}
+    R1 --> S1{"score meets model cutoff?"}
+    R2 --> S2{"score meets model cutoff?"}
+    R3 --> S3{"score meets model cutoff?"}
 
     S1 -- "yes" --> T1["Keep recipe"]
     S2 -- "yes" --> T2["Keep recipe"]
@@ -113,9 +113,9 @@ Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputT
 
 ## Critique And Fan-In
 
-`critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `google/gemini-3.1-pro-preview`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
+`critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `anthropic/claude-opus-5`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
+When an Opus 5 critique score is at least `6`, the recipe is kept; other models use the conservative default cutoff of `8`. Scores below the model-specific cutoff cause one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 

@@ -33,7 +33,7 @@ The application is configured via environment variables:
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
 ### Optional 
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
-- `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-3.1-pro-preview`)
+- `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `anthropic/claude-opus-5`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
 - `GOOGLE_TAG_MANAGER_ID` - Google Tag Manager container ID for web analytics and ad conversion tags (optional); see `docs/gtm-ads.md` for conversion setup
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP HTTP endpoint. For Grafana Cloud, use the endpoint from the OpenTelemetry connection tile.

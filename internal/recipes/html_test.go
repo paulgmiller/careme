@@ -698,9 +698,10 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	score := 8
+	score := 6
+	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -710,7 +711,7 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	if !strings.Contains(html, `href="/critiques/`) {
 		t.Error("recipe HTML should contain public critique link")
 	}
-	if !strings.Contains(html, ">8/10<") {
+	if !strings.Contains(html, ">6/10<") {
 		t.Error("recipe HTML should contain critique score value")
 	}
 	if strings.Contains(html, "This recipe may need another look before cooking.") {
@@ -724,16 +725,17 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	score := 6
+	score := 5
+	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
 	if !strings.Contains(html, "This recipe may need another look before cooking.") {
 		t.Error("recipe HTML should show a prominent low-score warning")
 	}
-	if !strings.Contains(html, "It scored 6/10, below our 8/10 retry mark.") {
+	if !strings.Contains(html, "It scored 5/10, below our 6/10 retry mark.") {
 		t.Error("recipe HTML should explain why the warning appears")
 	}
 	if !strings.Contains(html, `Read the critique`) || !strings.Contains(html, `href="/critiques/`) {

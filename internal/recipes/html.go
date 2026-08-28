@@ -194,7 +194,7 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
 func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved bool,
-	currentUser *utypes.User, critiqueScore *int, hasRecipeImage bool, thread []RecipeThreadEntry,
+	currentUser *utypes.User, recipeCritique *ai.RecipeCritique, hasRecipeImage bool, thread []RecipeThreadEntry,
 	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
 ) {
 	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
@@ -211,6 +211,12 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		activeResponseID = threadResponseID
 	}
 	serverSignedIn := currentUser != nil
+	var critiqueScore *int
+	var minimumRecipeScore int
+	if recipeCritique != nil {
+		critiqueScore = &recipeCritique.OverallScore
+		minimumRecipeScore = critique.MinimumRecipeScoreForModel(recipeCritique.Model)
+	}
 	data := struct {
 		Location                locations.Location
 		Date                    string
@@ -262,8 +268,8 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		AuthReturnTo:            "/recipe/" + recipeHash,
 		RecipeCritiqueURL:       "/critiques/" + recipeHash,
 		RecipeCritiqueScore:     critiqueScore,
-		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < critique.MinimumRecipeScore,
-		MinimumRecipeScore:      critique.MinimumRecipeScore,
+		RecipeCritiqueNeedsCare: critiqueScore != nil && *critiqueScore < minimumRecipeScore,
+		MinimumRecipeScore:      minimumRecipeScore,
 		AdminURL:                "/admin/prompt/recipe/" + recipeHash,
 	}
 
