@@ -22,7 +22,7 @@ const (
 	openRouterApplicationURL   = "https://careme.cooking"
 )
 
-const recipeCritiquePromptFormat = "Critique this generated recipe for correctness and usefulness to a home cook.\nReturn JSON only using schema_version %q.\nRecipe JSON:\n%s"
+const recipeCritiquePromptFormat = "Review this generated recipe for correctness and usefulness to a home cook.\nRecipe JSON:\n%s"
 
 const recipeCritiqueSystemInstruction = `
 You are a strict recipe editor reviewing AI-generated recipes before they are given to human cooks and used for future fine tuning.
@@ -229,7 +229,6 @@ func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 	}
 	return fmt.Sprintf(
 		recipeCritiquePromptFormat,
-		recipeCritiqueSchemaV1,
 		string(body),
 	), nil
 }

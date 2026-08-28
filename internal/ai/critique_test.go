@@ -53,7 +53,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`1 lemon, juiced`,
 		`"Roast until golden."`,
 		`Recipe JSON:`,
-		`Return JSON only using schema_version "recipe-critique-v1".`,
+		`Review this generated recipe for correctness and usefulness to a home cook.`,
 	} {
 		assert.Contains(t, prompt, want)
 	}
