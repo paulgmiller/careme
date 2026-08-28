@@ -115,8 +115,6 @@ Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputT
 
 `critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `anthropic/claude-opus-5`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-`cmd/critiqueeval` provides a private, repeatable model evaluation workflow. `snapshot` freezes a named set of cooked recipes and star ratings, `run` critiques that same set with one or more models, and `report` compares cached results without making model calls. Result keys include a fingerprint of the critique instructions and schema so prompt revisions cannot reuse stale evaluations.
-
 When an Opus 5 critique score is at least `6`, the recipe is kept; other models use the conservative default cutoff of `8`. Scores below the model-specific cutoff cause one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:

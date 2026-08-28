@@ -65,14 +65,12 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 }
 
-func TestRecipeCritiqueDefaultsAndFingerprint(t *testing.T) {
+func TestRecipeCritiqueDefaults(t *testing.T) {
 	t.Parallel()
 
 	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
 
 	assert.Equal(t, "anthropic/claude-opus-5", client.model)
-	assert.Len(t, RecipeCritiqueFingerprint(), 64)
-	assert.Equal(t, RecipeCritiqueFingerprint(), RecipeCritiqueFingerprint())
 }
 
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {

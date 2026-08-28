@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -233,22 +232,6 @@ func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 		recipeCritiqueSchemaV1,
 		string(body),
 	), nil
-}
-
-// RecipeCritiqueFingerprint identifies the instructions and output schema used
-// for a critique so eval caches cannot cross prompt or schema revisions.
-func RecipeCritiqueFingerprint() string {
-	body, err := json.Marshal(recipeCritiqueJSONSchema())
-	if err != nil {
-		panic(fmt.Sprintf("marshal recipe critique fingerprint schema: %v", err))
-	}
-	value := strings.Join([]string{
-		recipeCritiqueSystemInstruction,
-		recipeCritiquePromptFormat,
-		recipeCritiqueSchemaV1,
-		string(body),
-	}, "\n")
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }
 
 func recipeCritiqueJSONSchema() map[string]any {

@@ -25,7 +25,7 @@ func MinimumRecipeScoreForModel(model string) int {
 	if strings.HasPrefix(strings.TrimSpace(model), "anthropic/claude-opus-") {
 		return 6
 	}
-	//gemini was much more generous
+	// gemini was much more generous
 	return 8
 }
 
