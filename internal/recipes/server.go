@@ -1322,10 +1322,11 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	p.Directive = currentUser.Directive
 	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
-	// if params are already saved redirect and assume someone kicks off genration
-
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
+			// Another request with these content-addressed params owns the generation.
+			// Redirecting lets this user poll for that shared result; only the owner
+			// records it in their recent shopping lists when generation completes.
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
@@ -1473,6 +1474,8 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 		return fmt.Errorf("remember shopping list: location is required")
 	}
 
+	// TODO: Use storage ETags to compare-and-swap and retry this entire
+	// read-modify-write operation so concurrent user updates are not lost.
 	currentUser, err := s.storage.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("remember shopping list: %w", err)
