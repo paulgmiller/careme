@@ -1340,7 +1340,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
-	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
+	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 
 	select {
 	case <-generator.called:
@@ -1364,7 +1364,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
+	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1380,7 +1380,7 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
+	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1413,9 +1413,24 @@ func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, user.ShoppingLists, 1)
 	assert.Equal(t, params.Hash(), user.ShoppingLists[0].Hash)
-	assert.Equal(t, "70001001", user.ShoppingLists[0].LocationID)
-	assert.Equal(t, "Neighborhood Market", user.ShoppingLists[0].LocationName)
-	assert.Equal(t, "1 Main St", user.ShoppingLists[0].LocationAddress)
+	assert.Equal(t, "Neighborhood Market", user.ShoppingLists[0].Name)
+}
+
+func TestKickgeneration_FailsWhenCompletedShoppingListCannotBeRecordedForUser(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestGenerator(&captureKickgenerationGenerator{}),
+	)
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Neighborhood Market"}, time.Now())
+
+	require.NoError(t, s.kickgeneration(t.Context(), params, "missing-user"))
+	s.Wait()
+
+	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.Contains(t, status.Error, "remember shopping list")
+	assert.Contains(t, status.Error, "user not found")
 }
 
 func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
@@ -1426,7 +1441,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
+	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())

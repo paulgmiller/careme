@@ -348,8 +348,8 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 			{Title: "Cooked Five Weeks", Hash: "hash-cooked-five-weeks", CreatedAt: now.Add(-35 * 24 * time.Hour)},
 		},
 		ShoppingLists: []utypes.ShoppingList{
-			{Hash: "recent-shopping-hash", LocationID: "store-1", LocationName: "Neighborhood Market", LocationAddress: "1 Main St", CompletedAt: now.Add(-time.Hour)},
-			{Hash: "expired-shopping-hash", LocationID: "store-old", LocationName: "Old Market", CompletedAt: now.Add(-8 * 24 * time.Hour)},
+			{Hash: "recent-shopping-hash", Name: "Neighborhood Market", CompletedAt: now.Add(-time.Hour)},
+			{Hash: "expired-shopping-hash", Name: "Old Market", CompletedAt: now.Add(-8 * 24 * time.Hour)},
 		},
 	}
 	if err := storage.Update(existing); err != nil {
@@ -416,7 +416,7 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	if !strings.Contains(body, `Recent shopping lists`) || !strings.Contains(body, `/recipes?h=recent-shopping-hash`) {
 		t.Fatalf("expected recent shopping-list link, got body: %s", body)
 	}
-	if !strings.Contains(body, `Neighborhood Market`) || !strings.Contains(body, `1 Main St`) {
+	if !strings.Contains(body, `Neighborhood Market`) {
 		t.Fatalf("expected shopping-list location label, got body: %s", body)
 	}
 	if strings.Contains(body, `Old Market`) || strings.Contains(body, `expired-shopping-hash`) {

@@ -16,11 +16,9 @@ type Recipe struct {
 }
 
 type ShoppingList struct {
-	Hash            string    `json:"hash"`
-	LocationID      string    `json:"location_id"`
-	LocationName    string    `json:"location_name"`
-	LocationAddress string    `json:"location_address,omitempty"`
-	CompletedAt     time.Time `json:"completed_at"`
+	Hash        string    `json:"hash"`
+	Name        string    `json:"name"`
+	CompletedAt time.Time `json:"completed_at"`
 }
 
 type User struct {

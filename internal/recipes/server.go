@@ -996,7 +996,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid, err := s.clerk.GetUserIDFromRequest(r)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			redirectToSignIn(w, r, http.StatusUnauthorized)
@@ -1005,6 +1005,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
+	userid := currentUser.ID
 
 	p, err := paramsForAction(ctx, hash, userid, "", s.recipeio)
 	if err != nil {
@@ -1040,7 +1041,11 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
 		return
 	}
-	s.recordShoppingListForUser(ctx, userid, newHash, p.Location)
+	if err := s.recordShoppingListForUser(userid, newHash, p.Location); err != nil {
+		slog.ErrorContext(ctx, "failed to remember finalized shopping list", "user_id", userid, "hash", newHash, "error", err)
+		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
+		return
+	}
 
 	redirectToHash(w, r, newHash)
 }
@@ -1322,9 +1327,6 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
-			if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
-				s.recordShoppingListForUser(ctx, currentUser.ID, p.Hash(), p.Location)
-			}
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
@@ -1346,20 +1348,11 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	userID := ""
-	if id, err := s.clerk.GetUserIDFromRequest(r); err == nil {
-		userID = id
-	} else if !errors.Is(err, auth.ErrNoSession) {
-		slog.ErrorContext(ctx, "failed to identify user retrying recipe generation", "error", err)
-	}
 
 	// Retry intentionally does not require a current session: it can only reuse
 	// cached parameters from a generation request that already passed the
 	// signed-in or guest-generation allowance check.
 	if _, err := s.FromCache(ctx, hash); err == nil {
-		if p, paramsErr := s.ParamsFromCache(ctx, hash); paramsErr == nil {
-			s.recordShoppingListForUser(ctx, userID, hash, p.Location)
-		}
 		redirectToHash(w, r, hash, QueryArgHelp)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
@@ -1367,6 +1360,18 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to retry recipe generation", http.StatusInternalServerError)
 		return
 	}
+
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			currentUser = guestUser
+		} else {
+			slog.ErrorContext(ctx, "failed to load account for recipe generation retry", "error", err)
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+			return
+		}
+	}
+	userID := currentUser.ID
 
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
@@ -1446,24 +1451,41 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 			}
 			return
 		}
-		s.recordShoppingListForUser(ctx, userID, hash, p.Location)
+		if err := s.recordShoppingListForUser(userID, hash, p.Location); err != nil {
+			slog.ErrorContext(ctx, "failed to remember generated shopping list", "user_id", userID, "hash", hash, "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record shopping list history failure", "hash", hash, "error", statusErr)
+			}
+			return
+		}
 	})
 	return nil
 }
 
-func (s *server) recordShoppingListForUser(ctx context.Context, userID, hash string, location *locations.Location) {
-	if userID == "" || userID == guestUser.ID || location == nil {
-		return
+func (s *server) recordShoppingListForUser(userID, hash string, location *locations.Location) error {
+	if userID == guestUser.ID {
+		return nil
 	}
-	if err := s.storage.RecordShoppingList(userID, utypes.ShoppingList{
-		Hash:            hash,
-		LocationID:      location.ID,
-		LocationName:    location.Name,
-		LocationAddress: location.Address,
-		CompletedAt:     time.Now(),
-	}); err != nil {
-		slog.ErrorContext(ctx, "failed to remember recent shopping list", "user_id", userID, "hash", hash, "error", err)
+	if strings.TrimSpace(userID) == "" {
+		return fmt.Errorf("remember shopping list: user ID is required")
 	}
+	if location == nil {
+		return fmt.Errorf("remember shopping list: location is required")
+	}
+
+	currentUser, err := s.storage.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("remember shopping list: %w", err)
+	}
+	currentUser.ShoppingLists = append(currentUser.ShoppingLists, utypes.ShoppingList{
+		Hash:        hash,
+		Name:        location.Name,
+		CompletedAt: time.Now(),
+	})
+	if err := s.storage.Update(currentUser); err != nil {
+		return fmt.Errorf("remember shopping list: %w", err)
+	}
+	return nil
 }
 
 // Almost same as kick generation except

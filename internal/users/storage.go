@@ -75,6 +75,9 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	if err := decoder.Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
+	if err := normalizeShoppingLists(&user, time.Now()); err != nil {
+		return nil, fmt.Errorf("invalid user shopping lists: %w", err)
+	}
 	return &user, nil
 }
 
@@ -147,6 +150,9 @@ func (s *Storage) Update(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
+	if err := normalizeShoppingLists(user, time.Now()); err != nil {
+		return fmt.Errorf("invalid user: %w", err)
+	}
 
 	userBytes, err := json.Marshal(user)
 	if err != nil {
@@ -208,42 +214,18 @@ func (s *Storage) ReplaceRecipe(user *utypes.User, oldHash string, replacement u
 	return true, nil
 }
 
-// RecordShoppingList keeps the newest completed shopping list for up to two
-// store locations. Reloading the user avoids overwriting profile changes made
-// while recipe generation was running in the background.
-func (s *Storage) RecordShoppingList(userID string, shoppingList utypes.ShoppingList) error {
-	userID = strings.TrimSpace(userID)
-	shoppingList.Hash = strings.TrimSpace(shoppingList.Hash)
-	shoppingList.LocationID = strings.TrimSpace(shoppingList.LocationID)
-	shoppingList.LocationName = strings.TrimSpace(shoppingList.LocationName)
-	shoppingList.LocationAddress = strings.TrimSpace(shoppingList.LocationAddress)
-	if userID == "" || shoppingList.Hash == "" || shoppingList.LocationID == "" || shoppingList.CompletedAt.IsZero() {
-		return fmt.Errorf("invalid shopping list")
-	}
-
-	user, err := s.GetByID(userID)
-	if err != nil {
-		return err
-	}
-
-	cutoff := shoppingList.CompletedAt.Add(-shoppingListWindow)
-	recent := lo.Filter(user.ShoppingLists, func(existing utypes.ShoppingList, _ int) bool {
-		return existing.LocationID != shoppingList.LocationID && !existing.CompletedAt.Before(cutoff)
-	})
-	user.ShoppingLists = append([]utypes.ShoppingList{shoppingList}, recent...)
-	slices.SortFunc(user.ShoppingLists, func(a, b utypes.ShoppingList) int {
-		return b.CompletedAt.Compare(a.CompletedAt)
-	})
-	user.ShoppingLists = lo.Take(user.ShoppingLists, shoppingListLimit)
-	return s.Update(user)
-}
-
-// PruneShoppingLists removes stored shopping-list links that are more than
-// seven days old. It returns true when the user record changed.
-func (s *Storage) PruneShoppingLists(user *utypes.User, now time.Time) (bool, error) {
+func normalizeShoppingLists(user *utypes.User, now time.Time) error {
 	if user == nil {
-		return false, fmt.Errorf("user is required")
+		return fmt.Errorf("user is required")
 	}
+	for i := range user.ShoppingLists {
+		user.ShoppingLists[i].Hash = strings.TrimSpace(user.ShoppingLists[i].Hash)
+		user.ShoppingLists[i].Name = strings.TrimSpace(user.ShoppingLists[i].Name)
+		if user.ShoppingLists[i].Hash == "" || user.ShoppingLists[i].Name == "" || user.ShoppingLists[i].CompletedAt.IsZero() {
+			return fmt.Errorf("shopping list at index %d is invalid", i)
+		}
+	}
+
 	cutoff := now.Add(-shoppingListWindow)
 	recent := lo.Filter(user.ShoppingLists, func(shoppingList utypes.ShoppingList, _ int) bool {
 		return !shoppingList.CompletedAt.Before(cutoff)
@@ -251,15 +233,21 @@ func (s *Storage) PruneShoppingLists(user *utypes.User, now time.Time) (bool, er
 	slices.SortFunc(recent, func(a, b utypes.ShoppingList) int {
 		return b.CompletedAt.Compare(a.CompletedAt)
 	})
-	recent = lo.Take(recent, shoppingListLimit)
-	if slices.Equal(recent, user.ShoppingLists) {
-		return false, nil
+
+	unique := make([]utypes.ShoppingList, 0, min(len(recent), shoppingListLimit))
+	for _, shoppingList := range recent {
+		if _, found := lo.Find(unique, func(existing utypes.ShoppingList) bool {
+			return strings.EqualFold(existing.Name, shoppingList.Name)
+		}); found {
+			continue
+		}
+		unique = append(unique, shoppingList)
+		if len(unique) == shoppingListLimit {
+			break
+		}
 	}
-	user.ShoppingLists = recent
-	if err := s.Update(user); err != nil {
-		return false, err
-	}
-	return true, nil
+	user.ShoppingLists = unique
+	return nil
 }
 
 func normalizeEmail(email string) string {
