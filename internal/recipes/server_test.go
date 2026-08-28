@@ -1447,6 +1447,9 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err := s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
+	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.False(t, status.StartedAt.IsZero())
 }
 
 func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *testing.T) {
@@ -1467,26 +1470,28 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	s.Wait()
 
 	assert.Equal(t, 1, imageGenerator.imageCalls)
-	imageBody, err := s.RecipeImageFromCache(t.Context(), recipe.ComputeHash())
+	imageBody, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.NoError(t, imageBody.Close())
 }
 
 func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
 
 	hash := "spinner-hash"
 	status := "Baby we working"
-	err := s.generationStatuses.Start(t.Context(), hash)
+	statusStore := StatusStore(cacheStore)
+	err := statusStore.Start(t.Context(), hash)
 	require.NoError(t, err)
-	err = s.generationStatuses.Update(t.Context(), hash, status)
+	err = statusStore.Update(t.Context(), hash, status)
+	require.NoError(t, err)
+	genstatus, err := statusStore.Load(t.Context(), hash)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 
-	s.spin(t.Context(), rr, req, hash)
+	spin(t.Context(), rr, req, genstatus)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
@@ -1498,20 +1503,23 @@ func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
 
 func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t, withTestCache(cacheStore))
 
 	hash := "spinner-hash"
 	status := "Still chopping"
-	err := s.generationStatuses.Start(t.Context(), hash)
+	statusStore := StatusStore(cacheStore)
+
+	err := statusStore.Start(t.Context(), hash)
 	require.NoError(t, err)
-	err = s.generationStatuses.Update(t.Context(), hash, status)
+	err = statusStore.Update(t.Context(), hash, status)
+	require.NoError(t, err)
+	genstatus, err := statusStore.Load(t.Context(), hash)
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
 	req.Header.Set("HX-Request", "true")
 
-	s.spin(t.Context(), rr, req, hash)
+	spin(t.Context(), rr, req, genstatus)
 
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
@@ -1757,7 +1765,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
-	if err := s.SaveRecipeImage(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
+	if err := s.images.Save(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
 
@@ -2125,7 +2133,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
-	imageBody, err := s.RecipeImageFromCache(t.Context(), recipeHash)
+	imageBody, err := s.images.FromCache(t.Context(), recipeHash)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, imageBody.Close()) }()
 	gotImage, err := io.ReadAll(imageBody)
