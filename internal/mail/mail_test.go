@@ -461,7 +461,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		},
 	}
 	recipeHash := recipe.ComputeHash()
-	for _, want := range []string{"https://careme.cooking/recipe/" + recipeHash + "/image", "⏱️", "30 min", "👥&nbsp;4</span>", "💵", "$18", "❤️", "520 cal", "♨️", "Oven"} {
+	for _, want := range []string{"https://careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/" + recipeHash + "/image", "⏱️", "30 min", "👥&nbsp;4</span>", "💵", "$18", "❤️", "520 cal", "♨️", "Oven"} {
 		if !strings.Contains(htmlContent, want) {
 			t.Fatalf("expected email HTML to contain %q", want)
 		}

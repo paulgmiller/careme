@@ -13,8 +13,33 @@ import (
 	"careme/internal/seasons"
 	utypes "careme/internal/users/types"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/html"
 )
+
+func TestRecipeImageURLsUseCloudflareForCaremeHosts(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(
+		t,
+		"/cdn-cgi/image/width=480,quality=75,format=auto,onerror=redirect/recipe/recipe_hash==/image",
+		shoppingRecipeImageURL("https://careme.cooking", hash),
+	)
+	assert.Equal(
+		t,
+		"https://test.careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/recipe_hash==/image",
+		emailRecipeImageURL("https://test.careme.cooking/", hash),
+	)
+}
+
+func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(t, "/recipe/recipe_hash==/image", shoppingRecipeImageURL("http://localhost:8080", hash))
+	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
+}
 
 func TestClarityScriptIncludesSessionID(t *testing.T) {
 	prev := Clarityproject

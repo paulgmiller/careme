@@ -414,7 +414,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 
 	isValidHTML(t, html)
 	for _, want := range []string{
-		"Test Recipe", "https://careme.cooking/recipe/" + recipeHash + "/image", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
+		"Test Recipe", "https://careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/" + recipeHash + "/image", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("mail HTML should contain %q", want)
