@@ -171,6 +171,29 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	}
 }
 
+func TestRegisterServesFarmersMarketJS(t *testing.T) {
+	Init()
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/static/farmersmarket.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("farmers market js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("farmers market js content type = %q", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("farmers market js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "Compressor") {
+		t.Fatal("farmers market js should include image compression logic")
+	}
+}
+
 func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "spring")
 	Init()
