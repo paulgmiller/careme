@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	MinimumRecipeScore        = 8
 	backgroundCritiqueTimeout = 2 * time.Minute
 )
 
@@ -26,7 +25,8 @@ func MinimumRecipeScoreForModel(model string) int {
 	if strings.HasPrefix(strings.TrimSpace(model), "anthropic/claude-opus-") {
 		return 6
 	}
-	return MinimumRecipeScore
+	//gemini was much more generous
+	return 8
 }
 
 type recipeCritiquer interface {

@@ -111,7 +111,7 @@ func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T
 		"2% salinity for pasta or vegetable-blanching water",
 		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
 		"evaluate salt by weight when available rather than assuming equal volume measures across salt types",
-		"if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 6 so the recipe is revised",
+		"reflect substantial underseasoning or oversalting in the overall score",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
@@ -131,7 +131,6 @@ func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testi
 		"salmon 125-130 and lean white fish 135-140",
 		"egg dishes 160",
 		"flag instructions to serve ground beef, pork, veal, or lamb below 160, poultry below 165 after any stated rest, or egg dishes below 160 as high-severity safety issues",
-		"keep the overall score below 6",
 		"unless the recipe gives a validated time-at-temperature method that achieves equivalent safety",
 		"do not use the preferred doneness ranges for intact beef, lamb, pork, or fish as automatic safety cutoffs",
 		"evaluate temperature instructions in the context of the full cooking method, including time at temperature, carryover cooking, and whether the food is an intact or ground cut",
@@ -142,6 +141,7 @@ func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testi
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
+	assert.NotContains(t, recipeCritiqueSystemInstruction, "overall score below")
 }
 
 func TestParseRecipeCritique(t *testing.T) {

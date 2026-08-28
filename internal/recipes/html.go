@@ -212,7 +212,7 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 	}
 	serverSignedIn := currentUser != nil
 	var critiqueScore *int
-	minimumRecipeScore := critique.MinimumRecipeScore
+	var minimumRecipeScore int
 	if recipeCritique != nil {
 		critiqueScore = &recipeCritique.OverallScore
 		minimumRecipeScore = critique.MinimumRecipeScoreForModel(recipeCritique.Model)

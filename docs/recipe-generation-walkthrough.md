@@ -37,9 +37,9 @@ flowchart TD
     P2 --> R2["CritiqueRecipe"]
     P3 --> R3["CritiqueRecipe"]
 
-    R1 --> S1{"score at least 6?"}
-    R2 --> S2{"score at least 6?"}
-    R3 --> S3{"score at least 6?"}
+    R1 --> S1{"score meets model cutoff?"}
+    R2 --> S2{"score meets model cutoff?"}
+    R3 --> S3{"score meets model cutoff?"}
 
     S1 -- "yes" --> T1["Keep recipe"]
     S2 -- "yes" --> T2["Keep recipe"]
