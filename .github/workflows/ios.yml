@@ -1,0 +1,36 @@
+name: iOS shell
+
+on:
+  pull_request:
+    paths:
+      - "careme-ios/**"
+      - ".github/workflows/ios.yml"
+  push:
+    branches:
+      - master
+      - applestore
+    paths:
+      - "careme-ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Build for iOS Simulator
+        run: >-
+          xcodebuild
+          -project careme-ios/Careme.xcodeproj
+          -scheme Careme
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
