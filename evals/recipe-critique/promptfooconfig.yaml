@@ -1,0 +1,121 @@
+description: Recipe critique regression eval
+evaluateOptions:
+  maxConcurrency: 1
+
+# The Go provider ignores the rendered prompt and reads recipe or recipe_hash
+# from the test variables. It uses the production critique prompt and schema.
+prompts:
+  - recipe-critique-eval
+
+providers:
+  - id: 'file://provider.go'
+    label: recipe-critique
+
+defaultTest:
+  assert:
+    - type: is-json
+      metric: critique-json
+    - type: javascript
+      value: |
+        const critique = JSON.parse(output);
+        const severities = new Set(['low', 'medium', 'high']);
+        const categories = new Set(['cookability', 'safety', 'clarity', 'flavor', 'timing', 'cost', 'nutrition', 'ingredient_usage', 'presentation']);
+        return critique.schema_version === 'recipe-critique-v1'
+          && Number.isInteger(critique.overall_score)
+          && critique.overall_score >= 1
+          && critique.overall_score <= 10
+          && typeof critique.summary === 'string'
+          && critique.summary.trim().length > 0
+          && Array.isArray(critique.strengths)
+          && Array.isArray(critique.issues)
+          && Array.isArray(critique.suggested_fixes)
+          && critique.issues.every((issue) =>
+            severities.has(issue.severity)
+            && categories.has(issue.category)
+            && typeof issue.detail === 'string'
+            && issue.detail.trim().length > 0)
+          && (critique.issues.length === 0
+            || critique.suggested_fixes.some((fix) => typeof fix === 'string' && fix.trim().length >= 8));
+      metric: valid-critique
+
+tests:
+  - description: Detect unsafe ground-beef serving temperature and propose a concrete fix
+    vars:
+      recipe:
+        title: Weeknight Beef Burgers
+        description: Simple skillet burgers with a crisp salad.
+        properties:
+          total_minutes: 25
+          servings: 2
+          estimated_cost_dollars: 14
+          calories_per_serving: 620
+          cooking_methods: [stovetop]
+        ingredients:
+          - name: Ground beef
+            quantity: 12 ounces
+          - name: Kosher salt
+            quantity: 1 teaspoon
+          - name: Burger buns
+            quantity: 2
+          - name: Mixed greens
+            quantity: 4 ounces
+        instructions:
+          - Shape the 12 ounces ground beef with 1 teaspoon kosher salt into two patties.
+          - Sear the patties until their centers reach 145°F, then serve immediately on the 2 buns.
+          - Plate with the 4 ounces mixed greens.
+        health: ''
+        drink_pairing: Iced tea
+        wine_styles: []
+    assert:
+      - type: javascript
+        value: |
+          const critique = JSON.parse(output);
+          const issues = critique.issues.map((issue) => `${issue.category} ${issue.detail}`).join(' ');
+          const fixes = critique.suggested_fixes.join(' ');
+          return /safety/i.test(issues)
+            && /ground beef|burger/i.test(issues)
+            && /145|temperature|undercook/i.test(issues)
+            && /160\s*(?:°|degrees?)?\s*f?/i.test(fixes);
+        metric: detects-unsafe-ground-beef-temperature
+
+  - description: Do not invent a salt defect for brined chicken with restrained finishing salt
+    vars:
+      recipe:
+        title: Brined Chicken and Green Beans
+        description: A quick skillet dinner built around already-brined chicken.
+        properties:
+          total_minutes: 35
+          servings: 2
+          estimated_cost_dollars: 16
+          calories_per_serving: 540
+          cooking_methods: [stovetop]
+        ingredients:
+          - name: Pre-brined boneless chicken breasts
+            quantity: 12 ounces
+          - name: Green beans
+            quantity: 8 ounces
+          - name: Olive oil
+            quantity: 1 tablespoon
+          - name: Kosher salt
+            quantity: 1/4 teaspoon
+          - name: Lemon
+            quantity: 1
+        instructions:
+          - Pat dry the 12 ounces pre-brined chicken breasts; trim the 8 ounces green beans and halve the lemon.
+          - Heat 2 teaspoons olive oil and cook the chicken to 160°F; rest it 5 minutes to reach 165°F.
+          - Heat the remaining 1 teaspoon olive oil and sauté the green beans with 1/4 teaspoon kosher salt until crisp-tender, then finish them with the juice of 1/2 lemon.
+          - Slice the chicken and plate it with the green beans and remaining lemon wedges. Taste before adding any finishing salt because the chicken is already brined.
+        health: ''
+        drink_pairing: Sparkling water with lemon
+        wine_styles: []
+    assert:
+      - type: javascript
+        value: |
+          const critique = JSON.parse(output);
+          const saltIssues = critique.issues.filter((issue) =>
+            issue.category === 'flavor' && /salt|season/i.test(issue.detail));
+          return saltIssues.length === 0;
+        metric: respects-pre-brined-ingredient
+
+  # A production cache case can replace recipe with:
+  # recipe_hash: MnMrPhOaMIhdNVeTptogQg==
