@@ -222,7 +222,7 @@
         </div>
         {{if .HasImage}}
         <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
-          <img src="/recipe/{{.Hash}}/image"
+          <img src="{{ShoppingRecipeImageURL .Hash}}"
                alt="{{.Title}}"
                class="h-auto w-full object-cover"
                loading="lazy" />

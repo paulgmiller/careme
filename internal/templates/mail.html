@@ -30,8 +30,7 @@
             {{range .Recipes}}
             <article style="margin-bottom:24px; border-radius:16px; border:1px solid {{$.Style.Colors.C100}}; background-color:rgba(255,255,255,0.95); padding:24px; box-shadow:0 6px 16px rgba(15,23,42,0.05);">
               <a href="{{$.Domain}}/recipe/{{.Hash}}" style="display:block; margin:-24px -24px 20px -24px; overflow:hidden; border-radius:16px 16px 0 0;">
-                {{/* TODO: Serve an email-sized image derivative instead of the full recipe image. */}}
-                <img src="{{$.Domain}}/recipe/{{.Hash}}/image"
+                <img src="{{EmailRecipeImageURL $.Domain .Hash}}"
                      alt="{{.Title}}"
                      width="752"
                      style="display:block; width:100%; max-width:752px; height:auto; border:0;" />
