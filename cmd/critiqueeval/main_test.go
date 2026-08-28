@@ -126,7 +126,7 @@ func TestCalculateModelStatsUsesOnlyRatedRowsForAlignment(t *testing.T) {
 		"c": {Critique: &ai.RecipeCritique{OverallScore: 10}},
 	}
 
-	stats := calculateModelStats(samples, results)
+	stats := calculateModelStats(samples, results, 8)
 
 	assert.Equal(t, 3, stats.count)
 	assert.Zero(t, stats.missing)
@@ -174,7 +174,7 @@ func TestPrintCritiqueDetailsShowsHistoricalAndEvalResults(t *testing.T) {
 		RequestedModel:    "opus",
 		RecipeHash:        "recipe-hash",
 		Critique: &ai.RecipeCritique{
-			OverallScore: 6,
+			OverallScore: 5,
 			Model:        "anthropic/claude-opus-5",
 			Summary:      "Needs work.",
 			Issues:       []ai.RecipeCritiqueIssue{{Category: "timing", Severity: "high", Detail: "Too short."}},
@@ -189,7 +189,7 @@ func TestPrintCritiqueDetailsShowsHistoricalAndEvalResults(t *testing.T) {
 	assert.Contains(t, body, "Historical critique")
 	assert.Contains(t, body, "Score: 9/pass")
 	assert.Contains(t, body, "Eval critique requested from opus")
-	assert.Contains(t, body, "Score: 6/fail")
+	assert.Contains(t, body, "Score: 5/fail")
 	assert.Contains(t, body, "[timing/high] Too short.")
 }
 

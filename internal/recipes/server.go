@@ -174,7 +174,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	signedIn := currentUser != nil
-	var critiqueScore *int
+	var recipeCritique *ai.RecipeCritique
 	feedback := feedback.Feedback{}
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
@@ -226,8 +226,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		score := result.OverallScore
-		critiqueScore = &score
+		recipeCritique = result
 	})
 	loadWG.Wait()
 
@@ -240,7 +239,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, false, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			FormatRecipeHTML(ctx, p, *recipe, false, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -268,7 +267,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, saved, currentUser, critiqueScore, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	FormatRecipeHTML(ctx, p, *recipe, saved, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {

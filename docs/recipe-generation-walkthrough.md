@@ -37,9 +37,9 @@ flowchart TD
     P2 --> R2["CritiqueRecipe"]
     P3 --> R3["CritiqueRecipe"]
 
-    R1 --> S1{"score at least 8?"}
-    R2 --> S2{"score at least 8?"}
-    R3 --> S3{"score at least 8?"}
+    R1 --> S1{"score at least 6?"}
+    R2 --> S2{"score at least 6?"}
+    R3 --> S3{"score at least 6?"}
 
     S1 -- "yes" --> T1["Keep recipe"]
     S2 -- "yes" --> T2["Keep recipe"]
@@ -117,7 +117,7 @@ Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputT
 
 `cmd/critiqueeval` provides a private, repeatable model evaluation workflow. `snapshot` freezes a named set of cooked recipes and star ratings, `run` critiques that same set with one or more models, and `report` compares cached results without making model calls. Result keys include a fingerprint of the critique instructions and schema so prompt revisions cannot reuse stale evaluations.
 
-When a critique score is at least `critique.MinimumRecipeScore` (`8`), the recipe is kept. When the score is below `8`, the generator does one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, then uses that retry in place of the original recipe.
+When an Opus 5 critique score is at least `6`, the recipe is kept; other models use the conservative default cutoff of `8`. Scores below the model-specific cutoff cause one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 

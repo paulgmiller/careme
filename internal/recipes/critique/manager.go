@@ -21,6 +21,14 @@ const (
 	backgroundCritiqueTimeout = 2 * time.Minute
 )
 
+// MinimumRecipeScoreForModel accounts for model-specific score calibration.
+func MinimumRecipeScoreForModel(model string) int {
+	if strings.HasPrefix(strings.TrimSpace(model), "anthropic/claude-opus-") {
+		return 6
+	}
+	return MinimumRecipeScore
+}
+
 type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 	Ready(ctx context.Context) error

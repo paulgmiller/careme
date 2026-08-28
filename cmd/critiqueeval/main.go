@@ -30,12 +30,11 @@ import (
 )
 
 const (
-	evalPrefix       = "recipe_critique_evals/"
-	datasetPrefix    = evalPrefix + "datasets/"
-	resultPrefix     = evalPrefix + "results/"
-	defaultLimit     = 20
-	defaultWorkers   = 3
-	minimumPassScore = 8
+	evalPrefix     = "recipe_critique_evals/"
+	datasetPrefix  = evalPrefix + "datasets/"
+	resultPrefix   = evalPrefix + "results/"
+	defaultLimit   = 20
+	defaultWorkers = 3
 )
 
 type recipeCritiquer interface {
@@ -580,7 +579,7 @@ func printReport(ctx context.Context, out io.Writer, store evalStore, dataset *e
 			result, ok := byModel[model][sample.Hash]
 			cell := "-"
 			if ok && result.Critique != nil {
-				cell = fmt.Sprintf("%d/%s", result.Critique.OverallScore, passLabel(result.Critique.OverallScore))
+				cell = fmt.Sprintf("%d/%s", result.Critique.OverallScore, passLabel(result.Critique.OverallScore, model))
 			}
 			if _, err := fmt.Fprintf(out, "\t%s", cell); err != nil {
 				return err
@@ -595,7 +594,7 @@ func printReport(ctx context.Context, out io.Writer, store evalStore, dataset *e
 		return err
 	}
 	for _, model := range models {
-		stats := calculateModelStats(dataset.Samples, byModel[model])
+		stats := calculateModelStats(dataset.Samples, byModel[model], critique.MinimumRecipeScoreForModel(model))
 		if _, err := fmt.Fprintf(out, "%s\t%d\t%d\t%.2f\t%.2f\t%.1f%%\t%d\t%s\t%s\t%s\n", model, stats.count, stats.missing, stats.mean, stats.variance, stats.passRate*100, stats.ratedCount, optionalFloat(stats.mae, stats.ratedCount > 0), optionalFloat(stats.pearson, stats.correlatable), optionalFloat(stats.spearman, stats.correlatable)); err != nil {
 			return err
 		}
@@ -663,7 +662,7 @@ func printCritiqueDetail(out io.Writer, heading string, value *ai.RecipeCritique
 		_, err := fmt.Fprintln(out, "- unavailable")
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "Model: %s\nScore: %d/%s\nSummary: %s\n", cleanCell(value.Model), value.OverallScore, passLabel(value.OverallScore), cleanCell(value.Summary)); err != nil {
+	if _, err := fmt.Fprintf(out, "Model: %s\nScore: %d/%s\nSummary: %s\n", cleanCell(value.Model), value.OverallScore, passLabel(value.OverallScore, value.Model), cleanCell(value.Summary)); err != nil {
 		return err
 	}
 	if err := printDetailList(out, "Strengths", value.Strengths); err != nil {
@@ -702,7 +701,7 @@ func printDetailList(out io.Writer, heading string, values []string) error {
 	return nil
 }
 
-func calculateModelStats(samples []evalSample, results map[string]evalResult) modelStats {
+func calculateModelStats(samples []evalSample, results map[string]evalResult, minimumPassScore int) modelStats {
 	stats := modelStats{missing: len(samples)}
 	var scores, ratedScores, stars []float64
 	passes := 0
@@ -713,7 +712,7 @@ func calculateModelStats(samples []evalSample, results map[string]evalResult) mo
 		}
 		score := float64(result.Critique.OverallScore)
 		scores = append(scores, score)
-		if score >= minimumPassScore {
+		if score >= float64(minimumPassScore) {
 			passes++
 		}
 		if sample.Stars > 0 {
@@ -765,7 +764,7 @@ func printPairwise(out io.Writer, samples []evalSample, models []string, byModel
 				}
 				delta := b.Critique.OverallScore - a.Critique.OverallScore
 				deltas = append(deltas, float64(delta))
-				if (a.Critique.OverallScore >= minimumPassScore) != (b.Critique.OverallScore >= minimumPassScore) {
+				if (a.Critique.OverallScore >= critique.MinimumRecipeScoreForModel(models[i])) != (b.Critique.OverallScore >= critique.MinimumRecipeScoreForModel(models[j])) {
 					passChanges++
 				}
 				maxDelta = max(maxDelta, abs(delta))
@@ -856,11 +855,11 @@ func critiqueCell(value *ai.RecipeCritique) string {
 	if value == nil {
 		return "-"
 	}
-	return fmt.Sprintf("%d/%s/%s", value.OverallScore, passLabel(value.OverallScore), cleanCell(value.Model))
+	return fmt.Sprintf("%d/%s/%s", value.OverallScore, passLabel(value.OverallScore, value.Model), cleanCell(value.Model))
 }
 
-func passLabel(score int) string {
-	if score >= minimumPassScore {
+func passLabel(score int, model string) string {
+	if score >= critique.MinimumRecipeScoreForModel(model) {
 		return "pass"
 	}
 	return "fail"
