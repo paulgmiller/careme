@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,9 @@ const (
 	CookieName  = "careme_user"
 	userPrefix  = "users/"
 	emailPrefix = "email2user/"
+
+	shoppingListLimit  = 2
+	shoppingListWindow = 7 * 24 * time.Hour
 )
 
 func NewStorage(c cache.ListCache) *Storage {
@@ -198,6 +202,60 @@ func (s *Storage) ReplaceRecipe(user *utypes.User, oldHash string, replacement u
 	if !replaced {
 		return false, nil
 	}
+	if err := s.Update(user); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// RecordShoppingList keeps the newest completed shopping list for up to two
+// store locations. Reloading the user avoids overwriting profile changes made
+// while recipe generation was running in the background.
+func (s *Storage) RecordShoppingList(userID string, shoppingList utypes.ShoppingList) error {
+	userID = strings.TrimSpace(userID)
+	shoppingList.Hash = strings.TrimSpace(shoppingList.Hash)
+	shoppingList.LocationID = strings.TrimSpace(shoppingList.LocationID)
+	shoppingList.LocationName = strings.TrimSpace(shoppingList.LocationName)
+	shoppingList.LocationAddress = strings.TrimSpace(shoppingList.LocationAddress)
+	if userID == "" || shoppingList.Hash == "" || shoppingList.LocationID == "" || shoppingList.CompletedAt.IsZero() {
+		return fmt.Errorf("invalid shopping list")
+	}
+
+	user, err := s.GetByID(userID)
+	if err != nil {
+		return err
+	}
+
+	cutoff := shoppingList.CompletedAt.Add(-shoppingListWindow)
+	recent := lo.Filter(user.ShoppingLists, func(existing utypes.ShoppingList, _ int) bool {
+		return existing.LocationID != shoppingList.LocationID && !existing.CompletedAt.Before(cutoff)
+	})
+	user.ShoppingLists = append([]utypes.ShoppingList{shoppingList}, recent...)
+	slices.SortFunc(user.ShoppingLists, func(a, b utypes.ShoppingList) int {
+		return b.CompletedAt.Compare(a.CompletedAt)
+	})
+	user.ShoppingLists = lo.Take(user.ShoppingLists, shoppingListLimit)
+	return s.Update(user)
+}
+
+// PruneShoppingLists removes stored shopping-list links that are more than
+// seven days old. It returns true when the user record changed.
+func (s *Storage) PruneShoppingLists(user *utypes.User, now time.Time) (bool, error) {
+	if user == nil {
+		return false, fmt.Errorf("user is required")
+	}
+	cutoff := now.Add(-shoppingListWindow)
+	recent := lo.Filter(user.ShoppingLists, func(shoppingList utypes.ShoppingList, _ int) bool {
+		return !shoppingList.CompletedAt.Before(cutoff)
+	})
+	slices.SortFunc(recent, func(a, b utypes.ShoppingList) int {
+		return b.CompletedAt.Compare(a.CompletedAt)
+	})
+	recent = lo.Take(recent, shoppingListLimit)
+	if slices.Equal(recent, user.ShoppingLists) {
+		return false, nil
+	}
+	user.ShoppingLists = recent
 	if err := s.Update(user); err != nil {
 		return false, err
 	}

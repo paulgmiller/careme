@@ -347,6 +347,10 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 			{Title: "Saved Three Weeks", Hash: "hash-saved-three-weeks", CreatedAt: now.Add(-21 * 24 * time.Hour)},
 			{Title: "Cooked Five Weeks", Hash: "hash-cooked-five-weeks", CreatedAt: now.Add(-35 * 24 * time.Hour)},
 		},
+		ShoppingLists: []utypes.ShoppingList{
+			{Hash: "recent-shopping-hash", LocationID: "store-1", LocationName: "Neighborhood Market", LocationAddress: "1 Main St", CompletedAt: now.Add(-time.Hour)},
+			{Hash: "expired-shopping-hash", LocationID: "store-old", LocationName: "Old Market", CompletedAt: now.Add(-8 * 24 * time.Hour)},
+		},
 	}
 	if err := storage.Update(existing); err != nil {
 		t.Fatalf("failed to seed user: %v", err)
@@ -408,6 +412,25 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 	if !strings.Contains(body, `hx-target="closest li"`) || !strings.Contains(body, `hx-swap="delete"`) {
 		t.Fatalf("expected remove recipe form to delete only the matching row, got body: %s", body)
+	}
+	if !strings.Contains(body, `Recent shopping lists`) || !strings.Contains(body, `/recipes?h=recent-shopping-hash`) {
+		t.Fatalf("expected recent shopping-list link, got body: %s", body)
+	}
+	if !strings.Contains(body, `Neighborhood Market`) || !strings.Contains(body, `1 Main St`) {
+		t.Fatalf("expected shopping-list location label, got body: %s", body)
+	}
+	if strings.Contains(body, `Old Market`) || strings.Contains(body, `expired-shopping-hash`) {
+		t.Fatalf("expected expired shopping list to be pruned, got body: %s", body)
+	}
+	if strings.Contains(body, `>recent-shopping-hash<`) {
+		t.Fatalf("expected shopping-list hash not to be visible as link text, got body: %s", body)
+	}
+	updated, err := storage.GetByID(existing.ID)
+	if err != nil {
+		t.Fatalf("failed to reload pruned shopping lists: %v", err)
+	}
+	if len(updated.ShoppingLists) != 1 || updated.ShoppingLists[0].Hash != "recent-shopping-hash" {
+		t.Fatalf("expected expired shopping list to be removed from storage, got %#v", updated.ShoppingLists)
 	}
 }
 

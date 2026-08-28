@@ -1340,7 +1340,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
 
 	select {
 	case <-generator.called:
@@ -1364,7 +1364,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1380,7 +1380,7 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
@@ -1391,6 +1391,33 @@ func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testi
 	require.NoError(t, err)
 }
 
+func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := users.NewStorage(cacheStore)
+	require.NoError(t, storage.Update(&utypes.User{
+		ID:          "shopping-list-user",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+	}))
+	s := newTestServer(t,
+		withTestCache(cacheStore),
+		withTestStorage(storage),
+		withTestGenerator(&captureKickgenerationGenerator{}),
+	)
+
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Neighborhood Market", Address: "1 Main St"}, time.Now())
+	require.NoError(t, s.kickgeneration(t.Context(), params, "shopping-list-user"))
+	s.Wait()
+
+	user, err := storage.GetByID("shopping-list-user")
+	require.NoError(t, err)
+	require.Len(t, user.ShoppingLists, 1)
+	assert.Equal(t, params.Hash(), user.ShoppingLists[0].Hash)
+	assert.Equal(t, "70001001", user.ShoppingLists[0].LocationID)
+	assert.Equal(t, "Neighborhood Market", user.ShoppingLists[0].LocationName)
+	assert.Equal(t, "1 Main St", user.ShoppingLists[0].LocationAddress)
+}
+
 func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	cacheStore := &failShoppingListCache{ListCache: cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))}
 	s := newTestServer(t,
@@ -1399,7 +1426,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params))
+	require.NoError(t, s.kickgeneration(t.Context(), params, ""))
 	s.Wait()
 
 	got, err := s.generationStatuses.Load(t.Context(), params.Hash())

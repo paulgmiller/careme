@@ -11,6 +11,9 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	utypes "careme/internal/users/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubEmailFetcher struct {
@@ -61,6 +64,68 @@ func TestStorageGetByIDNotFound(t *testing.T) {
 	if err == nil || err != ErrNotFound {
 		t.Fatalf("GetByID() error = %v, want %v", err, ErrNotFound)
 	}
+}
+
+func TestRecordShoppingListKeepsNewestListForTwoLocations(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	now := time.Now().Round(0)
+	require.NoError(t, storage.Update(&utypes.User{
+		ID:          "user-shopping-lists",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+	}))
+
+	require.NoError(t, storage.RecordShoppingList("user-shopping-lists", utypes.ShoppingList{
+		Hash: "old-market-list", LocationID: "market", LocationName: "Market", CompletedAt: now.Add(-6 * 24 * time.Hour),
+	}))
+	require.NoError(t, storage.RecordShoppingList("user-shopping-lists", utypes.ShoppingList{
+		Hash: "grocer-list", LocationID: "grocer", LocationName: "Grocer", CompletedAt: now.Add(-2 * time.Hour),
+	}))
+	require.NoError(t, storage.RecordShoppingList("user-shopping-lists", utypes.ShoppingList{
+		Hash: "new-market-list", LocationID: "market", LocationName: "Market", LocationAddress: "1 Main St", CompletedAt: now,
+	}))
+
+	user, err := storage.GetByID("user-shopping-lists")
+	require.NoError(t, err)
+	require.Len(t, user.ShoppingLists, 2)
+	assert.Equal(t, "new-market-list", user.ShoppingLists[0].Hash)
+	assert.Equal(t, "grocer-list", user.ShoppingLists[1].Hash)
+	assert.Equal(t, "1 Main St", user.ShoppingLists[0].LocationAddress)
+
+	require.NoError(t, storage.RecordShoppingList("user-shopping-lists", utypes.ShoppingList{
+		Hash: "third-list", LocationID: "third", LocationName: "Third Store", CompletedAt: now.Add(time.Hour),
+	}))
+	user, err = storage.GetByID("user-shopping-lists")
+	require.NoError(t, err)
+	require.Len(t, user.ShoppingLists, 2)
+	assert.Equal(t, []string{"third", "market"}, []string{user.ShoppingLists[0].LocationID, user.ShoppingLists[1].LocationID})
+}
+
+func TestPruneShoppingListsRemovesOnlyEntriesMoreThanSevenDaysOld(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	now := time.Now().Round(0)
+	user := &utypes.User{
+		ID:          "user-prune-shopping-lists",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+		ShoppingLists: []utypes.ShoppingList{
+			{Hash: "expired", LocationID: "old", LocationName: "Old Store", CompletedAt: now.Add(-7*24*time.Hour - time.Nanosecond)},
+			{Hash: "boundary", LocationID: "current", LocationName: "Current Store", CompletedAt: now.Add(-7 * 24 * time.Hour)},
+		},
+	}
+	require.NoError(t, storage.Update(user))
+
+	changed, err := storage.PruneShoppingLists(user, now)
+	require.NoError(t, err)
+	assert.True(t, changed)
+	require.Len(t, user.ShoppingLists, 1)
+	assert.Equal(t, "boundary", user.ShoppingLists[0].Hash)
+
+	stored, err := storage.GetByID(user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, user.ShoppingLists, stored.ShoppingLists)
 }
 
 func TestStorageGetByEmailNotFound(t *testing.T) {

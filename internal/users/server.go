@@ -237,6 +237,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	userCopy := *currentUser
 	userForTemplate := &userCopy
+	if _, err := s.storage.PruneShoppingLists(userForTemplate, time.Now()); err != nil {
+		slog.ErrorContext(ctx, "failed to prune recent shopping lists", "user_id", userForTemplate.ID, "error", err)
+	}
 
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
