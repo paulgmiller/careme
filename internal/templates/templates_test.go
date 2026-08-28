@@ -624,8 +624,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
 		`hx-target="#farmers-market-work"`,
-		`const maxPhotoDimension = 2048`,
-		`canvas.toBlob(resolve, "image/jpeg", 0.82)`,
+		`<script type="module" src="/static/farmersmarket.js"></script>`,
 		`Large photos are resized before upload`,
 	} {
 		if !strings.Contains(rendered, want) {

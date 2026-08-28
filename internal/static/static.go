@@ -26,6 +26,9 @@ var shareJS []byte
 //go:embed recipe.js
 var recipeJS []byte
 
+//go:embed farmersmarket.js
+var farmersMarketJS []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -102,6 +105,14 @@ func Register(mux routing.Registrar) {
 		w.Header().Set("Cache-Control", "no-cache")
 		if _, err := w.Write(recipeJS); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write recipe js", "error", err)
+		}
+	})
+
+	mux.HandleFunc("/static/farmersmarket.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		if _, err := w.Write(farmersMarketJS); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write farmers market js", "error", err)
 		}
 	})
 

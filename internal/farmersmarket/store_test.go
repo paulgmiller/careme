@@ -11,9 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -228,22 +226,13 @@ func TestResolveMarketLocationRejectsInvalidCoordinates(t *testing.T) {
 }
 
 func TestParseUploadedPhotosAcceptsImagesWithoutGPS(t *testing.T) {
-	want := jpegBytes(t)
-	req := multipartRequest(t, "photos", "market.jpg", want)
+	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	require.NoError(t, req.ParseMultipartForm(maxUploadBytes))
 
 	photos, err := parseUploadedPhotos(t.Context(), req)
 	require.NoError(t, err)
-	t.Cleanup(func() { removePhotos(t.Context(), photos) })
 	require.Len(t, photos, 1)
 	assert.Equal(t, "image/jpeg", photos[0].contentType)
-	assert.NotEmpty(t, photos[0].path)
-	got, err := os.ReadFile(photos[0].path)
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
-	dataURL, err := photos[0].dataURL()
-	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(dataURL, "data:image/jpeg;base64,"))
 }
 
 func TestParseUploadedPhotosRejectsTooManyPhotos(t *testing.T) {
@@ -272,20 +261,19 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 		},
 	}
 
-	photos := []Photo{testPhoto(t, []byte("tomatoes")), testPhoto(t, []byte("radishes"))}
-	firstURL, err := photos[0].dataURL()
-	require.NoError(t, err)
-	secondURL, err := photos[1].dataURL()
-	require.NoError(t, err)
+	photos := []Photo{
+		{contentType: "image/jpeg", content: []byte("tomatoes")},
+		{contentType: "image/jpeg", content: []byte("radishes")},
+	}
 
 	got, err := extractFarmersMarketIngredients(t.Context(), extractor, photos)
 
 	require.NoError(t, err)
 	require.Len(t, extractor.calls, 2)
-	assert.ElementsMatch(t, []string{firstURL, secondURL}, extractor.calls)
+	assert.ElementsMatch(t, []string{photos[0].dataURL(), photos[1].dataURL()}, extractor.calls)
 	require.Len(t, got, 3)
-	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, firstURL)
-	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, secondURL)
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, photos[0].dataURL())
+	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, photos[1].dataURL())
 	assert.Contains(t, []string{got[0].Description, got[1].Description, got[2].Description}, "shared basil")
 }
 
@@ -299,12 +287,6 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 		auth.DefaultMock(),
 		extractor,
 	)
-	var stagedPhotos []Photo
-	handler.parsePhotos = func(ctx context.Context, r *http.Request) ([]Photo, error) {
-		var err error
-		stagedPhotos, err = parseUploadedPhotos(ctx, r)
-		return stagedPhotos, err
-	}
 	req := multipartRequestWithFields(t, nil, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
@@ -317,8 +299,6 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 	assert.Equal(t, "#farmers-market-error", rr.Header().Get("HX-Retarget"))
 	assert.Equal(t, "outerHTML", rr.Header().Get("HX-Reswap"))
 	assert.Contains(t, rr.Body.String(), `id="farmers-market-error"`)
-	require.Len(t, stagedPhotos, 1)
-	assert.NoFileExists(t, stagedPhotos[0].path)
 }
 
 func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
@@ -358,7 +338,7 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 	})
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
 	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
-		return []Photo{testPhoto(t, []byte("apples"))}, nil
+		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -405,7 +385,7 @@ func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
 	})
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
 	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
-		return []Photo{testPhoto(t, []byte("apples"))}, nil
+		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequestWithFields(t, map[string]string{
 		"lat": "47.610000",
@@ -607,14 +587,4 @@ func jpegBytes(t *testing.T) []byte {
 	err := jpeg.Encode(&b, img, nil)
 	require.NoError(t, err)
 	return b.Bytes()
-}
-
-func testPhoto(t *testing.T, content []byte) Photo {
-	t.Helper()
-	file, err := os.CreateTemp(t.TempDir(), "photo-*")
-	require.NoError(t, err)
-	_, err = file.Write(content)
-	require.NoError(t, err)
-	require.NoError(t, file.Close())
-	return Photo{contentType: "image/jpeg", path: file.Name(), size: int64(len(content))}
 }
