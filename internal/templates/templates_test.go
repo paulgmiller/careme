@@ -13,8 +13,33 @@ import (
 	"careme/internal/seasons"
 	utypes "careme/internal/users/types"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/html"
 )
+
+func TestRecipeImageURLsUseCloudflareForCaremeHosts(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(
+		t,
+		"/cdn-cgi/image/width=480,quality=75,format=auto,onerror=redirect/recipe/recipe_hash==/image",
+		shoppingRecipeImageURL("https://careme.cooking", hash),
+	)
+	assert.Equal(
+		t,
+		"https://test.careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/recipe_hash==/image",
+		emailRecipeImageURL("https://test.careme.cooking/", hash),
+	)
+}
+
+func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(t, "/recipe/recipe_hash==/image", shoppingRecipeImageURL("http://localhost:8080", hash))
+	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
+}
 
 func TestClarityScriptIncludesSessionID(t *testing.T) {
 	prev := Clarityproject
@@ -265,12 +290,12 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="faq"`, `id="github"`} {
+	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="install"`, `id="faq"`, `id="github"`} {
 		if !strings.Contains(rendered, sectionID) {
 			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
 		}
 	}
-	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">Install the app</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
 		if !strings.Contains(rendered, heading) {
 			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
 		}
@@ -279,15 +304,21 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 		"https://github.com/paulgmiller/careme/issues/472",
 		"https://www.facebook.com/careme.cooking",
 		"https://bsky.app/profile/northbriton.net",
+		"https://play.google.com/store/apps/details?id=cooking.careme",
 		"https://github.com/paulgmiller/careme",
 	} {
 		if !strings.Contains(rendered, link) {
 			t.Fatalf("about page should include %q link, body: %s", link, rendered)
 		}
 	}
-	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`} {
+	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`, `alt="Get it on Google Play"`} {
 		if !strings.Contains(rendered, label) {
 			t.Fatalf("about page should include %s social label, body: %s", label, rendered)
+		}
+	}
+	for _, appCopy := range []string{"keep saved recipes available offline", "Coming soon for Apple"} {
+		if !strings.Contains(rendered, appCopy) {
+			t.Fatalf("about page should include %q app copy, body: %s", appCopy, rendered)
 		}
 	}
 	if strings.Contains(rendered, `id="privacy"`) {
@@ -618,6 +649,8 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
 		`hx-target="#farmers-market-work"`,
+		`<script type="module" src="/static/farmersmarket.js"></script>`,
+		`Large photos are resized before upload`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("farmers market page should include %q, body: %s", want, rendered)

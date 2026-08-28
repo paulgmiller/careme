@@ -6,10 +6,13 @@ export default [
     files: ["internal/static/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
-      sourceType: "script",
+      sourceType: "module",
       globals: {
         console: "readonly",
         document: "readonly",
+        File: "readonly",
+        DataTransfer: "readonly",
+        Image: "readonly",
         navigator: "readonly",
         setTimeout: "readonly",
         URL: "readonly",

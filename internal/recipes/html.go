@@ -70,6 +70,12 @@ type shoppingRecipeView struct {
 	WineRecommendation *ai.WineSelection
 }
 
+type mailRecipeView struct {
+	ai.Recipe
+	Hash            string
+	PropertyDisplay recipePropertyDisplay
+}
+
 type shoppingListGroup struct {
 	Aisle string
 	Items []*ai.Ingredient
@@ -442,11 +448,23 @@ func latestThreadResponseID(thread []RecipeThreadEntry) string {
 
 // drops clarity, instructions and most of shoppinglist
 func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsubscribeURL string, writer io.Writer) error {
+	recipeViews := make([]mailRecipeView, 0, len(l.Recipes))
+	for _, recipe := range l.Recipes {
+		hash := recipe.ComputeHash()
+		propertyDisplay := newRecipePropertyDisplay(recipe)
+		propertyDisplay.Servings = strings.TrimSuffix(strings.TrimSuffix(propertyDisplay.Servings, " servings"), " serving")
+		recipeViews = append(recipeViews, mailRecipeView{
+			Recipe:          recipe,
+			Hash:            hash,
+			PropertyDisplay: propertyDisplay,
+		})
+	}
+
 	data := struct {
 		Location       locations.Location
 		Date           string
 		Hash           string
-		Recipes        []ai.Recipe
+		Recipes        []mailRecipeView
 		Domain         string
 		UnsubscribeURL string
 		Style          seasons.Style
@@ -454,7 +472,7 @@ func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsu
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
 		Hash:           p.Hash(),
-		Recipes:        l.Recipes,
+		Recipes:        recipeViews,
 		Domain:         publicOrigin,
 		UnsubscribeURL: unsubscribeURL,
 		Style:          seasons.GetCurrentStyle(),

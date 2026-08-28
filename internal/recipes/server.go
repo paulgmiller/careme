@@ -84,6 +84,12 @@ type ImageGen interface {
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
 }
 
+type ImageStore interface {
+	Exists(ctx context.Context, hash string) (bool, error)
+	FromCache(ctx context.Context, hash string) (io.ReadCloser, error)
+	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
+}
+
 type regens interface {
 	Start(ctx context.Context, id string, opts cache.PutOptions) error
 	Complete(ctx context.Context, id, newHash string) error
@@ -92,7 +98,7 @@ type regens interface {
 
 type server struct {
 	recipeio
-	imageio
+	images             ImageStore
 	imagegen           ImageGen
 	generationStatuses *statusStore
 	cfg                *config.Config
@@ -115,7 +121,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	statusStore := StatusStore(c)
 	return &server{
 		recipeio:           IO(c),
-		imageio:            imageio{Cache: imageCache},
+		images:             NewImageStore(imageCache),
 		imagegen:           imagegen,
 		generationStatuses: statusStore,
 		cfg:                cfg,
@@ -205,7 +211,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		wineRecommendation = selection
 	})
 	loadWG.Go(func() {
-		exists, err := s.RecipeImageExists(ctx, hash)
+		exists, err := s.images.Exists(ctx, hash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
 			return
@@ -273,7 +279,7 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	imageBody, err := s.RecipeImageFromCache(ctx, hash)
+	imageBody, err := s.images.FromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe image not found", http.StatusNotFound)
@@ -797,7 +803,7 @@ func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash strin
 }
 
 func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string) bool {
-	exists, err := s.RecipeImageExists(ctx, recipeHash)
+	exists, err := s.images.Exists(ctx, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image for recipe card render", "recipe_hash", recipeHash, "error", err)
 		return false
@@ -841,7 +847,7 @@ func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recip
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
 	defer cancel()
 
-	exists, err := s.RecipeImageExists(ctx, recipeHash)
+	exists, err := s.images.Exists(ctx, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
 		return
@@ -855,7 +861,7 @@ func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recip
 		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
 		return
 	}
-	if err := s.SaveRecipeImage(ctx, recipeHash, image); err != nil {
+	if err := s.images.Save(ctx, recipeHash, image); err != nil {
 		slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
 	}
 }
@@ -1489,9 +1495,8 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 }
 
 // Almost same as kick generation except
-// 1 doesn't bother to write status.
-// 2 saves params and skips if already there
-// 3 generate images.
+// 1 saves params and skips if already there.
+// 2 generates images.
 // Could try and consolidate and
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
 	s.wg.Go(func() {
@@ -1507,16 +1512,26 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 			return
 		}
 		hash := p.Hash()
+		if err := s.generationStatuses.Start(ctx, hash); err != nil {
+			slog.ErrorContext(ctx, "failed to start campaign recipe generation", "hash", hash, "error", err)
+			return
+		}
 
 		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record campaign recipe generation failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record campaign shopping list save failure", "hash", hash, "error", statusErr)
+			}
 			return
 		}
 

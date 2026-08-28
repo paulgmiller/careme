@@ -29,9 +29,15 @@
           <div style="margin-top:16px;">
             {{range .Recipes}}
             <article style="margin-bottom:24px; border-radius:16px; border:1px solid {{$.Style.Colors.C100}}; background-color:rgba(255,255,255,0.95); padding:24px; box-shadow:0 6px 16px rgba(15,23,42,0.05);">
+              <a href="{{$.Domain}}/recipe/{{.Hash}}" style="display:block; margin:-24px -24px 20px -24px; overflow:hidden; border-radius:16px 16px 0 0;">
+                <img src="{{EmailRecipeImageURL $.Domain .Hash}}"
+                     alt="{{.Title}}"
+                     width="752"
+                     style="display:block; width:100%; max-width:752px; height:auto; border:0;" />
+              </a>
               <header style="margin-bottom:12px;">
                 <div>
-                  <a href="{{$.Domain}}/recipe/{{.ComputeHash}}"
+                  <a href="{{$.Domain}}/recipe/{{.Hash}}"
                      style="font-size:20px; font-weight:600; color:{{$.Style.Colors.C700}}; text-decoration:none;">
                     {{.Title}}
                   </a>
@@ -40,6 +46,7 @@
                   </p>
                 </div>
               </header>
+              {{template "mail_recipe_properties" .PropertyDisplay}}
             </article>
             {{end}}
           </div>
@@ -58,3 +65,15 @@
   </main>
 </body>
 </html>
+
+{{define "mail_recipe_properties"}}
+<div aria-label="Recipe details" style="margin-top:12px; font-size:0; line-height:1.5;">
+  <span aria-label="Total time: {{.Time}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">⏱️&nbsp;{{.Time}}</span>
+  <span aria-label="Servings: {{.Servings}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">👥&nbsp;{{.Servings}}</span>
+  <span aria-label="Estimated total cost: {{.Cost}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">💵&nbsp;{{.Cost}}</span>
+  <span aria-label="Calories per serving: {{.Calories}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">❤️&nbsp;{{.Calories}}</span>
+  {{range .CookingMethods}}
+  <span aria-label="Cooking method: {{.Label}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">{{.Emoji}}&nbsp;{{.Label}}</span>
+  {{end}}
+</div>
+{{end}}

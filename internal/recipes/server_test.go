@@ -1494,6 +1494,9 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err := s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
+	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.False(t, status.StartedAt.IsZero())
 }
 
 func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *testing.T) {
@@ -1514,7 +1517,7 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	s.Wait()
 
 	assert.Equal(t, 1, imageGenerator.imageCalls)
-	imageBody, err := s.RecipeImageFromCache(t.Context(), recipe.ComputeHash())
+	imageBody, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.NoError(t, imageBody.Close())
 }
@@ -1809,7 +1812,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
-	if err := s.SaveRecipeImage(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
+	if err := s.images.Save(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
 
@@ -2177,7 +2180,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
-	imageBody, err := s.RecipeImageFromCache(t.Context(), recipeHash)
+	imageBody, err := s.images.FromCache(t.Context(), recipeHash)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, imageBody.Close()) }()
 	gotImage, err := io.ReadAll(imageBody)
