@@ -196,6 +196,11 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t, withTestGenerator(generator))
 	t.Cleanup(s.Wait)
+	require.NoError(t, s.storage.Update(&utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+	}))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	oldStartedAt := time.Now().Add(-time.Hour).UTC()
@@ -2825,6 +2830,11 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 		withTestCache(cacheStore),
 		withTestStorage(storage),
 	)
+	require.NoError(t, storage.Update(&utypes.User{
+		ID:          "mock-clerk-user-id",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+	}))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	originHash := p.Hash()

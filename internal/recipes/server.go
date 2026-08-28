@@ -996,7 +996,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	userid, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			redirectToSignIn(w, r, http.StatusUnauthorized)
@@ -1005,7 +1005,6 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to load account", http.StatusInternalServerError)
 		return
 	}
-	userid := currentUser.ID
 
 	p, err := paramsForAction(ctx, hash, userid, "", s.recipeio)
 	if err != nil {
@@ -1362,17 +1361,15 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	userID, err := s.clerk.GetUserIDFromRequest(r)
 	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			currentUser = guestUser
-		} else {
-			slog.ErrorContext(ctx, "failed to load account for recipe generation retry", "error", err)
+		if !errors.Is(err, auth.ErrNoSession) {
+			slog.ErrorContext(ctx, "failed to identify account for recipe generation retry", "error", err)
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
+		userID = guestUser.ID
 	}
-	userID := currentUser.ID
 
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
