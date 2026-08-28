@@ -1,13 +1,19 @@
 import Compressor from "https://esm.sh/compressorjs@1.3.0";
 
-const form = document.getElementById("farmers-market-form");
-const submit = document.getElementById("farmers-market-submit");
-const status = document.getElementById("farmers-market-location-status");
-const photos = document.getElementById("photos");
-const lat = document.getElementById("lat");
-const lon = document.getElementById("lon");
+// This module only runs on the farmers-market page. Keeping initialization in
+// a function makes the asset safe to load from pages that do not have the form.
+const initializeFarmersMarketUpload = () => {
+  const form = document.getElementById("farmers-market-form");
+  const submit = document.getElementById("farmers-market-submit");
+  const status = document.getElementById("farmers-market-location-status");
+  const photos = document.getElementById("photos");
+  const lat = document.getElementById("lat");
+  const lon = document.getElementById("lon");
 
-if (form && submit && status && photos && lat && lon) {
+  if (!form || !submit || !status || !photos || !lat || !lon) {
+    return;
+  }
+
   const maxPhotoBytes = 2 * 1024 * 1024;
 
   let photosPrepared = false;
@@ -22,6 +28,8 @@ if (form && submit && status && photos && lat && lon) {
       return Promise.resolve(file);
     }
 
+    // Compressor.js decodes and recompresses one file at a time. The original
+    // is retained if compression cannot make the upload smaller.
     return new Promise((resolve) => {
       new Compressor(file, {
         quality: 0.82,
@@ -57,6 +65,9 @@ if (form && submit && status && photos && lat && lon) {
       return;
     }
 
+    // File inputs cannot be assigned a new FileList directly. DataTransfer is
+    // the browser-supported way to replace the selected files before HTMX
+    // builds its multipart FormData payload.
     const selected = Array.from(photos.files || []);
 
     let prepared;
@@ -66,6 +77,8 @@ if (form && submit && status && photos && lat && lon) {
       return;
     }
 
+    // Process files sequentially so compression does not decode every photo
+    // into browser memory at the same time.
     for (let index = 0; index < selected.length; index += 1) {
       status.textContent =
         `Preparing photo ${index + 1} of ${selected.length}...`;
@@ -96,6 +109,11 @@ if (form && submit && status && photos && lat && lon) {
       "Current location is not available in this browser.";
   }
 
+  const setSubmitState = (disabled, text) => {
+    submit.disabled = disabled;
+    submit.textContent = text;
+  };
+
   form.addEventListener(
     "submit",
     async (event) => {
@@ -116,9 +134,8 @@ if (form && submit && status && photos && lat && lon) {
       }
 
       preparing = true;
-      submit.disabled = true;
-
       const originalText = submit.textContent;
+      setSubmitState(true, originalText);
 
       try {
         if (needsPhotos) {
@@ -138,23 +155,23 @@ if (form && submit && status && photos && lat && lon) {
         }
 
         status.textContent = "Uploading your market photos...";
-
-        submit.disabled = false;
-        submit.textContent = originalText;
         preparing = false;
 
+        // The first submit is intercepted above. Re-submit after preparation
+        // so HTMX can collect the resized FileList and send the normal request.
+        setSubmitState(false, originalText);
         form.requestSubmit();
       } catch {
         lat.value = "";
         lon.value = "";
 
         status.textContent = "Could not use current location.";
-
-        submit.disabled = false;
-        submit.textContent = originalText;
         preparing = false;
+        setSubmitState(false, originalText);
       }
     },
     true,
   );
-}
+};
+
+initializeFarmersMarketUpload();
