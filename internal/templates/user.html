@@ -138,6 +138,21 @@
 
           {{if eq .ActiveTab "past"}}
           <section class="space-y-4">
+            {{if .User.ShoppingLists}}
+            <div class="space-y-2">
+              <span class="text-xs uppercase tracking-wide text-gray-400">Recent shopping lists</span>
+              <ul class="grid gap-3 sm:grid-cols-2">
+                {{range $list := .User.ShoppingLists}}
+                <li>
+                  <a href="/recipes?h={{$list.Hash}}"
+                     class="block rounded-xl border border-brand-100 bg-brand-50/70 px-4 py-3 transition hover:border-brand-200 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    <span class="block font-semibold text-brand-700">{{$list.Name}}</span>
+                  </a>
+                </li>
+                {{end}}
+              </ul>
+            </div>
+            {{end}}
             {{if .PastRecipes}}
             <span class="text-xs uppercase tracking-wide text-gray-400">Recent history</span>
             <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,9 @@ const (
 	CookieName  = "careme_user"
 	userPrefix  = "users/"
 	emailPrefix = "email2user/"
+
+	shoppingListLimit  = 2
+	shoppingListWindow = 7 * 24 * time.Hour
 )
 
 func NewStorage(c cache.ListCache) *Storage {
@@ -70,6 +74,9 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	var user utypes.User
 	if err := decoder.Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
+	}
+	if err := normalizeShoppingLists(&user, time.Now()); err != nil {
+		return nil, fmt.Errorf("invalid user shopping lists: %w", err)
 	}
 	return &user, nil
 }
@@ -143,6 +150,9 @@ func (s *Storage) Update(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
+	if err := normalizeShoppingLists(user, time.Now()); err != nil {
+		return fmt.Errorf("invalid user: %w", err)
+	}
 
 	userBytes, err := json.Marshal(user)
 	if err != nil {
@@ -202,6 +212,42 @@ func (s *Storage) ReplaceRecipe(user *utypes.User, oldHash string, replacement u
 		return false, err
 	}
 	return true, nil
+}
+
+func normalizeShoppingLists(user *utypes.User, now time.Time) error {
+	if user == nil {
+		return fmt.Errorf("user is required")
+	}
+	for i := range user.ShoppingLists {
+		user.ShoppingLists[i].Hash = strings.TrimSpace(user.ShoppingLists[i].Hash)
+		user.ShoppingLists[i].Name = strings.TrimSpace(user.ShoppingLists[i].Name)
+		if user.ShoppingLists[i].Hash == "" || user.ShoppingLists[i].Name == "" || user.ShoppingLists[i].CompletedAt.IsZero() {
+			return fmt.Errorf("shopping list at index %d is invalid", i)
+		}
+	}
+
+	cutoff := now.Add(-shoppingListWindow)
+	recent := lo.Filter(user.ShoppingLists, func(shoppingList utypes.ShoppingList, _ int) bool {
+		return !shoppingList.CompletedAt.Before(cutoff)
+	})
+	slices.SortFunc(recent, func(a, b utypes.ShoppingList) int {
+		return b.CompletedAt.Compare(a.CompletedAt)
+	})
+
+	unique := make([]utypes.ShoppingList, 0, min(len(recent), shoppingListLimit))
+	for _, shoppingList := range recent {
+		if _, found := lo.Find(unique, func(existing utypes.ShoppingList) bool {
+			return strings.EqualFold(existing.Name, shoppingList.Name)
+		}); found {
+			continue
+		}
+		unique = append(unique, shoppingList)
+		if len(unique) == shoppingListLimit {
+			break
+		}
+	}
+	user.ShoppingLists = unique
+	return nil
 }
 
 func normalizeEmail(email string) string {
