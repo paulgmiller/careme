@@ -79,6 +79,12 @@ function initializeRecipeSteps() {
     let isHorizontal = false;
 
     function resetSwipe() {
+      // Android WebView can retain a captured pointer after cancelling a
+      // gesture. Release it explicitly so the next vertical gesture always
+      // belongs to the page scroller.
+      if (pointerID !== null && step.hasPointerCapture(pointerID)) {
+        step.releasePointerCapture(pointerID);
+      }
       pointerID = null;
       offsetX = 0;
       isHorizontal = false;
@@ -99,7 +105,6 @@ function initializeRecipeSteps() {
       startY = event.clientY;
       offsetX = 0;
       isHorizontal = false;
-      step.setPointerCapture(event.pointerId);
     });
 
     step.addEventListener("pointermove", (event) => {
@@ -115,6 +120,9 @@ function initializeRecipeSteps() {
           return;
         }
         isHorizontal = true;
+        // Do not capture on pointerdown: Android needs to arbitrate vertical
+        // panning first. Capture only after the gesture is clearly a swipe.
+        step.setPointerCapture(event.pointerId);
         step.setAttribute("data-recipe-step-dragging", "true");
       }
 
@@ -133,6 +141,7 @@ function initializeRecipeSteps() {
     });
 
     step.addEventListener("pointercancel", resetSwipe);
+    step.addEventListener("lostpointercapture", resetSwipe);
   });
 }
 
