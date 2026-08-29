@@ -175,6 +175,10 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		slog.DebugContext(ctx, "user has not opted into mail", "user", user.ID)
 		return
 	}
+	if user.FavoriteStore == "" {
+		slog.DebugContext(ctx, "user has no favorite store", "user", user.ID)
+		return
+	}
 	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
 	defer cancel()
 
