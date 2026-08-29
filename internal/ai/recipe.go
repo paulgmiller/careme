@@ -149,7 +149,7 @@ type QuestionResponse struct {
 	PromptCacheKey string
 }
 
-const saltSeasoningStandard = `When quantities permit calculation, use these salt amounts as starting points: 1.25% salt by weight for boneless meat, 1.5% for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water. Apply salt at the proper cooking stage: presalt meat and salt pasta or blanching water rather than relying on finishing salt or salty ingredients added later. Account for ingredients that are already brined or cured and for user requests to reduce sodium. Specify salt by weight when practical; if using a volume measure, name the salt type because crystal sizes vary.`
+const saltSeasoningStandard = `Use these salt starting points when quantities permit calculation: 1.25% by meat weight for boneless meat, 1.5% by meat weight for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water. Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams, and name the salt type because crystal sizes vary. Presalt meat and salt pasta or blanching water at the proper cooking stage rather than relying on salt or salty ingredients added later. Account for ingredients that are already brined or cured and for requests to reduce sodium.`
 
 // edited out. Which recipe should be richer?!
 const systemMessage = `
