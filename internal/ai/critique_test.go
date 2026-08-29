@@ -108,7 +108,8 @@ func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T
 		"1% for vegetables and grains",
 		"2% salinity for pasta or vegetable-blanching water",
 		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
-		"evaluate salt by weight when available rather than assuming equal volume measures across salt types",
+		"Specify salt by weight when practical",
+		"name the salt type because crystal sizes vary",
 		"reflect substantial underseasoning or oversalting in the overall score",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
