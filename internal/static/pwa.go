@@ -136,13 +136,13 @@ func manifestHostname(host string) string {
 func renderOfflinePage(w io.Writer) error {
 	scheme := seasons.GetCurrentColorScheme()
 	data := struct {
-		TailwindAssetPath string
-		ThemeColor        string
-		Colors            seasons.ColorScheme
+		AssetPath  string
+		ThemeColor string
+		Colors     seasons.ColorScheme
 	}{
-		TailwindAssetPath: TailwindAssetPath,
-		ThemeColor:        scheme.C50,
-		Colors:            scheme,
+		AssetPath:  AssetPath,
+		ThemeColor: scheme.C50,
+		Colors:     scheme,
 	}
 
 	return offlinePageTemplate.Execute(w, data)
@@ -155,7 +155,8 @@ func renderServiceWorker(w io.Writer) error {
 		"/static/app-icon-192.png",
 		"/static/app-icon-512.png",
 		"/static/htmx@2.0.8.js",
-		TailwindAssetPath,
+		AssetPath + "tailwind.css",
+		//not not other javascript?
 	}
 	authPaths := []string{"/sign-in", "/sign-up", "/auth/establish", "/logout"}
 
@@ -200,7 +201,7 @@ func serviceWorkerCacheName(precachePaths, authPaths []string) (string, error) {
 		appIcon192,
 		appIcon512,
 		htmx208JS,
-		[]byte(TailwindAssetPath),
+		[]byte(tailwindCSS), //already triggerd by precachepaths?
 	} {
 		if _, err := fmt.Fprintf(hash, "%d:", len(part)); err != nil {
 			return "", err

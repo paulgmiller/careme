@@ -31,11 +31,12 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			wantType:    "application/manifest+json; charset=utf-8",
 			wantSnippet: `"display": "standalone"`,
 		},
+		//what do we actuallt want here?
 		{
 			name:        "service worker",
 			path:        "/sw.js",
 			wantType:    "application/javascript; charset=utf-8",
-			wantSnippet: TailwindAssetPath,
+			wantSnippet: AssetPath,
 		},
 		{
 			name:        "Android asset links",
@@ -47,7 +48,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			name:        "offline page",
 			path:        "/offline",
 			wantType:    "text/html; charset=utf-8",
-			wantSnippet: TailwindAssetPath,
+			wantSnippet: AssetPath,
 		},
 		{
 			name:     "192 icon",

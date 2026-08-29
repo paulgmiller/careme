@@ -197,7 +197,7 @@
   <script src="/static/htmx@2.0.8.js"></script>
   {{template "clerk_refresh.html" .}}
   {{if (ClerkEnabled)}}
-  <script src="/static/user-clerk-billing.js"></script>
+  <script src="{.AssetPath}user-clerk-billing.js"></script>
   {{end}}
 </body>
 </html>

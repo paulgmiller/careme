@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("load configuration: %v", err)
 	}
 	static.Init()
-	if err := templates.Init(cfg, static.TailwindAssetPath); err != nil {
+	if err := templates.Init(cfg, static.AssetPath); err != nil {
 		log.Fatalf("initialize templates: %v", err)
 	}
 

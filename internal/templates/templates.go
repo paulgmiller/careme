@@ -51,7 +51,7 @@ var Home,
 	FarmersMarket,
 	Mail *template.Template
 
-func Init(config *config.Config, tailwindAssetPath string) error {
+func Init(config *config.Config, assetPath string) error {
 	publicOrigin := config.ResolvedPublicOrigin()
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
@@ -72,7 +72,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
 		"ShoppingRecipeImageURL":    func(hash string) string { return shoppingRecipeImageURL(publicOrigin, hash) },
-		"TailwindAssetPath":         func() string { return tailwindAssetPath },
+		"AssetPath":                 func() string { return assetPath },
 		"UserInitial":               userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
