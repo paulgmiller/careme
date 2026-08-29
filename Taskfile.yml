@@ -81,14 +81,27 @@ tasks:
       - go test ./...
 
   evals:
-    desc: Run all Promptfoo evaluations, or one with EVAL=recipe-critique
+    desc: List Promptfoo evaluations; run one with EVAL=recipe-critique or all with EVAL=all
+    silent: true
     vars:
       EVAL: '{{default "" .EVAL}}'
     env:
       CAREME_EVAL: "{{.EVAL}}"
     cmds:
       - |
-        if [ -n "$CAREME_EVAL" ]; then
+        if [ -z "$CAREME_EVAL" ]; then
+          echo "available evals:"
+          for available in evals/*/promptfooconfig.yaml; do
+            basename "$(dirname "$available")"
+          done
+          echo "run one with: ./task.sh evals EVAL=<name>"
+          echo "run all with: ./task.sh evals EVAL=all"
+          exit 0
+        fi
+
+        if [ "$CAREME_EVAL" = "all" ]; then
+          configs="evals/*/promptfooconfig.yaml"
+        else
           config="evals/$CAREME_EVAL/promptfooconfig.yaml"
           if [ ! -f "$config" ]; then
             echo "unknown eval: $CAREME_EVAL" >&2
@@ -99,8 +112,6 @@ tasks:
             exit 1
           fi
           configs="$config"
-        else
-          configs="evals/*/promptfooconfig.yaml"
         fi
 
         for config in $configs; do

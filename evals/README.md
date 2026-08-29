@@ -1,6 +1,6 @@
 # Promptfoo evals
 
-Run every checked-in Promptfoo suite from the repository root:
+List every checked-in Promptfoo suite without running one:
 
 ```sh
 ./task.sh evals
@@ -10,6 +10,12 @@ Select one suite by its directory name:
 
 ```sh
 ./task.sh evals EVAL=recipe-critique
+```
+
+Because evaluations can make paid model calls, running every suite requires an explicit selection:
+
+```sh
+./task.sh evals EVAL=all
 ```
 
 Generate recipe test cases from a cached shopping-list hash:

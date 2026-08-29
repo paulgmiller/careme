@@ -1,4 +1,4 @@
-package menuplaneval
+package main
 
 import (
 	"context"

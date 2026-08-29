@@ -1,16 +1,18 @@
-package critiqueeval
+package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/recipes"
+
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 type promptfooContext struct {
@@ -31,16 +33,29 @@ type recipeLoader interface {
 }
 
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	result, err := callAPI(ctx)
+	if err != nil {
+		// Promptfoo's generated Go wrapper exits without exposing the error text
+		// when CallApi returns an error. ProviderResponse.error keeps it visible.
+		return map[string]interface{}{"error": err.Error()}, nil
+	}
+	return result, nil
+}
+
+func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
 	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	if err := kage.Load(); err != nil {
+		return nil, fmt.Errorf("load encrypted environment: %w", err)
 	}
-	critiquer := ai.NewCritiquer(cfg.OpenRouter.APIKey, cfg.OpenRouter.CritiqueModel, http.DefaultClient)
+
+	apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	if apiKey == "" {
+		return nil, fmt.Errorf("OPENROUTER_API_KEY is required for recipe critique evals")
+	}
+	critiquer := ai.NewCritiquer(apiKey, os.Getenv("OPENROUTER_CRITIQUE_MODEL"), http.DefaultClient)
 
 	testCase, err := decodeEvalCase(body)
 	if err != nil {

@@ -1,8 +1,9 @@
-package critiqueeval
+package main
 
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"careme/internal/ai"
@@ -82,4 +83,15 @@ func TestCritiqueRecipeReturnsModelError(t *testing.T) {
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, `critique recipe "Supper": unavailable`)
+}
+
+func TestCallApiReturnsReadableProviderError(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "")
+
+	result, err := CallApi("", nil, map[string]interface{}{})
+	require.NoError(t, err)
+
+	message, ok := result["error"].(string)
+	require.True(t, ok)
+	assert.True(t, strings.Contains(message, "OPENROUTER_API_KEY is required"))
 }

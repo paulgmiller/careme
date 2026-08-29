@@ -1,4 +1,4 @@
-package grader
+package main
 
 import (
 	"context"
