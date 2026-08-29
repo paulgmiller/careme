@@ -23,7 +23,7 @@ const (
 // MinimumRecipeScoreForModel accounts for model-specific score calibration.
 func MinimumRecipeScoreForModel(model string) int {
 	if strings.HasPrefix(strings.TrimSpace(model), "anthropic/claude-opus-") {
-		return 6
+		return 7
 	}
 	// gemini was much more generous
 	return 8
