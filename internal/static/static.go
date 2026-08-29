@@ -64,16 +64,18 @@ func Init() {
 	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS} {
 		hasher.Write(asset)
 	}
-	AssetPath = fmt.Sprintf("static/%x/", hasher.Sum(nil))
+	AssetPath = fmt.Sprintf("/static/%x/", hasher.Sum(nil))
 }
+
+const immutable = "public, max-age=31536000, immutable"
 
 // helper for immutable I bett http package has something like this.
 // could embed whole fs and then use http.FileServerFS()
 func static(contentType string, buf []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(tailwindCSS); err != nil {
+		w.Header().Set("Cache-Control", immutable)
+		if _, err := w.Write(buf); err != nil {
 			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
 		}
 	}

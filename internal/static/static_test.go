@@ -1,6 +1,7 @@
 package static
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -100,17 +101,19 @@ func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/user-clerk-billing.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"user-clerk-billing.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
+		fmt.Println(AssetPath)
+
 		t.Fatalf("billing js response status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("billing js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("billing js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "mountPricingTable") {
@@ -123,7 +126,7 @@ func TestRegisterServesShareJS(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/share.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"share.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -133,7 +136,7 @@ func TestRegisterServesShareJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("share js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("share js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "navigator.share") {
@@ -146,7 +149,7 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/recipe.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"recipe.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -156,7 +159,7 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("recipe js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("recipe js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
@@ -176,7 +179,7 @@ func TestRegisterServesFarmersMarketJS(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/farmersmarket.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"farmersmarket.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -186,7 +189,7 @@ func TestRegisterServesFarmersMarketJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("farmers market js content type = %q", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("farmers market js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "Compressor") {
