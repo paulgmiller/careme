@@ -139,24 +139,6 @@
     corner-shape: squircle;
   }
 
-  /* Let recipe steps follow the finger without interfering with vertical scrolling. */
-  .recipe-step {
-    touch-action: pan-y;
-    transition: opacity 180ms ease, transform 180ms ease;
-  }
-
-  /* Direct pointer tracking should not lag behind the user's swipe. */
-  .recipe-step[data-recipe-step-dragging] {
-    transition: none;
-    user-select: none;
-  }
-
-  /* Honor the platform motion preference for swipe and snap-back transitions. */
-  @media (prefers-reduced-motion: reduce) {
-    .recipe-step {
-      transition: none;
-    }
-  }
 }
 
 /*

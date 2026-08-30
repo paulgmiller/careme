@@ -162,21 +162,12 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
 		t.Fatal("recipe js response should include recipe step interaction logic")
 	}
-	if !strings.Contains(rec.Body.String(), `event.pointerType !== "touch"`) ||
-		!strings.Contains(rec.Body.String(), `event.pointerType !== "pen"`) {
-		t.Fatal("recipe step swiping should only start for touch or pen pointers")
-	}
 	if !strings.Contains(rec.Body.String(), "data-recipe-step-done") {
 		t.Fatal("recipe js should support clicking a step number to complete it")
 	}
-	downIndex := strings.Index(rec.Body.String(), `step.addEventListener("pointerdown"`)
-	moveIndex := strings.Index(rec.Body.String(), `step.addEventListener("pointermove"`)
-	captureIndex := strings.Index(rec.Body.String(), "step.setPointerCapture(event.pointerId)")
-	if downIndex < 0 || moveIndex < 0 || captureIndex < moveIndex || captureIndex < downIndex {
-		t.Fatal("recipe steps should capture pointers only after detecting horizontal movement")
-	}
-	if !strings.Contains(rec.Body.String(), "step.releasePointerCapture(pointerID)") {
-		t.Fatal("recipe steps should release captured pointers when a swipe ends")
+	if strings.Contains(rec.Body.String(), "setPointerCapture") ||
+		strings.Contains(rec.Body.String(), `addEventListener("pointermove"`) {
+		t.Fatal("recipe steps must not intercept scrolling gestures")
 	}
 }
 

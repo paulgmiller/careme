@@ -32,24 +32,13 @@ function initializeRecipeSteps() {
   const root = document.querySelector("[data-recipe-steps]");
   if (!root) return;
 
-  // Keep this small pointer handler local instead of adding a swipe library
-  // such as TinyGesture. Recipe steps only need horizontal dragging, while the
-  // page must preserve normal vertical scrolling. Mouse dragging is left to
-  // the browser so desktop users can select and copy instruction text.
   const steps = Array.from(root.querySelectorAll("[data-recipe-step]"));
   const undoButton = root.querySelector("[data-recipe-step-undo]");
   if (!steps.length || !undoButton) return;
 
   const completedSteps = [];
-  const swipeIntentDistance = 10;
 
   root.querySelector("[data-recipe-steps-hint]").hidden = false;
-
-  function restoreStepStyles(step) {
-    step.removeAttribute("data-recipe-step-dragging");
-    step.style.removeProperty("opacity");
-    step.style.removeProperty("transform");
-  }
 
   function restoreStep(step) {
     step.hidden = false;
@@ -72,76 +61,7 @@ function initializeRecipeSteps() {
   });
   steps.forEach((step) => {
     const doneButton = step.querySelector("[data-recipe-step-done]");
-    let pointerID = null;
-    let startX = 0;
-    let startY = 0;
-    let offsetX = 0;
-    let isHorizontal = false;
-
-    function resetSwipe() {
-      // Android WebView can retain a captured pointer after cancelling a
-      // gesture. Release it explicitly so the next vertical gesture always
-      // belongs to the page scroller.
-      if (pointerID !== null && step.hasPointerCapture(pointerID)) {
-        step.releasePointerCapture(pointerID);
-      }
-      pointerID = null;
-      offsetX = 0;
-      isHorizontal = false;
-      // Inline drag styles must be cleared before a step snaps back or is hidden.
-      restoreStepStyles(step);
-    }
-
-    if (doneButton) {
-      doneButton.addEventListener("pointerdown", (event) => event.stopPropagation());
-      doneButton.addEventListener("click", () => completeStep(step));
-    }
-
-    step.addEventListener("pointerdown", (event) => {
-      if (!event.isPrimary) return;
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
-      pointerID = event.pointerId;
-      startX = event.clientX;
-      startY = event.clientY;
-      offsetX = 0;
-      isHorizontal = false;
-    });
-
-    step.addEventListener("pointermove", (event) => {
-      if (event.pointerId !== pointerID) return;
-      const deltaX = event.clientX - startX;
-      const deltaY = event.clientY - startY;
-
-      if (!isHorizontal) {
-        if (Math.abs(deltaX) < swipeIntentDistance && Math.abs(deltaY) < swipeIntentDistance) return;
-        // A vertical-first gesture belongs to page scrolling, not step dismissal.
-        if (Math.abs(deltaY) >= Math.abs(deltaX)) {
-          resetSwipe();
-          return;
-        }
-        isHorizontal = true;
-        // Do not capture on pointerdown: Android needs to arbitrate vertical
-        // panning first. Capture only after the gesture is clearly a swipe.
-        step.setPointerCapture(event.pointerId);
-        step.setAttribute("data-recipe-step-dragging", "true");
-      }
-
-      offsetX = deltaX;
-      const progress = Math.min(Math.abs(offsetX) / step.offsetWidth, 1);
-      step.style.transform = `translateX(${offsetX}px)`;
-      step.style.opacity = String(1 - progress * 0.65);
-    });
-
-    step.addEventListener("pointerup", (event) => {
-      if (event.pointerId !== pointerID) return;
-      const threshold = Math.min(120, step.offsetWidth * 0.3);
-      const shouldComplete = isHorizontal && Math.abs(offsetX) >= threshold;
-      resetSwipe();
-      if (shouldComplete) completeStep(step);
-    });
-
-    step.addEventListener("pointercancel", resetSwipe);
-    step.addEventListener("lostpointercapture", resetSwipe);
+    if (doneButton) doneButton.addEventListener("click", () => completeStep(step));
   });
 }
 
