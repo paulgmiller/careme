@@ -319,6 +319,15 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 		m.sendEmail(context.Background(), utypes.User{ID: "user-1"})
 	})
 
+	t.Run("no favorite store", func(t *testing.T) {
+		m := &mailer{}
+		m.sendEmail(context.Background(), utypes.User{
+			ID:        "user-1",
+			MailOptIn: true,
+			Email:     []string{"u1@example.com"},
+		})
+	})
+
 	location := testMailLocation()
 	today, err := recipes.StoreToDate(context.Background(), time.Now(), location)
 	if err != nil {
