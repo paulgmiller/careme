@@ -31,7 +31,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			wantType:    "application/manifest+json; charset=utf-8",
 			wantSnippet: `"display": "standalone"`,
 		},
-		//what do we actuallt want here?
+		// what do we actuallt want here?
 		{
 			name:        "service worker",
 			path:        "/sw.js",

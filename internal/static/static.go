@@ -90,9 +90,9 @@ func Register(mux routing.Registrar) {
 	// Intentionally versioned so that we can cache aggressively.
 	mux.HandleFunc("/static/htmx@2.0.8.js", static(jsContentType, htmx208JS))
 
-	//bad form to redirect to assetpath so pages are simpler? Still have to do head requests
+	// bad form to redirect to assetpath so pages are simpler? Still have to do head requests
 	mux.HandleFunc(AssetPath+"user-clerk-billing.js", static(jsContentType, userClerkBillingJS))
-	//w.Header().Set("Cache-Control", "public, max-age=3600")
+	// w.Header().Set("Cache-Control", "public, max-age=3600")
 
 	mux.HandleFunc(AssetPath+"share.js", static(jsContentType, shareJS))
 	mux.HandleFunc(AssetPath+"recipe.js", static(jsContentType, recipeJS))
@@ -121,7 +121,7 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc("/background.webp", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/webp")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
-		//could redirect to
+		// could redirect to
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		background := backgroundBySeason(seasons.GetCurrentSeason())
 		if _, err := w.Write(background); err != nil {

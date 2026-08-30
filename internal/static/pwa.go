@@ -156,7 +156,7 @@ func renderServiceWorker(w io.Writer) error {
 		"/static/app-icon-512.png",
 		"/static/htmx@2.0.8.js",
 		AssetPath + "tailwind.css",
-		//not not other javascript?
+		// not not other javascript?
 	}
 	authPaths := []string{"/sign-in", "/sign-up", "/auth/establish", "/logout"}
 
@@ -201,7 +201,7 @@ func serviceWorkerCacheName(precachePaths, authPaths []string) (string, error) {
 		appIcon192,
 		appIcon512,
 		htmx208JS,
-		[]byte(tailwindCSS), //already triggerd by precachepaths?
+		[]byte(tailwindCSS), // already triggerd by precachepaths?
 	} {
 		if _, err := fmt.Fprintf(hash, "%d:", len(part)); err != nil {
 			return "", err
