@@ -38,4 +38,4 @@ Run just this suite from the repository root:
 ./task.sh evals EVAL=recipe-critique
 ```
 
-The current suite evaluates critique structure, defect detection, suggested fixes, false positives, and brined/salty ingredient context. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
+The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
