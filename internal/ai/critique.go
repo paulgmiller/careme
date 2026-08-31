@@ -16,7 +16,7 @@ import (
 
 const (
 	openRouterBaseURL          = "https://openrouter.ai/api/v1"
-	defaultCritiqueModel       = "anthropic/claude-opus-5"
+	defaultCritiqueModel       = "google/gemini-3.1-pro-preview"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
 	openRouterApplicationTitle = "Careme"
 	openRouterApplicationURL   = "https://careme.cooking"

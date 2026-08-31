@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -100,7 +101,9 @@ func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiq
 }
 
 func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCritiquer) (map[string]interface{}, error) {
+	start := time.Now()
 	critique, err := critiquer.CritiqueRecipe(ctx, recipe)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
 	}
@@ -111,5 +114,8 @@ func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCriti
 	if err != nil {
 		return nil, fmt.Errorf("encode recipe critique: %w", err)
 	}
-	return map[string]interface{}{"output": string(output)}, nil
+	return map[string]interface{}{
+		"output":    string(output),
+		"latencyMs": latency.Milliseconds(),
+	}, nil
 }

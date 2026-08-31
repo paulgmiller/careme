@@ -70,7 +70,7 @@ func TestRecipeCritiqueDefaults(t *testing.T) {
 
 	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
 
-	assert.Equal(t, "anthropic/claude-opus-5", client.model)
+	assert.Equal(t, "google/gemini-3.1-pro-preview", client.model)
 }
 
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
