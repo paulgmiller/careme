@@ -155,6 +155,8 @@ func searchBaseURLAndStoreID(locationID string) (string, string, bool) {
 }
 
 func productToIngredient(product query.PathwaySearchProduct, _ int) ai.InputIngredient {
+	// TODO: Preserve SellByWeight, UnitOfMeasure, BasePricePer, and PricePer as
+	// InputIngredient.PriceUnit when adding Albertsons price-basis support.
 	productID := strings.TrimSpace(product.ID)
 	description := strings.TrimSpace(product.Name)
 	size := sizeText(product)

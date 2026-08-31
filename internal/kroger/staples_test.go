@@ -17,7 +17,7 @@ import (
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	got := NewIdentityProvider().Signature()
-	want := mustJSONSignature(defaultStaples())
+	want := mustJSONSignature(defaultStaples()) + "-price-unit-v1"
 
 	assert.Equal(t, want, got)
 }
@@ -165,6 +165,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 		Size:         new(" 3 lb "),
 		PriceRegular: &regular,
 		PriceSale:    &sale,
+		SoldBy:       new("weight"),
 		Categories:   &categories,
 	}, 0)
 
@@ -177,5 +178,6 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	assert.Equal(t, regular, *ingredient.PriceRegular)
 	require.NotNil(t, ingredient.PriceSale)
 	assert.Equal(t, sale, *ingredient.PriceSale)
+	assert.Equal(t, "lb", ingredient.PriceUnit)
 	assert.Equal(t, categories, ingredient.Categories)
 }

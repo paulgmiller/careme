@@ -29,6 +29,8 @@ func NewStaplesProviderFromStore(store *store) *staplesProvider {
 }
 
 func (p *staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	// TODO: Extend photo extraction to capture a price basis when a market sign
+	// shows one; its current numeric price is not reliably per item or weight.
 	ingredients, err := p.store.freshInventory(ctx, locationID)
 	if err != nil {
 		return nil, err

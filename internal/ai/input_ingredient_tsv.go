@@ -10,7 +10,7 @@ import (
 func InputIngredientsToTSV(ingredients []InputIngredient, w io.Writer) error {
 	csvw := csv.NewWriter(w)
 	csvw.Comma = '\t'
-	header := []string{"ProductId", "Brand", "Description", "Size", "PriceRegular", "PriceSale"}
+	header := []string{"ProductId", "Brand", "Description", "Size", "PriceRegular", "PriceSale", "PriceUnit"}
 	if err := csvw.Write(header); err != nil {
 		return err
 	}
@@ -26,6 +26,7 @@ func InputIngredientsToTSV(ingredients []InputIngredient, w io.Writer) error {
 			ingredient.Size,
 			priceToString(ingredient.PriceRegular),
 			priceToString(priceSale),
+			ingredient.PriceUnit,
 		}
 		if len(header) != len(row) {
 			return fmt.Errorf("header and row length mismatch: %d vs %d", len(header), len(row))

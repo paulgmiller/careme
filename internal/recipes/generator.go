@@ -375,7 +375,11 @@ func inputIngredientDisplayPrice(input ai.InputIngredient) string {
 	if price == nil {
 		return ""
 	}
-	return fmt.Sprintf("$%.2f", *price)
+	priceText := fmt.Sprintf("$%.2f", *price)
+	if unit := strings.TrimSpace(input.PriceUnit); unit != "" {
+		return priceText + " / " + unit
+	}
+	return priceText
 }
 
 // just making this best effort

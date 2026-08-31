@@ -17,7 +17,7 @@ import (
 	"github.com/samber/lo"
 )
 
-var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
+var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples()))) + "-price-unit-v1"
 
 type staplesFilter struct {
 	Term   string   `json:"term,omitempty"`
@@ -138,6 +138,7 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 				PriceSale:    item.Price.Promo,
 				Categories:   product.Categories,
 				AisleNumber:  aisle,
+				SoldBy:       item.SoldBy,
 			})
 
 			//DO we care about these?
@@ -175,8 +176,29 @@ func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputI
 		Size:         strings.TrimSpace(toStr(ingredient.Size)),
 		PriceRegular: clonePrice(ingredient.PriceRegular),
 		PriceSale:    clonePrice(ingredient.PriceSale),
+		PriceUnit:    priceUnit(ingredient),
 		Categories:   categoriesFromPtr(ingredient.Categories),
 	})
+}
+
+func priceUnit(ingredient Ingredient) string {
+	if !strings.EqualFold(strings.TrimSpace(toStr(ingredient.SoldBy)), "weight") {
+		return ""
+	}
+
+	for _, word := range strings.Fields(strings.ToLower(toStr(ingredient.Size))) {
+		switch strings.Trim(word, ".,()") {
+		case "lb", "lbs", "pound", "pounds":
+			return "lb"
+		case "oz", "ounce", "ounces":
+			return "oz"
+		case "kg", "kilogram", "kilograms":
+			return "kg"
+		case "g", "gram", "grams":
+			return "g"
+		}
+	}
+	return "weight"
 }
 
 func categoriesFromPtr(ptr *[]string) []string {

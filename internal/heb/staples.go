@@ -175,6 +175,8 @@ func storeIDFromLocation(locationID string) (string, error) {
 }
 
 func productToIngredient(product Product, category StapleCategory) ai.InputIngredient {
+	// TODO: Preserve PricedByWeight and the selected SKU's UnitListPrice /
+	// UnitSalePrice as InputIngredient.PriceUnit when adding H-E-B support.
 	categories := categoryNames(product, category)
 	location := ""
 	if product.ProductLocation != nil {

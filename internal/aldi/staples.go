@@ -172,6 +172,8 @@ func Wines() []StapleCategory {
 }
 
 func itemToIngredient(item query.Item, category StapleCategory) ai.InputIngredient {
+	// TODO: Parse ItemCard.PricingUnitString (for example "$7.49 / lb") into
+	// InputIngredient.PriceUnit when adding ALDI price-basis support.
 	productID := strings.TrimSpace(item.ProductID)
 	if productID == "" {
 		productID = strings.TrimSpace(item.ID)
