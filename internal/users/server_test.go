@@ -17,6 +17,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
+	"careme/internal/static"
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
@@ -310,10 +311,10 @@ func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing
 		"Account Information",
 		"Subscription",
 		`data-clerk-pricing-table`,
-		`/static/user-clerk-billing.js`,
+		static.AssetPath + `user-clerk-billing.js`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("expected user page to include %q, got body: %s", want, body)
+			t.Fatalf("expected user page to include %q, got body: %s, assetpath %s", want, body, static.AssetPath)
 		}
 	}
 	accountIndex := strings.Index(body, "Account Information")

@@ -14,8 +14,6 @@ import (
 )
 
 func TestRegisterServesPWAAssets(t *testing.T) {
-	Init()
-
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -31,11 +29,12 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			wantType:    "application/manifest+json; charset=utf-8",
 			wantSnippet: `"display": "standalone"`,
 		},
+		// what do we actuallt want here?
 		{
 			name:        "service worker",
 			path:        "/sw.js",
 			wantType:    "application/javascript; charset=utf-8",
-			wantSnippet: TailwindAssetPath,
+			wantSnippet: AssetPath,
 		},
 		{
 			name:        "Android asset links",
@@ -47,7 +46,7 @@ func TestRegisterServesPWAAssets(t *testing.T) {
 			name:        "offline page",
 			path:        "/offline",
 			wantType:    "text/html; charset=utf-8",
-			wantSnippet: TailwindAssetPath,
+			wantSnippet: AssetPath,
 		},
 		{
 			name:     "192 icon",
@@ -104,7 +103,6 @@ func TestAndroidAssetLinksMatchesBubblewrapFingerprint(t *testing.T) {
 }
 
 func TestRegisterServesManifestNameByHost(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -199,7 +197,6 @@ func TestRegisterServesManifestNameByHost(t *testing.T) {
 }
 
 func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
-	Init()
 	var b strings.Builder
 	err := renderOfflinePage(&b)
 	if err != nil {
@@ -213,7 +210,6 @@ func TestOfflinePageThemeColorMatchesPageBackground(t *testing.T) {
 }
 
 func TestOfflinePageResumesOnlineAndShowsCachedRecipeLinks(t *testing.T) {
-	Init()
 	var b strings.Builder
 	err := renderOfflinePage(&b)
 	if err != nil {
@@ -271,7 +267,6 @@ func TestOfflinePageResumesOnlineAndShowsCachedRecipeLinks(t *testing.T) {
 }
 
 func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
-	Init()
 	var b strings.Builder
 	err := renderServiceWorker(&b)
 	if err != nil {
@@ -291,7 +286,6 @@ func TestServiceWorkerBypassesAuthRoutes(t *testing.T) {
 }
 
 func TestServiceWorkerCacheNameIsContentAddressed(t *testing.T) {
-	Init()
 	var before strings.Builder
 	if err := renderServiceWorker(&before); err != nil {
 		t.Fatalf("renderServiceWorker() error = %v", err)
@@ -319,7 +313,6 @@ func TestServiceWorkerCacheNameIsContentAddressed(t *testing.T) {
 }
 
 func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
-	Init()
 	var b strings.Builder
 	err := renderServiceWorker(&b)
 	if err != nil {
@@ -346,7 +339,6 @@ func TestServiceWorkerRefreshesSeasonalFavicon(t *testing.T) {
 }
 
 func TestServiceWorkerCachesSavedRecipesOffline(t *testing.T) {
-	Init()
 	var b strings.Builder
 	err := renderServiceWorker(&b)
 	if err != nil {
