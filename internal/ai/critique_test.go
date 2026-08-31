@@ -103,12 +103,12 @@ func TestRecipeCritiqueSystemInstructionRequiresProviderCompatibleOutput(t *test
 
 func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T) {
 	for _, want := range []string{
-		"1.25% salt by weight for boneless meat",
-		"1.5% for bone-in meat including roast chicken",
+		"1.25% by meat weight for boneless meat",
+		"1.5% by meat weight for bone-in meat including roast chicken",
 		"1% for vegetables and grains",
 		"2% salinity for pasta or vegetable-blanching water",
 		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
-		"Specify salt by weight when practical",
+		"Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams",
 		"name the salt type because crystal sizes vary",
 		"reflect substantial underseasoning or oversalting in the overall score",
 	} {
