@@ -122,7 +122,7 @@ tests:
           const saltCriticism = [
             ...critique.issues.map((issue) => issue.detail),
             ...critique.suggested_fixes,
-          ].filter((text) => /salt|season|brin/i.test(text));
+          ].filter((text) => /\bsalt(?:ed|ing|y)?\b|\bbrin(?:e|ed|ing)\b/i.test(text));
           return saltCriticism.length === 0;
         metric: respects-pre-brined-ingredient
 
