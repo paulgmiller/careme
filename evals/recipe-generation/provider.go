@@ -1,4 +1,4 @@
-package recipeeval
+package main
 
 import (
 	"context"

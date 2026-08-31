@@ -70,7 +70,7 @@ func TestRecipeCritiqueDefaults(t *testing.T) {
 
 	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
 
-	assert.Equal(t, "anthropic/claude-opus-5", client.model)
+	assert.Equal(t, "google/gemini-3.1-pro-preview", client.model)
 }
 
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
@@ -103,12 +103,13 @@ func TestRecipeCritiqueSystemInstructionRequiresProviderCompatibleOutput(t *test
 
 func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T) {
 	for _, want := range []string{
-		"1.25% salt by weight for boneless meat",
-		"1.5% for bone-in meat including roast chicken",
+		"1.25% by meat weight for boneless meat",
+		"1.5% by meat weight for bone-in meat including roast chicken",
 		"1% for vegetables and grains",
 		"2% salinity for pasta or vegetable-blanching water",
 		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
-		"evaluate salt by weight when available rather than assuming equal volume measures across salt types",
+		"Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams",
+		"name the salt type because crystal sizes vary",
 		"reflect substantial underseasoning or oversalting in the overall score",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)

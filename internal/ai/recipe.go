@@ -149,6 +149,8 @@ type QuestionResponse struct {
 	PromptCacheKey string
 }
 
+const saltSeasoningStandard = `Use these salt starting points when quantities permit calculation: 1.25% by meat weight for boneless meat, 1.5% by meat weight for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water. Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams, and name the salt type because crystal sizes vary. Presalt meat and salt pasta or blanching water at the proper cooking stage rather than relying on salt or salty ingredients added later. Account for ingredients that are already brined or cured and for requests to reduce sodium.`
+
 // edited out. Which recipe should be richer?!
 const systemMessage = `
 You are a professional chef and recipe developer helping working families cook varied weeknight dinners.
@@ -162,7 +164,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
 - Pantry items are allowed when common and inexpensive.
-- Presalting meat and salting pasta or blanching water season food during cooking. Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead. Account for meat that is already brined or cured and for user requests to reduce sodium.
+- ` + saltSeasoningStandard + `
 - When doneness matters, recommend the doneness that best suits the dish and give one concise target or pull temperature, plus a brief rest when useful. Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer. Careme provides a separate temperature guide beside the recipe.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.

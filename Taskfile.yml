@@ -81,10 +81,48 @@ tasks:
       - go test ./...
 
   evals:
-    desc: Run ingredient grader evaluations
-    dir: evals/ingredient-grader
+    desc: List Promptfoo evaluations; run one with EVAL=recipe-critique or all with EVAL=all
+    silent: true
+    vars:
+      EVAL: '{{default "" .EVAL}}'
+    env:
+      CAREME_EVAL: "{{.EVAL}}"
     cmds:
-      - npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval
+      - |
+        if [ -z "$CAREME_EVAL" ]; then
+          echo "available evals:"
+          for available in evals/*/promptfooconfig.yaml; do
+            basename "$(dirname "$available")"
+          done
+          echo "run one with: ./task.sh evals EVAL=<name>"
+          echo "run all with: ./task.sh evals EVAL=all"
+          exit 0
+        fi
+
+        if [ "$CAREME_EVAL" = "all" ]; then
+          configs="evals/*/promptfooconfig.yaml"
+        else
+          config="evals/$CAREME_EVAL/promptfooconfig.yaml"
+          if [ ! -f "$config" ]; then
+            echo "unknown eval: $CAREME_EVAL" >&2
+            echo "available evals:" >&2
+            for available in evals/*/promptfooconfig.yaml; do
+              basename "$(dirname "$available")" >&2
+            done
+            exit 1
+          fi
+          configs="$config"
+        fi
+
+        for config in $configs; do
+          eval_dir="$(dirname "$config")"
+          eval_name="$(basename "$eval_dir")"
+          echo "Running $eval_name eval"
+          (
+            cd "$eval_dir"
+            npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --config promptfooconfig.yaml
+          )
+        done
 
   css:
     desc: Rebuild Tailwind output
