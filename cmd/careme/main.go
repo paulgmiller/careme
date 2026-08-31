@@ -11,7 +11,6 @@ import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/mail"
-	"careme/internal/static"
 	"careme/internal/templates"
 )
 
@@ -43,8 +42,7 @@ func main() {
 	}
 	defer close()
 
-	static.Init()
-	if err := templates.Init(cfg, static.AssetPath); err != nil {
+	if err := templates.Init(cfg); err != nil {
 		log.Fatalf("failed to initialize templates: %s", err)
 	}
 

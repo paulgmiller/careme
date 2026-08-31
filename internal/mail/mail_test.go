@@ -27,7 +27,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	if err := templates.Init(&config.Config{}); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

@@ -37,8 +37,11 @@ var offlineHTML []byte
 var serviceWorkerJS []byte
 
 var (
+	funcs = template.FuncMap{
+		"AssetPath": func() string { return AssetPath },
+	}
 	manifestTemplate      = texttemplate.Must(texttemplate.New("manifest").Parse(string(manifestWebmanifest)))
-	offlinePageTemplate   = template.Must(template.New("offline").Parse(string(offlineHTML)))
+	offlinePageTemplate   = template.Must(template.New("offline").Funcs(funcs).Parse(string(offlineHTML)))
 	serviceWorkerTemplate = texttemplate.Must(texttemplate.New("sw").Parse(string(serviceWorkerJS)))
 )
 

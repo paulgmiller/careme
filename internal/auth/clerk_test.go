@@ -67,7 +67,7 @@ func TestSignInURLFallsBackToLocalhostForLocalRequests(t *testing.T) {
 }
 
 func TestAccountRequiredPageExplainsReasonAndPreservesReturnTo(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	client := &clerkClient{cfg: &config.Config{}}
 	mux := http.NewServeMux()
 	client.Register(mux)
@@ -106,7 +106,7 @@ func TestAccountRequiredPageExplainsReasonAndPreservesReturnTo(t *testing.T) {
 }
 
 func TestAccountRequiredPageRejectsInvalidInput(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	client := &clerkClient{cfg: &config.Config{}}
 	mux := http.NewServeMux()
 	client.Register(mux)

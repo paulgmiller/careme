@@ -8,7 +8,6 @@ import (
 
 	"careme/internal/config"
 	caremail "careme/internal/mail"
-	"careme/internal/static"
 	"careme/internal/templates"
 )
 
@@ -24,8 +23,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load configuration: %v", err)
 	}
-	static.Init()
-	if err := templates.Init(cfg, static.AssetPath); err != nil {
+	if err := templates.Init(cfg); err != nil {
 		log.Fatalf("initialize templates: %v", err)
 	}
 

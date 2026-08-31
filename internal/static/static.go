@@ -56,15 +56,15 @@ var backgroundSpring []byte
 //go:embed summer.webp
 var backgroundSummer []byte
 
-var AssetPath string
+var AssetPath = calculateAssetPath()
 
-func Init() {
+func calculateAssetPath() string {
 	hasher := fnv.New64()
 
 	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS} {
-		hasher.Write(asset)
+		_, _ = hasher.Write(asset)
 	}
-	AssetPath = fmt.Sprintf("/static/%x/", hasher.Sum(nil))
+	return fmt.Sprintf("/static/%x/", hasher.Sum(nil))
 }
 
 const immutable = "public, max-age=31536000, immutable"

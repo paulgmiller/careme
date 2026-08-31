@@ -74,7 +74,6 @@ func TestFontFilesEmbedded(t *testing.T) {
 }
 
 func TestRegisterServesFontFiles(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -97,7 +96,6 @@ func TestRegisterServesFontFiles(t *testing.T) {
 }
 
 func TestRegisterServesUserClerkBillingJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -122,7 +120,6 @@ func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 }
 
 func TestRegisterServesShareJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -145,7 +142,6 @@ func TestRegisterServesShareJS(t *testing.T) {
 }
 
 func TestRegisterServesRecipeJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -175,7 +171,6 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 }
 
 func TestRegisterServesFarmersMarketJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -199,7 +194,6 @@ func TestRegisterServesFarmersMarketJS(t *testing.T) {
 
 func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "spring")
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -220,7 +214,6 @@ func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 
 func TestRegisterServesSeasonalFaviconFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "winter")
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
