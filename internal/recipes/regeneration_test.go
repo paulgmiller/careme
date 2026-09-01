@@ -1,12 +1,13 @@
 package recipes
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"careme/internal/cache"
-	"careme/internal/recipes/regeneration"
+	"careme/internal/recipes/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +16,8 @@ import (
 func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
-	jobID := regeneration.ID("old-hash", "response-id")
-	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.IfNoneMatch()))
+	jobID := status.ID("old-hash", "response-id")
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID))
 
 	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -34,10 +35,10 @@ func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) 
 func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
-	s.regenerations = regeneration.TimeoutStore(cacheStore)
 
-	jobID := regeneration.ID("old-hash", "response-id")
-	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.IfNoneMatch()))
+	jobID := status.ID("old-hash", "response-id")
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID))
+	require.NoError(t, s.generationStatuses.Fail(t.Context(), jobID, fmt.Errorf("timed out i guess")))
 
 	path := "/recipe/old-hash/regen/" + jobID
 	req := httptest.NewRequest(http.MethodGet, path, nil)

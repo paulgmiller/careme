@@ -23,7 +23,6 @@ import (
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
-	"careme/internal/recipes/regeneration"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/templates"
@@ -1113,18 +1112,18 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	spinLocation := rr.Header().Get("Location")
-	jobID := regeneration.ID(originalHash, "resp-question")
+	jobID := status.ID(originalHash, "resp-question")
 	require.Equal(t, "/recipe/"+url.PathEscape(originalHash)+"/regen/"+jobID, spinLocation)
 	require.NotContains(t, spinLocation, "resp-question")
 
 	require.Eventually(t, func() bool {
-		newHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
-		return loadErr == nil && newHash != ""
+		payload, loadErr := s.generationStatuses.Load(t.Context(), jobID)
+		return loadErr == nil && payload.NewHash() != ""
 	}, time.Second, 10*time.Millisecond)
-	regeneratedHash, timedOut, err := s.regenerations.Load(t.Context(), jobID)
+	payload, err := s.generationStatuses.Load(t.Context(), jobID)
 	require.NoError(t, err)
-	assert.NotEmpty(t, regeneratedHash)
-	assert.False(t, timedOut)
+	assert.NotEmpty(t, payload.NewHash())
+	assert.Empty(t, payload.Failed())
 	pollServer := newTestServer(t, withTestCache(cacheStore))
 
 	htmxSpinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
@@ -1173,8 +1172,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
 
-	s.regenerations = regeneration.TimeoutStore(cacheStore)
-	require.NoError(t, s.regenerations.Start(t.Context(), jobID, cache.Unconditional()))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID))
+	require.NoError(t, s.generationStatuses.Fail(t.Context(), jobID, fmt.Errorf("timed out")))
 	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
 	timedOutReq.Header.Set("HX-Request", "true")
 	timedOutReq.SetPathValue("hash", originalHash)
@@ -1193,8 +1192,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	require.Equal(t, http.StatusSeeOther, retryRR.Code)
 	assert.Equal(t, spinLocation, retryRR.Header().Get("Location"))
 	require.Eventually(t, func() bool {
-		retryHash, _, loadErr := s.regenerations.Load(t.Context(), jobID)
-		return loadErr == nil && retryHash != ""
+		payload, loadErr := s.generationStatuses.Load(t.Context(), jobID)
+		return loadErr == nil && payload.NewHash() != ""
 	}, time.Second, 10*time.Millisecond)
 	assert.Equal(t, 2, generator.regenerateCalls)
 	assert.Equal(t, "resp-question", generator.lastResponse.ID)

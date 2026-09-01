@@ -99,7 +99,12 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 }
 
 func (ss *Store) Complete(ctx context.Context, hash, newhash string) error {
-	panic("not implemented")
+	status, err := ss.Load(ctx, hash)
+	if err != nil {
+		return err
+	}
+	status.Redirect = newhash
+	return ss.save(ctx, hash, status)
 }
 
 func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
