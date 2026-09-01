@@ -28,7 +28,6 @@ import (
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
-	"careme/internal/recipes/regeneration"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -91,18 +90,13 @@ type ImageStore interface {
 	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
 }
 
-type regens interface {
-	Start(ctx context.Context, id string, opts cache.PutOptions) error
-	Complete(ctx context.Context, id, newHash string) error
-	Load(ctx context.Context, id string) (newHash string, timedOut bool, err error)
-}
-
 // pretty simililar to regens :) just missing redirect here and status messages above.
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error
 	//TODO would really like to return an interface from load
 	Load(ctx context.Context, hash string) (status.Payload, error)
+	Complete(ctx context.Context, id, newHash string) error
 }
 
 type server struct {
@@ -117,7 +111,6 @@ type server struct {
 	wg                 sync.WaitGroup
 	clerk              auth.AuthClient
 	critiques          critiqueStore
-	regenerations      regens
 }
 
 type critiqueStore interface {
@@ -139,7 +132,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		locServer:          locServer,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
-		regenerations:      regeneration.NewStore(c),
 	}
 }
 
@@ -469,23 +461,21 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 	instructions := singleRecipeRegenerationInstructions(critiqueFixes)
 	previous := ai.ResponseRef{ID: responseID, PromptCacheKey: recipe.PromptCacheKey}
-	id := regeneration.ID(hash, responseID)
+	id := status.ID(hash, responseID)
 
-	putOptions := cache.IfNoneMatch()
-	_, timedOut, err := s.regenerations.Load(ctx, id)
+	status, err := s.generationStatuses.Load(ctx, id)
 	if err == nil {
-		if !timedOut {
+		if status.Failed() != "" {
 			redirectToRecipeRegeneration(w, r, hash, id)
 			return
 		}
-		putOptions = cache.Unconditional()
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load recipe regeneration job", "hash", hash, "job_id", id, "error", err)
 		http.Error(w, "failed to prepare recipe refresh", http.StatusInternalServerError)
 		return
 	}
 
-	err = s.regenerations.Start(ctx, id, putOptions)
+	err = s.generationStatuses.Start(ctx, id)
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -519,7 +509,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	newHash, timedOut, err := s.regenerations.Load(ctx, jobID)
+	payload, err := s.generationStatuses.Load(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe regeneration not found", http.StatusNotFound)
@@ -530,16 +520,16 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if newHash != "" {
-		redirectToRecipe(w, r, newHash)
+	if payload.NewHash() != "" {
+		redirectToRecipe(w, r, payload.NewHash())
 		return
 	}
-	if timedOut {
+	if payload.Failed() != "" {
 		s.renderRecipeRegenerationRetry(ctx, w, r, hash)
 		return
 	}
 
-	spin(ctx, w, r, "working on it boss")
+	spin(ctx, w, r, payload.String())
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -909,7 +899,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
 			}
 		}
-		if err := s.regenerations.Complete(ctx, id, newHash); err != nil {
+		if err := s.generationStatuses.Complete(ctx, id, newHash); err != nil {
 			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "job_id", id, "new_hash", newHash, "error", err)
 		}
 	})

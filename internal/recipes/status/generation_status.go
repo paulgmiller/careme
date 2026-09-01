@@ -2,8 +2,10 @@ package status
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	"strings"
@@ -18,17 +20,11 @@ const (
 	recipeGenerationTimeout     = 10 * time.Minute
 )
 
-// Full-plan generation uses the shopping-list hash as its job ID because one
-// cached result exists per parameter hash; an explicit retry replaces that
-// hash's previous attempt. Single-recipe tweaks instead use recipe_regenerations/
-// with an ID derived from the old recipe hash and response ID so separate
-// question threads do not collide. The stores can share a generic job model in
-// the future if their different IDs and completion Payloads are made explicit.
 type Payload struct {
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	Error     string    `json:"error,omitempty"`
-	//Redirect  string    `json:"redirect,omitemptu"`
+	Redirect  string    `json:"redirect,omitemptu"`
 }
 
 func (p Payload) String() string {
@@ -42,6 +38,19 @@ func (p Payload) Failed() string {
 	}
 
 	return p.Error
+}
+
+// Complete(ctx context.Context, id, newHash string) error
+// ID returns the stable, URL-safe identifier for a regeneration attempt.
+func ID(oldHash, responseID string) string {
+	h := fnv.New128a()
+	_, _ = io.WriteString(h, strings.TrimSpace(oldHash))
+	_, _ = io.WriteString(h, strings.TrimSpace(responseID))
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+
+func (p Payload) NewHash() string {
+	return p.Redirect
 }
 
 type Store struct {
@@ -87,6 +96,10 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 	}
 	status.Message = prependStatus(message, status.Message)
 	return ss.save(ctx, hash, status)
+}
+
+func (ss *Store) Complete(ctx context.Context, hash, newhash string) error {
+	panic("not implemented")
 }
 
 func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
