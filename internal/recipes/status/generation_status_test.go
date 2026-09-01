@@ -1,4 +1,4 @@
-package recipes
+package status
 
 import (
 	"errors"
@@ -13,8 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPayloadTimeout(t *testing.T) {
+	p := Payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
+	assert.Equal(t, "Recipe generation timed out.", p.Failed())
+}
+func TestPayloadFailed(t *testing.T) {
+	p := Payload{Error: "Kaboom", StartedAt: time.Now()}
+	assert.Equal(t, "Kaboom", p.Failed())
+	assert.Equal(t, Payload{StartedAt: time.Now()}.Failed(), "")
+}
+
 func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
 	statuses.now = func() time.Time { return startedAt }
 
@@ -44,7 +54,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 }
 
 func TestUpdateKeepsFiveRecentLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -62,7 +72,7 @@ func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 }
 
 func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -74,7 +84,7 @@ func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 }
 
 func TestUpdateKeepsConcurrentLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-concurrent"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -100,7 +110,7 @@ func TestUpdateKeepsConcurrentLines(t *testing.T) {
 }
 
 func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	require.NoError(t, statuses.Start(t.Context(), "failed"))
 
 	require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
@@ -113,7 +123,7 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 
 func TestGenerationStatusDecodesLegacyText(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	statuses := StatusStore(cacheStore)
+	statuses := NewStore(cacheStore)
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.UTC)
 	statuses.now = func() time.Time { return startedAt }
 	require.NoError(t, cacheStore.Put(t.Context(), generationStatusCachePrefix+"running", "Still chopping", cache.Unconditional()))

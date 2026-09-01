@@ -1,4 +1,4 @@
-package recipes
+package status
 
 import (
 	"context"
@@ -13,38 +13,55 @@ import (
 	"careme/internal/cache"
 )
 
-const generationStatusCachePrefix = "generation_status/"
+const (
+	generationStatusCachePrefix = "generation_status/"
+	recipeGenerationTimeout     = 10 * time.Minute
+)
 
 // Full-plan generation uses the shopping-list hash as its job ID because one
 // cached result exists per parameter hash; an explicit retry replaces that
 // hash's previous attempt. Single-recipe tweaks instead use recipe_regenerations/
 // with an ID derived from the old recipe hash and response ID so separate
 // question threads do not collide. The stores can share a generic job model in
-// the future if their different IDs and completion payloads are made explicit.
-type generationStatus struct {
+// the future if their different IDs and completion Payloads are made explicit.
+type Payload struct {
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	Error     string    `json:"error,omitempty"`
+	//Redirect  string    `json:"redirect,omitemptu"`
 }
 
-type statusStore struct {
+func (p Payload) String() string {
+	return p.Message
+}
+
+func (p Payload) Failed() string {
+
+	if time.Since(p.StartedAt) >= recipeGenerationTimeout {
+		return "Recipe generation timed out."
+	}
+
+	return p.Error
+}
+
+type Store struct {
 	mu    sync.Mutex
 	cache cache.Cache
 	now   func() time.Time
 }
 
-func StatusStore(c cache.Cache) *statusStore {
-	return &statusStore{cache: c, now: time.Now}
+func NewStore(c cache.Cache) *Store {
+	return &Store{cache: c, now: time.Now}
 }
 
 // Start  creates or resets an existing
-func (ss *statusStore) Start(ctx context.Context, hash string) error {
-	return ss.save(ctx, hash, generationStatus{
+func (ss *Store) Start(ctx context.Context, hash string) error {
+	return ss.save(ctx, hash, Payload{
 		StartedAt: ss.now().UTC(),
 	})
 }
 
-func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
+func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 	if err == nil {
 		return fmt.Errorf("generation failure is required")
 	}
@@ -58,7 +75,7 @@ func (ss *statusStore) Fail(ctx context.Context, hash string, err error) error {
 	return ss.save(ctx, hash, status)
 }
 
-func (ss *statusStore) Update(ctx context.Context, hash, message string) error {
+func (ss *Store) Update(ctx context.Context, hash, message string) error {
 	// this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
 	// should be using etags
 	ss.mu.Lock()
@@ -72,10 +89,10 @@ func (ss *statusStore) Update(ctx context.Context, hash, message string) error {
 	return ss.save(ctx, hash, status)
 }
 
-func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus, error) {
+func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 	statusReader, err := ss.cache.Get(ctx, generationStatusCachePrefix+hash)
 	if err != nil {
-		return generationStatus{}, fmt.Errorf("get generation status for hash %s: %w", hash, err)
+		return Payload{}, fmt.Errorf("get generation status for hash %s: %w", hash, err)
 	}
 	defer func() {
 		if err := statusReader.Close(); err != nil {
@@ -86,20 +103,20 @@ func (ss *statusStore) Load(ctx context.Context, hash string) (generationStatus,
 	// buffer whole thing only for back compat below. Afetr that we can stream
 	raw, err := io.ReadAll(statusReader)
 	if err != nil {
-		return generationStatus{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)
+		return Payload{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)
 	}
 
-	var stored generationStatus
+	var stored Payload
 	if err := json.Unmarshal(raw, &stored); err == nil {
 		return stored, nil
 	}
 
 	// back compat its all just strings Remove after a couple of days?
 	message := strings.TrimSpace(string(raw))
-	return generationStatus{Message: message, StartedAt: ss.now()}, nil
+	return Payload{Message: message, StartedAt: ss.now()}, nil
 }
 
-func (ss *statusStore) save(ctx context.Context, hash string, status generationStatus) error {
+func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")

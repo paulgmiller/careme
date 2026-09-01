@@ -29,6 +29,7 @@ import (
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/recipes/regeneration"
+	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -96,11 +97,19 @@ type regens interface {
 	Load(ctx context.Context, id string) (newHash string, timedOut bool, err error)
 }
 
+// pretty simililar to regens :) just missing redirect here and status messages above.
+type statusStore interface {
+	Start(ctx context.Context, hash string) error
+	Fail(ctx context.Context, hash string, err error) error
+	//TODO would really like to return an interface from load
+	Load(ctx context.Context, hash string) (status.Payload, error)
+}
+
 type server struct {
 	recipeio
 	images             ImageStore
 	imagegen           ImageGen
-	generationStatuses *statusStore
+	generationStatuses statusStore
 	cfg                *config.Config
 	storage            *users.Storage
 	generator          generator
@@ -118,12 +127,12 @@ type critiqueStore interface {
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
-	statusStore := StatusStore(c)
+
 	return &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),
 		imagegen:           imagegen,
-		generationStatuses: statusStore,
+		generationStatuses: status.NewStore(c),
 		cfg:                cfg,
 		storage:            storage,
 		generator:          generator,
@@ -530,7 +539,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	spin(ctx, w, r, generationStatus{})
+	spin(ctx, w, r, "working on it boss")
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1112,10 +1121,9 @@ func paramsForAction(ctx context.Context, hash, userID, instructions string, io 
 }
 
 const (
-	queryArgHash            = "h"
-	queryArgConversion      = "conversion"
-	queryArgInstructions    = "instructions"
-	recipeGenerationTimeout = 10 * time.Minute
+	queryArgHash         = "h"
+	queryArgConversion   = "conversion"
+	queryArgInstructions = "instructions"
 	// QueryArgHelp carries campaign-specific shopping list help text through redirects.
 	QueryArgHelp = "help"
 )
@@ -1146,24 +1154,16 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			generationFailed(ctx, w, r, hashParam, "recipe start failure")
 			return
 		}
-		spin(ctx, w, r, generationStatus{
-			Message: "We couldn't check progress just now. We'll try again automatically.",
-		})
+		spin(ctx, w, r, "We couldn't check progress just now. We'll try again automatically.")
 		return
 	}
 
-	if status.Error != "" {
-		generationFailed(ctx, w, r, hashParam, status.Error)
+	if status.Failed() != "" {
+		generationFailed(ctx, w, r, hashParam, status.Failed())
 		return
 	}
 
-	if time.Since(status.StartedAt) >= recipeGenerationTimeout {
-		slog.WarnContext(ctx, "recipe generation timed out", "started_at", status.StartedAt, "hash", hashParam)
-		generationFailed(ctx, w, r, hashParam, "Recipe generation timed out.")
-		return
-	}
-
-	spin(ctx, w, r, status)
+	spin(ctx, w, r, status.String())
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1564,12 +1564,12 @@ func newSpinnerData(ctx context.Context) spinnerData {
 	}
 }
 
-func spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status generationStatus) {
+func spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status string) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 
 	data := newSpinnerData(ctx)
 	data.RefreshInterval = "10" // seconds
-	data.StatusMessage = status.Message
+	data.StatusMessage = status
 	data.CurrentPath = r.URL.RequestURI()
 
 	if httpx.IsHTMX(r) {
