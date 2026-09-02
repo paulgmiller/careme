@@ -90,7 +90,7 @@ type ImageStore interface {
 	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
 }
 
-// pretty simililar to regens :) just missing redirect here and status messages above.
+
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error

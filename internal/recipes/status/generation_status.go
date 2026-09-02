@@ -144,21 +144,13 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 			slog.ErrorContext(ctx, "failed to close generation status reader", "hash", hash, "error", err)
 		}
 	}()
-
-	// buffer whole thing only for back compat below. Afetr that we can stream
-	raw, err := io.ReadAll(statusReader)
-	if err != nil {
-		return Payload{}, fmt.Errorf("read generation status for hash %s: %w", hash, err)
-	}
-
+	
 	var stored Payload
-	if err := json.Unmarshal(raw, &stored); err == nil {
-		return stored, nil
+	if err := json.NewDecoder(statusReader).Decode(&stored); err != nil {
+		return Payload{}, err
 	}
-
-	// back compat its all just strings Remove after a couple of days?
-	message := strings.TrimSpace(string(raw))
-	return Payload{Message: message, StartedAt: ss.now()}, nil
+	return stored, nil 
+	
 }
 
 func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
