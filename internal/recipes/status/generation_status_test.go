@@ -13,6 +13,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIDIsStableAndURLSafe(t *testing.T) {
+	id := ID("old-hash", "response/id+with=padding")
+
+	require.Len(t, id, 22)
+	assert.NotContains(t, id, "+")
+	assert.NotContains(t, id, "/")
+	assert.NotContains(t, id, "=")
+	assert.True(t, IsValidID(id))
+	assert.Equal(t, id, ID("old-hash", "response/id+with=padding"))
+	assert.NotEqual(t, id, ID("other-hash", "response/id+with=padding"))
+
+	for _, invalid := range []string{"", "not-an-id", id + "=", " " + id} {
+		assert.False(t, IsValidID(invalid), invalid)
+	}
+}
+
 func TestPayloadTimeout(t *testing.T) {
 	p := Payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
 	assert.Equal(t, "Recipe generation timed out.", p.Failed())

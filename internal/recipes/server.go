@@ -464,7 +464,8 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 	status, err := s.generationStatuses.Load(ctx, id)
 	if err == nil {
-		// failures can be redirected back here but if theres no failure just go back to spin
+		// Running and completed jobs already have a polling URL. Failed jobs
+		// fall through so Start resets their status for the explicit retry.
 		if status.Failed() == "" {
 			redirectToRecipeRegeneration(w, r, hash, id)
 			return
@@ -506,6 +507,10 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 	jobID := strings.TrimSpace(r.PathValue("jobID"))
 	if hash == "" || jobID == "" {
 		http.Error(w, "missing recipe regeneration", http.StatusBadRequest)
+		return
+	}
+	if !status.IsValidID(jobID) {
+		http.Error(w, "recipe regeneration not found", http.StatusNotFound)
 		return
 	}
 

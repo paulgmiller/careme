@@ -52,3 +52,19 @@ func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), `/recipe/old-hash/regenerate`)
 	assert.Contains(t, rr.Body.String(), "Try again, chef")
 }
+
+func TestHandleSingleRecipeRegenerationRejectsInvalidJobID(t *testing.T) {
+	cacheStore := cache.NewFileCache(t.TempDir())
+	s := newTestServer(t, withTestCache(cacheStore))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), "not-an-id"))
+
+	req := httptest.NewRequest(http.MethodGet, "/recipe/old-hash/regen/not-an-id", nil)
+	req.SetPathValue("hash", "old-hash")
+	req.SetPathValue("jobID", "not-an-id")
+	rr := httptest.NewRecorder()
+
+	s.handleSingleRecipeRegeneration(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "recipe regeneration not found")
+}

@@ -45,13 +45,18 @@ func (p Payload) Failed() string {
 	return ""
 }
 
-// Complete(ctx context.Context, id, newHash string) error
 // ID returns the stable, URL-safe identifier for a regeneration attempt.
 func ID(oldHash, responseID string) string {
 	h := fnv.New128a()
 	_, _ = io.WriteString(h, strings.TrimSpace(oldHash))
 	_, _ = io.WriteString(h, strings.TrimSpace(responseID))
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+}
+
+// IsValidID reports whether id is a canonical regeneration identifier.
+func IsValidID(id string) bool {
+	raw, err := base64.RawURLEncoding.DecodeString(id)
+	return err == nil && len(raw) == 16 && base64.RawURLEncoding.EncodeToString(raw) == id
 }
 
 func (p Payload) NewHash() string {
@@ -156,7 +161,7 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 	return Payload{Message: message, StartedAt: ss.now()}, nil
 }
 
-func (ss *Store) save(ctx context.Context, hash string, status Payload, opts cache.Put) error {
+func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")
