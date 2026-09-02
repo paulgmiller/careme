@@ -1,4 +1,4 @@
-package recipes
+package status
 
 import (
 	"errors"
@@ -13,8 +13,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIDIsStableAndURLSafe(t *testing.T) {
+	id := ID("old-hash", "response/id+with=padding")
+
+	require.Len(t, id, 22)
+	assert.NotContains(t, id, "+")
+	assert.NotContains(t, id, "/")
+	assert.NotContains(t, id, "=")
+	assert.True(t, IsValidID(id))
+	assert.Equal(t, id, ID("old-hash", "response/id+with=padding"))
+	assert.NotEqual(t, id, ID("other-hash", "response/id+with=padding"))
+
+	for _, invalid := range []string{"", "not-an-id", id + "=", " " + id} {
+		assert.False(t, IsValidID(invalid), invalid)
+	}
+}
+
+func TestPayloadTimeout(t *testing.T) {
+	p := Payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
+	assert.Equal(t, "Recipe generation timed out.", p.Failed())
+}
+
+func TestPayloadFailed(t *testing.T) {
+	p := Payload{Error: "Kaboom", StartedAt: time.Now()}
+	assert.Equal(t, "Kaboom", p.Failed())
+	assert.Equal(t, Payload{StartedAt: time.Now()}.Failed(), "")
+}
+
+func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
+	p := Payload{
+		StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute),
+		Error:     "stale failure",
+		Redirect:  "new-hash",
+	}
+
+	assert.Empty(t, p.Failed())
+}
+
 func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
 	statuses.now = func() time.Time { return startedAt }
 
@@ -44,7 +81,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 }
 
 func TestUpdateKeepsFiveRecentLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -62,7 +99,7 @@ func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 }
 
 func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -74,7 +111,7 @@ func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 }
 
 func TestUpdateKeepsConcurrentLines(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-concurrent"
 	require.NoError(t, statuses.Start(t.Context(), hash))
 
@@ -100,7 +137,7 @@ func TestUpdateKeepsConcurrentLines(t *testing.T) {
 }
 
 func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
-	statuses := StatusStore(cache.NewInMemoryCache())
+	statuses := NewStore(cache.NewInMemoryCache())
 	require.NoError(t, statuses.Start(t.Context(), "failed"))
 
 	require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
@@ -111,21 +148,40 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 	assert.Empty(t, got.Message)
 }
 
-func TestGenerationStatusDecodesLegacyText(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	statuses := StatusStore(cacheStore)
-	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.UTC)
-	statuses.now = func() time.Time { return startedAt }
-	require.NoError(t, cacheStore.Put(t.Context(), generationStatusCachePrefix+"running", "Still chopping", cache.Unconditional()))
-	require.NoError(t, cacheStore.Put(t.Context(), generationStatusCachePrefix+"failed", "Something went wrong: store returned 404", cache.Unconditional()))
+func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
+	t.Run("completed generation cannot fail", func(t *testing.T) {
+		statuses := NewStore(cache.NewInMemoryCache())
+		require.NoError(t, statuses.Start(t.Context(), "completed"))
+		require.NoError(t, statuses.Complete(t.Context(), "completed", "new-hash"))
 
-	running, err := statuses.Load(t.Context(), "running")
-	require.NoError(t, err)
-	assert.Equal(t, "Still chopping", running.Message)
-	assert.Empty(t, running.Error)
-	assert.Equal(t, startedAt, running.StartedAt)
+		err := statuses.Fail(t.Context(), "completed", errors.New("late failure"))
+		require.ErrorContains(t, err, "already completed")
 
-	failed, err := statuses.Load(t.Context(), "failed")
-	require.NoError(t, err)
-	assert.Equal(t, "Something went wrong: store returned 404", failed.Message)
+		got, loadErr := statuses.Load(t.Context(), "completed")
+		require.NoError(t, loadErr)
+		assert.Equal(t, "new-hash", got.NewHash())
+		assert.Empty(t, got.Failed())
+	})
+
+	t.Run("failed generation cannot complete", func(t *testing.T) {
+		statuses := NewStore(cache.NewInMemoryCache())
+		require.NoError(t, statuses.Start(t.Context(), "failed"))
+		require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
+
+		err := statuses.Complete(t.Context(), "failed", "new-hash")
+		require.ErrorContains(t, err, "already failed")
+
+		got, loadErr := statuses.Load(t.Context(), "failed")
+		require.NoError(t, loadErr)
+		assert.Empty(t, got.NewHash())
+		assert.Equal(t, "plan exploded", got.Failed())
+	})
+}
+
+func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
+	statuses := NewStore(cache.NewInMemoryCache())
+	require.NoError(t, statuses.Start(t.Context(), "running"))
+
+	err := statuses.Complete(t.Context(), "running", "  ")
+	require.ErrorContains(t, err, "completed generation hash is required")
 }
