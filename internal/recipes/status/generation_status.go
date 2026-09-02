@@ -72,7 +72,7 @@ func NewStore(c cache.Cache) *Store {
 func (ss *Store) Start(ctx context.Context, hash string) error {
 	return ss.save(ctx, hash, Payload{
 		StartedAt: ss.now().UTC(),
-	}, cache.IfNoneMatch())
+	})
 }
 
 func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
@@ -89,7 +89,7 @@ func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 	}
 	status.Error = err.Error()
 	// could get overwritten by parallel update
-	return ss.save(ctx, hash, status, cache.Unconditional())
+	return ss.save(ctx, hash, status)
 }
 
 func (ss *Store) Update(ctx context.Context, hash, message string) error {
@@ -103,7 +103,7 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 		return err
 	}
 	status.Message = prependStatus(message, status.Message)
-	return ss.save(ctx, hash, status, cache.Unconditional())
+	return ss.save(ctx, hash, status)
 }
 
 func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
@@ -126,7 +126,7 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 		return fmt.Errorf("complete generation %s: already completed with hash %s", hash, completedHash)
 	}
 	status.Redirect = newHash
-	return ss.save(ctx, hash, status, cache.Unconditional())
+	return ss.save(ctx, hash, status)
 }
 
 func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
@@ -156,7 +156,7 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 	return Payload{Message: message, StartedAt: ss.now()}, nil
 }
 
-func (ss *Store) save(ctx context.Context, hash string, status Payload, opts cache.PutOptions) error {
+func (ss *Store) save(ctx context.Context, hash string, status Payload, opts cache.Put) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")
@@ -165,7 +165,7 @@ func (ss *Store) save(ctx context.Context, hash string, status Payload, opts cac
 	if err != nil {
 		return fmt.Errorf("marshal generation status: %w", err)
 	}
-	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), opts); err != nil {
+	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), cache.Unconditional()); err != nil {
 		return fmt.Errorf("save generation status for hash %s: %w", hash, err)
 	}
 	return nil
