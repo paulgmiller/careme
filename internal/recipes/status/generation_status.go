@@ -32,7 +32,6 @@ func (p Payload) String() string {
 }
 
 func (p Payload) Failed() string {
-
 	if time.Since(p.StartedAt) >= recipeGenerationTimeout {
 		return "Recipe generation timed out."
 	}

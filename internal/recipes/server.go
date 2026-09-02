@@ -94,7 +94,7 @@ type ImageStore interface {
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error
-	//TODO would really like to return an interface from load
+	// TODO would really like to return an interface from load
 	Load(ctx context.Context, hash string) (status.Payload, error)
 	Complete(ctx context.Context, id, newHash string) error
 }
@@ -120,7 +120,6 @@ type critiqueStore interface {
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
-
 	return &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),

@@ -17,6 +17,7 @@ func TestPayloadTimeout(t *testing.T) {
 	p := Payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
 	assert.Equal(t, "Recipe generation timed out.", p.Failed())
 }
+
 func TestPayloadFailed(t *testing.T) {
 	p := Payload{Error: "Kaboom", StartedAt: time.Now()}
 	assert.Equal(t, "Kaboom", p.Failed())
