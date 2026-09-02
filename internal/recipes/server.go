@@ -93,8 +93,7 @@ type ImageStore interface {
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error
-	// TODO would really like to return an interface from load
-	Load(ctx context.Context, hash string) (status.Payload, error)
+	Load(ctx context.Context, hash string) (status.Status, error)
 	Complete(ctx context.Context, id, newHash string) error
 }
 
@@ -524,8 +523,8 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if payload.NewHash() != "" {
-		redirectToRecipe(w, r, payload.NewHash())
+	if payload.Redirect() != "" {
+		redirectToRecipe(w, r, payload.Redirect())
 		return
 	}
 	if payload.Failed() != "" {
@@ -533,7 +532,7 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	spin(ctx, w, r, payload.String())
+	spin(ctx, w, r, payload.Message())
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1157,7 +1156,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	spin(ctx, w, r, status.String())
+	spin(ctx, w, r, status.Message())
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}

@@ -30,21 +30,21 @@ func TestIDIsStableAndURLSafe(t *testing.T) {
 }
 
 func TestPayloadTimeout(t *testing.T) {
-	p := Payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
+	p := payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
 	assert.Equal(t, "Recipe generation timed out.", p.Failed())
 }
 
 func TestPayloadFailed(t *testing.T) {
-	p := Payload{Error: "Kaboom", StartedAt: time.Now()}
+	p := payload{Error: "Kaboom", StartedAt: time.Now()}
 	assert.Equal(t, "Kaboom", p.Failed())
-	assert.Equal(t, Payload{StartedAt: time.Now()}.Failed(), "")
+	assert.Equal(t, payload{StartedAt: time.Now()}.Failed(), "")
 }
 
 func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
-	p := Payload{
-		StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute),
-		Error:     "stale failure",
-		Redirect:  "new-hash",
+	p := payload{
+		StartedAt:    time.Now().Add(-recipeGenerationTimeout - time.Minute),
+		Error:        "stale failure",
+		RedirectHash: "new-hash",
 	}
 
 	assert.Empty(t, p.Failed())
@@ -52,31 +52,31 @@ func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
 
 func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
-	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
+	startedAt := time.Now().In(time.FixedZone("PDT", -7*60*60)).Truncate(time.Second)
 	statuses.now = func() time.Time { return startedAt }
 
 	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle"))
 	require.NoError(t, statuses.Update(t.Context(), "status-lifecycle", "Gathering ingredients"))
 
-	got, err := statuses.Load(t.Context(), "status-lifecycle")
+	got, err := statuses.load(t.Context(), "status-lifecycle")
 	require.NoError(t, err)
-	assert.Equal(t, "Gathering ingredients", got.Message)
+	assert.Equal(t, "Gathering ingredients", got.Message())
 	assert.Equal(t, startedAt.UTC(), got.StartedAt)
-	assert.Empty(t, got.Error)
+	assert.Empty(t, got.Failed())
 
 	require.NoError(t, statuses.Fail(t.Context(), "status-lifecycle", errors.New("store returned 404")))
-	got, err = statuses.Load(t.Context(), "status-lifecycle")
+	got, err = statuses.load(t.Context(), "status-lifecycle")
 	require.NoError(t, err)
-	assert.Equal(t, "store returned 404", got.Error)
+	assert.Equal(t, "store returned 404", got.Failed())
 	assert.Equal(t, startedAt.UTC(), got.StartedAt)
 
 	retriedAt := startedAt.Add(time.Minute)
 	statuses.now = func() time.Time { return retriedAt }
 	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle"))
-	got, err = statuses.Load(t.Context(), "status-lifecycle")
+	got, err = statuses.load(t.Context(), "status-lifecycle")
 	require.NoError(t, err)
-	assert.Empty(t, got.Error)
-	assert.Empty(t, got.Message)
+	assert.Empty(t, got.Failed())
+	assert.Empty(t, got.Message())
 	assert.Equal(t, retriedAt.UTC(), got.StartedAt)
 }
 
@@ -90,12 +90,12 @@ func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 
 	got, err := statuses.Load(t.Context(), hash)
 	require.NoError(t, err)
-	assert.Equal(t, "three\nfour\nfive\none\ntwo", got.Message)
+	assert.Equal(t, "three\nfour\nfive\none\ntwo", got.Message())
 
 	require.NoError(t, statuses.Update(t.Context(), hash, "six\nseven"))
 	got, err = statuses.Load(t.Context(), hash)
 	require.NoError(t, err)
-	assert.Equal(t, "six\nseven\nthree\nfour\nfive", got.Message)
+	assert.Equal(t, "six\nseven\nthree\nfour\nfive", got.Message())
 }
 
 func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
@@ -107,7 +107,7 @@ func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 
 	got, err := statuses.Load(t.Context(), hash)
 	require.NoError(t, err)
-	assert.Equal(t, "one\ntwo\nthree\nfour\nfive", got.Message)
+	assert.Equal(t, "one\ntwo\nthree\nfour\nfive", got.Message())
 }
 
 func TestUpdateKeepsConcurrentLines(t *testing.T) {
@@ -133,7 +133,7 @@ func TestUpdateKeepsConcurrentLines(t *testing.T) {
 
 	got, err := statuses.Load(t.Context(), hash)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"one", "two", "three"}, strings.Split(got.Message, "\n"))
+	assert.ElementsMatch(t, []string{"one", "two", "three"}, strings.Split(got.Message(), "\n"))
 }
 
 func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
@@ -144,8 +144,8 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 
 	got, err := statuses.Load(t.Context(), "failed")
 	require.NoError(t, err)
-	assert.Equal(t, "plan exploded", got.Error)
-	assert.Empty(t, got.Message)
+	assert.Equal(t, "plan exploded", got.Failed())
+	assert.Empty(t, got.Message())
 }
 
 func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
@@ -159,7 +159,7 @@ func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 
 		got, loadErr := statuses.Load(t.Context(), "completed")
 		require.NoError(t, loadErr)
-		assert.Equal(t, "new-hash", got.NewHash())
+		assert.Equal(t, "new-hash", got.Redirect())
 		assert.Empty(t, got.Failed())
 	})
 
@@ -173,7 +173,7 @@ func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 
 		got, loadErr := statuses.Load(t.Context(), "failed")
 		require.NoError(t, loadErr)
-		assert.Empty(t, got.NewHash())
+		assert.Empty(t, got.Redirect())
 		assert.Equal(t, "plan exploded", got.Failed())
 	})
 }
