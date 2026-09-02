@@ -24,7 +24,7 @@ type Payload struct {
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	Error     string    `json:"error,omitempty"`
-	Redirect  string    `json:"redirect,omitemptu"`
+	Redirect  string    `json:"redirect,omitempty"`
 }
 
 func (p Payload) String() string {
@@ -32,11 +32,17 @@ func (p Payload) String() string {
 }
 
 func (p Payload) Failed() string {
+	if strings.TrimSpace(p.NewHash()) != "" {
+		return ""
+	}
+	if p.Error != "" {
+		return p.Error
+	}
 	if time.Since(p.StartedAt) >= recipeGenerationTimeout {
 		return "Recipe generation timed out."
 	}
 
-	return p.Error
+	return ""
 }
 
 // Complete(ctx context.Context, id, newHash string) error
@@ -66,7 +72,7 @@ func NewStore(c cache.Cache) *Store {
 func (ss *Store) Start(ctx context.Context, hash string) error {
 	return ss.save(ctx, hash, Payload{
 		StartedAt: ss.now().UTC(),
-	})
+	}, cache.IfNoneMatch())
 }
 
 func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
@@ -78,9 +84,12 @@ func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 	if loadErr != nil {
 		return loadErr
 	}
+	if status.NewHash() != "" {
+		return fmt.Errorf("fail generation %s: already completed", hash)
+	}
 	status.Error = err.Error()
 	// could get overwritten by parallel update
-	return ss.save(ctx, hash, status)
+	return ss.save(ctx, hash, status, cache.Unconditional())
 }
 
 func (ss *Store) Update(ctx context.Context, hash, message string) error {
@@ -94,16 +103,30 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 		return err
 	}
 	status.Message = prependStatus(message, status.Message)
-	return ss.save(ctx, hash, status)
+	return ss.save(ctx, hash, status, cache.Unconditional())
 }
 
-func (ss *Store) Complete(ctx context.Context, hash, newhash string) error {
+func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
+	newHash = strings.TrimSpace(newHash)
+	if newHash == "" {
+		return fmt.Errorf("completed generation hash is required")
+	}
+
 	status, err := ss.Load(ctx, hash)
 	if err != nil {
 		return err
 	}
-	status.Redirect = newhash
-	return ss.save(ctx, hash, status)
+	if status.Error != "" {
+		return fmt.Errorf("complete generation %s: already failed: %s", hash, status.Error)
+	}
+	if completedHash := strings.TrimSpace(status.NewHash()); completedHash != "" {
+		if completedHash == newHash {
+			return nil
+		}
+		return fmt.Errorf("complete generation %s: already completed with hash %s", hash, completedHash)
+	}
+	status.Redirect = newHash
+	return ss.save(ctx, hash, status, cache.Unconditional())
 }
 
 func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
@@ -133,7 +156,7 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 	return Payload{Message: message, StartedAt: ss.now()}, nil
 }
 
-func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
+func (ss *Store) save(ctx context.Context, hash string, status Payload, opts cache.PutOptions) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")
@@ -142,7 +165,7 @@ func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
 	if err != nil {
 		return fmt.Errorf("marshal generation status: %w", err)
 	}
-	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), cache.Unconditional()); err != nil {
+	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), opts); err != nil {
 		return fmt.Errorf("save generation status for hash %s: %w", hash, err)
 	}
 	return nil

@@ -464,7 +464,8 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 
 	status, err := s.generationStatuses.Load(ctx, id)
 	if err == nil {
-		if status.Failed() != "" {
+		// failures can be redirected back here but if theres no failure just go back to spin
+		if status.Failed() == "" {
 			redirectToRecipeRegeneration(w, r, hash, id)
 			return
 		}

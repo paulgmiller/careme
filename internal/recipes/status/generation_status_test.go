@@ -24,6 +24,16 @@ func TestPayloadFailed(t *testing.T) {
 	assert.Equal(t, Payload{StartedAt: time.Now()}.Failed(), "")
 }
 
+func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
+	p := Payload{
+		StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute),
+		Error:     "stale failure",
+		Redirect:  "new-hash",
+	}
+
+	assert.Empty(t, p.Failed())
+}
+
 func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
@@ -120,6 +130,44 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "plan exploded", got.Error)
 	assert.Empty(t, got.Message)
+}
+
+func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
+	t.Run("completed generation cannot fail", func(t *testing.T) {
+		statuses := NewStore(cache.NewInMemoryCache())
+		require.NoError(t, statuses.Start(t.Context(), "completed"))
+		require.NoError(t, statuses.Complete(t.Context(), "completed", "new-hash"))
+
+		err := statuses.Fail(t.Context(), "completed", errors.New("late failure"))
+		require.ErrorContains(t, err, "already completed")
+
+		got, loadErr := statuses.Load(t.Context(), "completed")
+		require.NoError(t, loadErr)
+		assert.Equal(t, "new-hash", got.NewHash())
+		assert.Empty(t, got.Failed())
+	})
+
+	t.Run("failed generation cannot complete", func(t *testing.T) {
+		statuses := NewStore(cache.NewInMemoryCache())
+		require.NoError(t, statuses.Start(t.Context(), "failed"))
+		require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
+
+		err := statuses.Complete(t.Context(), "failed", "new-hash")
+		require.ErrorContains(t, err, "already failed")
+
+		got, loadErr := statuses.Load(t.Context(), "failed")
+		require.NoError(t, loadErr)
+		assert.Empty(t, got.NewHash())
+		assert.Equal(t, "plan exploded", got.Failed())
+	})
+}
+
+func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
+	statuses := NewStore(cache.NewInMemoryCache())
+	require.NoError(t, statuses.Start(t.Context(), "running"))
+
+	err := statuses.Complete(t.Context(), "running", "  ")
+	require.ErrorContains(t, err, "completed generation hash is required")
 }
 
 func TestGenerationStatusDecodesLegacyText(t *testing.T) {
