@@ -23,6 +23,11 @@ defaultTest:
         return available.has(recipe.anchor_ingredient.toLowerCase())
           && available.has(recipe.side_vegetable.toLowerCase());
       metric: available-menu-ingredients
+    - type: javascript
+      value: |
+        const plan = JSON.parse(output);
+        return plan.plans?.[0]?.side_vegetable === context.vars.expected_side;
+      metric: organic-produce-price-policy
 
 tests:
   - description: One quick seasonal chicken dinner
@@ -34,6 +39,7 @@ tests:
       date: '2026-08-21'
       count: 1
       instructions: Keep dinner under 45 minutes.
+      expected_side: Broccoli Crowns
       ingredients:
         - id: chicken-thighs
           description: Boneless Skinless Chicken Thighs
@@ -44,3 +50,93 @@ tests:
         - id: jasmine-rice
           description: Jasmine Rice
           size: 2 lb
+  - description: Prefer organic produce when its current price is equal
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-02'
+      count: 1
+      instructions: Make a chicken dinner with green beans as the side vegetable.
+      expected_side: Organic Green Beans
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+          regularPrice: 5.99
+        - id: green-beans
+          description: Fresh Green Beans
+          size: 1 lb
+          regularPrice: 2.99
+        - id: organic-green-beans
+          description: Organic Green Beans
+          size: 1 lb
+          regularPrice: 3.99
+          salePrice: 2.99
+  - description: Prefer conventional produce when organic costs more
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-02'
+      count: 1
+      instructions: Make a chicken dinner with zucchini as the side vegetable.
+      expected_side: Zucchini
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+          regularPrice: 5.99
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+          regularPrice: 1.69
+        - id: organic-zucchini
+          description: Organic Zucchini
+          size: 1 lb
+          regularPrice: 2.29
+  - description: Prefer organic produce when its current price is lower
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-02'
+      count: 1
+      instructions: Make a chicken dinner with butternut squash as the side vegetable.
+      expected_side: Organic Butternut Squash
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+          regularPrice: 5.99
+        - id: butternut-squash
+          description: Butternut Squash
+          size: 1 lb
+          regularPrice: 2.49
+          salePrice: 2.29
+        - id: organic-butternut-squash
+          description: Organic Butternut Squash
+          size: 1 lb
+          regularPrice: 1.99
+  - description: Prefer organic produce when conventional is unavailable
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-02'
+      count: 1
+      instructions: Make a chicken dinner with asparagus as the side vegetable.
+      expected_side: Organic Asparagus
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+          regularPrice: 5.99
+        - id: organic-asparagus
+          description: Organic Asparagus
+          size: 1 lb
+          regularPrice: 4.99
