@@ -90,7 +90,6 @@ type ImageStore interface {
 	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
 }
 
-
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error

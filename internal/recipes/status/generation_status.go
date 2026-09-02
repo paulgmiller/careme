@@ -74,6 +74,7 @@ func NewStore(c cache.Cache) *Store {
 }
 
 // Start  creates or resets an existing
+// TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash string) error {
 	return ss.save(ctx, hash, Payload{
 		StartedAt: ss.now().UTC(),
@@ -144,13 +145,12 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 			slog.ErrorContext(ctx, "failed to close generation status reader", "hash", hash, "error", err)
 		}
 	}()
-	
+
 	var stored Payload
 	if err := json.NewDecoder(statusReader).Decode(&stored); err != nil {
 		return Payload{}, err
 	}
-	return stored, nil 
-	
+	return stored, nil
 }
 
 func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
