@@ -140,3 +140,26 @@ tests:
           description: Organic Asparagus
           size: 1 lb
           regularPrice: 4.99
+  - description: Honor a user organic preference even when organic costs more
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-02'
+      count: 1
+      instructions: Prefer organic ingredients. Make a chicken dinner with zucchini as the side vegetable.
+      expected_side: Organic Zucchini
+      ingredients:
+        - id: chicken-thighs
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+          regularPrice: 5.99
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+          regularPrice: 1.69
+        - id: organic-zucchini
+          description: Organic Zucchini
+          size: 1 lb
+          regularPrice: 2.29
