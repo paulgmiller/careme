@@ -20,19 +20,21 @@ const (
 	recipeGenerationTimeout     = 10 * time.Minute
 )
 
-type Payload struct {
+type Status struct {
+	Message  string
+	Failed   string
+	Redirect string
+}
+
+type payload struct {
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	Error     string    `json:"error,omitempty"`
 	Redirect  string    `json:"redirect,omitempty"`
 }
 
-func (p Payload) String() string {
-	return p.Message
-}
-
-func (p Payload) Failed() string {
-	if strings.TrimSpace(p.NewHash()) != "" {
+func (p payload) failed() string {
+	if strings.TrimSpace(p.Redirect) != "" {
 		return ""
 	}
 	if p.Error != "" {
@@ -59,10 +61,6 @@ func IsValidID(id string) bool {
 	return err == nil && len(raw) == 16 && base64.RawURLEncoding.EncodeToString(raw) == id
 }
 
-func (p Payload) NewHash() string {
-	return p.Redirect
-}
-
 type Store struct {
 	mu    sync.Mutex
 	cache cache.Cache
@@ -76,7 +74,7 @@ func NewStore(c cache.Cache) *Store {
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash string) error {
-	return ss.save(ctx, hash, Payload{
+	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
 	})
 }
@@ -86,11 +84,11 @@ func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 		return fmt.Errorf("generation failure is required")
 	}
 
-	status, loadErr := ss.Load(ctx, hash)
+	status, loadErr := ss.load(ctx, hash)
 	if loadErr != nil {
 		return loadErr
 	}
-	if status.NewHash() != "" {
+	if status.Redirect != "" {
 		return fmt.Errorf("fail generation %s: already completed", hash)
 	}
 	status.Error = err.Error()
@@ -104,7 +102,7 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
-	status, err := ss.Load(ctx, hash)
+	status, err := ss.load(ctx, hash)
 	if err != nil {
 		return err
 	}
@@ -118,14 +116,14 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 		return fmt.Errorf("completed generation hash is required")
 	}
 
-	status, err := ss.Load(ctx, hash)
+	status, err := ss.load(ctx, hash)
 	if err != nil {
 		return err
 	}
 	if status.Error != "" {
 		return fmt.Errorf("complete generation %s: already failed: %s", hash, status.Error)
 	}
-	if completedHash := strings.TrimSpace(status.NewHash()); completedHash != "" {
+	if completedHash := strings.TrimSpace(status.Redirect); completedHash != "" {
 		if completedHash == newHash {
 			return nil
 		}
@@ -135,10 +133,22 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 	return ss.save(ctx, hash, status)
 }
 
-func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
+func (ss *Store) Load(ctx context.Context, hash string) (Status, error) {
+	stored, err := ss.load(ctx, hash)
+	if err != nil {
+		return Status{}, err
+	}
+	return Status{
+		Message:  stored.Message,
+		Failed:   stored.failed(),
+		Redirect: stored.Redirect,
+	}, nil
+}
+
+func (ss *Store) load(ctx context.Context, hash string) (payload, error) {
 	statusReader, err := ss.cache.Get(ctx, generationStatusCachePrefix+hash)
 	if err != nil {
-		return Payload{}, fmt.Errorf("get generation status for hash %s: %w", hash, err)
+		return payload{}, fmt.Errorf("get generation status for hash %s: %w", hash, err)
 	}
 	defer func() {
 		if err := statusReader.Close(); err != nil {
@@ -146,14 +156,14 @@ func (ss *Store) Load(ctx context.Context, hash string) (Payload, error) {
 		}
 	}()
 
-	var stored Payload
+	var stored payload
 	if err := json.NewDecoder(statusReader).Decode(&stored); err != nil {
-		return Payload{}, err
+		return payload{}, err
 	}
 	return stored, nil
 }
 
-func (ss *Store) save(ctx context.Context, hash string, status Payload) error {
+func (ss *Store) save(ctx context.Context, hash string, status payload) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")

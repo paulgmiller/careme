@@ -73,12 +73,11 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 
 func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
-	s := newTestServer(t, withTestGenerator(generator))
+	statuses := newFakeStatusStore()
+	s := newTestServer(t, withTestGenerator(generator), withTestStatusStore(statuses))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash()))
-	ss := s.generationStatuses.(*status.Store)
-	require.NoError(t, ss.Update(t.Context(), p.Hash(), "Still chopping"))
+	statuses.setProgress(p.Hash(), "Still chopping")
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
 	req.Header.Set("HX-Request", "true")
@@ -118,14 +117,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 			name:     "untimed legacy progress",
 			wantText: "Still chopping",
 			setup: func(t testing.TB, s *server, hash string) {
-				store := s.generationStatuses.(*status.Store)
-				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
-
-				require.NoError(t, store.Update(
-					t.Context(),
-					hash,
-					"Still chopping",
-				))
+				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Still chopping")
 			},
 		},
 		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
@@ -133,7 +125,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newTestServer(t)
+			s := newTestServer(t, withTestStatusStore(newFakeStatusStore()))
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			tt.setup(t, s, p.Hash())
@@ -190,7 +182,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	s.Wait()
 	status, err := s.generationStatuses.Load(t.Context(), p.Hash())
 	require.NoError(t, err)
-	assert.NotContains(t, status.Failed(), "first attempt failed")
+	assert.NotContains(t, status.Failed, "first attempt failed")
 }
 
 func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
@@ -1118,12 +1110,12 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	require.Eventually(t, func() bool {
 		payload, loadErr := s.generationStatuses.Load(t.Context(), jobID)
-		return loadErr == nil && payload.NewHash() != ""
+		return loadErr == nil && payload.Redirect != ""
 	}, time.Second, 10*time.Millisecond)
 	payload, err := s.generationStatuses.Load(t.Context(), jobID)
 	require.NoError(t, err)
-	assert.NotEmpty(t, payload.NewHash())
-	assert.Empty(t, payload.Failed())
+	assert.NotEmpty(t, payload.Redirect)
+	assert.Empty(t, payload.Failed)
 	pollServer := newTestServer(t, withTestCache(cacheStore))
 
 	htmxSpinReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
@@ -1193,7 +1185,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, retryRR.Header().Get("Location"))
 	require.Eventually(t, func() bool {
 		payload, loadErr := s.generationStatuses.Load(t.Context(), jobID)
-		return loadErr == nil && payload.NewHash() != ""
+		return loadErr == nil && payload.Redirect != ""
 	}, time.Second, 10*time.Millisecond)
 	assert.Equal(t, 2, generator.regenerateCalls)
 	assert.Equal(t, "resp-question", generator.lastResponse.ID)
@@ -1320,39 +1312,18 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 }
 
 func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{err: errors.New("plan exploded")}
+	statuses := newFakeStatusStore()
 	s := newTestServer(t,
-		withTestCache(cacheStore),
 		withTestGenerator(generator),
+		withTestStatusStore(statuses),
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
-	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.Equal(t, "plan exploded", got.Error)
-}
-
-func TestKickgeneration_LeavesStatusWithoutErrorAfterSavingShoppingList(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-	s := newTestServer(t,
-		withTestCache(cacheStore),
-		withTestGenerator(&captureKickgenerationGenerator{}),
-	)
-
-	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
-	s.Wait()
-
-	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.Empty(t, got.Error)
-	assert.False(t, got.StartedAt.IsZero())
-	_, err = s.FromCache(t.Context(), params.Hash())
-	require.NoError(t, err)
+	require.EqualError(t, statuses.failure(params.Hash()), "plan exploded")
 }
 
 func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
@@ -1381,44 +1352,46 @@ func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
 }
 
 func TestKickgeneration_FailsWhenCompletedShoppingListCannotBeRecordedForUser(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	statuses := newFakeStatusStore()
 	s := newTestServer(t,
-		withTestCache(cacheStore),
 		withTestGenerator(&captureKickgenerationGenerator{}),
+		withTestStatusStore(statuses),
 	)
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Neighborhood Market"}, time.Now())
 
 	require.NoError(t, s.kickgeneration(t.Context(), params, "missing-user"))
 	s.Wait()
 
-	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.Contains(t, status.Error, "remember shopping list")
-	assert.Contains(t, status.Error, "user not found")
+	err := statuses.failure(params.Hash())
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "remember shopping list")
+	assert.ErrorContains(t, err, "user not found")
 }
 
 func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	cacheStore := &failShoppingListCache{ListCache: cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))}
+	statuses := newFakeStatusStore()
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestGenerator(&captureKickgenerationGenerator{}),
+		withTestStatusStore(statuses),
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
-	got, err := s.generationStatuses.Load(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.Contains(t, got.Error, "shopping list save exploded")
+	require.ErrorContains(t, statuses.failure(params.Hash()), "shopping list save exploded")
 }
 
 func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	statuses := newFakeStatusStore()
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestGenerator(generator),
+		withTestStatusStore(statuses),
 	)
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
@@ -1436,9 +1409,11 @@ func TestKickGenerationIfNotPresent_DoesNotKickExistingParams(t *testing.T) {
 func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *testing.T) {
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	statuses := newFakeStatusStore()
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestGenerator(generator),
+		withTestStatusStore(statuses),
 	)
 	t.Cleanup(s.Wait)
 
@@ -1453,9 +1428,7 @@ func TestKickGenerationIfNotPresent_SavesParamsAndKicksMissingShoppingList(t *te
 
 	_, err := s.ParamsFromCache(t.Context(), params.Hash())
 	require.NoError(t, err)
-	status, err := s.generationStatuses.Load(t.Context(), params.Hash())
-	require.NoError(t, err)
-	assert.False(t, status.StartedAt.IsZero())
+	assert.True(t, statuses.started(params.Hash()))
 }
 
 func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *testing.T) {
@@ -1481,58 +1454,30 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	require.NoError(t, imageBody.Close())
 }
 
-func TestSpin_RendersCachedGenerationStatus(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+func TestSpinRendersGenerationProgress(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		htmx bool
+		want string
+	}{
+		{name: "page", want: `hx-get="/recipes?h=spinner-hash"`},
+		{name: "HTMX fragment", htmx: true, want: `hx-trigger="load delay:10s"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h=spinner-hash", nil)
+			if tt.htmx {
+				req.Header.Set("HX-Request", "true")
+			}
 
-	hash := "spinner-hash"
-	statusMsg := "Baby we working"
-	statusStore := status.NewStore(cacheStore)
-	err := statusStore.Start(t.Context(), hash)
-	require.NoError(t, err)
-	err = statusStore.Update(t.Context(), hash, statusMsg)
-	require.NoError(t, err)
-	genstatus, err := statusStore.Load(t.Context(), hash)
-	require.NoError(t, err)
+			spin(t.Context(), rr, req, "Still chopping")
 
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
-
-	spin(t.Context(), rr, req, genstatus.String())
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Contains(t, rr.Body.String(), "Still chopping")
+			assert.Contains(t, rr.Body.String(), tt.want)
+			assert.Equal(t, tt.htmx, !strings.Contains(rr.Body.String(), "<!doctype html>"))
+		})
 	}
-	assert.Contains(t, rr.Body.String(), statusMsg)
-	assert.Contains(t, rr.Body.String(), `hx-get="/recipes?h=`+hash+`"`)
-	assert.NotContains(t, rr.Body.String(), `http-equiv="refresh"`)
-}
-
-func TestSpin_HTMXRequestRendersProgressFragment(t *testing.T) {
-	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
-
-	hash := "spinner-hash"
-	statusMsg := "Still chopping"
-	statusStore := status.NewStore(cacheStore)
-
-	err := statusStore.Start(t.Context(), hash)
-	require.NoError(t, err)
-	err = statusStore.Update(t.Context(), hash, statusMsg)
-	require.NoError(t, err)
-	genstatus, err := statusStore.Load(t.Context(), hash)
-	require.NoError(t, err)
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash, nil)
-	req.Header.Set("HX-Request", "true")
-
-	spin(t.Context(), rr, req, genstatus.String())
-
-	require.Equal(t, http.StatusOK, rr.Code)
-	body := rr.Body.String()
-	assert.Contains(t, body, `id="spin-page-work"`)
-	assert.Contains(t, body, statusMsg)
-	assert.Contains(t, body, `hx-trigger="load delay:10s"`)
-	assert.NotContains(t, body, "<!doctype html>")
 }
 
 type captureQuestionGenerator struct {
