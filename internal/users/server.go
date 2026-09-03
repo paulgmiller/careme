@@ -77,97 +77,50 @@ func (s *server) Register(mux routing.Registrar) {
 
 func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if !httpx.IsHTMX(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
-			http.Error(w, "no valid session found", http.StatusUnauthorized)
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for partner action", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		writePartnerResult(w, false)
 		return
 	}
 
 	action := strings.TrimSpace(r.FormValue("action"))
-	status := ""
 	switch action {
-	case "link":
+	case "request":
 		err = s.storage.RequestPartner(currentUser.ID, r.FormValue("email"), false)
-		status = "requested"
 	case "accept":
 		err = s.storage.RequestPartner(currentUser.ID, "", true)
-		status = "accepted"
 	case "unlink":
 		err = s.storage.UnlinkPartner(currentUser.ID)
-		status = "unlinked"
 	default:
-		http.Error(w, "invalid partner action", http.StatusBadRequest)
+		writePartnerResult(w, false)
 		return
 	}
 
 	if err != nil {
-		status, ok := partnerErrorStatus(err)
-		if !ok {
-			slog.ErrorContext(ctx, "partner action failed", "user_id", currentUser.ID, "action", action, "error", err)
-			http.Error(w, "unable to update partner", http.StatusInternalServerError)
-			return
-		}
-		redirectPartnerStatus(w, r, status)
+		slog.WarnContext(ctx, "partner action failed", "user_id", currentUser.ID, "action", action, "error", err)
+		writePartnerResult(w, false)
 		return
 	}
-	redirectPartnerStatus(w, r, status)
+	writePartnerResult(w, true)
 }
 
-func partnerErrorStatus(err error) (string, bool) {
-	switch {
-	case errors.Is(err, ErrPartnerNotFound):
-		return "not_found", true
-	case errors.Is(err, ErrPartnerSelf):
-		return "self", true
-	case errors.Is(err, ErrUserAlreadyHasPartner):
-		return "already_linked", true
-	case errors.Is(err, ErrPartnerUnavailable):
-		return "partner_unavailable", true
-	case errors.Is(err, ErrNoPartner):
-		return "no_partner", true
-	case errors.Is(err, ErrNoIncomingPartner):
-		return "no_request", true
-	case errors.Is(err, ErrPartnershipInconsistent):
-		return "inconsistent", true
-	default:
-		return "", false
+func writePartnerResult(w http.ResponseWriter, success bool) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if success {
+		_, _ = fmt.Fprint(w, `<span class="text-emerald-700" role="status" aria-label="Partner updated">✓</span>`)
+		return
 	}
-}
-
-func redirectPartnerStatus(w http.ResponseWriter, r *http.Request, status string) {
-	http.Redirect(w, r, "/user?tab=customize&partner_status="+status, http.StatusSeeOther)
-}
-
-func partnerNotice(status string) (string, bool) {
-	switch status {
-	case "requested":
-		return "Your partner can now see your recent recipes. You'll see theirs after they accept.", false
-	case "accepted":
-		return "Your kitchens are now connected.", false
-	case "unlinked":
-		return "The partner connection was removed.", false
-	case "not_found":
-		return "We couldn't find a Careme account with that email.", true
-	case "self":
-		return "Choose someone else's email for your partner.", true
-	case "already_linked":
-		return "Your kitchen already has a partner.", true
-	case "partner_unavailable":
-		return "That cook isn't available to connect.", true
-	case "no_partner":
-		return "Your kitchen does not currently have a partner.", true
-	case "no_request":
-		return "There isn't a partner request to accept.", true
-	case "inconsistent":
-		return "We couldn't verify that partnership. Try again, chef.", true
-	default:
-		return "", false
-	}
+	_, _ = fmt.Fprint(w, `<span class="text-red-700" role="alert">That didn't work. Try again, chef.</span>`)
 }
 
 func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request) {
@@ -349,8 +302,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 			partnerRecipes = pastRecipeViews(ctx, s.storage.cache, partner.LastRecipes)
 		}
 	}
-	partnerMessage, partnerMessageError := partnerNotice(r.URL.Query().Get("partner_status"))
-
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
 	if userForTemplate.FavoriteStore != "" && s.locGetter != nil {
@@ -376,8 +327,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner           *utypes.User
 		PartnerEmail      string
 		PartnerRecipes    []pastRecipeView
-		PartnerMessage    string
-		PartnerMessageErr bool
 		PartnerIncoming   bool
 		PartnerOutgoing   bool
 		PartnerLinked     bool
@@ -395,8 +344,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner:           partner,
 		PartnerEmail:      partnerEmail,
 		PartnerRecipes:    partnerRecipes,
-		PartnerMessage:    partnerMessage,
-		PartnerMessageErr: partnerMessageError,
 		PartnerIncoming:   partnerStage == partnershipStageIncoming,
 		PartnerOutgoing:   partnerStage == partnershipStageOutgoing,
 		PartnerLinked:     partnerStage == partnershipStageLinked,

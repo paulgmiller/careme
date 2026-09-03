@@ -214,23 +214,24 @@ func TestStorageRequestPartnerRollsBackFirstWrite(t *testing.T) {
 	assert.Empty(t, storedSecond.PendingPartnerID)
 }
 
-func TestHandlePartnerLinksAndRedirectsWithoutEmail(t *testing.T) {
+func TestHandlePartnerRequestsAndReturnsSuccess(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 	first := seedPartnerUser(t, storage, cacheStore, "user-1", "user@example.com")
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
 	s := &server{storage: storage, clerk: testAuthClient{}}
-	form := url.Values{"action": {"link"}, "email": {second.Email[0]}}
+	form := url.Values{"action": {"request"}, "email": {second.Email[0]}}
 	req := httptest.NewRequest(http.MethodPost, "/user/partner", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
 	s.handlePartner(rr, req)
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Equal(t, "/user?tab=customize&partner_status=requested", rr.Header().Get("Location"))
-	assert.NotContains(t, rr.Header().Get("Location"), second.Email[0])
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "✓")
+	assert.NotContains(t, rr.Body.String(), second.Email[0])
 	stored, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, second.ID, stored.PartnerID)
@@ -247,34 +248,36 @@ func TestHandlePartnerRecipientAcceptsRequest(t *testing.T) {
 	form := url.Values{"action": {"accept"}}
 	req := httptest.NewRequest(http.MethodPost, "/user/partner", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
 	s.handlePartner(rr, req)
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Equal(t, "/user?tab=customize&partner_status=accepted", rr.Header().Get("Location"))
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "✓")
 	storedSecond, err := storage.GetByID(second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, storedSecond.PartnerID)
 	assert.Empty(t, storedSecond.PendingPartnerID)
 }
 
-func TestHandlePartnerUnknownEmailReturnsFriendlyStatus(t *testing.T) {
+func TestHandlePartnerUnknownEmailReturnsInlineError(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
 	seedPartnerUser(t, storage, cacheStore, "user-1", "user@example.com")
 	s := &server{storage: storage, clerk: testAuthClient{}}
-	form := url.Values{"action": {"link"}, "email": {"private@example.com"}}
+	form := url.Values{"action": {"request"}, "email": {"private@example.com"}}
 	req := httptest.NewRequest(http.MethodPost, "/user/partner", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
 	s.handlePartner(rr, req)
 
-	require.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Equal(t, "/user?tab=customize&partner_status=not_found", rr.Header().Get("Location"))
-	assert.NotContains(t, rr.Header().Get("Location"), "private@example.com")
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Try again, chef")
+	assert.NotContains(t, rr.Body.String(), "private@example.com")
 }
 
 func TestHandleUserShowsPartnerRecipesOnlyInAllowedDirection(t *testing.T) {
