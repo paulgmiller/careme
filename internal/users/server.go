@@ -115,11 +115,12 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 }
 
 func writePartnerResult(w http.ResponseWriter, err error) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err == nil {
-		_, _ = fmt.Fprint(w, `<span class="text-emerald-700" role="status" aria-label="Partner updated">✓</span>`)
+		w.Header().Set("HX-Refresh", "true")
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	message := "Unable to update partner. Try again, chef."
 	if errors.Is(err, ErrPartnerNotFound) {
 		message = err.Error()

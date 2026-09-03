@@ -208,8 +208,8 @@ func TestHandlePartnerRequestsAndReturnsSuccess(t *testing.T) {
 
 	s.handlePartner(rr, req)
 
-	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "✓")
+	require.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Equal(t, "true", rr.Header().Get("HX-Refresh"))
 	assert.NotContains(t, rr.Body.String(), second.Email[0])
 	stored, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
@@ -232,8 +232,8 @@ func TestHandlePartnerRecipientAcceptsRequest(t *testing.T) {
 
 	s.handlePartner(rr, req)
 
-	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "✓")
+	require.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Equal(t, "true", rr.Header().Get("HX-Refresh"))
 	storedSecond, err := storage.GetByID(second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, storedSecond.PartnerID)
