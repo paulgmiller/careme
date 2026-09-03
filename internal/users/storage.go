@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"careme/internal/auth"
@@ -22,8 +21,7 @@ import (
 )
 
 type Storage struct {
-	cache          cache.ListCache
-	partnershipsMu sync.Mutex
+	cache cache.ListCache
 }
 
 var (
@@ -157,9 +155,6 @@ func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string,
 }
 
 func (s *Storage) Update(user *utypes.User) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
 	// Partnership changes go through the relationship methods below. Preserve
 	// the stored value so an unrelated, stale profile update cannot unlink users.
 	stored, err := s.GetByID(user.ID)
@@ -169,10 +164,10 @@ func (s *Storage) Update(user *utypes.User) error {
 	} else if !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("load user before update: %w", err)
 	}
-	return s.updateUnlocked(user)
+	return s.writeUser(user)
 }
 
-func (s *Storage) updateUnlocked(user *utypes.User) error {
+func (s *Storage) writeUser(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
@@ -195,9 +190,6 @@ func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
 		return nil, fmt.Errorf("user is required")
 	}
 
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
 	partnerID := user.PartnerID
 	if user.PendingPartnerID != "" {
 		partnerID = user.PendingPartnerID
@@ -215,13 +207,13 @@ func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
 	return partner, nil
 }
 
-type partnershipStage uint8
+type partnershipStage string
 
 const (
-	partnershipStageNone partnershipStage = iota
-	partnershipStageOutgoing
-	partnershipStageIncoming
-	partnershipStageLinked
+	partnershipStageNone     partnershipStage = "none"
+	partnershipStageOutgoing partnershipStage = "outgoing"
+	partnershipStageIncoming partnershipStage = "incoming"
+	partnershipStageLinked   partnershipStage = "linked"
 )
 
 func partnershipStageFor(user, partner *utypes.User) partnershipStage {
@@ -241,9 +233,6 @@ func partnershipStageFor(user, partner *utypes.User) partnershipStage {
 }
 
 func (s *Storage) RequestPartner(userID, email string, accept bool) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
 	currentUser, err := s.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("load current user: %w", err)
@@ -273,13 +262,16 @@ func (s *Storage) requestPartner(currentUser *utypes.User, email string) error {
 	}
 
 	currentUser.PartnerID = partner.ID
-	if err := s.updateUnlocked(currentUser); err != nil {
+	// TODO: Partnership updates span two user records and are not atomic. Concurrent
+	// requests handled by different servers can leave the relationship inconsistent.
+	// Move this to transactional storage or use conditional/versioned writes.
+	if err := s.writeUser(currentUser); err != nil {
 		return fmt.Errorf("save outgoing partner request: %w", err)
 	}
 	partner.PendingPartnerID = currentUser.ID
-	if err := s.updateUnlocked(partner); err != nil {
+	if err := s.writeUser(partner); err != nil {
 		currentUser.PartnerID = ""
-		rollbackErr := s.updateUnlocked(currentUser)
+		rollbackErr := s.writeUser(currentUser)
 		return fmt.Errorf("save incoming partner request: %w", errors.Join(err, rollbackErr))
 	}
 	return nil
@@ -299,16 +291,13 @@ func (s *Storage) acceptPartner(currentUser *utypes.User) error {
 
 	currentUser.PartnerID = currentUser.PendingPartnerID
 	currentUser.PendingPartnerID = ""
-	if err := s.updateUnlocked(currentUser); err != nil {
+	if err := s.writeUser(currentUser); err != nil {
 		return fmt.Errorf("accept partner: %w", err)
 	}
 	return nil
 }
 
 func (s *Storage) UnlinkPartner(userID string) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
 	currentUser, err := s.GetByID(userID)
 	if err != nil {
 		return fmt.Errorf("load current user: %w", err)
@@ -332,15 +321,15 @@ func (s *Storage) UnlinkPartner(userID string) error {
 	currentPendingPartnerID := currentUser.PendingPartnerID
 	currentUser.PartnerID = ""
 	currentUser.PendingPartnerID = ""
-	if err := s.updateUnlocked(currentUser); err != nil {
+	if err := s.writeUser(currentUser); err != nil {
 		return fmt.Errorf("unlink current user: %w", err)
 	}
 	partner.PartnerID = ""
 	partner.PendingPartnerID = ""
-	if err := s.updateUnlocked(partner); err != nil {
+	if err := s.writeUser(partner); err != nil {
 		currentUser.PartnerID = currentPartnerID
 		currentUser.PendingPartnerID = currentPendingPartnerID
-		rollbackErr := s.updateUnlocked(currentUser)
+		rollbackErr := s.writeUser(currentUser)
 		return fmt.Errorf("unlink partner: %w", errors.Join(err, rollbackErr))
 	}
 	return nil

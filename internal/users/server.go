@@ -331,10 +331,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner           *utypes.User
 		PartnerEmail      string
 		PartnerRecipes    []pastRecipeView
-		PartnerIncoming   bool
-		PartnerOutgoing   bool
-		PartnerLinked     bool
-		CanViewPartner    bool
+		PartnerStage      partnershipStage
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
@@ -348,10 +345,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner:           partner,
 		PartnerEmail:      partnerEmail,
 		PartnerRecipes:    partnerRecipes,
-		PartnerIncoming:   partnerStage == partnershipStageIncoming,
-		PartnerOutgoing:   partnerStage == partnershipStageOutgoing,
-		PartnerLinked:     partnerStage == partnershipStageLinked,
-		CanViewPartner:    partnerStage == partnershipStageIncoming || partnerStage == partnershipStageLinked,
+		PartnerStage:      partnerStage,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
