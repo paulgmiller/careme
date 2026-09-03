@@ -224,7 +224,6 @@ func partnershipStageFor(user, partner *utypes.User) partnershipStage {
 }
 
 func (s *Storage) RequestPartner(currentUser *utypes.User, email string) error {
-
 	partner, err := s.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -259,7 +258,6 @@ func (s *Storage) RequestPartner(currentUser *utypes.User, email string) error {
 }
 
 func (s *Storage) AcceptPartner(currentUser *utypes.User) error {
-
 	if currentUser.PendingPartnerID == "" || currentUser.PartnerID != "" {
 		return ErrNoIncomingPartner
 	}

@@ -328,7 +328,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes       []pastRecipeView
 		Style             seasons.Style
 		ServerSignedIn    bool
-		Partner           *utypes.User
 		PartnerEmail      string
 		PartnerRecipes    []pastRecipeView
 		PartnerStage      partnershipStage
@@ -342,7 +341,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
-		Partner:           partner,
 		PartnerEmail:      partnerEmail,
 		PartnerRecipes:    partnerRecipes,
 		PartnerStage:      partnerStage,

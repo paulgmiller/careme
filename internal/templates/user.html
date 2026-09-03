@@ -117,7 +117,7 @@
 
             <div id="partner-status" class="min-h-6 text-sm"></div>
 
-            {{if .Partner}}
+            {{if ne .PartnerStage "none"}}
             <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
               {{if eq .PartnerStage "incoming"}}
               <p class="text-sm text-gray-600">Partner request from</p>
