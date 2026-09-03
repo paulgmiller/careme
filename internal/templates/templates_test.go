@@ -569,6 +569,10 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 		PartnerDisabled   bool
 		PartnerMessage    string
 		PartnerMessageErr bool
+		PartnerIncoming   bool
+		PartnerOutgoing   bool
+		PartnerLinked     bool
+		CanViewPartner    bool
 	}{
 		Style:          seasons.GetCurrentStyle(),
 		User:           &utypes.User{Email: []string{"chef@example.com"}},

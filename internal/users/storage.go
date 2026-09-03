@@ -33,6 +33,7 @@ var (
 	ErrUserAlreadyHasPartner   = errors.New("user already has a partner")
 	ErrPartnerUnavailable      = errors.New("partner is unavailable")
 	ErrNoPartner               = errors.New("user does not have a partner")
+	ErrNoIncomingPartner       = errors.New("user does not have an incoming partner request")
 	ErrPartnershipInconsistent = errors.New("partnership is not reciprocal")
 )
 
@@ -166,6 +167,7 @@ func (s *Storage) Update(user *utypes.User) error {
 	stored, err := s.GetByID(user.ID)
 	if err == nil {
 		user.PartnerID = stored.PartnerID
+		user.PendingPartnerID = stored.PendingPartnerID
 	} else if !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("load user before update: %w", err)
 	}
@@ -198,24 +200,53 @@ func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
 	s.partnershipsMu.Lock()
 	defer s.partnershipsMu.Unlock()
 
-	if user.PartnerID == "" || user.PartnerID == partnerDisabledID {
+	partnerID := user.PartnerID
+	if user.PendingPartnerID != "" {
+		partnerID = user.PendingPartnerID
+	}
+	if partnerID == "" || partnerID == partnerDisabledID {
 		return nil, nil
 	}
-	partner, err := s.GetByID(user.PartnerID)
+	partner, err := s.GetByID(partnerID)
 	if err != nil {
 		return nil, fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
 	}
-	if partner.PartnerID != user.ID {
+	if partnershipStageFor(user, partner) == partnershipStageNone {
 		return nil, ErrPartnershipInconsistent
 	}
 	return partner, nil
+}
+
+type partnershipStage uint8
+
+const (
+	partnershipStageNone partnershipStage = iota
+	partnershipStageOutgoing
+	partnershipStageIncoming
+	partnershipStageLinked
+)
+
+func partnershipStageFor(user, partner *utypes.User) partnershipStage {
+	if user == nil || partner == nil {
+		return partnershipStageNone
+	}
+	switch {
+	case user.PartnerID == partner.ID && partner.PartnerID == user.ID:
+		return partnershipStageLinked
+	case user.PartnerID == partner.ID && partner.PendingPartnerID == user.ID:
+		return partnershipStageOutgoing
+	case user.PendingPartnerID == partner.ID && partner.PartnerID == user.ID:
+		return partnershipStageIncoming
+	default:
+		return partnershipStageNone
+	}
 }
 
 func partnerSharingDisabled(user *utypes.User) bool {
 	return user != nil && user.PartnerID == partnerDisabledID
 }
 
-func (s *Storage) LinkPartner(userID, email string) error {
+func (s *Storage) RequestPartner(userID, email string) error {
 	s.partnershipsMu.Lock()
 	defer s.partnershipsMu.Unlock()
 
@@ -233,22 +264,49 @@ func (s *Storage) LinkPartner(userID, email string) error {
 	if currentUser.ID == partner.ID {
 		return ErrPartnerSelf
 	}
-	if currentUser.PartnerID != "" {
+	if currentUser.PartnerID != "" || currentUser.PendingPartnerID != "" {
 		return ErrUserAlreadyHasPartner
 	}
-	if partner.PartnerID != "" {
+	if partner.PartnerID != "" || partner.PendingPartnerID != "" {
 		return ErrPartnerUnavailable
 	}
 
 	currentUser.PartnerID = partner.ID
 	if err := s.updateUnlocked(currentUser); err != nil {
-		return fmt.Errorf("link current user: %w", err)
+		return fmt.Errorf("save outgoing partner request: %w", err)
 	}
-	partner.PartnerID = currentUser.ID
+	partner.PendingPartnerID = currentUser.ID
 	if err := s.updateUnlocked(partner); err != nil {
 		currentUser.PartnerID = ""
 		rollbackErr := s.updateUnlocked(currentUser)
-		return fmt.Errorf("link partner: %w", errors.Join(err, rollbackErr))
+		return fmt.Errorf("save incoming partner request: %w", errors.Join(err, rollbackErr))
+	}
+	return nil
+}
+
+func (s *Storage) AcceptPartner(userID string) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	currentUser, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("load current user: %w", err)
+	}
+	if currentUser.PendingPartnerID == "" || currentUser.PartnerID != "" {
+		return ErrNoIncomingPartner
+	}
+	partner, err := s.GetByID(currentUser.PendingPartnerID)
+	if err != nil {
+		return fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+	}
+	if partnershipStageFor(currentUser, partner) != partnershipStageIncoming {
+		return ErrPartnershipInconsistent
+	}
+
+	currentUser.PartnerID = currentUser.PendingPartnerID
+	currentUser.PendingPartnerID = ""
+	if err := s.updateUnlocked(currentUser); err != nil {
+		return fmt.Errorf("accept partner: %w", err)
 	}
 	return nil
 }
@@ -261,25 +319,33 @@ func (s *Storage) UnlinkPartner(userID string) error {
 	if err != nil {
 		return fmt.Errorf("load current user: %w", err)
 	}
-	if currentUser.PartnerID == "" || currentUser.PartnerID == partnerDisabledID {
+	partnerID := currentUser.PartnerID
+	if currentUser.PendingPartnerID != "" {
+		partnerID = currentUser.PendingPartnerID
+	}
+	if partnerID == "" || partnerID == partnerDisabledID {
 		return ErrNoPartner
 	}
-	partner, err := s.GetByID(currentUser.PartnerID)
+	partner, err := s.GetByID(partnerID)
 	if err != nil {
 		return fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
 	}
-	if partner.PartnerID != currentUser.ID {
+	if partnershipStageFor(currentUser, partner) == partnershipStageNone {
 		return ErrPartnershipInconsistent
 	}
 
-	partnerID := currentUser.PartnerID
+	currentPartnerID := currentUser.PartnerID
+	currentPendingPartnerID := currentUser.PendingPartnerID
 	currentUser.PartnerID = ""
+	currentUser.PendingPartnerID = ""
 	if err := s.updateUnlocked(currentUser); err != nil {
 		return fmt.Errorf("unlink current user: %w", err)
 	}
 	partner.PartnerID = ""
+	partner.PendingPartnerID = ""
 	if err := s.updateUnlocked(partner); err != nil {
-		currentUser.PartnerID = partnerID
+		currentUser.PartnerID = currentPartnerID
+		currentUser.PendingPartnerID = currentPendingPartnerID
 		rollbackErr := s.updateUnlocked(currentUser)
 		return fmt.Errorf("unlink partner: %w", errors.Join(err, rollbackErr))
 	}
@@ -297,7 +363,7 @@ func (s *Storage) DisablePartnerSharing(userID string) error {
 	if currentUser.PartnerID == partnerDisabledID {
 		return nil
 	}
-	if currentUser.PartnerID != "" {
+	if currentUser.PartnerID != "" || currentUser.PendingPartnerID != "" {
 		return ErrUserAlreadyHasPartner
 	}
 	currentUser.PartnerID = partnerDisabledID

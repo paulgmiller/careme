@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/templates"
 
@@ -21,14 +22,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStorageLinkPartnerCreatesReciprocalRelationship(t *testing.T) {
+func TestStorageRequestPartnerCreatesPendingRelationship(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
 	storage := NewStorage(cacheStore)
 	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
 
-	require.NoError(t, storage.LinkPartner(first.ID, " SECOND@EXAMPLE.COM "))
+	require.NoError(t, storage.RequestPartner(first.ID, " SECOND@EXAMPLE.COM "))
+
+	storedFirst, err := storage.GetByID(first.ID)
+	require.NoError(t, err)
+	storedSecond, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, second.ID, storedFirst.PartnerID)
+	assert.Empty(t, storedFirst.PendingPartnerID)
+	assert.Empty(t, storedSecond.PartnerID)
+	assert.Equal(t, first.ID, storedSecond.PendingPartnerID)
+	resolved, err := storage.Partner(storedFirst)
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	assert.Equal(t, second.ID, resolved.ID)
+}
+
+func TestStorageAcceptPartnerCompletesReciprocalRelationship(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(t.TempDir())
+	storage := NewStorage(cacheStore)
+	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
+	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
+	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0]))
+
+	require.NoError(t, storage.AcceptPartner(second.ID))
 
 	storedFirst, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
@@ -36,13 +61,12 @@ func TestStorageLinkPartnerCreatesReciprocalRelationship(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, second.ID, storedFirst.PartnerID)
 	assert.Equal(t, first.ID, storedSecond.PartnerID)
-	resolved, err := storage.Partner(storedFirst)
-	require.NoError(t, err)
-	require.NotNil(t, resolved)
-	assert.Equal(t, second.ID, resolved.ID)
+	assert.Empty(t, storedFirst.PendingPartnerID)
+	assert.Empty(t, storedSecond.PendingPartnerID)
+	require.ErrorIs(t, storage.AcceptPartner(first.ID), ErrNoIncomingPartner)
 }
 
-func TestStorageLinkPartnerRejectsInvalidRelationships(t *testing.T) {
+func TestStorageRequestPartnerRejectsInvalidRelationships(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -65,7 +89,7 @@ func TestStorageLinkPartnerRejectsInvalidRelationships(t *testing.T) {
 			name: "current user already linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache, first, _ *utypes.User) {
 				third := seedPartnerUser(t, storage, cacheStore, "user-3", "third@example.com")
-				require.NoError(t, storage.LinkPartner(first.ID, third.Email[0]))
+				require.NoError(t, storage.RequestPartner(first.ID, third.Email[0]))
 			},
 			email:   "second@example.com",
 			wantErr: ErrUserAlreadyHasPartner,
@@ -74,7 +98,7 @@ func TestStorageLinkPartnerRejectsInvalidRelationships(t *testing.T) {
 			name: "recipient already linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache, _, second *utypes.User) {
 				third := seedPartnerUser(t, storage, cacheStore, "user-3", "third@example.com")
-				require.NoError(t, storage.LinkPartner(second.ID, third.Email[0]))
+				require.NoError(t, storage.RequestPartner(second.ID, third.Email[0]))
 			},
 			email:   "second@example.com",
 			wantErr: ErrPartnerUnavailable,
@@ -108,7 +132,7 @@ func TestStorageLinkPartnerRejectsInvalidRelationships(t *testing.T) {
 				tt.prepare(t, storage, cacheStore, first, second)
 			}
 
-			err := storage.LinkPartner(first.ID, tt.email)
+			err := storage.RequestPartner(first.ID, tt.email)
 
 			require.ErrorIs(t, err, tt.wantErr)
 		})
@@ -117,21 +141,41 @@ func TestStorageLinkPartnerRejectsInvalidRelationships(t *testing.T) {
 
 func TestStorageUnlinkPartnerFromEitherSide(t *testing.T) {
 	t.Parallel()
-	cacheStore := cache.NewFileCache(t.TempDir())
-	storage := NewStorage(cacheStore)
-	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
-	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
-	require.NoError(t, storage.LinkPartner(first.ID, second.Email[0]))
 
-	require.NoError(t, storage.UnlinkPartner(second.ID))
+	tests := []struct {
+		name       string
+		accept     bool
+		unlinkUser string
+	}{
+		{name: "requester cancels", unlinkUser: "user-1"},
+		{name: "recipient declines", unlinkUser: "user-2"},
+		{name: "accepted partner disconnects", accept: true, unlinkUser: "user-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cacheStore := cache.NewFileCache(t.TempDir())
+			storage := NewStorage(cacheStore)
+			first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
+			second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
+			require.NoError(t, storage.RequestPartner(first.ID, second.Email[0]))
+			if tt.accept {
+				require.NoError(t, storage.AcceptPartner(second.ID))
+			}
 
-	storedFirst, err := storage.GetByID(first.ID)
-	require.NoError(t, err)
-	storedSecond, err := storage.GetByID(second.ID)
-	require.NoError(t, err)
-	assert.Empty(t, storedFirst.PartnerID)
-	assert.Empty(t, storedSecond.PartnerID)
-	require.ErrorIs(t, storage.UnlinkPartner(first.ID), ErrNoPartner)
+			require.NoError(t, storage.UnlinkPartner(tt.unlinkUser))
+
+			storedFirst, err := storage.GetByID(first.ID)
+			require.NoError(t, err)
+			storedSecond, err := storage.GetByID(second.ID)
+			require.NoError(t, err)
+			assert.Empty(t, storedFirst.PartnerID)
+			assert.Empty(t, storedSecond.PartnerID)
+			assert.Empty(t, storedFirst.PendingPartnerID)
+			assert.Empty(t, storedSecond.PendingPartnerID)
+			require.ErrorIs(t, storage.UnlinkPartner(first.ID), ErrNoPartner)
+		})
+	}
 }
 
 func TestStoragePartnerSharingOptOutCanBeReenabled(t *testing.T) {
@@ -162,18 +206,26 @@ func TestStorageUpdatePreservesManagedPartnerID(t *testing.T) {
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
 	staleFirst, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
-	require.NoError(t, storage.LinkPartner(first.ID, second.Email[0]))
+	staleSecond, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0]))
 
 	staleFirst.Directive = "Use more vegetables."
 	require.NoError(t, storage.Update(staleFirst))
+	staleSecond.Directive = "Cook on weeknights."
+	require.NoError(t, storage.Update(staleSecond))
 
 	updated, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, second.ID, updated.PartnerID)
 	assert.Equal(t, "Use more vegetables.", updated.Directive)
+	updatedSecond, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, updatedSecond.PendingPartnerID)
+	assert.Equal(t, "Cook on weeknights.", updatedSecond.Directive)
 }
 
-func TestStorageLinkPartnerRollsBackFirstWrite(t *testing.T) {
+func TestStorageRequestPartnerRollsBackFirstWrite(t *testing.T) {
 	t.Parallel()
 	base := cache.NewFileCache(t.TempDir())
 	storage := NewStorage(base)
@@ -186,7 +238,7 @@ func TestStorageLinkPartnerRollsBackFirstWrite(t *testing.T) {
 	}
 	storage = NewStorage(failingCache)
 
-	err := storage.LinkPartner(first.ID, second.Email[0])
+	err := storage.RequestPartner(first.ID, second.Email[0])
 
 	require.ErrorContains(t, err, "forced partner write failure")
 	storedFirst, getErr := storage.GetByID(first.ID)
@@ -195,6 +247,7 @@ func TestStorageLinkPartnerRollsBackFirstWrite(t *testing.T) {
 	storedSecond, getErr := storage.GetByID(second.ID)
 	require.NoError(t, getErr)
 	assert.Empty(t, storedSecond.PartnerID)
+	assert.Empty(t, storedSecond.PendingPartnerID)
 }
 
 func TestHandlePartnerLinksAndRedirectsWithoutEmail(t *testing.T) {
@@ -212,11 +265,34 @@ func TestHandlePartnerLinksAndRedirectsWithoutEmail(t *testing.T) {
 	s.handlePartner(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Equal(t, "/user?tab=customize&partner_status=linked", rr.Header().Get("Location"))
+	assert.Equal(t, "/user?tab=customize&partner_status=requested", rr.Header().Get("Location"))
 	assert.NotContains(t, rr.Header().Get("Location"), second.Email[0])
 	stored, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, second.ID, stored.PartnerID)
+}
+
+func TestHandlePartnerRecipientAcceptsRequest(t *testing.T) {
+	t.Parallel()
+	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	storage := NewStorage(cacheStore)
+	first := seedPartnerUser(t, storage, cacheStore, "user-1", "user@example.com")
+	second := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
+	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0]))
+	s := &server{storage: storage, clerk: partnershipAuthClient{userID: second.ID}}
+	form := url.Values{"action": {"accept"}}
+	req := httptest.NewRequest(http.MethodPost, "/user/partner", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	s.handlePartner(rr, req)
+
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	assert.Equal(t, "/user?tab=customize&partner_status=accepted", rr.Header().Get("Location"))
+	storedSecond, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, first.ID, storedSecond.PartnerID)
+	assert.Empty(t, storedSecond.PendingPartnerID)
 }
 
 func TestHandlePartnerUnknownEmailReturnsFriendlyStatus(t *testing.T) {
@@ -237,7 +313,7 @@ func TestHandlePartnerUnknownEmailReturnsFriendlyStatus(t *testing.T) {
 	assert.NotContains(t, rr.Header().Get("Location"), "private@example.com")
 }
 
-func TestHandleUserShowsPartnerRecipesAfterOwnRecipesReadOnly(t *testing.T) {
+func TestHandleUserShowsPartnerRecipesOnlyInAllowedDirection(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := NewStorage(cacheStore)
@@ -248,19 +324,24 @@ func TestHandleUserShowsPartnerRecipesAfterOwnRecipesReadOnly(t *testing.T) {
 	second.LastRecipes = []utypes.Recipe{{Title: "Partner Pasta", Hash: "theirs", CreatedAt: now}}
 	require.NoError(t, storage.Update(first))
 	require.NoError(t, storage.Update(second))
-	require.NoError(t, storage.LinkPartner(first.ID, second.Email[0]))
-	s := &server{storage: storage, userTmpl: templates.User, clerk: testAuthClient{}}
-	req := httptest.NewRequest(http.MethodGet, "/user?tab=past", nil)
-	rr := httptest.NewRecorder()
+	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0]))
 
-	s.handleUser(rr, req)
+	requesterBody := renderPastRecipesPage(t, storage, testAuthClient{})
+	assert.NotContains(t, requesterBody, "Recipes from")
+	assert.NotContains(t, requesterBody, "Partner Pasta")
 
-	require.Equal(t, http.StatusOK, rr.Code)
-	body := rr.Body.String()
-	assert.Contains(t, body, "Recipes from")
-	assert.Contains(t, body, second.Email[0])
-	assert.Less(t, strings.Index(body, "My Soup"), strings.Index(body, "Partner Pasta"))
-	assert.Equal(t, 1, strings.Count(body, `hx-post="/user/recipes/remove"`))
+	recipientBody := renderPastRecipesPage(t, storage, partnershipAuthClient{userID: second.ID})
+	assert.Contains(t, recipientBody, "Recipes from")
+	assert.Contains(t, recipientBody, first.Email[0])
+	assert.Contains(t, recipientBody, "My Soup")
+	assert.Equal(t, 1, strings.Count(recipientBody, `hx-post="/user/recipes/remove"`))
+
+	require.NoError(t, storage.AcceptPartner(second.ID))
+	requesterBody = renderPastRecipesPage(t, storage, testAuthClient{})
+	assert.Contains(t, requesterBody, "Recipes from")
+	assert.Contains(t, requesterBody, "Partner Pasta")
+	assert.Less(t, strings.Index(requesterBody, "My Soup"), strings.Index(requesterBody, "Partner Pasta"))
+	assert.Equal(t, 1, strings.Count(requesterBody, `hx-post="/user/recipes/remove"`))
 }
 
 func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
@@ -278,13 +359,32 @@ func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
 			doNotWant: []string{"Disconnect kitchens", "Allow partner sharing"},
 		},
 		{
+			name: "outgoing",
+			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
+				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
+				require.NoError(t, storage.RequestPartner("user-1", partner.Email[0]))
+			},
+			want:      []string{"partner@example.com", "Waiting for", "Cancel request"},
+			doNotWant: []string{`id="partner_email"`, "Accept partner", "Disconnect kitchens"},
+		},
+		{
+			name: "incoming",
+			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
+				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
+				require.NoError(t, storage.RequestPartner(partner.ID, "user@example.com"))
+			},
+			want:      []string{"partner@example.com", "Partner request from", "Accept partner", "Decline"},
+			doNotWant: []string{`id="partner_email"`, "Cancel request", "Disconnect kitchens"},
+		},
+		{
 			name: "linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
 				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
-				require.NoError(t, storage.LinkPartner("user-1", partner.Email[0]))
+				require.NoError(t, storage.RequestPartner("user-1", partner.Email[0]))
+				require.NoError(t, storage.AcceptPartner(partner.ID))
 			},
 			want:      []string{"partner@example.com", "Disconnect kitchens"},
-			doNotWant: []string{`id="partner_email"`, "Keep my kitchen private", "Allow partner sharing"},
+			doNotWant: []string{`id="partner_email"`, "Accept partner", "Cancel request"},
 		},
 		{
 			name: "disabled",
@@ -320,6 +420,25 @@ func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func renderPastRecipesPage(t *testing.T, storage *Storage, authClient auth.AuthClient) string {
+	t.Helper()
+	s := &server{storage: storage, userTmpl: templates.User, clerk: authClient}
+	req := httptest.NewRequest(http.MethodGet, "/user?tab=past", nil)
+	rr := httptest.NewRecorder()
+	s.handleUser(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	return rr.Body.String()
+}
+
+type partnershipAuthClient struct {
+	testAuthClient
+	userID string
+}
+
+func (c partnershipAuthClient) GetUserIDFromRequest(*http.Request) (string, error) {
+	return c.userID, nil
 }
 
 func seedPartnerUser(t *testing.T, storage *Storage, cacheStore cache.Cache, id, email string) *utypes.User {

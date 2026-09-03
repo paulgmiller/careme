@@ -123,6 +123,38 @@
 
             {{if .Partner}}
             <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+              {{if .PartnerIncoming}}
+              <p class="text-sm text-gray-600">Partner request from</p>
+              <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
+              <p class="mt-2 text-sm text-gray-600">You can already see their recent recipes. Accept to share yours with them too.</p>
+              <div class="mt-4 flex flex-wrap gap-3">
+                <form method="POST" action="/user/partner">
+                  <input type="hidden" name="action" value="accept" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Accept partner
+                  </button>
+                </form>
+                <form method="POST" action="/user/partner">
+                  <input type="hidden" name="action" value="unlink" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Decline
+                  </button>
+                </form>
+              </div>
+              {{else if .PartnerOutgoing}}
+              <p class="text-sm text-gray-600">Waiting for</p>
+              <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
+              <p class="mt-2 text-sm text-gray-600">They can see your recent recipes. You'll see theirs after they accept.</p>
+              <form method="POST" action="/user/partner" class="mt-4">
+                <input type="hidden" name="action" value="unlink" />
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Cancel request
+                </button>
+              </form>
+              {{else if .PartnerLinked}}
               <p class="text-sm text-gray-600">Your kitchen is connected with</p>
               <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
               <form method="POST" action="/user/partner" class="mt-4">
@@ -132,6 +164,7 @@
                   Disconnect kitchens
                 </button>
               </form>
+              {{end}}
             </div>
             {{else if .PartnerDisabled}}
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -247,7 +280,7 @@
             {{end}}
           </section>
 
-          {{if .Partner}}
+          {{if .CanViewPartner}}
           <section class="space-y-4 border-t border-brand-100 pt-8">
             <div>
               <span class="text-xs uppercase tracking-wide text-gray-400">Recipes from</span>

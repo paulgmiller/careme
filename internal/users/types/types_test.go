@@ -141,4 +141,33 @@ func TestUserValidate(t *testing.T) {
 			t.Fatalf("expected invalid favorite store error, got %v", err)
 		}
 	})
+
+	t.Run("cannot be own pending partner", func(t *testing.T) {
+		user := &User{
+			ID:               "user-1",
+			PendingPartnerID: "user-1",
+			ShoppingDay:      time.Saturday.String(),
+			Email:            []string{"alice@example.com"},
+		}
+
+		err := user.Validate()
+		if err == nil || !strings.Contains(err.Error(), "own pending partner") {
+			t.Fatalf("expected own pending partner error, got %v", err)
+		}
+	})
+
+	t.Run("cannot have established and pending partners", func(t *testing.T) {
+		user := &User{
+			ID:               "user-1",
+			PartnerID:        "user-2",
+			PendingPartnerID: "user-3",
+			ShoppingDay:      time.Saturday.String(),
+			Email:            []string{"alice@example.com"},
+		}
+
+		err := user.Validate()
+		if err == nil || !strings.Contains(err.Error(), "pending partner") {
+			t.Fatalf("expected conflicting partner error, got %v", err)
+		}
+	})
 }

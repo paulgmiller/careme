@@ -92,8 +92,11 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	status := ""
 	switch action {
 	case "link":
-		err = s.storage.LinkPartner(currentUser.ID, r.FormValue("email"))
-		status = "linked"
+		err = s.storage.RequestPartner(currentUser.ID, r.FormValue("email"))
+		status = "requested"
+	case "accept":
+		err = s.storage.AcceptPartner(currentUser.ID)
+		status = "accepted"
 	case "unlink":
 		err = s.storage.UnlinkPartner(currentUser.ID)
 		status = "unlinked"
@@ -133,6 +136,8 @@ func partnerErrorStatus(err error) (string, bool) {
 		return "partner_unavailable", true
 	case errors.Is(err, ErrNoPartner):
 		return "no_partner", true
+	case errors.Is(err, ErrNoIncomingPartner):
+		return "no_request", true
 	case errors.Is(err, ErrPartnershipInconsistent):
 		return "inconsistent", true
 	default:
@@ -146,10 +151,12 @@ func redirectPartnerStatus(w http.ResponseWriter, r *http.Request, status string
 
 func partnerNotice(status string) (string, bool) {
 	switch status {
-	case "linked":
+	case "requested":
+		return "Your partner can now see your recent recipes. You'll see theirs after they accept.", false
+	case "accepted":
 		return "Your kitchens are now connected.", false
 	case "unlinked":
-		return "Your kitchens are no longer connected.", false
+		return "The partner connection was removed.", false
 	case "disabled":
 		return "Your kitchen is private from partner sharing.", false
 	case "enabled":
@@ -164,6 +171,8 @@ func partnerNotice(status string) (string, bool) {
 		return "That cook isn't available to connect.", true
 	case "no_partner":
 		return "Your kitchen does not currently have a partner.", true
+	case "no_request":
+		return "There isn't a partner request to accept.", true
 	case "inconsistent":
 		return "We couldn't verify that partnership. Try again, chef.", true
 	default:
@@ -342,9 +351,11 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	}
 	partnerEmail := ""
 	partnerRecipes := []pastRecipeView(nil)
+	partnerStage := partnershipStageNone
 	if partner != nil {
 		partnerEmail = primaryEmail(partner)
-		if activeTab == "past" {
+		partnerStage = partnershipStageFor(currentUser, partner)
+		if activeTab == "past" && (partnerStage == partnershipStageIncoming || partnerStage == partnershipStageLinked) {
 			partnerRecipes = pastRecipeViews(ctx, s.storage.cache, partner.LastRecipes)
 		}
 	}
@@ -378,6 +389,10 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PartnerDisabled   bool
 		PartnerMessage    string
 		PartnerMessageErr bool
+		PartnerIncoming   bool
+		PartnerOutgoing   bool
+		PartnerLinked     bool
+		CanViewPartner    bool
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
@@ -394,6 +409,10 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PartnerDisabled:   partnerSharingDisabled(currentUser),
 		PartnerMessage:    partnerMessage,
 		PartnerMessageErr: partnerMessageError,
+		PartnerIncoming:   partnerStage == partnershipStageIncoming,
+		PartnerOutgoing:   partnerStage == partnershipStageOutgoing,
+		PartnerLinked:     partnerStage == partnershipStageLinked,
+		CanViewPartner:    partnerStage == partnershipStageIncoming || partnerStage == partnershipStageLinked,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
