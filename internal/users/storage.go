@@ -176,6 +176,8 @@ func (s *Storage) writeUser(user *utypes.User) error {
 	return nil
 }
 
+// partner returns the other user in a pending or accepted partnership.
+// It returns (nil, nil) when the user has no partnership.
 func (s *Storage) partner(user *utypes.User) (*utypes.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is required")
@@ -192,6 +194,9 @@ func (s *Storage) partner(user *utypes.User) (*utypes.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
 	}
+	// Both records must describe the same pending or accepted relationship. A
+	// one-sided reference can be left behind because the cache cannot update the
+	// two user records atomically.
 	if partnershipStageFor(user, partner) == partnershipStageNone {
 		return nil, ErrPartnershipInconsistent
 	}

@@ -22,7 +22,10 @@ type ShoppingList struct {
 }
 
 type User struct {
-	ID               string         `json:"id"`
+	ID string `json:"id"`
+	// TODO: Confirm whether users still need multiple email addresses. This may
+	// be leftover household/partner modeling; additional addresses are currently
+	// BCC'd on mail. Use a single string if that behavior is no longer intended.
 	Email            []string       `json:"email"`
 	CreatedAt        time.Time      `json:"created_at"`
 	PartnerID        string         `json:"partner_id,omitempty"`
