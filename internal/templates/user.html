@@ -109,6 +109,80 @@
             </form>
           </section>
 
+          <section class="space-y-4 border-t border-brand-100 pt-8">
+            <div>
+              <h2 class="text-lg font-semibold text-brand-700">Share your kitchen</h2>
+              <p class="mt-1 text-sm text-gray-600">Connect with one partner so you can see each other's recent recipes.</p>
+            </div>
+
+            <div id="partner-status" class="min-h-6 text-sm"></div>
+
+            {{if ne .PartnerStage "none"}}
+            <div class="rounded-xl border border-brand-100 bg-brand-50/70 p-4">
+              {{if eq .PartnerStage "incoming"}}
+              <p class="text-sm text-gray-600">Partner request from</p>
+              <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
+              <p class="mt-2 text-sm text-gray-600">You can already see their recent recipes. Accept to share yours with them too.</p>
+              <div class="mt-4 flex flex-wrap gap-3">
+                <form method="POST" action="/user/partner" hx-post="/user/partner" hx-target="#partner-status" hx-swap="innerHTML">
+                  <input type="hidden" name="action" value="accept" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Accept partner
+                  </button>
+                </form>
+                <form method="POST" action="/user/partner" hx-post="/user/partner" hx-target="#partner-status" hx-swap="innerHTML">
+                  <input type="hidden" name="action" value="unlink" />
+                  <button type="submit"
+                          class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                    Decline
+                  </button>
+                </form>
+              </div>
+              {{else if eq .PartnerStage "outgoing"}}
+              <p class="text-sm text-gray-600">Waiting for</p>
+              <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
+              <p class="mt-2 text-sm text-gray-600">They can see your recent recipes. You'll see theirs after they accept.</p>
+              <form method="POST" action="/user/partner" hx-post="/user/partner" hx-target="#partner-status" hx-swap="innerHTML" class="mt-4">
+                <input type="hidden" name="action" value="unlink" />
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Cancel request
+                </button>
+              </form>
+              {{else if eq .PartnerStage "linked"}}
+              <p class="text-sm text-gray-600">Your kitchen is connected with</p>
+              <p class="mt-1 font-semibold text-brand-700">{{.PartnerEmail}}</p>
+              <form method="POST" action="/user/partner" hx-post="/user/partner" hx-target="#partner-status" hx-swap="innerHTML" class="mt-4">
+                <input type="hidden" name="action" value="unlink" />
+                <button type="submit"
+                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Disconnect kitchens
+                </button>
+              </form>
+              {{end}}
+            </div>
+            {{else}}
+            <form method="POST" action="/user/partner" hx-post="/user/partner" hx-target="#partner-status" hx-swap="innerHTML" class="space-y-4">
+              <input type="hidden" name="action" value="request" />
+              <div class="space-y-2">
+                <label for="partner_email" class="text-sm font-medium text-gray-700">Partner's email address</label>
+                <input id="partner_email"
+                       name="email"
+                       type="email"
+                       autocomplete="email"
+                       required
+                       class="w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                <p class="text-xs text-gray-500">They need an existing Careme account. Connecting happens right away.</p>
+              </div>
+              <button type="submit"
+                      class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                Connect kitchens
+              </button>
+            </form>
+            {{end}}
+          </section>
+
           <section class="space-y-4">
             <h2 class="text-lg font-semibold text-brand-700">Account Information</h2>
             <div class="grid gap-3 sm:grid-cols-2">
@@ -184,6 +258,29 @@
             <p class="text-sm text-gray-500">No recipes yet—start by saving one from your recommendations.</p>
             {{end}}
           </section>
+
+          {{if or (eq .PartnerStage "incoming") (eq .PartnerStage "linked")}}
+          <section class="space-y-4 border-t border-brand-100 pt-8">
+            <div>
+              <span class="text-xs uppercase tracking-wide text-gray-400">Recipes from</span>
+              <h2 class="mt-1 text-lg font-semibold text-brand-700">{{.PartnerEmail}}</h2>
+            </div>
+            {{if .PartnerRecipes}}
+            <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100 bg-white/60">
+              {{range $recipe := .PartnerRecipes}}
+              <li class="px-5 py-4 text-sm text-gray-700">
+                <div class="font-semibold text-brand-700">
+                  <a href="/recipe/{{$recipe.Hash}}" class="hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{$recipe.Title}}</a>
+                  {{- if $recipe.Cooked}} <span aria-label="{{$recipe.CookedStarsLabel}}" title="{{$recipe.CookedStarsLabel}}">{{$recipe.CookedStars}}</span>{{end}}
+                </div>
+              </li>
+              {{end}}
+            </ul>
+            {{else}}
+            <p class="text-sm text-gray-500">No recent recipes from your partner yet.</p>
+            {{end}}
+          </section>
+          {{end}}
           {{end}}
         </div>
       </div>
