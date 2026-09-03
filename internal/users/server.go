@@ -96,11 +96,11 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	action := strings.TrimSpace(r.FormValue("action"))
 	switch action {
 	case "request":
-		err = s.storage.RequestPartner(currentUser.ID, r.FormValue("email"), false)
+		err = s.storage.RequestPartner(currentUser, r.FormValue("email"))
 	case "accept":
-		err = s.storage.RequestPartner(currentUser.ID, "", true)
+		err = s.storage.AcceptPartner(currentUser)
 	case "unlink":
-		err = s.storage.UnlinkPartner(currentUser.ID)
+		err = s.storage.UnlinkPartner(currentUser)
 	default:
 		writePartnerResult(w, errors.New("invalid partner action"))
 		return
@@ -290,7 +290,7 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	userCopy := *currentUser
 	userForTemplate := &userCopy
-	partner, err := s.storage.Partner(currentUser)
+	partner, err := s.storage.partner(currentUser)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to resolve partner", "user_id", currentUser.ID, "error", err)
 		http.Error(w, "unable to load partner", http.StatusInternalServerError)

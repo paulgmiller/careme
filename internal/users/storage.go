@@ -155,15 +155,6 @@ func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string,
 }
 
 func (s *Storage) Update(user *utypes.User) error {
-	// Partnership changes go through the relationship methods below. Preserve
-	// the stored value so an unrelated, stale profile update cannot unlink users.
-	stored, err := s.GetByID(user.ID)
-	if err == nil {
-		user.PartnerID = stored.PartnerID
-		user.PendingPartnerID = stored.PendingPartnerID
-	} else if !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("load user before update: %w", err)
-	}
 	return s.writeUser(user)
 }
 
@@ -185,7 +176,7 @@ func (s *Storage) writeUser(user *utypes.User) error {
 	return nil
 }
 
-func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
+func (s *Storage) partner(user *utypes.User) (*utypes.User, error) {
 	if user == nil {
 		return nil, fmt.Errorf("user is required")
 	}
@@ -232,15 +223,12 @@ func partnershipStageFor(user, partner *utypes.User) partnershipStage {
 	}
 }
 
-func (s *Storage) RequestPartner(userID, email string, accept bool) error {
-	currentUser, err := s.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("load current user: %w", err)
-	}
-	if accept {
-		return s.acceptPartner(currentUser)
-	}
+func (s *Storage) RequestPartner(currentUser *utypes.User, email string) error {
 	return s.requestPartner(currentUser, email)
+}
+
+func (s *Storage) AcceptPartner(currentUser *utypes.User) error {
+	return s.acceptPartner(currentUser)
 }
 
 func (s *Storage) requestPartner(currentUser *utypes.User, email string) error {
@@ -264,7 +252,7 @@ func (s *Storage) requestPartner(currentUser *utypes.User, email string) error {
 	currentUser.PartnerID = partner.ID
 	// TODO: Partnership updates span two user records and are not atomic. Concurrent
 	// requests handled by different servers can leave the relationship inconsistent.
-	// Move this to transactional storage or use conditional/versioned writes.
+	// Move this to transactional storage or use ETags for conditional writes.
 	if err := s.writeUser(currentUser); err != nil {
 		return fmt.Errorf("save outgoing partner request: %w", err)
 	}
@@ -297,11 +285,7 @@ func (s *Storage) acceptPartner(currentUser *utypes.User) error {
 	return nil
 }
 
-func (s *Storage) UnlinkPartner(userID string) error {
-	currentUser, err := s.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("load current user: %w", err)
-	}
+func (s *Storage) UnlinkPartner(currentUser *utypes.User) error {
 	partnerID := currentUser.PartnerID
 	if currentUser.PendingPartnerID != "" {
 		partnerID = currentUser.PendingPartnerID

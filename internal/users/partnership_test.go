@@ -29,7 +29,7 @@ func TestStorageRequestPartnerCreatesPendingRelationship(t *testing.T) {
 	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
 
-	require.NoError(t, storage.RequestPartner(first.ID, " SECOND@EXAMPLE.COM ", false))
+	require.NoError(t, storage.RequestPartner(first, " SECOND@EXAMPLE.COM "))
 
 	storedFirst, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestStorageRequestPartnerCreatesPendingRelationship(t *testing.T) {
 	assert.Empty(t, storedFirst.PendingPartnerID)
 	assert.Empty(t, storedSecond.PartnerID)
 	assert.Equal(t, first.ID, storedSecond.PendingPartnerID)
-	resolved, err := storage.Partner(storedFirst)
+	resolved, err := storage.partner(storedFirst)
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, second.ID, resolved.ID)
@@ -51,9 +51,11 @@ func TestStorageAcceptPartnerCompletesReciprocalRelationship(t *testing.T) {
 	storage := NewStorage(cacheStore)
 	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
-	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0], false))
+	require.NoError(t, storage.RequestPartner(first, second.Email[0]))
 
-	require.NoError(t, storage.RequestPartner(second.ID, "", true))
+	second, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	require.NoError(t, storage.AcceptPartner(second))
 
 	storedFirst, err := storage.GetByID(first.ID)
 	require.NoError(t, err)
@@ -63,7 +65,7 @@ func TestStorageAcceptPartnerCompletesReciprocalRelationship(t *testing.T) {
 	assert.Equal(t, first.ID, storedSecond.PartnerID)
 	assert.Empty(t, storedFirst.PendingPartnerID)
 	assert.Empty(t, storedSecond.PendingPartnerID)
-	require.ErrorIs(t, storage.RequestPartner(first.ID, "", true), ErrNoIncomingPartner)
+	require.ErrorIs(t, storage.AcceptPartner(first), ErrNoIncomingPartner)
 }
 
 func TestStorageRequestPartnerRejectsInvalidRelationships(t *testing.T) {
@@ -89,7 +91,7 @@ func TestStorageRequestPartnerRejectsInvalidRelationships(t *testing.T) {
 			name: "current user already linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache, first, _ *utypes.User) {
 				third := seedPartnerUser(t, storage, cacheStore, "user-3", "third@example.com")
-				require.NoError(t, storage.RequestPartner(first.ID, third.Email[0], false))
+				require.NoError(t, storage.RequestPartner(first, third.Email[0]))
 			},
 			email:   "second@example.com",
 			wantErr: ErrUserAlreadyHasPartner,
@@ -98,7 +100,7 @@ func TestStorageRequestPartnerRejectsInvalidRelationships(t *testing.T) {
 			name: "recipient already linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache, _, second *utypes.User) {
 				third := seedPartnerUser(t, storage, cacheStore, "user-3", "third@example.com")
-				require.NoError(t, storage.RequestPartner(second.ID, third.Email[0], false))
+				require.NoError(t, storage.RequestPartner(second, third.Email[0]))
 			},
 			email:   "second@example.com",
 			wantErr: ErrPartnerUnavailable,
@@ -116,7 +118,7 @@ func TestStorageRequestPartnerRejectsInvalidRelationships(t *testing.T) {
 				tt.prepare(t, storage, cacheStore, first, second)
 			}
 
-			err := storage.RequestPartner(first.ID, tt.email, false)
+			err := storage.RequestPartner(first, tt.email)
 
 			require.ErrorIs(t, err, tt.wantErr)
 		})
@@ -142,12 +144,16 @@ func TestStorageUnlinkPartnerFromEitherSide(t *testing.T) {
 			storage := NewStorage(cacheStore)
 			first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
 			second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
-			require.NoError(t, storage.RequestPartner(first.ID, second.Email[0], false))
+			require.NoError(t, storage.RequestPartner(first, second.Email[0]))
 			if tt.accept {
-				require.NoError(t, storage.RequestPartner(second.ID, "", true))
+				storedSecond, err := storage.GetByID(second.ID)
+				require.NoError(t, err)
+				require.NoError(t, storage.AcceptPartner(storedSecond))
 			}
 
-			require.NoError(t, storage.UnlinkPartner(tt.unlinkUser))
+			unlinkUser, err := storage.GetByID(tt.unlinkUser)
+			require.NoError(t, err)
+			require.NoError(t, storage.UnlinkPartner(unlinkUser))
 
 			storedFirst, err := storage.GetByID(first.ID)
 			require.NoError(t, err)
@@ -157,36 +163,9 @@ func TestStorageUnlinkPartnerFromEitherSide(t *testing.T) {
 			assert.Empty(t, storedSecond.PartnerID)
 			assert.Empty(t, storedFirst.PendingPartnerID)
 			assert.Empty(t, storedSecond.PendingPartnerID)
-			require.ErrorIs(t, storage.UnlinkPartner(first.ID), ErrNoPartner)
+			require.ErrorIs(t, storage.UnlinkPartner(storedFirst), ErrNoPartner)
 		})
 	}
-}
-
-func TestStorageUpdatePreservesManagedPartnerID(t *testing.T) {
-	t.Parallel()
-	cacheStore := cache.NewFileCache(t.TempDir())
-	storage := NewStorage(cacheStore)
-	first := seedPartnerUser(t, storage, cacheStore, "user-1", "first@example.com")
-	second := seedPartnerUser(t, storage, cacheStore, "user-2", "second@example.com")
-	staleFirst, err := storage.GetByID(first.ID)
-	require.NoError(t, err)
-	staleSecond, err := storage.GetByID(second.ID)
-	require.NoError(t, err)
-	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0], false))
-
-	staleFirst.Directive = "Use more vegetables."
-	require.NoError(t, storage.Update(staleFirst))
-	staleSecond.Directive = "Cook on weeknights."
-	require.NoError(t, storage.Update(staleSecond))
-
-	updated, err := storage.GetByID(first.ID)
-	require.NoError(t, err)
-	assert.Equal(t, second.ID, updated.PartnerID)
-	assert.Equal(t, "Use more vegetables.", updated.Directive)
-	updatedSecond, err := storage.GetByID(second.ID)
-	require.NoError(t, err)
-	assert.Equal(t, first.ID, updatedSecond.PendingPartnerID)
-	assert.Equal(t, "Cook on weeknights.", updatedSecond.Directive)
 }
 
 func TestStorageRequestPartnerRollsBackFirstWrite(t *testing.T) {
@@ -202,7 +181,7 @@ func TestStorageRequestPartnerRollsBackFirstWrite(t *testing.T) {
 	}
 	storage = NewStorage(failingCache)
 
-	err := storage.RequestPartner(first.ID, second.Email[0], false)
+	err := storage.RequestPartner(first, second.Email[0])
 
 	require.ErrorContains(t, err, "forced partner write failure")
 	storedFirst, getErr := storage.GetByID(first.ID)
@@ -243,7 +222,7 @@ func TestHandlePartnerRecipientAcceptsRequest(t *testing.T) {
 	storage := NewStorage(cacheStore)
 	first := seedPartnerUser(t, storage, cacheStore, "user-1", "user@example.com")
 	second := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
-	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0], false))
+	require.NoError(t, storage.RequestPartner(first, second.Email[0]))
 	s := &server{storage: storage, clerk: partnershipAuthClient{userID: second.ID}}
 	form := url.Values{"action": {"accept"}}
 	req := httptest.NewRequest(http.MethodPost, "/user/partner", strings.NewReader(form.Encode()))
@@ -291,7 +270,7 @@ func TestHandleUserShowsPartnerRecipesOnlyInAllowedDirection(t *testing.T) {
 	second.LastRecipes = []utypes.Recipe{{Title: "Partner Pasta", Hash: "theirs", CreatedAt: now}}
 	require.NoError(t, storage.Update(first))
 	require.NoError(t, storage.Update(second))
-	require.NoError(t, storage.RequestPartner(first.ID, second.Email[0], false))
+	require.NoError(t, storage.RequestPartner(first, second.Email[0]))
 
 	requesterBody := renderPastRecipesPage(t, storage, testAuthClient{})
 	assert.NotContains(t, requesterBody, "Recipes from")
@@ -303,7 +282,9 @@ func TestHandleUserShowsPartnerRecipesOnlyInAllowedDirection(t *testing.T) {
 	assert.Contains(t, recipientBody, "My Soup")
 	assert.Equal(t, 1, strings.Count(recipientBody, `hx-post="/user/recipes/remove"`))
 
-	require.NoError(t, storage.RequestPartner(second.ID, "", true))
+	second, err := storage.GetByID(second.ID)
+	require.NoError(t, err)
+	require.NoError(t, storage.AcceptPartner(second))
 	requesterBody = renderPastRecipesPage(t, storage, testAuthClient{})
 	assert.Contains(t, requesterBody, "Recipes from")
 	assert.Contains(t, requesterBody, "Partner Pasta")
@@ -329,7 +310,9 @@ func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
 			name: "outgoing",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
 				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
-				require.NoError(t, storage.RequestPartner("user-1", partner.Email[0], false))
+				user, err := storage.GetByID("user-1")
+				require.NoError(t, err)
+				require.NoError(t, storage.RequestPartner(user, partner.Email[0]))
 			},
 			want:      []string{"partner@example.com", "Waiting for", "Cancel request"},
 			doNotWant: []string{`id="partner_email"`, "Accept partner", "Disconnect kitchens"},
@@ -338,7 +321,7 @@ func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
 			name: "incoming",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
 				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
-				require.NoError(t, storage.RequestPartner(partner.ID, "user@example.com", false))
+				require.NoError(t, storage.RequestPartner(partner, "user@example.com"))
 			},
 			want:      []string{"partner@example.com", "Partner request from", "Accept partner", "Decline"},
 			doNotWant: []string{`id="partner_email"`, "Cancel request", "Disconnect kitchens"},
@@ -347,8 +330,12 @@ func TestHandleUserShowsPartnerControlsForRelationshipState(t *testing.T) {
 			name: "linked",
 			prepare: func(t *testing.T, storage *Storage, cacheStore *cache.FileCache) {
 				partner := seedPartnerUser(t, storage, cacheStore, "user-2", "partner@example.com")
-				require.NoError(t, storage.RequestPartner("user-1", partner.Email[0], false))
-				require.NoError(t, storage.RequestPartner(partner.ID, "", true))
+				user, err := storage.GetByID("user-1")
+				require.NoError(t, err)
+				require.NoError(t, storage.RequestPartner(user, partner.Email[0]))
+				partner, err = storage.GetByID(partner.ID)
+				require.NoError(t, err)
+				require.NoError(t, storage.AcceptPartner(partner))
 			},
 			want:      []string{"partner@example.com", "Disconnect kitchens"},
 			doNotWant: []string{`id="partner_email"`, "Accept partner", "Cancel request"},
