@@ -276,7 +276,7 @@ func TestHandlePartnerUnknownEmailReturnsInlineError(t *testing.T) {
 	s.handlePartner(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Try again, chef")
+	assert.Contains(t, rr.Body.String(), ErrPartnerNotFound.Error())
 	assert.NotContains(t, rr.Body.String(), "private@example.com")
 }
 

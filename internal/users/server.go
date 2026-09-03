@@ -89,7 +89,7 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load user for partner action", "error", err)
-		writePartnerResult(w, false)
+		writePartnerResult(w, err)
 		return
 	}
 
@@ -102,25 +102,29 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	case "unlink":
 		err = s.storage.UnlinkPartner(currentUser.ID)
 	default:
-		writePartnerResult(w, false)
+		writePartnerResult(w, errors.New("invalid partner action"))
 		return
 	}
 
 	if err != nil {
 		slog.WarnContext(ctx, "partner action failed", "user_id", currentUser.ID, "action", action, "error", err)
-		writePartnerResult(w, false)
+		writePartnerResult(w, err)
 		return
 	}
-	writePartnerResult(w, true)
+	writePartnerResult(w, nil)
 }
 
-func writePartnerResult(w http.ResponseWriter, success bool) {
+func writePartnerResult(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if success {
+	if err == nil {
 		_, _ = fmt.Fprint(w, `<span class="text-emerald-700" role="status" aria-label="Partner updated">✓</span>`)
 		return
 	}
-	_, _ = fmt.Fprint(w, `<span class="text-red-700" role="alert">That didn't work. Try again, chef.</span>`)
+	message := "Unable to update partner. Try again, chef."
+	if errors.Is(err, ErrPartnerNotFound) {
+		message = err.Error()
+	}
+	_, _ = fmt.Fprintf(w, `<span class="text-red-700" role="alert">%s</span>`, template.HTMLEscapeString(message))
 }
 
 func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request) {
