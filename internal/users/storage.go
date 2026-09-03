@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"careme/internal/auth"
@@ -21,15 +22,25 @@ import (
 )
 
 type Storage struct {
-	cache cache.ListCache
+	cache          cache.ListCache
+	partnershipsMu sync.Mutex
 }
 
-var ErrNotFound = errors.New("user not found")
+var (
+	ErrNotFound                = errors.New("user not found")
+	ErrPartnerNotFound         = errors.New("partner account not found")
+	ErrPartnerSelf             = errors.New("user cannot partner with themselves")
+	ErrUserAlreadyHasPartner   = errors.New("user already has a partner")
+	ErrPartnerUnavailable      = errors.New("partner is unavailable")
+	ErrNoPartner               = errors.New("user does not have a partner")
+	ErrPartnershipInconsistent = errors.New("partnership is not reciprocal")
+)
 
 const (
-	CookieName  = "careme_user"
-	userPrefix  = "users/"
-	emailPrefix = "email2user/"
+	CookieName        = "careme_user"
+	userPrefix        = "users/"
+	emailPrefix       = "email2user/"
+	partnerDisabledID = "careme-partner-sharing-disabled"
 
 	shoppingListLimit  = 2
 	shoppingListWindow = 7 * 24 * time.Hour
@@ -147,6 +158,21 @@ func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string,
 }
 
 func (s *Storage) Update(user *utypes.User) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	// Partnership changes go through the relationship methods below. Preserve
+	// the stored value so an unrelated, stale profile update cannot unlink users.
+	stored, err := s.GetByID(user.ID)
+	if err == nil {
+		user.PartnerID = stored.PartnerID
+	} else if !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("load user before update: %w", err)
+	}
+	return s.updateUnlocked(user)
+}
+
+func (s *Storage) updateUnlocked(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
@@ -160,6 +186,144 @@ func (s *Storage) Update(user *utypes.User) error {
 	}
 	if err := s.cache.Put(context.TODO(), userPrefix+user.ID, string(userBytes), cache.Unconditional()); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is required")
+	}
+
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	if user.PartnerID == "" || user.PartnerID == partnerDisabledID {
+		return nil, nil
+	}
+	partner, err := s.GetByID(user.PartnerID)
+	if err != nil {
+		return nil, fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+	}
+	if partner.PartnerID != user.ID {
+		return nil, ErrPartnershipInconsistent
+	}
+	return partner, nil
+}
+
+func partnerSharingDisabled(user *utypes.User) bool {
+	return user != nil && user.PartnerID == partnerDisabledID
+}
+
+func (s *Storage) LinkPartner(userID, email string) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	currentUser, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("load current user: %w", err)
+	}
+	partner, err := s.GetByEmail(email)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return ErrPartnerNotFound
+		}
+		return fmt.Errorf("find partner by email: %w", err)
+	}
+	if currentUser.ID == partner.ID {
+		return ErrPartnerSelf
+	}
+	if currentUser.PartnerID != "" {
+		return ErrUserAlreadyHasPartner
+	}
+	if partner.PartnerID != "" {
+		return ErrPartnerUnavailable
+	}
+
+	currentUser.PartnerID = partner.ID
+	if err := s.updateUnlocked(currentUser); err != nil {
+		return fmt.Errorf("link current user: %w", err)
+	}
+	partner.PartnerID = currentUser.ID
+	if err := s.updateUnlocked(partner); err != nil {
+		currentUser.PartnerID = ""
+		rollbackErr := s.updateUnlocked(currentUser)
+		return fmt.Errorf("link partner: %w", errors.Join(err, rollbackErr))
+	}
+	return nil
+}
+
+func (s *Storage) UnlinkPartner(userID string) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	currentUser, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("load current user: %w", err)
+	}
+	if currentUser.PartnerID == "" || currentUser.PartnerID == partnerDisabledID {
+		return ErrNoPartner
+	}
+	partner, err := s.GetByID(currentUser.PartnerID)
+	if err != nil {
+		return fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+	}
+	if partner.PartnerID != currentUser.ID {
+		return ErrPartnershipInconsistent
+	}
+
+	partnerID := currentUser.PartnerID
+	currentUser.PartnerID = ""
+	if err := s.updateUnlocked(currentUser); err != nil {
+		return fmt.Errorf("unlink current user: %w", err)
+	}
+	partner.PartnerID = ""
+	if err := s.updateUnlocked(partner); err != nil {
+		currentUser.PartnerID = partnerID
+		rollbackErr := s.updateUnlocked(currentUser)
+		return fmt.Errorf("unlink partner: %w", errors.Join(err, rollbackErr))
+	}
+	return nil
+}
+
+func (s *Storage) DisablePartnerSharing(userID string) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	currentUser, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("load current user: %w", err)
+	}
+	if currentUser.PartnerID == partnerDisabledID {
+		return nil
+	}
+	if currentUser.PartnerID != "" {
+		return ErrUserAlreadyHasPartner
+	}
+	currentUser.PartnerID = partnerDisabledID
+	if err := s.updateUnlocked(currentUser); err != nil {
+		return fmt.Errorf("disable partner sharing: %w", err)
+	}
+	return nil
+}
+
+func (s *Storage) EnablePartnerSharing(userID string) error {
+	s.partnershipsMu.Lock()
+	defer s.partnershipsMu.Unlock()
+
+	currentUser, err := s.GetByID(userID)
+	if err != nil {
+		return fmt.Errorf("load current user: %w", err)
+	}
+	if currentUser.PartnerID == "" {
+		return nil
+	}
+	if currentUser.PartnerID != partnerDisabledID {
+		return ErrUserAlreadyHasPartner
+	}
+	currentUser.PartnerID = ""
+	if err := s.updateUnlocked(currentUser); err != nil {
+		return fmt.Errorf("enable partner sharing: %w", err)
 	}
 	return nil
 }

@@ -25,6 +25,7 @@ type User struct {
 	ID            string         `json:"id"`
 	Email         []string       `json:"email"`
 	CreatedAt     time.Time      `json:"created_at"`
+	PartnerID     string         `json:"partner_id,omitempty"`
 	LastRecipes   []Recipe       `json:"last_recipes,omitempty"`
 	FavoriteStore string         `json:"favorite_store,omitempty"`
 	ShoppingDay   string         `json:"shopping_day,omitempty"`
@@ -35,6 +36,9 @@ type User struct {
 
 // need to take a look up to location cache?
 func (u User) Validate() error {
+	if u.PartnerID == u.ID && u.ID != "" {
+		return errors.New("user cannot be their own partner")
+	}
 	if _, err := ParseWeekday(u.ShoppingDay); err != nil {
 		return err
 	}
