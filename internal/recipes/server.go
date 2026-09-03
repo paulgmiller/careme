@@ -93,8 +93,7 @@ type ImageStore interface {
 type statusStore interface {
 	Start(ctx context.Context, hash string) error
 	Fail(ctx context.Context, hash string, err error) error
-	// TODO would really like to return an interface from load
-	Load(ctx context.Context, hash string) (status.Payload, error)
+	Load(ctx context.Context, hash string) (status.Status, error)
 	Complete(ctx context.Context, id, newHash string) error
 }
 
@@ -465,7 +464,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 	if err == nil {
 		// Running and completed jobs already have a polling URL. Failed jobs
 		// fall through so Start resets their status for the explicit retry.
-		if status.Failed() == "" {
+		if status.Failed == "" {
 			redirectToRecipeRegeneration(w, r, hash, id)
 			return
 		}
@@ -524,16 +523,16 @@ func (s *server) handleSingleRecipeRegeneration(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if payload.NewHash() != "" {
-		redirectToRecipe(w, r, payload.NewHash())
+	if payload.Redirect != "" {
+		redirectToRecipe(w, r, payload.Redirect)
 		return
 	}
-	if payload.Failed() != "" {
+	if payload.Failed != "" {
 		s.renderRecipeRegenerationRetry(ctx, w, r, hash)
 		return
 	}
 
-	spin(ctx, w, r, payload.String())
+	spin(ctx, w, r, payload.Message)
 }
 
 func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
@@ -1152,12 +1151,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if status.Failed() != "" {
-		generationFailed(ctx, w, r, hashParam, status.Failed())
+	if status.Failed != "" {
+		generationFailed(ctx, w, r, hashParam, status.Failed)
 		return
 	}
 
-	spin(ctx, w, r, status.String())
+	spin(ctx, w, r, status.Message)
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
