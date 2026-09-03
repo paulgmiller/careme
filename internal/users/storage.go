@@ -38,11 +38,9 @@ var (
 )
 
 const (
-	CookieName        = "careme_user"
-	userPrefix        = "users/"
-	emailPrefix       = "email2user/"
-	partnerDisabledID = "careme-partner-sharing-disabled"
-
+	CookieName         = "careme_user"
+	userPrefix         = "users/"
+	emailPrefix        = "email2user/"
 	shoppingListLimit  = 2
 	shoppingListWindow = 7 * 24 * time.Hour
 )
@@ -204,7 +202,7 @@ func (s *Storage) Partner(user *utypes.User) (*utypes.User, error) {
 	if user.PendingPartnerID != "" {
 		partnerID = user.PendingPartnerID
 	}
-	if partnerID == "" || partnerID == partnerDisabledID {
+	if partnerID == "" {
 		return nil, nil
 	}
 	partner, err := s.GetByID(partnerID)
@@ -242,11 +240,7 @@ func partnershipStageFor(user, partner *utypes.User) partnershipStage {
 	}
 }
 
-func partnerSharingDisabled(user *utypes.User) bool {
-	return user != nil && user.PartnerID == partnerDisabledID
-}
-
-func (s *Storage) RequestPartner(userID, email string) error {
+func (s *Storage) RequestPartner(userID, email string, accept bool) error {
 	s.partnershipsMu.Lock()
 	defer s.partnershipsMu.Unlock()
 
@@ -254,6 +248,13 @@ func (s *Storage) RequestPartner(userID, email string) error {
 	if err != nil {
 		return fmt.Errorf("load current user: %w", err)
 	}
+	if accept {
+		return s.acceptPartner(currentUser)
+	}
+	return s.requestPartner(currentUser, email)
+}
+
+func (s *Storage) requestPartner(currentUser *utypes.User, email string) error {
 	partner, err := s.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -284,14 +285,7 @@ func (s *Storage) RequestPartner(userID, email string) error {
 	return nil
 }
 
-func (s *Storage) AcceptPartner(userID string) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
-	currentUser, err := s.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("load current user: %w", err)
-	}
+func (s *Storage) acceptPartner(currentUser *utypes.User) error {
 	if currentUser.PendingPartnerID == "" || currentUser.PartnerID != "" {
 		return ErrNoIncomingPartner
 	}
@@ -323,7 +317,7 @@ func (s *Storage) UnlinkPartner(userID string) error {
 	if currentUser.PendingPartnerID != "" {
 		partnerID = currentUser.PendingPartnerID
 	}
-	if partnerID == "" || partnerID == partnerDisabledID {
+	if partnerID == "" {
 		return ErrNoPartner
 	}
 	partner, err := s.GetByID(partnerID)
@@ -348,48 +342,6 @@ func (s *Storage) UnlinkPartner(userID string) error {
 		currentUser.PendingPartnerID = currentPendingPartnerID
 		rollbackErr := s.updateUnlocked(currentUser)
 		return fmt.Errorf("unlink partner: %w", errors.Join(err, rollbackErr))
-	}
-	return nil
-}
-
-func (s *Storage) DisablePartnerSharing(userID string) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
-	currentUser, err := s.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("load current user: %w", err)
-	}
-	if currentUser.PartnerID == partnerDisabledID {
-		return nil
-	}
-	if currentUser.PartnerID != "" || currentUser.PendingPartnerID != "" {
-		return ErrUserAlreadyHasPartner
-	}
-	currentUser.PartnerID = partnerDisabledID
-	if err := s.updateUnlocked(currentUser); err != nil {
-		return fmt.Errorf("disable partner sharing: %w", err)
-	}
-	return nil
-}
-
-func (s *Storage) EnablePartnerSharing(userID string) error {
-	s.partnershipsMu.Lock()
-	defer s.partnershipsMu.Unlock()
-
-	currentUser, err := s.GetByID(userID)
-	if err != nil {
-		return fmt.Errorf("load current user: %w", err)
-	}
-	if currentUser.PartnerID == "" {
-		return nil
-	}
-	if currentUser.PartnerID != partnerDisabledID {
-		return ErrUserAlreadyHasPartner
-	}
-	currentUser.PartnerID = ""
-	if err := s.updateUnlocked(currentUser); err != nil {
-		return fmt.Errorf("enable partner sharing: %w", err)
 	}
 	return nil
 }

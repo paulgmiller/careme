@@ -92,20 +92,14 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	status := ""
 	switch action {
 	case "link":
-		err = s.storage.RequestPartner(currentUser.ID, r.FormValue("email"))
+		err = s.storage.RequestPartner(currentUser.ID, r.FormValue("email"), false)
 		status = "requested"
 	case "accept":
-		err = s.storage.AcceptPartner(currentUser.ID)
+		err = s.storage.RequestPartner(currentUser.ID, "", true)
 		status = "accepted"
 	case "unlink":
 		err = s.storage.UnlinkPartner(currentUser.ID)
 		status = "unlinked"
-	case "disable":
-		err = s.storage.DisablePartnerSharing(currentUser.ID)
-		status = "disabled"
-	case "enable":
-		err = s.storage.EnablePartnerSharing(currentUser.ID)
-		status = "enabled"
 	default:
 		http.Error(w, "invalid partner action", http.StatusBadRequest)
 		return
@@ -157,10 +151,6 @@ func partnerNotice(status string) (string, bool) {
 		return "Your kitchens are now connected.", false
 	case "unlinked":
 		return "The partner connection was removed.", false
-	case "disabled":
-		return "Your kitchen is private from partner sharing.", false
-	case "enabled":
-		return "Partner sharing is available again.", false
 	case "not_found":
 		return "We couldn't find a Careme account with that email.", true
 	case "self":
@@ -386,7 +376,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner           *utypes.User
 		PartnerEmail      string
 		PartnerRecipes    []pastRecipeView
-		PartnerDisabled   bool
 		PartnerMessage    string
 		PartnerMessageErr bool
 		PartnerIncoming   bool
@@ -406,7 +395,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		Partner:           partner,
 		PartnerEmail:      partnerEmail,
 		PartnerRecipes:    partnerRecipes,
-		PartnerDisabled:   partnerSharingDisabled(currentUser),
 		PartnerMessage:    partnerMessage,
 		PartnerMessageErr: partnerMessageError,
 		PartnerIncoming:   partnerStage == partnershipStageIncoming,

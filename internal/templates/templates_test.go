@@ -566,7 +566,6 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 		Partner           *utypes.User
 		PartnerEmail      string
 		PartnerRecipes    []utypes.Recipe
-		PartnerDisabled   bool
 		PartnerMessage    string
 		PartnerMessageErr bool
 		PartnerIncoming   bool

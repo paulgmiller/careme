@@ -166,17 +166,6 @@
               </form>
               {{end}}
             </div>
-            {{else if .PartnerDisabled}}
-            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
-              <p class="text-sm text-gray-700">Your kitchen is private. No one can connect as your partner.</p>
-              <form method="POST" action="/user/partner" class="mt-4">
-                <input type="hidden" name="action" value="enable" />
-                <button type="submit"
-                        class="inline-flex items-center justify-center rounded-lg border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Allow partner sharing
-                </button>
-              </form>
-            </div>
             {{else}}
             <form method="POST" action="/user/partner" class="space-y-4">
               <input type="hidden" name="action" value="link" />
@@ -193,12 +182,6 @@
               <button type="submit"
                       class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 Connect kitchens
-              </button>
-            </form>
-            <form method="POST" action="/user/partner">
-              <input type="hidden" name="action" value="disable" />
-              <button type="submit" class="text-sm font-medium text-gray-600 underline underline-offset-4 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                Keep my kitchen private
               </button>
             </form>
             {{end}}
