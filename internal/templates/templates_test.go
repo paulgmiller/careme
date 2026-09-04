@@ -151,6 +151,7 @@ func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
 	nonAppPages := map[string]bool{
 		"auth_establish.html": true,
 		"mail.html":           true,
+		"cocktail_locations.html": true,
 	}
 
 	names, err := fs.Glob(htmlFiles, "*.html")
