@@ -85,8 +85,10 @@ tasks:
     silent: true
     vars:
       EVAL: '{{default "" .EVAL}}'
+      MODEL: '{{default "" .MODEL}}'
     env:
       CAREME_EVAL: "{{.EVAL}}"
+      RECIPE_EVAL_MODEL: "{{.MODEL}}"
     cmds:
       - |
         if [ -z "$CAREME_EVAL" ]; then
@@ -120,7 +122,7 @@ tasks:
           echo "Running $eval_name eval"
           (
             cd "$eval_dir"
-            npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --config promptfooconfig.yaml
+            npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --config promptfooconfig.yaml {{.CLI_ARGS}}
           )
         done
 

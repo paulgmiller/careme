@@ -12,7 +12,7 @@ import (
 )
 
 func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
-	client := NewClient("test-key", "ignored", farmersMarketResponseClient(t), nil)
+	client := NewClient("test-key", "", farmersMarketResponseClient(t), nil)
 
 	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
 
