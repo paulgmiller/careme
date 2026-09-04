@@ -322,6 +322,9 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 			t.Fatalf("about page should include %q app copy, body: %s", appCopy, rendered)
 		}
 	}
+	if !strings.Contains(rendered, "connect with one partner from Your Kitchen") {
+		t.Fatalf("about page should explain partner sharing, body: %s", rendered)
+	}
 	if strings.Contains(rendered, `id="privacy"`) {
 		t.Fatalf("about page should not include old privacy section, body: %s", rendered)
 	}
@@ -579,6 +582,9 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	}
 
 	rendered := buf.String()
+	if !strings.Contains(rendered, "chef@example.com") || !strings.Contains(rendered, `action="/logout"`) || !strings.Contains(rendered, "Sign out") {
+		t.Fatalf("user page should include the signed-in account menu and sign-out action, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
 		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
 	}
