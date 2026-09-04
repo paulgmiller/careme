@@ -87,13 +87,6 @@
     --clerk-spacing: 1rem;
   }
 
-  /* Keep app-like pages from rubber-banding or accepting browser zoom gestures. */
-  html,
-  body {
-    overscroll-behavior: none;
-    touch-action: pan-x pan-y;
-  }
-
   /* Balance paragraph lines where the browser supports pretty wrapping. */
   p {
     text-wrap: pretty;

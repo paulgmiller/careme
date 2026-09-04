@@ -73,6 +73,13 @@ func TestFontFilesEmbedded(t *testing.T) {
 	}
 }
 
+func TestTailwindAllowsNativePageScrolling(t *testing.T) {
+	css := string(tailwindCSS)
+	if strings.Contains(css, "html,body{overscroll-behavior:none;touch-action:pan-x pan-y}") {
+		t.Fatal("global CSS must leave scrolling and gesture handling to the browser")
+	}
+}
+
 func TestRegisterServesFontFiles(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
