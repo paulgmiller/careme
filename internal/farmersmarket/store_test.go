@@ -278,7 +278,7 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 }
 
 func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	extractor := &fakeExtractor{}
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
@@ -302,7 +302,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 }
 
 func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
 		t.Fatal("parsePhotos should not be called for non-HTMX posts")
@@ -318,7 +318,7 @@ func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
 }
 
 func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	extractor := &fakeExtractor{
@@ -365,7 +365,7 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 }
 
 func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	extractor := &fakeExtractor{
@@ -406,7 +406,7 @@ func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
 }
 
 func TestHandleStatusRendersPhotoAndIngredientProgress(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	status := analysisStatus{
 		ID:              "job-running",
@@ -451,7 +451,7 @@ func TestHandleStatusRedirectsCompletedJobToLocations(t *testing.T) {
 }
 
 func TestHandleStatusReturnsFailedJobAsErrorFragment(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
 	require.NoError(t, handler.statusStore.save(t.Context(), analysisStatus{
 		ID:      "job-failed",
@@ -507,7 +507,7 @@ func TestHandleStatusRejectsAnonymousUser(t *testing.T) {
 }
 
 func TestHandleGetRendersClerkRefreshData(t *testing.T) {
-	require.NoError(t, templates.Init(&config.Config{}, "dummy.css"))
+	require.NoError(t, templates.Init(&config.Config{}))
 	cacheStore := cache.NewInMemoryCache()
 	handler := NewHandler(
 		NewUploader(NewStore(cacheStore)),

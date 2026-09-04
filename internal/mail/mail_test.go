@@ -27,7 +27,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	if err := templates.Init(&config.Config{}); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())
@@ -317,6 +317,15 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	t.Run("not opted in", func(t *testing.T) {
 		m := &mailer{}
 		m.sendEmail(context.Background(), utypes.User{ID: "user-1"})
+	})
+
+	t.Run("no favorite store", func(t *testing.T) {
+		m := &mailer{}
+		m.sendEmail(context.Background(), utypes.User{
+			ID:        "user-1",
+			MailOptIn: true,
+			Email:     []string{"u1@example.com"},
+		})
 	})
 
 	location := testMailLocation()

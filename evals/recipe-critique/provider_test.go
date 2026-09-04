@@ -48,6 +48,7 @@ func TestRunEvalLoadsRecipeHashAndReturnsCritique(t *testing.T) {
 	assert.Equal(t, "recipe-hash", loader.hash)
 	assert.Equal(t, "Hash supper", critiquer.recipe.Title)
 	assert.JSONEq(t, `{"schema_version":"recipe-critique-v1","overall_score":8,"summary":"A useful recipe.","strengths":null,"issues":null,"suggested_fixes":null,"critiqued_at":"0001-01-01T00:00:00Z"}`, result["output"].(string))
+	assert.IsType(t, int64(0), result["latencyMs"])
 }
 
 func TestRunEvalUsesInlineRecipeWithoutLoader(t *testing.T) {

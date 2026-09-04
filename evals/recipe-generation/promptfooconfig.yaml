@@ -55,6 +55,22 @@ tests:
         chef_note_suggestion: skip the scallop splurge
         response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
         prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const saltIngredients = recipe.ingredients.filter((ingredient) => /\bsalt\b/i.test(ingredient.name));
+          const usesVolume = saltIngredients.length > 0 && saltIngredients.every((ingredient) =>
+            /\b(?:teaspoons?|tablespoons?)\b/i.test(ingredient.quantity)
+            && !/\b(?:grams?|g)\b/i.test(ingredient.quantity),
+          );
+          const saltText = [
+            ...saltIngredients.map((ingredient) => `${ingredient.quantity} ${ingredient.name}`),
+            ...recipe.instructions.filter((instruction) => /\bsalt\b/i.test(instruction)),
+          ].join(' ');
+          const exposesSaltWeight = /(?:\b(?:grams?|g)\b.{0,40}\bsalt\b|\bsalt\b.{0,40}\b(?:grams?|g)\b)/i.test(saltText);
+          return usesVolume && !exposesSaltWeight;
+        metric: salt-measured-by-volume
   # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA==
   - description: Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside
     vars:

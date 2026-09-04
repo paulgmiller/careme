@@ -13,6 +13,9 @@ providers:
 
 defaultTest:
   assert:
+    - type: latency
+      threshold: 30000
+      metric: critique-latency-under-30s
     - type: is-json
       metric: critique-json
     - type: javascript
@@ -116,9 +119,11 @@ tests:
       - type: javascript
         value: |
           const critique = JSON.parse(output);
-          const saltIssues = critique.issues.filter((issue) =>
-            issue.category === 'flavor' && /salt|season/i.test(issue.detail));
-          return saltIssues.length === 0;
+          const saltCriticism = [
+            ...critique.issues.map((issue) => issue.detail),
+            ...critique.suggested_fixes,
+          ].filter((text) => /\bsalt(?:ed|ing|y)?\b|\bbrin(?:e|ed|ing)\b/i.test(text));
+          return saltCriticism.length === 0;
         metric: respects-pre-brined-ingredient
 
   # A production cache case can replace recipe with:
