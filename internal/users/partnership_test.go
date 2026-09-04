@@ -275,11 +275,14 @@ func TestHandleUserShowsPartnerRecipesOnlyInAllowedDirection(t *testing.T) {
 	requesterBody := renderPastRecipesPage(t, storage, testAuthClient{})
 	assert.NotContains(t, requesterBody, "Recipes from")
 	assert.NotContains(t, requesterBody, "Partner Pasta")
+	assert.NotContains(t, requesterBody, `href="#partner-recipes"`)
 
 	recipientBody := renderPastRecipesPage(t, storage, partnershipAuthClient{userID: second.ID})
 	assert.Contains(t, recipientBody, "Recipes from")
 	assert.Contains(t, recipientBody, first.Email[0])
 	assert.Contains(t, recipientBody, "My Soup")
+	assert.Contains(t, recipientBody, `href="#partner-recipes"`)
+	assert.Contains(t, recipientBody, `id="partner-recipes"`)
 	assert.Equal(t, 1, strings.Count(recipientBody, `hx-post="/user/recipes/remove"`))
 
 	second, err := storage.GetByID(second.ID)
