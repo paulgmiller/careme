@@ -16,10 +16,12 @@ import (
 	"careme/internal/appredirect"
 	"careme/internal/auth"
 	"careme/internal/campaigns"
+	"careme/internal/cocktails"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -81,11 +83,17 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 
+	var cocktailLocations cocktails.Locations
+	var cocktailCatalog cocktails.Catalog
+	var cocktailPlanner cocktails.Planner
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
 	var waiters []waiter
 	if cfg.Mocks.Enable {
+		cocktailLocations = locationStorage
+		cocktailCatalog = cocktails.Mock{}
+		cocktailPlanner = cocktails.Mock{}
 		mc := critique.NewMock(cache)
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
 		imageGen = recipes.NewMockImageGen()
@@ -96,6 +104,15 @@ func runServer(cfg *config.Config, addr string) error {
 		ro.add(critiquer)
 
 		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+		cocktailLocations, err = kroger.NewLocationBackendFromConfig(cfg, aiHTTPClient)
+		if err != nil {
+			return fmt.Errorf("create cocktail locations: %w", err)
+		}
+		cocktailPlanner = aiclient
+		cocktailCatalog, err = kroger.NewCocktailProvider(cfg, aiHTTPClient)
+		if err != nil {
+			return fmt.Errorf("create cocktail catalog: %w", err)
+		}
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
@@ -111,6 +128,9 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 		waiters = append(waiters, critiquer)
 	}
+	cocktailHandler := cocktails.New(cocktailCatalog, cocktailPlanner, cocktailLocations, cache, centroids)
+	cocktailHandler.Register(appRoutes)
+	waiters = append(waiters, cocktailHandler)
 	watchdogServer.Register(infraRoutes)
 
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
