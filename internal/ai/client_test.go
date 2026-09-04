@@ -2,10 +2,26 @@ package ai
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
+func TestNewClientModelOverride(t *testing.T) {
+	for _, model := range []string{"", "  ", " candidate-model "} {
+		t.Run(model, func(t *testing.T) {
+			client := NewClient("test-key", model, nil, &capturePromptRecorder{})
+			want := defaultRecipeModel
+			if model == " candidate-model " {
+				want = "candidate-model"
+			}
+			assert.Equal(t, want, client.model)
+			assert.Equal(t, defaultWineModel, client.wineModel)
+		})
+	}
+}
+
 func TestNewClientUsesGPT56FamilyByRole(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, &capturePromptRecorder{})
+	client := NewClient("test-key", "", nil, &capturePromptRecorder{})
 
 	if client.model != gpt56Sol {
 		t.Fatalf("expected primary recipe model to be %q, got %q", gpt56Sol, client.model)
