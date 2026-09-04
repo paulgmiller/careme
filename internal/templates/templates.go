@@ -48,6 +48,8 @@ var Home,
 	About,
 	Privacy,
 	TemperatureGuide,
+	CocktailLocations,
+	Cocktails,
 	Location,
 	FarmersMarket,
 	Mail *template.Template
@@ -91,6 +93,8 @@ func Init(config *config.Config) error {
 	About = ensure(tmpls, "about.html")
 	Privacy = ensure(tmpls, "privacy.html")
 	TemperatureGuide = ensure(tmpls, "temperature_guide.html")
+	CocktailLocations = ensure(tmpls, "cocktail_locations.html")
+	Cocktails = ensure(tmpls, "cocktails.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")

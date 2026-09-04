@@ -142,3 +142,7 @@ Compatibility implications:
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.
 - Recipe records store `instructions` as a string array. Each string may contain the constrained Markdown supported by the instruction renderer: plain paragraphs and `- ` bullet lists.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.
+
+### Cocktail menus
+
+- `cocktails/v1/{krogerLocationID}/{UTC YYYY-MM-DD}/{season}.json`: complete three-drink `ai.CocktailMenu`, shared by store and day, in the main cache. The season follows `CAREME_SEASON` when set. Cocktail searches are independent of dinner staples and ingredient grading. Product candidates are searched live on a menu cache miss; no staples keys are read or written. Failed menus are not cached and can be retried. Process-local jobs support the progress page and server shutdown waiting; completed menus survive restarts.
