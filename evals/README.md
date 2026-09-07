@@ -30,7 +30,9 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe critique
 
-`recipe-critique/promptfooconfig.yaml` runs the production recipe critique prompt and schema against hand-reviewed recipe fixtures. A case accepts either a complete `vars.recipe` object or a `vars.recipe_hash`, but not both. Hash cases read `recipe/<hash>` from the configured cache, so export the cache credentials before running Promptfoo when the recipe is not in the local file cache.
+`recipe-critique/promptfooconfig.yaml` runs the production recipe critique prompt and schema against synthetic guardrails and checked-in recipes that users cooked and rated. A case accepts either a complete `vars.recipe` object or a `vars.recipe_hash`, but not both. The checked-in cases are self-contained; hash cases read `recipe/<hash>` from the configured cache when doing exploratory work.
+
+Candidate models are selected in the Promptfoo `providers` list through each provider's `config.model`; `OPENROUTER_CRITIQUE_MODEL` does not select the model for this suite. The custom usefulness grader calls `gpt-5.6-sol` directly through the OpenAI Responses API. Both providers load `OPENROUTER_API_KEY` and `AI_API_KEY` through kage.
 
 Run just this suite from the repository root:
 
@@ -38,4 +40,4 @@ Run just this suite from the repository root:
 ./task.sh evals EVAL=recipe-critique
 ```
 
-The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
+The suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, usefulness as judged by GPT-5.6 Sol, and a 30-second model-call latency budget. The candidate provider reports only the production critique call duration, excluding Promptfoo's provider startup, judge calls, and build time. Use `--no-cache` for model-selection runs so latency is measured from real requests.

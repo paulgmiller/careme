@@ -72,6 +72,26 @@ func TestDecodeEvalCaseRequiresExactlyOneRecipeSource(t *testing.T) {
 	}
 }
 
+func TestCritiqueModelRequiresPromptfooProviderConfig(t *testing.T) {
+	t.Parallel()
+
+	model, err := critiqueModel(map[string]interface{}{
+		"config": map[string]interface{}{"model": "  google/gemini-3.7-flash  "},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "google/gemini-3.7-flash", model)
+
+	for _, options := range []map[string]interface{}{
+		nil,
+		{},
+		{"config": map[string]interface{}{}},
+		{"config": map[string]interface{}{"model": "  "}},
+	} {
+		_, err := critiqueModel(options)
+		require.EqualError(t, err, "promptfoo provider config.model is required")
+	}
+}
+
 func TestRunEvalReturnsLoadError(t *testing.T) {
 	result, err := runEval(t.Context(), evalCase{RecipeHash: "missing"}, &stubLoader{err: errors.New("not found")}, &stubCritiquer{})
 
@@ -89,7 +109,9 @@ func TestCritiqueRecipeReturnsModelError(t *testing.T) {
 func TestCallApiReturnsReadableProviderError(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	result, err := CallApi("", nil, map[string]interface{}{})
+	result, err := CallApi("", map[string]interface{}{
+		"config": map[string]interface{}{"model": "google/gemini-3.7-flash"},
+	}, map[string]interface{}{})
 	require.NoError(t, err)
 
 	message, ok := result["error"].(string)
