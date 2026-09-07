@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,12 +67,12 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	}
 }
 
-func TestRecipeCritiqueDefaults(t *testing.T) {
+func TestRecipeCritiqueUsesConfiguredModel(t *testing.T) {
 	t.Parallel()
 
-	client := NewCritiquer("openrouter-key", "", http.DefaultClient)
+	client := NewCritiquer("openrouter-key", config.DefaultCritiqueModel, http.DefaultClient)
 
-	assert.Equal(t, "google/gemini-3.1-pro-preview", client.model)
+	assert.Equal(t, config.DefaultCritiqueModel, client.model)
 }
 
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {

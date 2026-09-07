@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/recipes"
 
 	"github.com/paulgmiller/kage/pkg/kage"

@@ -26,9 +26,8 @@ type client struct {
 	promptRecorder PromptRecorder
 }
 
-// ignoring model for now.
-func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	// ignor model for now.
+func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
+	model = strings.TrimSpace(model)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
 	}
@@ -60,7 +59,7 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
-		model:          defaultRecipeModel,
+		model:          model,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
