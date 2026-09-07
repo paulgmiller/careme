@@ -7,12 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
-	client := NewClient("test-key", "ignored", farmersMarketResponseClient(t), nil)
+	client := NewClient("test-key", config.DefaultRecipeModel, farmersMarketResponseClient(t), nil)
 
 	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
 

@@ -16,7 +16,6 @@ import (
 
 const (
 	openRouterBaseURL          = "https://openrouter.ai/api/v1"
-	defaultCritiqueModel       = "google/gemini-3.1-pro-preview"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
 	openRouterApplicationTitle = "Careme"
 	openRouterApplicationURL   = "https://careme.cooking"
@@ -90,9 +89,6 @@ type critiquer struct {
 
 func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 	model = strings.TrimSpace(model)
-	if model == "" {
-		model = defaultCritiqueModel
-	}
 
 	opts := []option.RequestOption{
 		option.WithAPIKey(apiKey),

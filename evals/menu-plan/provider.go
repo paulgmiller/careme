@@ -40,7 +40,7 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
-	planner := ai.NewClient(cfg.AI.APIKey, "", http.DefaultClient, nil)
+	planner := ai.NewClient(cfg.AI.APIKey, cfg.AI.RecipeModel, http.DefaultClient, nil)
 	return runEval(body, planner)
 }
 
