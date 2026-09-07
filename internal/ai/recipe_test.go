@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/config"
+
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,7 +149,7 @@ func TestRecipeSerializesMarkdownInstructions(t *testing.T) {
 }
 
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
-	client := NewClient("test-key", "", nil, nil)
+	client := NewClient("test-key", config.DefaultRecipeModel, nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	ingredients := schemaObject(t, properties["ingredients"])
 	items := schemaObject(t, ingredients["items"])
@@ -175,7 +177,7 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
-	client := NewClient("test-key", "", nil, nil)
+	client := NewClient("test-key", config.DefaultRecipeModel, nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 
 	assert.Contains(t, properties, "properties")
@@ -214,7 +216,7 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
-	client := NewClient("test-key", "", nil, nil)
+	client := NewClient("test-key", config.DefaultRecipeModel, nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	instructions := schemaObject(t, properties["instructions"])
 	items := schemaObject(t, instructions["items"])
@@ -352,7 +354,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 
 func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 	var requestBody string
-	client := NewClient("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("test-key", config.DefaultRecipeModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
@@ -366,7 +368,7 @@ func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 				"status":"completed","model":%q,
 				"output":[{"id":"msg-question","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Use half as much salt.","annotations":[]}]}],
 				"usage":{"input_tokens":20,"input_tokens_details":{"cached_tokens":15},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":25}
-			}`, defaultRecipeModel))),
+			}`, config.DefaultRecipeModel))),
 			Request: req,
 		}, nil
 	})}, nil)
@@ -389,7 +391,7 @@ func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 }
 
 func TestResponseUsageLogAttr(t *testing.T) {
-	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
+	attr := responseUsageLogAttr(config.DefaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,

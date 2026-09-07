@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
@@ -137,6 +139,19 @@ func TestLoadReadsOpenRouterCritiqueConfig(t *testing.T) {
 	if !cfg.OpenRouter.IsEnabled() {
 		t.Fatal("expected OpenRouter critique config to be enabled")
 	}
+}
+
+func TestLoadDefaultsAIModels(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	assert.Equal(t, DefaultRecipeModel, cfg.AI.RecipeModel)
+	assert.Equal(t, DefaultCritiqueModel, cfg.OpenRouter.CritiqueModel)
 }
 
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {

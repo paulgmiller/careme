@@ -26,12 +26,8 @@ type client struct {
 	promptRecorder PromptRecorder
 }
 
-// NewClient uses the production recipe model when model is empty.
 func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
 	model = strings.TrimSpace(model)
-	if model == "" {
-		model = defaultRecipeModel
-	}
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
 	}

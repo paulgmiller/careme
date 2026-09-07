@@ -59,6 +59,12 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if err != nil {
 		return nil, err
 	}
+	if settings.Config.Model == "" {
+		settings.Config.Model = cfg.AI.RecipeModel
+	}
+	if settings.Config.JudgeModel == "" {
+		settings.Config.JudgeModel = cfg.OpenRouter.CritiqueModel
+	}
 	if strings.TrimSpace(cfg.AI.APIKey) == "" || strings.TrimSpace(cfg.OpenRouter.APIKey) == "" {
 		return nil, fmt.Errorf("AI_API_KEY and OPENROUTER_API_KEY are required for judged recipe generation evals")
 	}

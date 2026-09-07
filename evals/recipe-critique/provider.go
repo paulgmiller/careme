@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/recipes"
 
 	"github.com/paulgmiller/kage/pkg/kage"
@@ -56,7 +57,11 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENROUTER_API_KEY is required for recipe critique evals")
 	}
-	critiquer := ai.NewCritiquer(apiKey, os.Getenv("OPENROUTER_CRITIQUE_MODEL"), http.DefaultClient)
+	model := strings.TrimSpace(os.Getenv("OPENROUTER_CRITIQUE_MODEL"))
+	if model == "" {
+		model = config.DefaultCritiqueModel
+	}
+	critiquer := ai.NewCritiquer(apiKey, model, http.DefaultClient)
 
 	testCase, err := decodeEvalCase(body)
 	if err != nil {

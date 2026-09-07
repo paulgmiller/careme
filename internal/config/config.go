@@ -15,6 +15,11 @@ const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
 
 const (
 	defaultLocalOrigin = "http://localhost:8080"
+
+	// DefaultRecipeModel is the production model for recipe and menu generation.
+	DefaultRecipeModel = "gpt-5.6-sol"
+	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
+	DefaultCritiqueModel = "google/gemini-3.1-pro-preview"
 )
 
 type Config struct {
@@ -37,7 +42,8 @@ type Config struct {
 }
 
 type AIConfig struct {
-	APIKey string `json:"api_key"`
+	APIKey      string `json:"api_key"`
+	RecipeModel string `json:"recipe_model"`
 }
 
 type IngredientGradingConfig struct {
@@ -170,7 +176,8 @@ func Load() (*Config, error) {
 
 	config := &Config{
 		AI: AIConfig{
-			APIKey: os.Getenv("AI_API_KEY"),
+			APIKey:      os.Getenv("AI_API_KEY"),
+			RecipeModel: DefaultRecipeModel,
 		},
 		IngredientGrading: IngredientGradingConfig{
 			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
@@ -178,7 +185,7 @@ func Load() (*Config, error) {
 		},
 		OpenRouter: OpenRouterConfig{
 			APIKey:        os.Getenv("OPENROUTER_API_KEY"),
-			CritiqueModel: os.Getenv("OPENROUTER_CRITIQUE_MODEL"),
+			CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
 		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
@@ -232,6 +239,13 @@ func Load() (*Config, error) {
 
 func envEnabled(name string) bool {
 	return os.Getenv(name) != "false"
+}
+
+func envOrDefault(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func validate(cfg *Config) error {
