@@ -1217,6 +1217,17 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The generation spinner polls this handler into #spin-page-work. Once the
+	// recipes are ready, replace the spinner document with a real page load rather
+	// than nesting the complete shopping-list document inside that element. The
+	// latter leaves the spinner body's overflow-hidden class in place and prevents
+	// the completed page from scrolling on mobile browsers.
+	if httpx.IsHTMX(r) && strings.EqualFold(strings.TrimSpace(r.Header.Get("HX-Target")), "spin-page-work") {
+		w.Header().Set("HX-Redirect", httpx.RequestPath(r))
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	signedIn := currentUser != nil
 	selection := selectionFromSaved(p.Saved)
 	if signedIn {

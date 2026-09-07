@@ -223,6 +223,27 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	}
 }
 
+func TestHandleRecipes_ReadySpinnerPollRedirectsToFullPage(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "70100024", Name: "Test Store"}, time.Now())
+	s := newTestServer(t)
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Scrollable supper"}},
+	}, p.Hash()))
+
+	target := "/recipes?h=" + url.QueryEscape(p.Hash()) + "&help=Pick+dinner"
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "spin-page-work")
+	rr := httptest.NewRecorder()
+
+	s.handleRecipes(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, target, rr.Header().Get("HX-Redirect"))
+	assert.Empty(t, rr.Body.String())
+}
+
 func legacyRecipeHash(hash string) (string, bool) {
 	return currentHashToLegacy(hash, legacyRecipeHashSeed)
 }
