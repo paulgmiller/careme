@@ -24,6 +24,7 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
+	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -103,7 +104,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
-		ss := recipes.StatusStore(cache)
+		ss := status.NewStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)

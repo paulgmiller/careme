@@ -11,6 +11,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/seasons"
+	"careme/internal/static"
 	utypes "careme/internal/users/types"
 
 	"github.com/stretchr/testify/assert"
@@ -269,7 +270,7 @@ func templateTitle(body string) (string, bool) {
 }
 
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -321,6 +322,9 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 			t.Fatalf("about page should include %q app copy, body: %s", appCopy, rendered)
 		}
 	}
+	if !strings.Contains(rendered, "connect with one partner from Your Kitchen") {
+		t.Fatalf("about page should explain partner sharing, body: %s", rendered)
+	}
 	if strings.Contains(rendered, `id="privacy"`) {
 		t.Fatalf("about page should not include old privacy section, body: %s", rendered)
 	}
@@ -347,7 +351,7 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 }
 
 func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -384,7 +388,7 @@ func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing
 }
 
 func TestTemperatureGuideTemplateRendersChefGuidance(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -427,11 +431,11 @@ func TestTemperatureGuideTemplateRendersChefGuidance(t *testing.T) {
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -481,11 +485,11 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -543,11 +547,11 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
 	cfg.Clerk.Domain = "clerk.example.com"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -562,6 +566,9 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 		ActiveTab         string
 		PastRecipes       []utypes.Recipe
 		ServerSignedIn    bool
+		PartnerEmail      string
+		PartnerRecipes    []utypes.Recipe
+		PartnerStage      string
 	}{
 		Style:          seasons.GetCurrentStyle(),
 		User:           &utypes.User{Email: []string{"chef@example.com"}},
@@ -575,10 +582,13 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	}
 
 	rendered := buf.String()
+	if !strings.Contains(rendered, "chef@example.com") || !strings.Contains(rendered, `action="/logout"`) || !strings.Contains(rendered, "Sign out") {
+		t.Fatalf("user page should include the signed-in account menu and sign-out action, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
 		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `<script src="/static/user-clerk-billing.js"></script>`) {
+	if !strings.Contains(rendered, `<script src="`+static.AssetPath+`user-clerk-billing.js"></script>`) {
 		t.Fatalf("user page should load Clerk billing script asset, body: %s", rendered)
 	}
 	if strings.Contains(rendered, `mountPricingTable`) {
@@ -587,7 +597,7 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 }
 
 func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -623,7 +633,7 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 }
 
 func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -649,7 +659,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
 		`hx-target="#farmers-market-work"`,
-		`<script type="module" src="/static/farmersmarket.js"></script>`,
+		`<script type="module" src="` + static.AssetPath + `farmersmarket.js"></script>`,
 		`Large photos are resized before upload`,
 	} {
 		if !strings.Contains(rendered, want) {
@@ -659,7 +669,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 }
 
 func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -717,7 +727,7 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 }
 
 func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -757,7 +767,7 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 }
 
 func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -813,11 +823,11 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})

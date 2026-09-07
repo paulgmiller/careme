@@ -66,12 +66,66 @@ func NewHandler(storage *Storage, locGetter locationGetter, clerkClient auth.Aut
 
 func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("/user", s.handleUser)
+	mux.HandleFunc("POST /user/partner", s.handlePartner)
 	mux.HandleFunc("GET /user/recipes/offline-cache", s.handleOfflineRecipeCache)
 	mux.HandleFunc("POST /user/recipes/remove", s.handleRemoveUserRecipe)
 	mux.HandleFunc("POST /user/favorite", s.handleFavorite)
 	mux.HandleFunc("GET /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("POST /user/unsubscribe", s.handleUnsubscribe)
 	mux.HandleFunc("GET /user/exists", s.handleExists)
+}
+
+func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !httpx.IsHTMX(r) {
+		http.Error(w, "htmx request required", http.StatusBadRequest)
+		return
+	}
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			w.Header().Set("HX-Redirect", "/")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		slog.ErrorContext(ctx, "failed to load user for partner action", "error", err)
+		writePartnerResult(w, err)
+		return
+	}
+
+	action := strings.TrimSpace(r.FormValue("action"))
+	switch action {
+	case "request":
+		err = s.storage.RequestPartner(currentUser, r.FormValue("email"))
+	case "accept":
+		err = s.storage.AcceptPartner(currentUser)
+	case "unlink":
+		err = s.storage.UnlinkPartner(currentUser)
+	default:
+		writePartnerResult(w, errors.New("invalid partner action"))
+		return
+	}
+
+	if err != nil {
+		slog.WarnContext(ctx, "partner action failed", "user_id", currentUser.ID, "action", action, "error", err)
+		writePartnerResult(w, err)
+		return
+	}
+	writePartnerResult(w, nil)
+}
+
+func writePartnerResult(w http.ResponseWriter, err error) {
+	if err == nil {
+		w.Header().Set("HX-Refresh", "true")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	message := "Unable to update partner. Try again, chef."
+	if errors.Is(err, ErrPartnerNotFound) {
+		message = err.Error()
+	}
+	_, _ = fmt.Fprintf(w, `<span class="text-red-700" role="alert">%s</span>`, template.HTMLEscapeString(message))
 }
 
 func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +291,22 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 
 	userCopy := *currentUser
 	userForTemplate := &userCopy
-
+	partner, err := s.storage.partner(currentUser)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to resolve partner", "user_id", currentUser.ID, "error", err)
+		http.Error(w, "unable to load partner", http.StatusInternalServerError)
+		return
+	}
+	partnerEmail := ""
+	partnerRecipes := []pastRecipeView(nil)
+	partnerStage := partnershipStageNone
+	if partner != nil {
+		partnerEmail = primaryEmail(partner)
+		partnerStage = partnershipStageFor(currentUser, partner)
+		if activeTab == "past" && (partnerStage == partnershipStageIncoming || partnerStage == partnershipStageLinked) {
+			partnerRecipes = pastRecipeViews(ctx, s.storage.cache, partner.LastRecipes)
+		}
+	}
 	// Fetch location name if favorite store is set
 	var favoriteStoreName string
 	if userForTemplate.FavoriteStore != "" && s.locGetter != nil {
@@ -260,6 +329,9 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes       []pastRecipeView
 		Style             seasons.Style
 		ServerSignedIn    bool
+		PartnerEmail      string
+		PartnerRecipes    []pastRecipeView
+		PartnerStage      partnershipStage
 	}{
 		ClarityScript:     templates.ClarityScript(ctx),
 		GoogleTagScript:   templates.GoogleTagScript(),
@@ -270,11 +342,21 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		PastRecipes:       pastRecipeViews(ctx, s.storage.cache, userForTemplate.LastRecipes),
 		Style:             seasons.GetCurrentStyle(),
 		ServerSignedIn:    true,
+		PartnerEmail:      partnerEmail,
+		PartnerRecipes:    partnerRecipes,
+		PartnerStage:      partnerStage,
 	}
 	if err := s.userTmpl.Execute(w, data); err != nil {
 		slog.ErrorContext(ctx, "user template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+func primaryEmail(user *utypes.User) string {
+	if user == nil || len(user.Email) == 0 {
+		return ""
+	}
+	return user.Email[0]
 }
 
 func pastRecipeViews(ctx context.Context, c cache.Cache, recipes []utypes.Recipe) []pastRecipeView {

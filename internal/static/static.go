@@ -1,9 +1,9 @@
 package static
 
 import (
-	"crypto/sha256"
 	"embed"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 
@@ -56,65 +56,48 @@ var backgroundSpring []byte
 //go:embed summer.webp
 var backgroundSummer []byte
 
-var TailwindAssetPath string
+var AssetPath = calculateAssetPath()
 
-func Init() {
-	tailwindHash := fmt.Sprintf("%x", sha256.Sum256(tailwindCSS))
-	TailwindAssetPath = fmt.Sprintf("/static/tailwind.%s.css", tailwindHash[:12])
+func calculateAssetPath() string {
+	hasher := fnv.New64()
+
+	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS} {
+		_, _ = hasher.Write(asset)
+	}
+	return fmt.Sprintf("/static/%x/", hasher.Sum(nil))
 }
+
+const immutable = "public, max-age=31536000, immutable"
+
+// helper for immutable I bett http package has something like this.
+// could embed whole fs and then use http.FileServerFS()
+func static(contentType string, buf []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", immutable)
+		if _, err := w.Write(buf); err != nil {
+			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
+		}
+	}
+}
+
+const jsContentType = "application/javascript; charset=utf-8"
 
 // Register serves static assets and wires template asset paths.
 func Register(mux routing.Registrar) {
-	mux.HandleFunc(TailwindAssetPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(tailwindCSS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write tailwind css", "error", err)
-		}
-	})
+	mux.HandleFunc(AssetPath+"tailwind.css", static("text/css; charset=utf-8", tailwindCSS))
 
 	// Intentionally versioned so that we can cache aggressively.
-	mux.HandleFunc("/static/htmx@2.0.8.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		if _, err := w.Write(htmx208JS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write htmx js", "error", err)
-		}
-	})
+	mux.HandleFunc("/static/htmx@2.0.8.js", static(jsContentType, htmx208JS))
 
-	mux.HandleFunc("/static/user-clerk-billing.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		if _, err := w.Write(userClerkBillingJS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write user Clerk billing js", "error", err)
-		}
-	})
+	// bad form to redirect to assetpath so pages are simpler? Still have to do head requests
+	mux.HandleFunc(AssetPath+"user-clerk-billing.js", static(jsContentType, userClerkBillingJS))
+	// w.Header().Set("Cache-Control", "public, max-age=3600")
 
-	// TODO: Revisit content-hashed URLs for first-party JavaScript when asset
-	// paths can be wired into templates without expanding template initialization.
-	mux.HandleFunc("/static/share.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		if _, err := w.Write(shareJS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write share js", "error", err)
-		}
-	})
+	mux.HandleFunc(AssetPath+"share.js", static(jsContentType, shareJS))
+	mux.HandleFunc(AssetPath+"recipe.js", static(jsContentType, recipeJS))
 
-	mux.HandleFunc("/static/recipe.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		if _, err := w.Write(recipeJS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write recipe js", "error", err)
-		}
-	})
-
-	mux.HandleFunc("/static/farmersmarket.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		if _, err := w.Write(farmersMarketJS); err != nil {
-			slog.ErrorContext(r.Context(), "failed to write farmers market js", "error", err)
-		}
-	})
+	mux.HandleFunc(AssetPath+"farmersmarket.js", static(jsContentType, farmersMarketJS))
 
 	fontServer := http.FileServer(http.FS(fontFiles))
 	mux.Handle("/static/fonts/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +121,7 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc("/background.webp", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/webp")
 		// Keep cache short so clients can refresh seasonally without manual cache clear.
+		// could redirect to
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		background := backgroundBySeason(seasons.GetCurrentSeason())
 		if _, err := w.Write(background); err != nil {

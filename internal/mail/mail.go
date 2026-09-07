@@ -28,6 +28,7 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
+	"careme/internal/recipes/status"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -116,7 +117,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
-	generationStatuses := recipes.StatusStore(cacheStore)
+	generationStatuses := status.NewStore(cacheStore)
 	aiClient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
 	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
 	if err != nil {

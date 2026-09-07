@@ -1,9 +1,11 @@
 package types
 
 import (
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseWeekday(t *testing.T) {
@@ -40,17 +42,11 @@ func TestParseWeekday(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseWeekday(tt.input)
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("parseWeekday(%q) expected error", tt.input)
-				}
+				require.Error(t, err)
 				return
 			}
-			if err != nil {
-				t.Fatalf("parseWeekday(%q) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Fatalf("parseWeekday(%q) = %v, want %v", tt.input, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -72,15 +68,11 @@ func TestUserValidate(t *testing.T) {
 			},
 		}
 
-		if err := user.Validate(); err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, user.Validate())
 
-		for i, name := range []string{"newer", "older", "oldest"} {
-			if got, want := user.LastRecipes[i].Title, name; got != want {
-				t.Fatalf("recipes not sorted by CreatedAt: got %s want %s", got, want)
-			}
-		}
+		assert.Equal(t, "newer", user.LastRecipes[0].Title)
+		assert.Equal(t, "older", user.LastRecipes[1].Title)
+		assert.Equal(t, "oldest", user.LastRecipes[2].Title)
 	})
 
 	t.Run("valid prefixed favorite store", func(t *testing.T) {
@@ -91,9 +83,7 @@ func TestUserValidate(t *testing.T) {
 			FavoriteStore: "wholefoods_123",
 		}
 
-		if err := user.Validate(); err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		require.NoError(t, user.Validate())
 	})
 
 	t.Run("invalid shopping day", func(t *testing.T) {
@@ -103,18 +93,15 @@ func TestUserValidate(t *testing.T) {
 		}
 
 		err := user.Validate()
-		if err == nil || !strings.Contains(err.Error(), "invalid weekday") {
-			t.Fatalf("expected invalid weekday error, got %v", err)
-		}
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid weekday")
 	})
 
 	t.Run("missing email", func(t *testing.T) {
 		user := &User{ShoppingDay: time.Friday.String()}
 
 		err := user.Validate()
-		if err == nil || err.Error() != "at least one email is required" {
-			t.Fatalf("expected missing email error, got %v", err)
-		}
+		require.EqualError(t, err, "at least one email is required")
 	})
 
 	t.Run("invalid email address", func(t *testing.T) {
@@ -124,9 +111,7 @@ func TestUserValidate(t *testing.T) {
 		}
 
 		err := user.Validate()
-		if err == nil || err.Error() != "invalid email address: not-an-email" {
-			t.Fatalf("expected invalid email error, got %v", err)
-		}
+		require.EqualError(t, err, "invalid email address: not-an-email")
 	})
 
 	t.Run("invalid favorite store", func(t *testing.T) {
@@ -137,8 +122,34 @@ func TestUserValidate(t *testing.T) {
 		}
 
 		err := user.Validate()
-		if err == nil || !strings.Contains(err.Error(), "invalid favorite store id") {
-			t.Fatalf("expected invalid favorite store error, got %v", err)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "invalid favorite store id")
+	})
+
+	t.Run("cannot be own pending partner", func(t *testing.T) {
+		user := &User{
+			ID:               "user-1",
+			PendingPartnerID: "user-1",
+			ShoppingDay:      time.Saturday.String(),
+			Email:            []string{"alice@example.com"},
 		}
+
+		err := user.Validate()
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "own pending partner")
+	})
+
+	t.Run("cannot have established and pending partners", func(t *testing.T) {
+		user := &User{
+			ID:               "user-1",
+			PartnerID:        "user-2",
+			PendingPartnerID: "user-3",
+			ShoppingDay:      time.Saturday.String(),
+			Email:            []string{"alice@example.com"},
+		}
+
+		err := user.Validate()
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "pending partner")
 	})
 }
