@@ -254,6 +254,9 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		PromptCacheKey:     openai.String(menu.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
+	if c.recipeReasoningEffort != "" {
+		params.Reasoning = responses.ReasoningParam{Effort: c.recipeReasoningEffort}
+	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)

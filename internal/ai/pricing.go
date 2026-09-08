@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"strings"
@@ -74,10 +75,30 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, c
 	}
 }
 
+// EstimateResponseCostUSD estimates standard short-context text response cost,
+// including cache writes and reasoning tokens (already included in outputTokens).
+// Unknown pricing and inputs outside the short-context range fail explicitly.
+func EstimateResponseCostUSD(model string, inputTokens, cachedInputTokens, cacheWriteTokens, outputTokens int64) (float64, error) {
+	if inputTokens <= 0 || outputTokens <= 0 || cachedInputTokens < 0 || cacheWriteTokens < 0 || cachedInputTokens > inputTokens || cacheWriteTokens > inputTokens-cachedInputTokens {
+		return 0, fmt.Errorf("invalid token usage for eval cost")
+	}
+	if inputTokens > 272000 {
+		return 0, fmt.Errorf("cost estimate only supports inputs up to 272000 tokens")
+	}
+	spend := estimateOpenAIResponseSpend(model, inputTokens, cachedInputTokens, cacheWriteTokens, outputTokens)
+	if spend.reason != "" {
+		return 0, fmt.Errorf("estimate response cost for %q: %s", model, spend.reason)
+	}
+	return spend.totalUSD(), nil
+}
+
 func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	// Standard short-context USD per 1M tokens, verified 2026-08-04:
 	// https://developers.openai.com/api/docs/pricing
 	switch normalizeModelName(model) {
+	case "gpt-6-astra":
+		// Verified 2026-09-08: https://developers.openai.com/api/docs/models/gpt-6-astra
+		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true
 	case "gpt-5.6", "gpt-5.6-sol":
 		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, cacheWriteUSDPerMillion: 6.25, outputUSDPerMillion: 30}, true
 	case "gpt-5.6-terra":
