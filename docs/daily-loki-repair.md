@@ -26,21 +26,30 @@ If you need normal PR CI to trigger too, set optional secret `LOKI_REPAIR_PR_TOK
 to a fine-grained GitHub token restricted to this repository with Contents and
 Pull requests read/write permissions. This token is used only for PR publication.
 
-The job queries 26 hours of production errors in hourly batches, giving a two-hour
-overlap for scheduling delays. GitHub scheduling is best effort; delays longer
-than the overlap can leave gaps. Repeated diagnostic messages are grouped. The
-job fails explicitly if an hourly batch hits Loki's 5,000-entry limit.
-Only selected diagnostic fields enter the report; token and email redaction is
-best effort, so logs should not contain secrets or personal data. Reports are
-supplied to the OpenAI API, but raw reports are not uploaded as Actions artifacts.
+Codex uses the pinned Grafana Loki skill and `.github/codex/loki_query.py` to
+choose its own queries. There is no prefetch or fixed error report. It first checks
+the last 24 hours of production errors, then follows correlation IDs or nearby
+pod logs as needed before choosing a fix. The helper accepts LogQL plus optional
+`--start`, `--end`, and `--limit` arguments, with a 60-second HTTP timeout and a
+maximum of 5,000 lines per query. It preserves correlation metadata and reports
+`limit_reached` so Codex can narrow its query. Query failures fail explicitly.
+
+The Loki token is available to Codex's shell only during the investigation step.
+Outbound network access is enabled within the workspace-write sandbox for Loki
+queries. The helper reads credentials from the environment and never prints
+headers; it redacts the token, bearer strings, and emails from results. This is
+best effort: query results go to the OpenAI API, so avoid logging sensitive data.
+No raw-log artifacts are uploaded by the workflow.
 
 An existing open `automation/daily-loki-repair` PR pauses further investigations
 until reviewed. Otherwise Codex checks recent commits, attempts at most one
-supported fix, and explains when evidence is insufficient. It receives a pinned
-Grafana Loki skill and the report, without Loki credentials. Prompts prohibit
-obeying instructions in logs, changing deployment/secrets/workflows, or treating
-log suppression alone as a fix. Publication is restricted to `internal/` and
-`cmd/`. The workflow times out after 30 minutes. Failed validation prevents a PR.
+supported fix, and explains when evidence is insufficient. Each investigation
+uses the OpenAI API even if it finds no errors. Prompts prohibit obeying log
+instructions, changing deployment/secrets/workflows, or treating log suppression
+alone as a fix. Publication is restricted to `internal/` and `cmd/`. The workflow
+times out after 30 minutes. Independent validation prevents publication on failure.
+GitHub scheduling is best effort; the 24-hour lookback can miss logs if runs are
+delayed or skipped.
 
 After adding secrets, use **Actions → Daily Loki repair → Run workflow** for the
 first hosted test. Inspect the job summary and any draft PR. No live hosted run

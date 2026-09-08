@@ -38,24 +38,11 @@ jobs:
             echo 'Daily repair skipped: review the existing automation/daily-loki-repair PR first.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Test Loki report helper
+      - name: Test Loki query helper
         run: python3 -B -m unittest discover -s .github/codex -p 'test_*.py'
 
-      - name: Query production errors
-        if: steps.pending.outputs.exists == 'false'
-        id: logs
-        env:
-          LOKI_TOKEN: ${{ secrets.LOKI_TOKEN }}
-          LOKI_USER: ${{ vars.LOKI_USER || '1563943' }}
-          LOKI_URL: ${{ vars.LOKI_URL || 'https://logs-prod-021.grafana.net' }}
-        run: python3 .github/codex/loki_errors.py
-
-      - name: No errors
-        if: steps.logs.outputs.has_errors == 'false'
-        run: echo 'No production Careme errors found in the last 26 hours.' >> "$GITHUB_STEP_SUMMARY"
-
       - uses: actions/setup-go@v6
-        if: steps.logs.outputs.has_errors == 'true'
+        if: steps.pending.outputs.exists == 'false'
         with:
           go-version-file: go.mod
           cache: true
@@ -63,15 +50,17 @@ jobs:
             go.sum
             tools/tool.sum
 
-      - name: Check API credential
-        if: steps.logs.outputs.has_errors == 'true'
+      - name: Check credentials
+        if: steps.pending.outputs.exists == 'false'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LOKI_TOKEN: ${{ secrets.LOKI_TOKEN }}
         run: |
+          test -n "$LOKI_TOKEN" || { echo "Set the LOKI_TOKEN repository secret." >&2; exit 1; }
           test -n "$OPENAI_API_KEY" || { echo "Set the OPENAI_API_KEY repository secret." >&2; exit 1; }
 
       - name: Install pinned Loki skill and prepare dependencies
-        if: steps.logs.outputs.has_errors == 'true'
+        if: steps.pending.outputs.exists == 'false'
         run: |
           git clone --no-checkout https://github.com/grafana/skills.git "$RUNNER_TEMP/grafana-skills"
           git -C "$RUNNER_TEMP/grafana-skills" checkout 51d33e71e191b409bbd25fc7be2684c610d18166
@@ -82,18 +71,23 @@ jobs:
           bash tools/install-golangci-lint.sh
 
       - name: Investigate and fix one error
-        if: steps.logs.outputs.has_errors == 'true'
+        if: steps.pending.outputs.exists == 'false'
         id: codex
+        env:
+          LOKI_TOKEN: ${{ secrets.LOKI_TOKEN }}
+          LOKI_USER: ${{ vars.LOKI_USER || '1563943' }}
+          LOKI_URL: ${{ vars.LOKI_URL || 'https://logs-prod-021.grafana.net' }}
         uses: openai/codex-action@f367b1e9572fd064ea71ef925ca24ee0f01080af # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/daily-loki.md
           output-file: ${{ runner.temp }}/loki-repair-summary.md
           sandbox: workspace-write
+          codex-args: '["-c", "sandbox_workspace_write.network_access=true", "-c", "shell_environment_policy.ignore_default_excludes=true", "-c", "shell_environment_policy.include_only=[\"PATH\",\"HOME\",\"TMPDIR\",\"RUNNER_TEMP\",\"ENABLE_MOCKS\",\"LOKI_TOKEN\",\"LOKI_USER\",\"LOKI_URL\"]"]'
           safety-strategy: drop-sudo
 
       - name: Validate proposed changes
-        if: steps.logs.outputs.has_errors == 'true'
+        if: steps.pending.outputs.exists == 'false'
         run: |
           # Reject changes outside application source/tests and existing UI assets.
           git add -N .
@@ -110,7 +104,7 @@ jobs:
           git diff --check
 
       - name: Open draft repair PR
-        if: steps.logs.outputs.has_errors == 'true'
+        if: steps.pending.outputs.exists == 'false'
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           token: ${{ secrets.LOKI_REPAIR_PR_TOKEN || github.token }}
