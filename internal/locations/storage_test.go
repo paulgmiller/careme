@@ -1,16 +1,21 @@
 package locations
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	cachepkg "careme/internal/cache"
 	"careme/internal/locations/geo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type namedBackend struct {
@@ -431,5 +436,54 @@ func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
 
 	if got, want := strings.Join(got, ","), "publix_123,walmart_456"; got != want {
 		t.Fatalf("RequestedStoreIDs = %q, want %q", got, want)
+	}
+}
+
+func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		canceled   bool
+		backendErr error
+		wantLevel  string
+	}{
+		{"request canceled", true, &url.Error{Op: "Post", URL: "https://example.test/token", Err: fmt.Errorf("token request: %w", context.Canceled)}, "DEBUG"},
+		{"backend canceled independently", false, context.Canceled, "ERROR"},
+		{"backend timeout", false, context.DeadlineExceeded, "ERROR"},
+		{"backend failure during cancellation", true, errors.New("backend unavailable"), "ERROR"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+			failed := newFakeLocationClient()
+			failed.err = tt.backendErr
+			success := newFakeLocationClient()
+			success.setListResponse("00601", []Location{{ID: "ok", ZipCode: "00601"}})
+			storage := newTestLocationServerWithBackends([]locationBackend{failed, success})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tt.canceled {
+				cancel()
+			}
+			got, err := storage.GetLocationsByCoordinates(ctx, coordinatesForZIP(t, "00601"))
+			if tt.canceled {
+				require.ErrorIs(t, err, context.Canceled)
+				assert.Nil(t, got)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, got, 1)
+			}
+			found := false
+			for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+				var record map[string]any
+				require.NoError(t, json.Unmarshal([]byte(line), &record))
+				if record["msg"] == "error fetching locations from backend" {
+					found = true
+					assert.Equal(t, tt.wantLevel, record["level"])
+				}
+			}
+			assert.True(t, found, "backend failure should remain observable")
+		})
 	}
 }
