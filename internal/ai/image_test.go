@@ -29,6 +29,12 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	}
 }
 
+func TestRecipeImageModel(t *testing.T) {
+	if got := string(recipeImageModel); got != "gpt-image-2.5-flare" {
+		t.Fatalf("unexpected recipe image model: %s", got)
+	}
+}
+
 func TestImageUsageLogAttr(t *testing.T) {
 	attr := imageUsageLogAttr(string(recipeImageModel), openai.ImagesResponseUsage{
 		InputTokens:  100,
