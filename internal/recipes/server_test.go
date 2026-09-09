@@ -1224,7 +1224,6 @@ func (c *failShoppingListCache) Put(ctx context.Context, key, value string, opts
 }
 
 type captureKickgenerationGenerator struct {
-	tier         string
 	mu           sync.Mutex
 	last         *generatorParams
 	err          error
@@ -1240,7 +1239,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	clone.Saved = append([]ai.Recipe(nil), p.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), p.Dismissed...)
 	c.last = &clone
-	c.tier = string(ai.RecipeServiceTier(ctx))
 	c.mu.Unlock()
 	if c.called != nil {
 		select {
@@ -1463,7 +1461,8 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	imageGenerator := &countingImageGenerator{imageBody: []byte("campaign-image")}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
-		withTestGenerator(generator),
+		withTestGenerator(&captureKickgenerationGenerator{err: errors.New("interactive generator must not be used for campaigns")}),
+		withTestCampaignGenerator(generator),
 		withImageGenerator(imageGenerator),
 	)
 
@@ -1471,7 +1470,6 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	s.KickGenerationIfNotPresent(t.Context(), params)
 	s.Wait()
 
-	assert.Equal(t, "flex", generator.tier)
 	assert.Equal(t, 1, imageGenerator.imageCalls)
 	imageBody, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)

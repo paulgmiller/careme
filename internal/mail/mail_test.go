@@ -512,9 +512,6 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	if generationStatuses.startedHash == "" {
 		t.Fatal("expected generation status to be started before generating recipes")
 	}
-	if ai.RecipeServiceTier(generator.ctx) != "flex" {
-		t.Fatal("email generation must use flex")
-	}
 	sessionID, ok := logsetup.SessionIDFromContext(generator.ctx)
 	if !ok {
 		t.Fatal("expected session id in generator context")

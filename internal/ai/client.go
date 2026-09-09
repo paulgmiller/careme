@@ -19,6 +19,7 @@ import (
 )
 
 type client struct {
+	serviceTier    responses.ResponseNewParamsServiceTier
 	recipeSchema   map[string]any
 	wineSchema     map[string]any
 	menuSchema     map[string]any
@@ -59,6 +60,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	aiClient := openai.NewClient(opts...)
 
 	return &client{
+		serviceTier:    cfg.ServiceTier,
 		oai:            aiClient,
 		recipeSchema:   recipe,
 		wineSchema:     wine,

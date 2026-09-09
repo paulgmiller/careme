@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -22,13 +21,14 @@ func TestRecipeAndMenuServiceTier(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
+			aiConfig := testAIConfig(config.DefaultRecipeModel)
 			if flex {
-				ctx = WithFlexProcessing(ctx)
+				aiConfig.ServiceTier = "flex"
 			}
 			for _, operation := range []string{"recipe", "recipe retry", "menu", "menu retry", "ingredient correction"} {
 				t.Run(operation, func(t *testing.T) {
 					calls := 0
-					c := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					c := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 						calls++
 						var body map[string]any
 						require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
@@ -62,7 +62,6 @@ func TestRecipeAndMenuServiceTier(t *testing.T) {
 					assert.Equal(t, 1, calls)
 				})
 			}
-			assert.Empty(t, RecipeServiceTier(context.Background()))
 		})
 	}
 }
@@ -78,8 +77,10 @@ func TestResponseSpendForTier(t *testing.T) {
 }
 
 func TestFlexGenerationReturnsAPIErrorWithoutStandardFallback(t *testing.T) {
+	aiConfig := testAIConfig(config.DefaultRecipeModel)
+	aiConfig.ServiceTier = "flex"
 	calls := 0
-	c := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	c := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		calls++
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
@@ -88,7 +89,7 @@ func TestFlexGenerationReturnsAPIErrorWithoutStandardFallback(t *testing.T) {
 		resp.StatusCode = http.StatusBadRequest
 		return resp, nil
 	})}, nil)
-	recipe, err := c.GenerateRecipe(WithFlexProcessing(t.Context()), nil, ResponseRef{ID: "resp-menu"})
+	recipe, err := c.GenerateRecipe(t.Context(), nil, ResponseRef{ID: "resp-menu"})
 	require.ErrorContains(t, err, "failed to generate recipe")
 	assert.Nil(t, recipe)
 	assert.Equal(t, 1, calls)

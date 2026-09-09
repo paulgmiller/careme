@@ -105,6 +105,7 @@ type server struct {
 	cfg                *config.Config
 	storage            *users.Storage
 	generator          generator
+	campaignGenerator  generator
 	locServer          locServer
 	wg                 sync.WaitGroup
 	clerk              auth.AuthClient
@@ -117,7 +118,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator, campaignGenerator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
 	return &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),
@@ -126,6 +127,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		cfg:                cfg,
 		storage:            storage,
 		generator:          generator,
+		campaignGenerator:  campaignGenerator,
 		locServer:          locServer,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
@@ -1504,7 +1506,7 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
 	s.wg.Go(func() {
 		// Allow sequential menu planning, recipe generation, and critique retries on flex.
-		ctx, cancel := context.WithTimeout(ai.WithFlexProcessing(context.WithoutCancel(ctx)), 60*time.Minute)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Minute)
 		defer cancel()
 		if err := s.SaveParams(ctx, p); err != nil {
 			if errors.Is(err, ErrAlreadyExists) {
@@ -1521,7 +1523,7 @@ func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorPar
 		}
 
 		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
-		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
+		shoppingList, err := s.campaignGenerator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
 			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {

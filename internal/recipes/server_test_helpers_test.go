@@ -16,15 +16,16 @@ import (
 )
 
 type testServerConfig struct {
-	cfg        *config.Config
-	cache      cache.ListCache
-	imageCache cache.Cache
-	storage    *users.Storage
-	generator  generator
-	imagegen   ImageGen
-	locServer  locServer
-	clerk      auth.AuthClient
-	statuses   statusStore
+	cfg               *config.Config
+	cache             cache.ListCache
+	imageCache        cache.Cache
+	storage           *users.Storage
+	generator         generator
+	campaignGenerator generator
+	imagegen          ImageGen
+	locServer         locServer
+	clerk             auth.AuthClient
+	statuses          statusStore
 }
 
 type testServerOption func(*testServerConfig)
@@ -49,11 +50,15 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache))
 	}
 
+	if cfg.campaignGenerator == nil {
+		cfg.campaignGenerator = cfg.generator
+	}
+
 	if cfg.imagegen == nil {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
+	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.campaignGenerator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}
@@ -166,4 +171,8 @@ func (s *fakeStatusStore) started(hash string) bool {
 	defer s.mu.Unlock()
 	_, ok := s.statuses[hash]
 	return ok
+}
+
+func withTestCampaignGenerator(g generator) testServerOption {
+	return func(cfg *testServerConfig) { cfg.campaignGenerator = g }
 }

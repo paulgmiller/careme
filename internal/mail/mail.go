@@ -118,7 +118,9 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create staples service: %w", err)
 	}
 	generationStatuses := status.NewStore(cacheStore)
-	aiClient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
+	aiConfig := cfg.AI
+	aiConfig.ServiceTier = "flex"
+	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
 	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
@@ -263,7 +265,6 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
-	ctx = ai.WithFlexProcessing(ctx)
 	ctx = logsetup.WithSessionID(ctx, "mail")
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
