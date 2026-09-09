@@ -26,7 +26,7 @@ Generate a realistic overhead food photograph of a single finished plate.
 `
 
 const (
-	recipeImageModel = openai.ImageModelGPTImage2 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
+	recipeImageModel = openai.ImageModel("gpt-image-2.5-flare")
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
