@@ -4,6 +4,7 @@ import (
 	"context"
 	"html"
 	"html/template"
+	"net/url"
 
 	"careme/internal/seasons"
 )
@@ -11,6 +12,8 @@ import (
 const (
 	aboutAlbumImageBaseURL  = "https://images.northbriton.net/"
 	aboutAlbumPreviewPrefix = "https://images.northbriton.net/cdn-cgi/image/width=800/https://images.northbriton.net/"
+	githubCommitBaseURL     = "https://github.com/paulgmiller/careme/commit/"
+	shortGitCommitLength    = 7
 )
 
 type AboutAlbumPhoto struct {
@@ -39,15 +42,32 @@ type AboutPageData struct {
 	GoogleTagScript template.HTML
 	Style           seasons.Style
 	AlbumPhotos     []AboutAlbumPhoto
+	GitCommit       string
+	GitCommitShort  string
+	GitCommitURL    string
 }
 
-func NewAboutPageData(ctx context.Context, style seasons.Style) AboutPageData {
-	return AboutPageData{
+func NewAboutPageData(ctx context.Context, style seasons.Style, gitCommit string) AboutPageData {
+	data := AboutPageData{
 		ClarityScript:   ClarityScript(ctx),
 		GoogleTagScript: GoogleTagScript(),
 		Style:           style,
 		AlbumPhotos:     DefaultAboutAlbumPhotos(),
 	}
+	if gitCommit == "" {
+		return data
+	}
+	data.GitCommit = gitCommit
+	data.GitCommitShort = shortGitCommit(gitCommit)
+	data.GitCommitURL = githubCommitBaseURL + url.PathEscape(gitCommit)
+	return data
+}
+
+func shortGitCommit(commit string) string {
+	if len(commit) <= shortGitCommitLength {
+		return commit
+	}
+	return commit[:shortGitCommitLength]
 }
 
 func DefaultAboutAlbumPhotos() []AboutAlbumPhoto {

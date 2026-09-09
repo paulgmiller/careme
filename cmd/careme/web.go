@@ -15,6 +15,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/appredirect"
 	"careme/internal/auth"
+	"careme/internal/buildinfo"
 	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
@@ -43,6 +44,7 @@ type waiter interface {
 }
 
 func runServer(cfg *config.Config, addr string) error {
+	gitCommit := buildinfo.Revision()
 	cache, err := cachepkg.MakeCache()
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
@@ -155,7 +157,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		data := templates.NewAboutPageData(ctx, seasons.GetCurrentStyle())
+		data := templates.NewAboutPageData(ctx, seasons.GetCurrentStyle(), gitCommit)
 		if err := templates.About.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "about template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)

@@ -15,6 +15,7 @@ import (
 	utypes "careme/internal/users/types"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/html"
 )
 
@@ -274,7 +275,8 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
-	data := NewAboutPageData(context.Background(), seasons.GetCurrentStyle())
+	const gitCommit = "0123456789abcdef0123456789abcdef01234567"
+	data := NewAboutPageData(context.Background(), seasons.GetCurrentStyle(), gitCommit)
 
 	var buf bytes.Buffer
 	if err := About.Execute(&buf, data); err != nil {
@@ -307,10 +309,14 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 		"https://bsky.app/profile/northbriton.net",
 		"https://play.google.com/store/apps/details?id=cooking.careme",
 		"https://github.com/paulgmiller/careme",
+		"https://github.com/paulgmiller/careme/commit/" + gitCommit,
 	} {
 		if !strings.Contains(rendered, link) {
 			t.Fatalf("about page should include %q link, body: %s", link, rendered)
 		}
+	}
+	if !strings.Contains(rendered, `>0123456</code>`) {
+		t.Fatalf("about page should show the short running commit, body: %s", rendered)
 	}
 	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`, `alt="Get it on Google Play"`} {
 		if !strings.Contains(rendered, label) {
@@ -348,6 +354,19 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if !strings.Contains(rendered, "Dungeness crab pasta") {
 		t.Fatalf("about page should render album comments from Go data, body: %s", rendered)
 	}
+}
+
+func TestAboutTemplateAllowsUnknownRunningCommit(t *testing.T) {
+	if err := Init(&config.Config{}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	data := NewAboutPageData(context.Background(), seasons.GetCurrentStyle(), "")
+
+	var buf bytes.Buffer
+	require.NoError(t, About.Execute(&buf, data))
+	assert.Contains(t, buf.String(), "Unknown for this build.")
+	assert.NotContains(t, buf.String(), githubCommitBaseURL)
 }
 
 func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {

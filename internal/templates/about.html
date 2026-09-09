@@ -185,13 +185,25 @@
 
         <section id="github" class="p-8">
           <h2 class="text-2xl font-bold text-brand-700">GitHub</h2>
-          <p class="mt-2 text-gray-600">Explore the project, file issues, or read the license.</p>
+          <p class="mt-2 text-gray-600">Explore the project, see what's running, file issues, or read the license.</p>
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
             <a href="https://github.com/paulgmiller/careme" target="_blank" rel="noreferrer"
                class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
               <h3 class="font-semibold text-brand-700">Repository</h3>
               <p class="mt-1 text-sm text-gray-600">Source code, README, and release history.</p>
             </a>
+            {{if .GitCommit}}
+              <a href="{{.GitCommitURL}}" target="_blank" rel="noreferrer"
+                 class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
+                <h3 class="font-semibold text-brand-700">Running commit</h3>
+                <p class="mt-1 text-sm text-gray-600">This Careme image was built from <code title="{{.GitCommit}}">{{.GitCommitShort}}</code>.</p>
+              </a>
+            {{else}}
+              <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
+                <h3 class="font-semibold text-brand-700">Running commit</h3>
+                <p class="mt-1 text-sm text-gray-600">Unknown for this build.</p>
+              </div>
+            {{end}}
             <a href="https://github.com/paulgmiller/careme/issues" target="_blank" rel="noreferrer"
                class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
               <h3 class="font-semibold text-brand-700">Issues</h3>
