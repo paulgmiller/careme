@@ -130,7 +130,7 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 		return nil
 	}
 
-	if err := s.prepare(ctx, p, list); err != nil {
+	if err := s.prepare(ctx, p); err != nil {
 		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
 			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
 		}
@@ -140,7 +140,7 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	return nil
 }
 
-func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams, list *ai.ShoppingList) error {
+func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
 	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
 		return fmt.Errorf("save campaign params: %w", err)
 	}
