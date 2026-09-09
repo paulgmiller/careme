@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"careme/internal/brightdata"
+
+	openai "github.com/openai/openai-go/v3"
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 
@@ -17,7 +19,9 @@ const (
 	defaultLocalOrigin = "http://localhost:8080"
 
 	// DefaultRecipeModel is the production model for recipe and menu generation.
-	DefaultRecipeModel = "gpt-5.6-sol"
+	DefaultRecipeModel openai.ResponsesModel = openai.ChatModelGPT5_6Sol
+	// DefaultImageModel is the production model for recipe image generation.
+	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Sunburst
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
 	DefaultCritiqueModel = "google/gemini-3.1-pro-preview"
 )
@@ -42,8 +46,9 @@ type Config struct {
 }
 
 type AIConfig struct {
-	APIKey      string `json:"api_key"`
-	RecipeModel string `json:"recipe_model"`
+	APIKey      string                `json:"api_key"`
+	RecipeModel openai.ResponsesModel `json:"recipe_model"`
+	ImageModel  openai.ImageModel     `json:"image_model"`
 }
 
 type IngredientGradingConfig struct {
@@ -178,6 +183,7 @@ func Load() (*Config, error) {
 		AI: AIConfig{
 			APIKey:      os.Getenv("AI_API_KEY"),
 			RecipeModel: DefaultRecipeModel,
+			ImageModel:  DefaultImageModel,
 		},
 		IngredientGrading: IngredientGradingConfig{
 			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
