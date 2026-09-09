@@ -1,56 +1,42 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `cmd/careme`: Entry point; `main.go` parses flags for CLI vs `-serve` web mode; `web.go` wires handlers and middleware.
-- `internal/recipes`, `internal/locations`, `internal/kroger`: Business logic for meal planning, location lookup, and Kroger API access; generated client files live under `internal/kroger`.
-- `internal/templates` and `cmd/careme/favicon.png`: HTML templates and assets for the UI; `internal/html` holds helpers (e.g., Clarity snippet).
-- `internal/cache`, `internal/logsink`, `internal/ai`, `internal/users`: Cross-cutting services (caching, logging, AI provider glue, user storage).
-- `recipes/`: Local output directory created at runtime; keep it out of commits unless intentionally adding fixtures.
-- `internal/auth` : mostly clerk authorization
+## Working Agreement
 
-## Cache Layout
-- Cache key/prefix docs live in `docs/cache-layout.md`. Keep that file updated when cache keys are added or changed.
+- Complete authorized work through verification; make routine choices from existing code and user intent. Ask only about material ambiguity or missing authorization, and continue independent work while waiting.
+- Keep changes scoped and preserve user edits. Delegate bounded, independent work when permitted and useful; handle small changes locally.
+- Report the outcome, verification, and concrete blockers concisely. Do not repeat passing checks without new changes or unresolved risks.
 
-## Build, Test, and Development Commands
-- Go commands use the developer's normal shared Go caches. Codex permission
-  profiles grant agents write access to those caches.
-- `./task.sh fmt` (preferred), then `go vet ./...`: Baseline formatting and static checks.
-- From the repo root, run `./task.sh lint`: Expanded Go linters using the pinned release binary.
-- `export ENABLE_MOCKS=1`: to test without kroger, openai credentials
-- `go test ./...`: Run unit tests across all packages; add `-cover` when changing core logic.
-- `go run ./cmd/careme -serve -addr :8080`: Start the web server (requires env vars below).
-- `go run ./cmd/careme -zipcode 98101`: Helper to list Kroger location IDs by ZIP.
-- `go build -o bin/careme ./cmd/careme`: Produce a local binary for manual runs.
-- `tailwind\generate.sh`: run when ever you change css or html
+## Project Map
 
-## Coding Style & Naming Conventions
-- Go 1.26; always format Go changes with `./task.sh fmt`, and keep code `gofumpt`-clean before review. Favor small, focused functions and table-driven tests.
-- Exported identifiers in `CamelCase`; package-private helpers in `lowerCamel`. Template names mirror file names in `internal/templates`.
-- Prefer standard library first; add dependencies sparingly and record rationale in PR description if new.
-- For tests perfer testify/assert or testify/require to limit verboseness 
-- Prefer simple html to javascript frameworks
-- For UI copy, prefer plain culinary language over technical terms (example: use "Try again, chef" instead of "Regenerate", and "make it vegetarian" instead of "prefer vegetarian").
-- Nothing is used outside of this repository so if a method is only used in tests it can be removed even if its public
-- Do not use variadic parameters to fake optional constructor arguments. Pass dependencies explicitly, or introduce a config/options struct when a constructor needs several optional settings.
-- Prefer a single, strong success contract over partial-success plumbing. If an output component is required, return a contextual error when it cannot be produced; do not silently omit it, substitute a fallback, or add availability flags unless partial success is an explicit product requirement.
-- Once an upstream function guarantees an invariant, let downstream code assume it. Remove redundant presence maps, booleans, nil checks, conditional template branches, and fallback paths.
-- Reserve best-effort behavior for explicitly optional work, and make that optionality clear in names, types, and tests.
+- `cmd/careme`: CLI entry point (`main.go`), web handlers and middleware (`web.go`).
+- `internal/recipes`, `internal/locations`, `internal/kroger`: Meal planning, location lookup, and Kroger access, including generated clients.
+- `internal/templates`, `internal/static`, `internal/html`: UI templates, assets, and HTML helpers.
+- `internal/cache`, `internal/logsink`, `internal/ai`, `internal/users`, `internal/auth`: Shared services and Clerk authentication/authorization.
+- Configuration and environment variables: [README.md](README.md). Use the Go version in `go.mod` and normal shared Go caches.
 
-## Testing Guidelines
-- Always run tests after making code changes. Default to `go test ./...`; use a narrower `go test ./... -run TestName` only when appropriate for quick iteration. If you cannot run tests, explicitly say why.
-- From the repo root, run `./task.sh lint` after Go changes unless the task clearly does not affect linted code.
-- Place tests alongside code in `*_test.go`; prefer table-driven cases and explicit fixtures over implicit globals.
-- Use `go test ./... -run TestName` for targeted debugging; keep deterministic by avoiding network calls and using fakes where possible.
-- Prefer explicit fakes or no-op implementations over passing nil dependencies in tests, unless nil behavior is the thing under test.
-- When touching recipe generation or Kroger client code, add assertions that cover API shape changes and template output (see existing tests in `internal/recipes` and `internal/html`).
-- When changing the generator produce filter list (`internal/recipes/params.go` `Produce()`), also run `go run ./cmd/producecheck -location 70500874` and see if score changes. Will need secrets in .envtest file
-  
-## Commit & Pull Request Guidelines
-- Reference an issue/PR number when applicable. Say why something was done rather than just what was done.
-- In PRs, include: what changed, why, how to verify (commands run), and any config/env impacts. Add screenshots for UI changes using `internal/templates`.
-- Keep commits scoped and reviewable; avoid mixing refactors with feature changes unless necessary.
+## Verification
 
-## Security & Configuration Notes
-- Required env vars: `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`, `AI_API_KEY`; optional `OPENROUTER_API_KEY`, `OPENROUTER_CRITIQUE_MODEL`, `CLARITY_PROJECT_ID`, `GOOGLE_TAG_MANAGER_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`. Azure Blob cache still uses `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Grafana Cloud direct OTLP uses the standard upstream OpenTelemetry endpoint and headers env vars.
-- Never commit secrets or generated recipe outputs. If testing against real APIs, use minimal scopes and rotate keys promptly.
-- Any handler that lets you see data from multiple users should go behind the /admin mux to secure it. 
+Run tasks from the repository root; `./task.sh --list` lists development commands. [Taskfile.yml](Taskfile.yml) owns command details.
+
+- Go changes: `./task.sh verify-go`; for core logic use `./task.sh verify-go -- -cover`. For targeted iteration: `./task.sh test -- -run TestName`.
+- HTML/CSS changes: `./task.sh verify-ui`, then inspect the affected UI and include screenshots in PRs. CSS generation requires Docker.
+- Documentation only: review accuracy and run `git diff --check`.
+- Changes to `internal/recipes/params.go` `Produce()`: run `./task.sh producecheck` before and after; report the score difference. Requires real API credentials from `.envtest`. If unavailable, report the check as blocked and complete other verification.
+- Add tests for changed behavior, failure paths, and regressions, not implementation details. Recipe generation or Kroger changes need assertions for affected API shapes and template output.
+- Keep tests alongside code in `*_test.go`; prefer table-driven cases, Testify assertions, deterministic fixtures, and explicit fakes/no-ops over nil dependencies unless testing nil behavior.
+- Inspect the final diff for unintended edits. Report blocked checks with the command and reason; distinguish environment failures from regressions.
+
+## Coding Conventions
+
+- Prefer small functions and the standard library; justify new dependencies in PRs. Use `CamelCase` for exported identifiers and `lowerCamel` otherwise; template names mirror filenames.
+- Prefer simple HTML and culinary UI copy: “Try again, chef” and “make it vegetarian.”
+- Check callers before removing methods; exported methods used only by tests need no external compatibility protection.
+- Pass constructor dependencies explicitly or use an options struct; do not fake optional arguments with variadic parameters.
+- Required output must either succeed completely or return a contextual error. Do not silently omit components or add fallbacks/availability flags. Trust upstream invariants and remove redundant downstream checks. Best-effort behavior is for explicitly optional work, reflected in names, types, and tests.
+- Update [docs/cache-layout.md](docs/cache-layout.md) when cache keys or prefixes change.
+
+## Security and Handoff
+
+- Handlers exposing multiple users’ data must be behind the `/admin` mux.
+- Never print or commit secrets or commit generated recipe outputs. Keep runtime `recipes/` files out of commits unless intentionally adding fixtures. Use minimal scopes for real API testing and rotate keys promptly.
+- Keep commits scoped. PRs explain what changed and why, verification commands, config/environment impacts, and relevant issue/PR numbers.

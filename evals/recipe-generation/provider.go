@@ -74,9 +74,11 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if strings.TrimSpace(cfg.AI.APIKey) == "" || strings.TrimSpace(cfg.OpenRouter.APIKey) == "" {
 		return nil, fmt.Errorf("AI_API_KEY and OPENROUTER_API_KEY are required for judged recipe generation evals")
 	}
+	aiConfig := cfg.AI
+	aiConfig.RecipeModel = settings.Config.Model
 	generationUsage := &usageTransport{next: http.DefaultTransport}
 	judgeUsage := &usageTransport{next: http.DefaultTransport, judge: true}
-	generator := ai.NewClient(cfg.AI.APIKey, settings.Config.Model, &http.Client{Transport: generationUsage}, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
+	generator := ai.NewClient(aiConfig, &http.Client{Transport: generationUsage}, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
 	judge := ai.NewCritiquer(cfg.OpenRouter.APIKey, settings.Config.JudgeModel, &http.Client{Transport: judgeUsage})
 	result, err := runEval(body, generator, judge)
 	if err != nil {
