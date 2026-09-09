@@ -37,7 +37,9 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
 	const imageModel = "gpt-image-2.5-sunburst"
-	client := NewClient("test-key", config.DefaultRecipeModel, imageModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	aiConfig := testAIConfig(config.DefaultRecipeModel)
+	aiConfig.ImageModel = imageModel
+	client := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), `"model":"`+imageModel+`"`)

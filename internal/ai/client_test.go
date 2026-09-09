@@ -9,7 +9,11 @@ import (
 )
 
 func TestNewClientTrimsModels(t *testing.T) {
-	client := NewClient("test-key", " candidate-model ", " candidate-image-model ", nil, &capturePromptRecorder{})
+	client := NewClient(config.AIConfig{
+		APIKey:      "test-key",
+		RecipeModel: " candidate-model ",
+		ImageModel:  " candidate-image-model ",
+	}, nil, &capturePromptRecorder{})
 
 	assert.Equal(t, "candidate-model", client.model)
 	assert.Equal(t, "candidate-image-model", string(client.imageModel))
@@ -17,7 +21,7 @@ func TestNewClientTrimsModels(t *testing.T) {
 }
 
 func TestNewClientUsesGPT56FamilyByRole(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, nil, &capturePromptRecorder{})
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, &capturePromptRecorder{})
 
 	if client.model != config.DefaultRecipeModel {
 		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)

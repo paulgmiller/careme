@@ -14,7 +14,7 @@ import (
 )
 
 func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, farmersMarketResponseClient(t), nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), farmersMarketResponseClient(t), nil)
 
 	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
 

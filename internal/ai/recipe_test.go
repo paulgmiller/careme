@@ -149,7 +149,7 @@ func TestRecipeSerializesMarkdownInstructions(t *testing.T) {
 }
 
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	ingredients := schemaObject(t, properties["ingredients"])
 	items := schemaObject(t, ingredients["items"])
@@ -177,7 +177,7 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 
 	assert.Contains(t, properties, "properties")
@@ -216,7 +216,7 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	instructions := schemaObject(t, properties["instructions"])
 	items := schemaObject(t, instructions["items"])
@@ -274,7 +274,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	var requestBody string
-	client := NewClient("test-key", "candidate-model", config.DefaultImageModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient(testAIConfig("candidate-model"), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
@@ -354,7 +354,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 
 func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 	var requestBody string
-	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)

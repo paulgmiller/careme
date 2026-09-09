@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -27,9 +29,9 @@ type client struct {
 	promptRecorder PromptRecorder
 }
 
-func NewClient(apiKey, model, imageModel string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	model = strings.TrimSpace(model)
-	imageModel = strings.TrimSpace(imageModel)
+func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
+	model := strings.TrimSpace(cfg.RecipeModel)
+	imageModel := strings.TrimSpace(cfg.ImageModel)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
 	}
@@ -50,7 +52,7 @@ func NewClient(apiKey, model, imageModel string, httpClient *http.Client, prompt
 	var menu map[string]any
 	_ = json.Unmarshal(menuSchemaJson, &menu)
 
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
