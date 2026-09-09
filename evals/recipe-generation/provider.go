@@ -28,7 +28,7 @@ type recipeGenerator interface {
 }
 
 type recipeCritiquer interface {
-	CritiqueRecipeWithCost(context.Context, ai.Recipe) (*ai.RecipeCritique, float64, error)
+	CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
 }
 
 type providerOptions struct {
@@ -139,9 +139,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 	result.PromptCacheKey = ""
 	result.OriginHash = ""
 	result.ParentHash = ""
-	judgeStart := time.Now()
-	critique, judgeCost, err := judge.CritiqueRecipeWithCost(context.Background(), result)
-	judgeLatency := time.Since(judgeStart)
+	critique, err := judge.CritiqueRecipe(context.Background(), result)
 	if err != nil {
 		return nil, fmt.Errorf("judge generated recipe: %w", err)
 	}
@@ -158,11 +156,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 		"cost":      generationCost,
 		"latencyMs": latency.Milliseconds(),
 		"metadata": map[string]interface{}{
-			"critique":          critique,
-			"generationCostUSD": generationCost,
-			"judgeCostUSD":      judgeCost,
-			"totalCostUSD":      generationCost + judgeCost,
-			"judgeLatencyMs":    judgeLatency.Milliseconds(),
+			"critique": critique,
 		},
 	}, nil
 }
