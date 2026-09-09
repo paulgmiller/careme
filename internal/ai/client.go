@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"careme/internal/config"
 
@@ -103,14 +102,6 @@ func (c *client) Ready(ctx context.Context) error {
 	// could only do it once to ensure startup
 	_, err := c.oai.Models.List(ctx)
 	return err
-}
-
-func (c *client) newRecipeResponse(ctx context.Context, params responses.ResponseNewParams) (*responses.Response, error) {
-	params.ServiceTier = c.serviceTier
-	if params.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
-		return c.oai.Responses.New(ctx, params, option.WithRequestTimeout(15*time.Minute))
-	}
-	return c.oai.Responses.New(ctx, params)
 }
 
 func cleanInstructionMessages(instructions []string) []PromptMessage {

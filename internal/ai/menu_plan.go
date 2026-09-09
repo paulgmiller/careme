@@ -172,7 +172,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		PromptCacheKey:     openai.String(cacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.newRecipeResponse(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 		PromptCacheOptions: defaultCacheOptions(),
 	}
 
-	resp, err := c.newRecipeResponse(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan after ingredient mismatch: %w", err)
 	}
@@ -246,7 +246,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.newRecipeResponse(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
