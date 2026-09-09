@@ -162,6 +162,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		ServiceTier:  c.serviceTier,
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
@@ -193,6 +194,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	promptMessages := buildRegenerateMenuPlanMessages([]string{feedback}, count)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		Instructions:       openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -231,6 +233,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -261,7 +264,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 	}
 	plan.ResponseID = resp.ID
 	plan.PromptCacheKey = cacheKey
-	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage, string(resp.ServiceTier)))
 	return &plan, nil
 }
 

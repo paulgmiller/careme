@@ -1461,7 +1461,8 @@ func TestKickGenerationIfNotPresent_KicksImagesForGeneratedCampaignRecipes(t *te
 	imageGenerator := &countingImageGenerator{imageBody: []byte("campaign-image")}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
-		withTestGenerator(generator),
+		withTestGenerator(&captureKickgenerationGenerator{err: errors.New("interactive generator must not be used for campaigns")}),
+		withTestCampaignGenerator(generator),
 		withImageGenerator(imageGenerator),
 	)
 

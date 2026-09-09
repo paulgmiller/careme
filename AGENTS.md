@@ -32,6 +32,7 @@ Run tasks from the repository root; `./task.sh --list` lists development command
 - Prefer simple HTML and culinary UI copy: “Try again, chef” and “make it vegetarian.”
 - Check callers before removing methods; exported methods used only by tests need no external compatibility protection.
 - Pass constructor dependencies explicitly or use an options struct; do not fake optional arguments with variadic parameters.
+- Keep configuration such as AI service tiers on the client, set at construction. The bar for context values is high; do not use context to pass configuration or optional parameters.
 - Required output must either succeed completely or return a contextual error. Do not silently omit components or add fallbacks/availability flags. Trust upstream invariants and remove redundant downstream checks. Best-effort behavior is for explicitly optional work, reflected in names, types, and tests.
 - Update [docs/cache-layout.md](docs/cache-layout.md) when cache keys or prefixes change.
 

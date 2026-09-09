@@ -10,6 +10,7 @@ import (
 	"careme/internal/brightdata"
 
 	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 
@@ -46,9 +47,11 @@ type Config struct {
 }
 
 type AIConfig struct {
-	APIKey      string                `json:"api_key"`
-	RecipeModel openai.ResponsesModel `json:"recipe_model"`
-	ImageModel  openai.ImageModel     `json:"image_model"`
+	// ServiceTier selects processing for recipe and menu requests on this client.
+	ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier,omitempty"`
+	APIKey      string                                 `json:"api_key"`
+	RecipeModel openai.ResponsesModel                  `json:"recipe_model"`
+	ImageModel  openai.ImageModel                      `json:"image_model"`
 }
 
 type IngredientGradingConfig struct {
