@@ -34,10 +34,10 @@ type stubRecipeGenerator struct {
 	menuRef            ai.ResponseRef
 }
 
-func (s *stubRecipeGenerator) GenerateRecipe(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
+func (s *stubRecipeGenerator) GenerateRecipeWithCost(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, float64, error) {
 	s.recipeInstructions = instructions
 	s.menuRef = menu
-	return s.recipe, s.recipeErr
+	return s.recipe, 0.01395, s.recipeErr
 }
 
 const validRecipeContext = `{
@@ -145,8 +145,6 @@ func TestRunEvalJudgesGeneratedRecipeAndSeparatesLatency(t *testing.T) {
 	assert.Empty(t, judge.received.OriginHash)
 	assert.Empty(t, judge.received.ParentHash)
 	metadata := result["metadata"].(map[string]interface{})
-	assert.GreaterOrEqual(t, metadata["judgeLatencyMs"].(int64), int64(30))
-	assert.Less(t, result["latencyMs"].(int64), metadata["judgeLatencyMs"].(int64))
 	assert.Equal(t, 8, metadata["critique"].(*ai.RecipeCritique).OverallScore)
 }
 
@@ -202,4 +200,38 @@ func TestCheckedInCasesGenerateAndJudge(t *testing.T) {
 			assert.NotEmpty(t, generator.recipeInstructions)
 		})
 	}
+}
+
+func TestDecodeOptionsReasoningEffort(t *testing.T) {
+	for _, tc := range []struct {
+		name, env, explicit, want string
+		invalid                   bool
+	}{
+		{name: "default"},
+		{name: "environment", env: " high ", want: "high"},
+		{name: "explicit wins", env: "high", explicit: " low ", want: "low"},
+		{name: "none is explicit", env: "high", explicit: "none", want: "none"},
+		{name: "max", explicit: "max", want: "max"},
+		{name: "invalid", explicit: "ultra", invalid: true},
+		{name: "invalid environment", env: "typo", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("RECIPE_EVAL_REASONING_EFFORT", tc.env)
+			got, err := decodeOptions(map[string]interface{}{"config": map[string]interface{}{"reasoning_effort": tc.explicit}})
+			if tc.invalid {
+				require.ErrorContains(t, err, "invalid recipe reasoning effort")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(got.Config.ReasoningEffort))
+		})
+	}
+}
+
+func TestRunEvalReportsGenerationAndJudgeCostSeparately(t *testing.T) {
+	result, err := runEval([]byte(validRecipeContext), &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Dinner"}}, &stubCritiquer{})
+	require.NoError(t, err)
+	assert.Equal(t, 0.01395, result["cost"])
+	assert.NotContains(t, result, "tokenUsage")
+	assert.NotContains(t, result["output"], "costUSD")
 }

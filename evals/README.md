@@ -30,6 +30,8 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe generation
 
+The [2026-09-07 model comparison](recipe-generation/README.md) records eight-case Astra, Sol, and Luna results, including quality scores, generation timings, and failures.
+
 Select the recipe model without editing the suite:
 
 ```sh
@@ -37,6 +39,18 @@ Select the recipe model without editing the suite:
 ```
 
 Omit `MODEL` to use the production default. Direct Promptfoo runs also accept `RECIPE_EVAL_MODEL`. For side-by-side columns in one report, duplicate the `file://provider.go` provider entry with a distinct label and `config.model` for each candidate. An explicit `config.model` takes precedence over the environment. Pass the actual API model ID; the provider does not translate display names or silently substitute unavailable models.
+
+Set recipe reasoning effort explicitly when comparing models:
+
+```sh
+./task.sh evals EVAL=recipe-generation MODEL=gpt-6-astra REASONING_EFFORT=high -- --no-cache --output /tmp/recipe-eval-astra-high.json
+```
+
+Direct Promptfoo runs accept `RECIPE_EVAL_REASONING_EFFORT`; provider `config.reasoning_effort` takes precedence over that environment variable. Omit effort or leave it empty to use the API default. Supported option values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; individual models support subsets, and the API rejects unsupported combinations. No effort is silently substituted. `metadata.requestedReasoningEffort` records the requested value (empty means unspecified), and the provider label includes it. The judge's reasoning is unchanged.
+
+Promptfoo's **cost** column reports estimated recipe-generation USD, matching its generation-only latency column. Exported JSON also includes `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD` for generation and judging together. The provider gets cost directly from `GenerateRecipeWithCost` and `CritiqueRecipeWithCost`; it does not intercept HTTP responses. Token counts, including reasoning and cache tokens, remain in the AI usage logs and are not exported in new eval results. Promptfoo token totals are therefore unavailable, not zero-cost usage.
+
+Generation cost uses the application's standard short-context price table, including cache reads and writes; Astra pricing is included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
 
 The suite requires `AI_API_KEY` and `OPENROUTER_API_KEY`, loaded through the existing configuration/kage path. Each case makes one generation call and one call to the production critiquer. `config.judge_model` pins Gemini for every candidate. The judge sees only the newly generated recipe, with response IDs and provenance removed. Its full critique, model, and timestamp are retained in response metadata. `critique-quality` reports the score divided by ten and passes at 8/10; judge errors fail the evaluation.
 

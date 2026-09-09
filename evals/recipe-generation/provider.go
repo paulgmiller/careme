@@ -11,6 +11,8 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
+
+	"github.com/openai/openai-go/v3/responses"
 )
 
 type promptfooContext struct {
@@ -22,7 +24,7 @@ type evalCase struct {
 }
 
 type recipeGenerator interface {
-	GenerateRecipe(context.Context, []string, ai.ResponseRef) (*ai.Recipe, error)
+	GenerateRecipeWithCost(context.Context, []string, ai.ResponseRef) (*ai.Recipe, float64, error)
 }
 
 type recipeCritiquer interface {
@@ -31,8 +33,9 @@ type recipeCritiquer interface {
 
 type providerOptions struct {
 	Config struct {
-		Model      string `json:"model"`
-		JudgeModel string `json:"judge_model"`
+		Model           string                    `json:"model"`
+		ReasoningEffort responses.ReasoningEffort `json:"reasoning_effort"`
+		JudgeModel      string                    `json:"judge_model"`
 	} `json:"config"`
 }
 
@@ -70,13 +73,15 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	}
 	aiConfig := cfg.AI
 	aiConfig.RecipeModel = settings.Config.Model
-	generator := ai.NewClient(aiConfig, http.DefaultClient, nil)
+	generator := ai.NewClient(aiConfig, http.DefaultClient, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
 	judge := ai.NewCritiquer(cfg.OpenRouter.APIKey, settings.Config.JudgeModel, http.DefaultClient)
 	result, err := runEval(body, generator, judge)
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]interface{})["requestedModel"] = settings.Config.Model
+	metadata := result["metadata"].(map[string]interface{})
+	metadata["requestedModel"] = settings.Config.Model
+	metadata["requestedReasoningEffort"] = settings.Config.ReasoningEffort
 	return result, nil
 }
 
@@ -92,6 +97,15 @@ func decodeOptions(options map[string]interface{}) (providerOptions, error) {
 	settings.Config.Model = strings.TrimSpace(settings.Config.Model)
 	if settings.Config.Model == "" {
 		settings.Config.Model = strings.TrimSpace(os.Getenv("RECIPE_EVAL_MODEL"))
+	}
+	settings.Config.ReasoningEffort = responses.ReasoningEffort(strings.TrimSpace(string(settings.Config.ReasoningEffort)))
+	if settings.Config.ReasoningEffort == "" {
+		settings.Config.ReasoningEffort = responses.ReasoningEffort(strings.TrimSpace(os.Getenv("RECIPE_EVAL_REASONING_EFFORT")))
+	}
+	switch settings.Config.ReasoningEffort {
+	case "", responses.ReasoningEffortNone, responses.ReasoningEffortMinimal, responses.ReasoningEffortLow, responses.ReasoningEffortMedium, responses.ReasoningEffortHigh, responses.ReasoningEffortXhigh, responses.ReasoningEffortMax:
+	default:
+		return settings, fmt.Errorf("invalid recipe reasoning effort %q: use none, minimal, low, medium, high, xhigh, or max", settings.Config.ReasoningEffort)
 	}
 	return settings, nil
 }
@@ -111,7 +125,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 
 	instructions := pf.Vars.MenuPlan.Plans[0].Instructions()
 	start := time.Now()
-	generated, err := generator.GenerateRecipe(context.Background(), instructions, pf.Vars.MenuPlan.ResponseRef())
+	generated, generationCost, err := generator.GenerateRecipeWithCost(context.Background(), instructions, pf.Vars.MenuPlan.ResponseRef())
 	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe: %w", err)
@@ -125,9 +139,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 	result.PromptCacheKey = ""
 	result.OriginHash = ""
 	result.ParentHash = ""
-	judgeStart := time.Now()
 	critique, err := judge.CritiqueRecipe(context.Background(), result)
-	judgeLatency := time.Since(judgeStart)
 	if err != nil {
 		return nil, fmt.Errorf("judge generated recipe: %w", err)
 	}
@@ -139,11 +151,12 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 		return nil, fmt.Errorf("failed to encode recipe: %w", err)
 	}
 	return map[string]interface{}{
-		"output":    string(output),
+		"output": string(output),
+		// Promptfoo's cost column compares generation, like its latency column.
+		"cost":      generationCost,
 		"latencyMs": latency.Milliseconds(),
 		"metadata": map[string]interface{}{
-			"critique":       critique,
-			"judgeLatencyMs": judgeLatency.Milliseconds(),
+			"critique": critique,
 		},
 	}, nil
 }
