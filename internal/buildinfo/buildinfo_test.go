@@ -18,8 +18,8 @@ func TestRevision(t *testing.T) {
 	assert.Equal(t, "0123456789abcdef", revision(info))
 }
 
-func TestRevisionReturnsEmptyWhenMissing(t *testing.T) {
+func TestRevisionReturnsUnknownWhenMissing(t *testing.T) {
 	t.Parallel()
 
-	assert.Empty(t, revision(&debug.BuildInfo{}))
+	assert.Equal(t, "unknown", revision(&debug.BuildInfo{}))
 }

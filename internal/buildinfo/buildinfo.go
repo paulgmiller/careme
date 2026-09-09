@@ -6,12 +6,12 @@ import (
 )
 
 // Revision returns the source control revision embedded in the running binary.
-// It returns an empty string when the binary does not contain VCS metadata,
+// It returns "unknown" when the binary does not contain VCS metadata,
 // such as some local builds produced by go run.
 func Revision() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return ""
+		return "unknown"
 	}
 	return revision(info)
 }
@@ -27,5 +27,5 @@ func revision(info *debug.BuildInfo) string {
 		}
 	}
 
-	return ""
+	return "unknown"
 }

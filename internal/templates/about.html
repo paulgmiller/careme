@@ -192,18 +192,11 @@
               <h3 class="font-semibold text-brand-700">Repository</h3>
               <p class="mt-1 text-sm text-gray-600">Source code, README, and release history.</p>
             </a>
-            {{if .GitCommit}}
               <a href="{{.GitCommitURL}}" target="_blank" rel="noreferrer"
                  class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
                 <h3 class="font-semibold text-brand-700">Running commit</h3>
                 <p class="mt-1 text-sm text-gray-600">This Careme image was built from <code title="{{.GitCommit}}">{{.GitCommitShort}}</code>.</p>
               </a>
-            {{else}}
-              <div class="rounded-xl border border-brand-100 bg-brand-50/40 p-4">
-                <h3 class="font-semibold text-brand-700">Running commit</h3>
-                <p class="mt-1 text-sm text-gray-600">Unknown for this build.</p>
-              </div>
-            {{end}}
             <a href="https://github.com/paulgmiller/careme/issues" target="_blank" rel="noreferrer"
                class="rounded-xl border border-brand-100 bg-brand-50/40 p-4 transition hover:bg-brand-50">
               <h3 class="font-semibold text-brand-700">Issues</h3>

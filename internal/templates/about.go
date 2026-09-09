@@ -48,19 +48,15 @@ type AboutPageData struct {
 }
 
 func NewAboutPageData(ctx context.Context, style seasons.Style, gitCommit string) AboutPageData {
-	data := AboutPageData{
+	return AboutPageData{
 		ClarityScript:   ClarityScript(ctx),
 		GoogleTagScript: GoogleTagScript(),
 		Style:           style,
 		AlbumPhotos:     DefaultAboutAlbumPhotos(),
+		GitCommit:       gitCommit,
+		GitCommitShort:  shortGitCommit(gitCommit),
+		GitCommitURL:    githubCommitBaseURL + url.PathEscape(gitCommit),
 	}
-	if gitCommit == "" {
-		return data
-	}
-	data.GitCommit = gitCommit
-	data.GitCommitShort = shortGitCommit(gitCommit)
-	data.GitCommitURL = githubCommitBaseURL + url.PathEscape(gitCommit)
-	return data
 }
 
 func shortGitCommit(commit string) string {

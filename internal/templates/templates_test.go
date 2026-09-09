@@ -361,12 +361,12 @@ func TestAboutTemplateAllowsUnknownRunningCommit(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
-	data := NewAboutPageData(context.Background(), seasons.GetCurrentStyle(), "")
+	data := NewAboutPageData(context.Background(), seasons.GetCurrentStyle(), "unknown")
 
 	var buf bytes.Buffer
 	require.NoError(t, About.Execute(&buf, data))
-	assert.Contains(t, buf.String(), "Unknown for this build.")
-	assert.NotContains(t, buf.String(), githubCommitBaseURL)
+	assert.Contains(t, buf.String(), `>unknown</code>`)
+	assert.Contains(t, buf.String(), `href="`+githubCommitBaseURL+`unknown"`)
 }
 
 func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
