@@ -17,6 +17,10 @@ import (
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
+
+	"github.com/samber/lo"
+	lop "github.com/samber/lo/parallel"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -85,18 +89,14 @@ func (s *Service) RunOnce(ctx context.Context) error {
 	defer s.wait()
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
-	var result error
-	for _, advertised := range AdvertisedRecipeLocations() {
-		if err := ctx.Err(); err != nil {
-			return errors.Join(result, err)
-		}
-		result = errors.Join(result, s.generateLocation(ctx, advertised.Location.ID))
-	}
-	return result
+	errs := lop.Map(lo.Values(AdvertisedRecipeLocations()), func(c campaign, _ int) error {
+		return s.generateLocation(ctx, c.Location.ID)
+	})
+	return errors.Join(errs...)
 }
 
 func (s *Service) generateLocation(ctx context.Context, locationID string) error {
-	ctx, cancel := context.WithTimeout(ctx, time.Hour)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
 	if err != nil {
@@ -122,60 +122,68 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if err := s.statuses.Start(ctx, hash); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
-	if err := s.prepare(ctx, p, list, missing); err != nil {
+
+	if !missing { //small chance someone got to this locationb before us?
+		if err := s.prepareImage(ctx, list); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := s.prepare(ctx, p, list); err != nil {
 		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
 			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
 		}
 		return err
 	}
+
 	return nil
 }
 
-func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams, list *ai.ShoppingList, missing bool) error {
-	if missing {
-		if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
-			return fmt.Errorf("save campaign params: %w", err)
-		}
-		var err error
-		list, err = s.generator.GenerateRecipes(ctx, p)
-		if err != nil {
-			return fmt.Errorf("generate campaign recipes: %w", err)
-		}
+func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams, list *ai.ShoppingList) error {
+	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
+		return fmt.Errorf("save campaign params: %w", err)
 	}
+	list, err := s.generator.GenerateRecipes(ctx, p)
+	if err != nil {
+		return fmt.Errorf("generate campaign recipes: %w", err)
+	}
+
 	if len(list.Recipes) == 0 {
 		return fmt.Errorf("campaign shopping list contains no recipes")
 	}
-	if missing {
-		if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
-			return fmt.Errorf("save campaign shopping list: %w", err)
-		}
+	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
+		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 
-	for _, recipe := range list.Recipes {
-		if err := s.prepareImage(ctx, recipe); err != nil {
-			return fmt.Errorf("prepare image for %q: %w", recipe.Title, err)
-		}
+	if err := s.prepareImage(ctx, list); err != nil {
+		return err
 	}
+
 	return nil
 }
 
-func (s *Service) prepareImage(ctx context.Context, recipe ai.Recipe) error {
-	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-	defer cancel()
-	hash := recipe.ComputeHash()
-	exists, err := s.images.Exists(ctx, hash)
-	if err != nil {
-		return fmt.Errorf("check image cache: %w", err)
-	}
-	if exists {
+func (s *Service) prepareImage(ctx context.Context, list *ai.ShoppingList) error {
+	errs := lop.Map(list.Recipes, func(recipe ai.Recipe, _ int) error {
+		//magic number for timeout
+		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+		defer cancel()
+		hash := recipe.ComputeHash()
+		exists, err := s.images.Exists(ctx, hash)
+		if err != nil {
+			return fmt.Errorf("check image cache: %w", err)
+		}
+		if exists {
+			return nil
+		}
+		image, err := s.imageGenerator.GenerateRecipeImage(ctx, recipe)
+		if err != nil {
+			return fmt.Errorf("generate image: %w", err)
+		}
+		if err := s.images.Save(ctx, hash, image); err != nil {
+			return fmt.Errorf("save image: %w", err)
+		}
 		return nil
-	}
-	image, err := s.imageGenerator.GenerateRecipeImage(ctx, recipe)
-	if err != nil {
-		return fmt.Errorf("generate image: %w", err)
-	}
-	if err := s.images.Save(ctx, hash, image); err != nil {
-		return fmt.Errorf("save image: %w", err)
-	}
-	return nil
+	})
+	return errors.Join(errs...)
 }

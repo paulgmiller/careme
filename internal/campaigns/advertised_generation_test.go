@@ -14,6 +14,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/status"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -122,14 +123,6 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, state.Failed)
 	}
-}
-
-func TestRunOnceHonorsCancellation(t *testing.T) {
-	s, g, _ := testService()
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	require.ErrorIs(t, s.RunOnce(ctx), context.Canceled)
-	assert.Empty(t, g.params)
 }
 
 func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {

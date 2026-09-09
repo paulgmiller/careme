@@ -25,6 +25,8 @@ func main() {
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
 	flag.BoolVar(&campaignJob, "campaigns", false, "Generate advertised recipes and images once and exit")
 	flag.Parse()
+
+	//todo just make these seperate images?
 	if mailer && campaignJob {
 		log.Fatal("-mail and -campaigns are mutually exclusive")
 	}
