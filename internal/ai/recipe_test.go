@@ -336,6 +336,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
 	}
 	assert.Contains(t, requestBody, `"model":"candidate-model"`)
+	assert.Contains(t, requestBody, `"reasoning":{"effort":"medium"}`)
 	assert.Equal(t, "candidate-model", recorder.record.Model)
 	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
 		t.Fatalf("expected previous response id in request: %s", requestBody)
@@ -421,11 +422,11 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
 			slog.String("currency", "USD"),
-			slog.Float64("totalUSD", 0.0127),
-			slog.Float64("inputUSD", 0.0005),
-			slog.Float64("cachedInputUSD", 0.00045),
-			slog.Float64("cacheWriteInputUSD", 0.00125),
-			slog.Float64("outputUSD", 0.0105),
+			slog.Float64("totalUSD", 0.0219),
+			slog.Float64("inputUSD", 0.001),
+			slog.Float64("cachedInputUSD", 0.0009),
+			slog.Float64("cacheWriteInputUSD", 0.0025),
+			slog.Float64("outputUSD", 0.0175),
 		),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())

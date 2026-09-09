@@ -214,6 +214,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -243,6 +244,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
@@ -271,6 +273,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},

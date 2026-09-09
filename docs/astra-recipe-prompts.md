@@ -27,13 +27,11 @@ and `medium` first; test `high` only if repeated failures on complicated recipes
 justify the latency and cost. Astra supports `low`, `medium`, `high`, `xhigh`, and
 `max`, but not `none`. See the [Astra model reference](https://developers.openai.com/api/docs/models/gpt-6-astra).
 
-This change leaves runtime model and reasoning settings unchanged. The configured
-production default is still GPT-5.6 Sol, and menu/recipe calls omit explicit effort.
-For an Astra experiment use `gpt-6-astra`; effort must be wired into the request to
-compare these recommendations. The eval providers do not currently expose an
-effort option. When changing effort within a stored conversation, review the
-[configuration update guidance](https://developers.openai.com/api/docs/guides/latest-model#update-api-and-model-parameters)
-to preserve the cached prefix.
+The production recipe model is now `gpt-6-astra`. Menu creation, regeneration,
+menu ingredient repair, recipe generation/revision, and recipe questions explicitly
+use `medium` effort. This keeps effort consistent across stored continuations.
+The lower-effort recommendations above remain future evaluation candidates.
+The eval providers do not currently expose an effort option.
 
 ## Validation before changing defaults
 

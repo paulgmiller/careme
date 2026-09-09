@@ -165,6 +165,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
@@ -196,6 +197,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	promptMessages := buildRegenerateMenuPlanMessages([]string{feedback}, count)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		PreviousResponseID: openai.String(previous.ID),
 		Instructions:       openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -234,6 +236,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following

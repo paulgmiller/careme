@@ -78,6 +78,9 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	// Standard short-context USD per 1M tokens, verified 2026-08-04:
 	// https://developers.openai.com/api/docs/pricing
 	switch normalizeModelName(model) {
+	// Astra standard rates verified 2026-09-09 against the model reference.
+	case "gpt-6-astra":
+		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true
 	case "gpt-5.6", "gpt-5.6-sol":
 		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, cacheWriteUSDPerMillion: 6.25, outputUSDPerMillion: 30}, true
 	case "gpt-5.6-terra":
