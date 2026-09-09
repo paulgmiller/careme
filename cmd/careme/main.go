@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/mail"
@@ -15,14 +16,18 @@ import (
 )
 
 func main() {
-	var serve, mailer bool
+	var serve, mailer, campaignJob bool
 	var addr string
 
 	// left for back compat does noting
 	flag.BoolVar(&serve, "serve", false, "dead we always serve")
 	flag.BoolVar(&mailer, "mail", false, "Run one-shot mail sender and exit")
 	flag.StringVar(&addr, "addr", ":8080", "Address to bind in server mode")
+	flag.BoolVar(&campaignJob, "campaigns", false, "Generate advertised recipes and images once and exit")
 	flag.Parse()
+	if mailer && campaignJob {
+		log.Fatal("-mail and -campaigns are mutually exclusive")
+	}
 
 	if err := os.MkdirAll("recipes", 0o755); err != nil {
 		log.Fatalf("failed to create recipes directory: %v", err)
@@ -44,6 +49,19 @@ func main() {
 
 	if err := templates.Init(cfg); err != nil {
 		log.Fatalf("failed to initialize templates: %s", err)
+	}
+
+	if campaignJob {
+		job, err := campaigns.NewService(cfg)
+		if err == nil {
+			err = job.RunOnce(ctx)
+		}
+		if err != nil {
+			slog.ErrorContext(ctx, "campaign generation failed", "error", err)
+			close()
+			os.Exit(1)
+		}
+		return
 	}
 
 	if mailer {

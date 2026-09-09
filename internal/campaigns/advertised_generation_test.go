@@ -2,80 +2,146 @@ package campaigns
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
+	"errors"
+	"io"
+	"strings"
 	"testing"
+	"time"
 
+	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
-
+	"careme/internal/recipes/status"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestAdvertisedRecipeGenerationRouteKicksAdvertisedLocations(t *testing.T) {
-	kicker := &advertisedGenerationKickstarterStub{}
-
-	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, kicker)
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/campaigns/advertised-recipes/generate", nil)
-	mux.ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusOK, response.Code)
-	require.Len(t, kicker.params, len(AdvertisedRecipeLocations()))
-
-	locationsByID := make(map[string]*locations.Location, len(kicker.params))
-	for _, params := range kicker.params {
-		locationsByID[params.Location.ID] = params.Location
-	}
-	require.Contains(t, locationsByID, "70100658")
-	require.Equal(t, "Hydrated 70100658", locationsByID["70100658"].Name)
-	require.Equal(t, "70100658 Market St", locationsByID["70100658"].Address)
-	require.Len(t, kicker.contexts, len(AdvertisedRecipeLocations()))
-	for _, ctx := range kicker.contexts {
-		sessionID, ok := logsetup.SessionIDFromContext(ctx)
-		require.True(t, ok)
-		require.Equal(t, "campaign_ads", sessionID)
-		userID, ok := logsetup.UserIDFromContext(ctx)
-		require.True(t, ok)
-		require.Equal(t, "campaign_ads", userID)
-	}
-}
-
-func TestAdvertisedRecipeGenerationRouteOnlyAcceptsPOST(t *testing.T) {
-	mux := http.NewServeMux()
-	RegisterAdvertisedRecipeGeneration(mux, advertisedLocationStoreStub{}, &advertisedGenerationKickstarterStub{})
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/campaigns/advertised-recipes/generate", nil)
-	mux.ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
-}
-
 type advertisedLocationStoreStub struct{}
 
-func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, locationID string) (*locations.Location, error) {
-	lat := 47.61
-	lon := -122.33
-	return &locations.Location{
-		ID:      locationID,
-		Name:    "Hydrated " + locationID,
-		Address: locationID + " Market St",
-		ZipCode: "98101",
-		Lat:     &lat,
-		Lon:     &lon,
-	}, nil
+func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, id string) (*locations.Location, error) {
+	lat, lon := 47.61, -122.33
+	return &locations.Location{ID: id, Name: "Hydrated " + id, Address: id + " Market St", ZipCode: "98101", Lat: &lat, Lon: &lon}, nil
 }
 
-type advertisedGenerationKickstarterStub struct {
+type campaignGeneratorStub struct {
 	params   []*recipes.GeneratorParams
 	contexts []context.Context
+	err      error
 }
 
-func (s *advertisedGenerationKickstarterStub) KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams) {
-	s.params = append(s.params, p)
-	s.contexts = append(s.contexts, ctx)
+func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	g.params = append(g.params, p)
+	g.contexts = append(g.contexts, ctx)
+	if g.err != nil {
+		return nil, g.err
+	}
+	return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Dinner at " + p.Location.ID, Instructions: []string{"Cook dinner."}}}}, nil
+}
+
+type campaignImageStub struct {
+	calls int
+	err   error
+}
+
+func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
+	g.calls++
+	if g.err != nil {
+		return nil, g.err
+	}
+	return &ai.GeneratedImage{Body: strings.NewReader("campaign-image")}, nil
+}
+
+func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
+	c := cache.NewInMemoryCache()
+	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
+	return &Service{
+		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
+		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
+	}, g, images
+}
+
+func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
+	s, g, images := testService()
+	waited := false
+	s.wait = func() { waited = true }
+	require.NoError(t, s.RunOnce(t.Context()))
+	require.True(t, waited)
+	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	require.Equal(t, len(g.params), images.calls)
+	for i, p := range g.params {
+		assert.Equal(t, "Hydrated "+p.Location.ID, p.Location.Name)
+		session, ok := logsetup.SessionIDFromContext(g.contexts[i])
+		require.True(t, ok)
+		assert.Equal(t, "campaign_ads", session)
+		user, ok := logsetup.UserIDFromContext(g.contexts[i])
+		require.True(t, ok)
+		assert.Equal(t, "campaign_ads", user)
+		list, err := s.store.FromCache(t.Context(), p.Hash())
+		require.NoError(t, err)
+		require.Len(t, list.Recipes, 1)
+		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
+		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
+		require.NoError(t, err)
+		data, err := io.ReadAll(body)
+		require.NoError(t, err)
+		require.NoError(t, body.Close())
+		assert.Equal(t, "campaign-image", string(data))
+	}
+	require.NoError(t, s.RunOnce(t.Context()))
+	assert.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	assert.Equal(t, len(g.params), images.calls)
+}
+
+func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
+	s, g, _ := testService()
+	g.err = errors.New("flex unavailable")
+	require.ErrorContains(t, s.RunOnce(t.Context()), "flex unavailable")
+	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	for _, p := range g.params {
+		state, err := s.statuses.Load(t.Context(), p.Hash())
+		require.NoError(t, err)
+		assert.Contains(t, state.Failed, "flex unavailable")
+	}
+	g.err = nil
+	require.NoError(t, s.RunOnce(t.Context()))
+	assert.Len(t, g.params, 2*len(AdvertisedRecipeLocations()))
+}
+
+func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
+	s, g, images := testService()
+	images.err = errors.New("image unavailable")
+	require.ErrorContains(t, s.RunOnce(t.Context()), "image unavailable")
+	images.err = nil
+	require.NoError(t, s.RunOnce(t.Context()))
+	assert.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	assert.Equal(t, 2*len(g.params), images.calls)
+	for _, p := range g.params {
+		state, err := s.statuses.Load(t.Context(), p.Hash())
+		require.NoError(t, err)
+		assert.Empty(t, state.Failed)
+	}
+}
+
+func TestRunOnceHonorsCancellation(t *testing.T) {
+	s, g, _ := testService()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, s.RunOnce(ctx), context.Canceled)
+	assert.Empty(t, g.params)
+}
+
+func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {
+	s, g, _ := testService()
+	s.store = failingCampaignStore{s.store}
+	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now())
+	require.ErrorContains(t, s.generate(t.Context(), p), "cache unavailable")
+	assert.Empty(t, g.params)
+}
+
+type failingCampaignStore struct{ recipeStore }
+
+func (f failingCampaignStore) FromCache(context.Context, string) (*ai.ShoppingList, error) {
+	return nil, errors.New("cache unavailable")
 }

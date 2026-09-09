@@ -85,3 +85,9 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 * Uptime https://stats.uptimerobot.com/ehEFlvlNM9
 * Cloudflare for dns and https proxying
+
+### Advertised recipe cronjob
+
+Run `careme -campaigns` to generate recipes and images for the advertised stores once. The job creates its own flex AI client and exits with an error if any store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+
+`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.

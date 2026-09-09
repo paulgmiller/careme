@@ -1,7 +1,6 @@
 package status
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -185,19 +184,4 @@ func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
 
 	err := statuses.Complete(t.Context(), "running", "  ")
 	require.ErrorContains(t, err, "completed generation hash is required")
-}
-
-func TestStartPreservesBackgroundJobDeadline(t *testing.T) {
-	store := NewStore(cache.NewInMemoryCache())
-	store.now = func() time.Time { return time.Now().Add(-20 * time.Minute) }
-	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
-	defer cancel()
-	require.NoError(t, store.Start(ctx, "background"))
-	stored, err := store.load(t.Context(), "background")
-	require.NoError(t, err)
-	deadline, _ := ctx.Deadline()
-	assert.True(t, stored.Deadline.Equal(deadline))
-	assert.Empty(t, stored.failed())
-	stored.Deadline = time.Now().Add(-time.Second)
-	assert.Equal(t, "Recipe generation timed out.", stored.failed())
 }

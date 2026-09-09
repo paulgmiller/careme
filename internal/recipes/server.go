@@ -105,7 +105,6 @@ type server struct {
 	cfg                *config.Config
 	storage            *users.Storage
 	generator          generator
-	campaignGenerator  generator
 	locServer          locServer
 	wg                 sync.WaitGroup
 	clerk              auth.AuthClient
@@ -118,7 +117,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator, campaignGenerator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
 	return &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),
@@ -127,7 +126,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator, campaignG
 		cfg:                cfg,
 		storage:            storage,
 		generator:          generator,
-		campaignGenerator:  campaignGenerator,
 		locServer:          locServer,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
@@ -1497,56 +1495,6 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 		return fmt.Errorf("remember shopping list: %w", err)
 	}
 	return nil
-}
-
-// Almost same as kick generation except
-// 1 saves params and skips if already there.
-// 2 generates images.
-// Could try and consolidate and
-func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
-	s.wg.Go(func() {
-		// Allow sequential menu planning, recipe generation, and critique retries on flex.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Minute)
-		defer cancel()
-		if err := s.SaveParams(ctx, p); err != nil {
-			if errors.Is(err, ErrAlreadyExists) {
-				slog.ErrorContext(ctx, "save params for campaigns already exists")
-				return
-			}
-			slog.ErrorContext(ctx, "save params for campaigns", "error", err)
-			return
-		}
-		hash := p.Hash()
-		if err := s.generationStatuses.Start(ctx, hash); err != nil {
-			slog.ErrorContext(ctx, "failed to start campaign recipe generation", "hash", hash, "error", err)
-			return
-		}
-
-		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
-		shoppingList, err := s.campaignGenerator.GenerateRecipes(ctx, p)
-		if err != nil {
-			slog.ErrorContext(ctx, "generate error", "error", err)
-			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record campaign recipe generation failure", "hash", hash, "error", statusErr)
-			}
-			return
-		}
-
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
-			slog.ErrorContext(ctx, "save error", "error", err)
-			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record campaign shopping list save failure", "hash", hash, "error", statusErr)
-			}
-			return
-		}
-
-		// don't really need to wait on full shopping list but generator doesn't have a channel
-		for _, recipe := range shoppingList.Recipes {
-			s.wg.Go(func() {
-				s.ensureRecipeImage(ctx, recipe.ComputeHash(), recipe)
-			})
-		}
-	})
 }
 
 type spinnerData struct {

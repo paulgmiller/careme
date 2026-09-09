@@ -29,7 +29,6 @@ type Status struct {
 type payload struct {
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
-	Deadline  time.Time `json:"deadline,omitzero"`
 	Error     string    `json:"error,omitempty"`
 	Redirect  string    `json:"redirect,omitempty"`
 }
@@ -41,11 +40,7 @@ func (p payload) failed() string {
 	if p.Error != "" {
 		return p.Error
 	}
-	deadline := p.Deadline
-	if deadline.IsZero() {
-		deadline = p.StartedAt.Add(recipeGenerationTimeout)
-	}
-	if !time.Now().Before(deadline) {
+	if time.Since(p.StartedAt) >= recipeGenerationTimeout {
 		return "Recipe generation timed out."
 	}
 
@@ -79,12 +74,7 @@ func NewStore(c cache.Cache) *Store {
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash string) error {
-	startedAt := ss.now().UTC()
-	deadline, ok := ctx.Deadline()
-	if !ok || deadline.Before(startedAt.Add(recipeGenerationTimeout)) {
-		deadline = startedAt.Add(recipeGenerationTimeout)
-	}
-	return ss.save(ctx, hash, payload{StartedAt: startedAt, Deadline: deadline.UTC()})
+	return ss.save(ctx, hash, payload{StartedAt: ss.now().UTC()})
 }
 
 func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
