@@ -265,6 +265,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
+	ctx = ai.WithFlexProcessing(ctx)
 	ctx = logsetup.WithSessionID(ctx, "mail")
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
