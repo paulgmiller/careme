@@ -123,7 +123,7 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 		return fmt.Errorf("start campaign status: %w", err)
 	}
 
-	if !missing { //small chance someone got to this locationb before us?
+	if !missing { // small chance someone got to this locationb before us?
 		if err := s.prepareImage(ctx, list); err != nil {
 			return err
 		}
@@ -165,7 +165,7 @@ func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams, list 
 
 func (s *Service) prepareImage(ctx context.Context, list *ai.ShoppingList) error {
 	errs := lop.Map(list.Recipes, func(recipe ai.Recipe, _ int) error {
-		//magic number for timeout
+		// magic number for timeout
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 		defer cancel()
 		hash := recipe.ComputeHash()
