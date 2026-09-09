@@ -31,6 +31,20 @@ tasks:
       - k8s-lint
       - tailwind-check
 
+  verify-go:
+    desc: Format Go, then run vet, tests, and lint (pass test flags after --)
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+      - task: lint
+
+  verify-ui:
+    desc: Regenerate Tailwind CSS and run tests; inspect the UI afterward
+    cmds:
+      - task: css
+      - task: test
+
   fmt:
     desc: Format Go code with gofumpt
     cmds:
@@ -78,7 +92,7 @@ tasks:
     env:
       ENABLE_MOCKS: '{{default "1" .ENABLE_MOCKS}}'
     cmds:
-      - go test ./...
+      - go test ./... {{.CLI_ARGS}}
 
   evals:
     desc: List Promptfoo evaluations; run one with EVAL=recipe-critique or all with EVAL=all
