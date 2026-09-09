@@ -18,6 +18,8 @@ const (
 
 	// DefaultRecipeModel is the production model for recipe and menu generation.
 	DefaultRecipeModel = "gpt-5.6-sol"
+	// DefaultImageModel is the production model for recipe image generation.
+	DefaultImageModel = "gpt-image-2.5-flare"
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
 	DefaultCritiqueModel = "google/gemini-3.1-pro-preview"
 )
@@ -44,6 +46,7 @@ type Config struct {
 type AIConfig struct {
 	APIKey      string `json:"api_key"`
 	RecipeModel string `json:"recipe_model"`
+	ImageModel  string `json:"image_model"`
 }
 
 type IngredientGradingConfig struct {
@@ -178,6 +181,7 @@ func Load() (*Config, error) {
 		AI: AIConfig{
 			APIKey:      os.Getenv("AI_API_KEY"),
 			RecipeModel: DefaultRecipeModel,
+			ImageModel:  DefaultImageModel,
 		},
 		IngredientGrading: IngredientGradingConfig{
 			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),

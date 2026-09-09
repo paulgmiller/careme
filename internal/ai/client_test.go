@@ -8,15 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewClientTrimsModel(t *testing.T) {
-	client := NewClient("test-key", " candidate-model ", nil, &capturePromptRecorder{})
+func TestNewClientTrimsModels(t *testing.T) {
+	client := NewClient("test-key", " candidate-model ", " candidate-image-model ", nil, &capturePromptRecorder{})
 
 	assert.Equal(t, "candidate-model", client.model)
+	assert.Equal(t, "candidate-image-model", string(client.imageModel))
 	assert.Equal(t, defaultWineModel, client.wineModel)
 }
 
 func TestNewClientUsesGPT56FamilyByRole(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, nil, &capturePromptRecorder{})
+	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, nil, &capturePromptRecorder{})
 
 	if client.model != config.DefaultRecipeModel {
 		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)

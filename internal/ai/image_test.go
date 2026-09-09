@@ -1,12 +1,18 @@
 package ai
 
 import (
+	"io"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildRecipeImagePrompt(t *testing.T) {
@@ -29,14 +35,30 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	}
 }
 
-func TestRecipeImageModel(t *testing.T) {
-	if got := string(recipeImageModel); got != "gpt-image-2.5-flare" {
-		t.Fatalf("unexpected recipe image model: %s", got)
-	}
+func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
+	const imageModel = "gpt-image-2.5-sunburst"
+	client := NewClient("test-key", config.DefaultRecipeModel, imageModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"model":"`+imageModel+`"`)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
+			Request:    req,
+		}, nil
+	})}, nil)
+
+	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"})
+	require.NoError(t, err)
+	imageBody, err := io.ReadAll(image.Body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("image"), imageBody)
 }
 
 func TestImageUsageLogAttr(t *testing.T) {
-	attr := imageUsageLogAttr(string(recipeImageModel), openai.ImagesResponseUsage{
+	attr := imageUsageLogAttr(config.DefaultImageModel, openai.ImagesResponseUsage{
 		InputTokens:  100,
 		OutputTokens: 200,
 		TotalTokens:  300,
@@ -78,5 +100,18 @@ func TestImageUsageLogAttr(t *testing.T) {
 		),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
+	}
+}
+
+func TestEstimateOpenAIImageSpendSupportsGPTImage25Models(t *testing.T) {
+	for _, model := range []string{config.DefaultImageModel, "gpt-image-2.5-sunburst"} {
+		t.Run(model, func(t *testing.T) {
+			spend := estimateOpenAIImageSpend(model, 40, 60, 200)
+
+			if spend.reason != "" {
+				t.Fatalf("expected pricing for %s, got reason %q", model, spend.reason)
+			}
+			assert.InDelta(t, 0.00668, spend.totalUSD(), 0.000000001)
+		})
 	}
 }

@@ -86,7 +86,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 }
 
 func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
-	client := NewClient("test-key", config.DefaultRecipeModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient("test-key", config.DefaultRecipeModel, config.DefaultImageModel, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)

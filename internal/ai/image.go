@@ -26,7 +26,6 @@ Generate a realistic overhead food photograph of a single finished plate.
 `
 
 const (
-	recipeImageModel = openai.ImageModel("gpt-image-2.5-flare")
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
@@ -41,7 +40,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
-		Model:        recipeImageModel,
+		Model:        c.imageModel,
 		N:            openai.Int(1),
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
@@ -51,7 +50,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(c.imageModel), imageUsageLogAttr(string(c.imageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
