@@ -214,6 +214,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -226,7 +227,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.newRecipeResponse(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
@@ -243,6 +244,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
@@ -254,7 +256,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		PromptCacheKey:     openai.String(menu.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.newRecipeResponse(ctx, params)
+	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
