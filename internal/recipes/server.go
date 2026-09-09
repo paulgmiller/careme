@@ -1503,8 +1503,8 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 // Could try and consolidate and
 func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
 	s.wg.Go(func() {
-		// 5 minutes is magic what should it be?
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		// Allow sequential menu planning, recipe generation, and critique retries on flex.
+		ctx, cancel := context.WithTimeout(ai.WithFlexProcessing(context.WithoutCancel(ctx)), 60*time.Minute)
 		defer cancel()
 		if err := s.SaveParams(ctx, p); err != nil {
 			if errors.Is(err, ErrAlreadyExists) {

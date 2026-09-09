@@ -190,7 +190,7 @@ Cross-check every ingredient mention in instruction prose and bullets for an exa
 Do not include these checks in the output.`
 
 func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
-	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage, string(resp.ServiceTier)))
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
@@ -226,7 +226,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newRecipeResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
@@ -254,7 +254,7 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		PromptCacheKey:     openai.String(menu.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newRecipeResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
@@ -285,7 +285,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.model, responseUsageLogAttr(c.model, resp.Usage, string(resp.ServiceTier)))
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
 		return nil, fmt.Errorf("empty response from model")
@@ -300,8 +300,9 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	}, nil
 }
 
-func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr {
+func responseUsageLogAttr(model string, usage responses.ResponseUsage, serviceTier string) slog.Attr {
 	return slog.Group("usage",
+		slog.String("serviceTier", serviceTier),
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", usage.InputTokensDetails.CachedTokens),
@@ -312,7 +313,7 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
-		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)),
+		estimatedSpendLogAttr(responseSpendForTier(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens), serviceTier)),
 	)
 }
 

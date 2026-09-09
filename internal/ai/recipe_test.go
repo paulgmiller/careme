@@ -402,7 +402,7 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		OutputTokensDetails: responses.ResponseUsageOutputTokensDetails{
 			ReasoningTokens: 125,
 		},
-	})
+	}, "default")
 
 	if attr.Key != "usage" {
 		t.Fatalf("unexpected attr key: %s", attr.Key)
@@ -411,6 +411,7 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		t.Fatalf("unexpected attr kind: %v", attr.Value.Kind())
 	}
 	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
+		slog.String("serviceTier", "default"),
 		slog.Int64("inputTokens", 1200),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", 900),

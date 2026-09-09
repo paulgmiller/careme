@@ -171,7 +171,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 		PromptCacheKey:     openai.String(cacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newRecipeResponse(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 		PromptCacheOptions: defaultCacheOptions(),
 	}
 
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newRecipeResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan after ingredient mismatch: %w", err)
 	}
@@ -243,7 +243,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newRecipeResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
@@ -261,7 +261,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 	}
 	plan.ResponseID = resp.ID
 	plan.PromptCacheKey = cacheKey
-	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage, string(resp.ServiceTier)))
 	return &plan, nil
 }
 

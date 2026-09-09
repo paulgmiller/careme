@@ -130,3 +130,15 @@ func normalizeModelName(model string) string {
 func roundUSD(value float64) float64 {
 	return math.Round(value*1_000_000_000) / 1_000_000_000
 }
+
+// Flex tokens are billed at half the standard rates. Use the returned tier,
+// since the API may serve a request on a different tier than requested.
+func responseSpendForTier(spend estimatedSpend, tier string) estimatedSpend {
+	if tier == "flex" {
+		spend.inputUSD /= 2
+		spend.cachedInputUSD /= 2
+		spend.cacheWriteUSD /= 2
+		spend.outputUSD /= 2
+	}
+	return spend
+}

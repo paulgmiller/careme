@@ -70,7 +70,7 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, imageDataU
 	if err != nil {
 		return nil, fmt.Errorf("extract farmers market ingredients: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryFarmersMarket, "model", farmersMarketIngredientModel, responseUsageLogAttr(farmersMarketIngredientModel, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryFarmersMarket, "model", farmersMarketIngredientModel, responseUsageLogAttr(farmersMarketIngredientModel, resp.Usage, string(resp.ServiceTier)))
 
 	var parsed farmersMarketIngredientResponse
 	if err := json.Unmarshal([]byte(resp.OutputText()), &parsed); err != nil {
