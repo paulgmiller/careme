@@ -31,7 +31,8 @@ The production recipe model is now `gpt-6-astra`. Menu creation, regeneration,
 menu ingredient repair, recipe generation/revision, and recipe questions explicitly
 use `medium` effort. This keeps effort consistent across stored continuations.
 The lower-effort recommendations above remain future evaluation candidates.
-The eval providers do not currently expose an effort option.
+The recipe eval accepts `REASONING_EFFORT=low`, `medium`, or another supported
+effort; omit it to use the production medium default.
 
 ## Validation before changing defaults
 

@@ -237,9 +237,30 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
+	recipe, _, err := c.generateRecipe(ctx, instructions, menu)
+	return recipe, err
+}
+
+// GenerateRecipeWithCost returns a recipe and its estimated generation cost in USD.
+// Pricing must be configured for the response model and usage must be valid.
+// Token details are logged, not added to the recipe.
+func (c *client) GenerateRecipeWithCost(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, float64, error) {
+	recipe, resp, err := c.generateRecipe(ctx, instructions, menu)
+	if err != nil {
+		return nil, 0, err
+	}
+	usage := resp.Usage
+	cost, err := estimateResponseCostUSD(resp.Model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)
+	if err != nil {
+		return nil, 0, fmt.Errorf("generation cost: %w", err)
+	}
+	return recipe, cost, nil
+}
+
+func (c *client) generateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, *responses.Response, error) {
 	menu.ID = strings.TrimSpace(menu.ID)
 	if menu.ID == "" {
-		return nil, fmt.Errorf("response ID is required for menu response generation")
+		return nil, nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
@@ -256,13 +277,17 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		PromptCacheKey:     openai.String(menu.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
+	if c.recipeReasoningEffort != "" {
+		params.Reasoning = responses.ReasoningParam{Effort: c.recipeReasoningEffort}
+	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
+	recipe, err := responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
+	return recipe, resp, err
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previous ResponseRef) (*QuestionResponse, error) {

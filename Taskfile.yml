@@ -100,9 +100,11 @@ tasks:
     vars:
       EVAL: '{{default "" .EVAL}}'
       MODEL: '{{default "" .MODEL}}'
+      REASONING_EFFORT: '{{default "" .REASONING_EFFORT}}'
     env:
       CAREME_EVAL: "{{.EVAL}}"
       RECIPE_EVAL_MODEL: "{{.MODEL}}"
+      RECIPE_EVAL_REASONING_EFFORT: "{{.REASONING_EFFORT}}"
     cmds:
       - |
         if [ -z "$CAREME_EVAL" ]; then

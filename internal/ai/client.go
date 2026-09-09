@@ -19,14 +19,15 @@ import (
 )
 
 type client struct {
-	recipeSchema   map[string]any
-	wineSchema     map[string]any
-	menuSchema     map[string]any
-	model          openai.ResponsesModel
-	imageModel     openai.ImageModel
-	wineModel      string
-	oai            openai.Client
-	promptRecorder PromptRecorder
+	recipeReasoningEffort responses.ReasoningEffort
+	recipeSchema          map[string]any
+	wineSchema            map[string]any
+	menuSchema            map[string]any
+	model                 openai.ResponsesModel
+	imageModel            openai.ImageModel
+	wineModel             string
+	oai                   openai.Client
+	promptRecorder        PromptRecorder
 }
 
 func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
@@ -68,6 +69,14 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
+}
+
+// WithRecipeReasoningEffort returns a copy configured with an explicit effort for
+// GenerateRecipe. An empty effort preserves the production medium default.
+func (c *client) WithRecipeReasoningEffort(effort responses.ReasoningEffort) *client {
+	configured := *c
+	configured.recipeReasoningEffort = effort
+	return &configured
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {
