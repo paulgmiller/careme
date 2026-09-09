@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -24,10 +21,10 @@ type stubCritiquer struct {
 	delay    time.Duration
 }
 
-func (s *stubCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+func (s *stubCritiquer) CritiqueRecipeWithCost(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, float64, error) {
 	s.received = recipe
 	time.Sleep(s.delay)
-	return &ai.RecipeCritique{OverallScore: 8, Summary: "Good dinner.", SuggestedFixes: []string{}, Model: "fixed-judge"}, s.err
+	return &ai.RecipeCritique{OverallScore: 8, Summary: "Good dinner.", SuggestedFixes: []string{}, Model: "fixed-judge"}, 0.0042, s.err
 }
 
 type stubRecipeGenerator struct {
@@ -37,10 +34,10 @@ type stubRecipeGenerator struct {
 	menuRef            ai.ResponseRef
 }
 
-func (s *stubRecipeGenerator) GenerateRecipe(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
+func (s *stubRecipeGenerator) GenerateRecipeWithCost(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, float64, error) {
 	s.recipeInstructions = instructions
 	s.menuRef = menu
-	return s.recipe, s.recipeErr
+	return s.recipe, 0.01395, s.recipeErr
 }
 
 const validRecipeContext = `{
@@ -233,63 +230,14 @@ func TestDecodeOptionsReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestDecodeCallUsage(t *testing.T) {
-	for _, tc := range []struct {
-		name, body string
-		judge      bool
-		cost       float64
-		reasoning  int64
-		wantErr    string
-	}{
-		{name: "astra caches and reasoning", body: `{"model":"gpt-6-astra","usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":200,"cache_write_tokens":300},"output_tokens":100,"output_tokens_details":{"reasoning_tokens":60}}}`, cost: 0.01395, reasoning: 60},
-		{name: "judge reported cost", judge: true, body: `{"usage":{"prompt_tokens":1000,"completion_tokens":100,"cost":0.0042,"completion_tokens_details":{"reasoning_tokens":80}}}`, cost: 0.0042, reasoning: 80},
-		{name: "judge zero cost", judge: true, body: `{"usage":{"cost":0}}`},
-		{name: "missing usage", body: `{}`, wantErr: "omitted usage"},
-		{name: "missing judge cost", judge: true, body: `{"usage":{}}`, wantErr: "usage.cost"},
-		{name: "negative judge cost", judge: true, body: `{"usage":{"cost":-1}}`, wantErr: "usage.cost"},
-		{name: "unknown generation model", body: `{"model":"unknown","usage":{"input_tokens":10,"output_tokens":10}}`, wantErr: "price_not_configured"},
-		{name: "missing generation tokens", body: `{"model":"gpt-6-astra","usage":{}}`, wantErr: "invalid token usage"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := decodeCallUsage([]byte(tc.body), tc.judge)
-			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			assert.InDelta(t, tc.cost, got.CostUSD, 1e-10)
-			assert.Equal(t, tc.reasoning, got.ReasoningTokens)
-		})
-	}
-}
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestUsageTransportPreservesResponseAndDoesNotRetryAccountingErrors(t *testing.T) {
-	for _, body := range []string{`{"model":"gpt-5.6-luna","usage":{"input_tokens":100,"output_tokens":100}}`, `{"usage":{}}`} {
-		t.Run(body, func(t *testing.T) {
-			calls := 0
-			meter := &usageTransport{next: roundTripFunc(func(*http.Request) (*http.Response, error) {
-				calls++
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
-			})}
-			req, err := http.NewRequest(http.MethodPost, "https://example.test/responses", nil)
-			require.NoError(t, err)
-			resp, err := meter.RoundTrip(req)
-			require.NoError(t, err)
-			defer func() { require.NoError(t, resp.Body.Close()) }()
-			got, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			assert.Equal(t, body, string(got))
-			assert.Equal(t, 1, calls)
-			if strings.Contains(body, "gpt-5.6-luna") {
-				require.NoError(t, meter.err)
-				assert.Positive(t, meter.usage.CostUSD)
-			} else {
-				require.Error(t, meter.err)
-			}
-		})
-	}
+func TestRunEvalReportsGenerationAndJudgeCostSeparately(t *testing.T) {
+	result, err := runEval([]byte(validRecipeContext), &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Dinner"}}, &stubCritiquer{})
+	require.NoError(t, err)
+	assert.Equal(t, 0.01395, result["cost"])
+	metadata := result["metadata"].(map[string]interface{})
+	assert.Equal(t, 0.01395, metadata["generationCostUSD"])
+	assert.Equal(t, 0.0042, metadata["judgeCostUSD"])
+	assert.InDelta(t, 0.01815, metadata["totalCostUSD"], 1e-10)
+	assert.NotContains(t, result, "tokenUsage")
+	assert.NotContains(t, result["output"], "costUSD")
 }

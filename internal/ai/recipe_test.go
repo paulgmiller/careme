@@ -272,7 +272,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 }
 
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
-	for _, effort := range []responses.ReasoningEffort{"", responses.ReasoningEffortLow, responses.ReasoningEffortHigh, responses.ReasoningEffortNone} {
+	for _, effort := range []responses.ReasoningEffort{"", responses.ReasoningEffortLow, responses.ReasoningEffortMedium, responses.ReasoningEffortHigh, responses.ReasoningEffortNone} {
 		t.Run(string(effort), func(t *testing.T) {
 			recorder := &capturePromptRecorder{}
 			var requestBody string
@@ -307,25 +307,26 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 				}],
 				"usage": {
 					"input_tokens": 20,
-					"input_tokens_details": {"cached_tokens": 15},
+					"input_tokens_details": {"cached_tokens": 15, "cache_write_tokens": 3},
 					"output_tokens": 5,
-					"output_tokens_details": {"reasoning_tokens": 0},
+					"output_tokens_details": {"reasoning_tokens": 2},
 					"total_tokens": 25
 				}
-			}`, "candidate-model"))),
+			}`, "gpt-6-astra"))),
 					Request: req,
 				}, nil
 			})}, recorder).WithRecipeReasoningEffort(effort)
 
 			cacheKey := storeDayPromptCacheKey("store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
 			menu := ResponseRef{ID: "resp-menu-plan", PromptCacheKey: cacheKey}
-			got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
+			got, cost, err := client.GenerateRecipeWithCost(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
 			if err != nil {
 				t.Fatalf("GenerateRecipe returned error: %v", err)
 			}
 			if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
 				t.Fatalf("unexpected recipe: %+v", got)
 			}
+			assert.InDelta(t, 0.0003225, cost, 1e-10)
 			assert.Equal(t, 35, got.Properties.TotalMinutes)
 			assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
 			if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {

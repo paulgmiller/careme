@@ -8,9 +8,9 @@ Run with an explicit recipe model and reasoning effort:
 
 Omit `REASONING_EFFORT` to preserve the API default. For direct Promptfoo runs, use `RECIPE_EVAL_REASONING_EFFORT` or provider `config.reasoning_effort` (which takes precedence). The requested effort is recorded in metadata and the provider label; unsupported model/effort combinations fail at the API.
 
-The cost column reports generation USD. JSON output also records `metadata.generationUsage.costUSD`, `metadata.judgeUsage.costUSD`, and `metadata.totalCostUSD`, together with token usage including reasoning and cache tokens. Generation cost is an estimate using standard short-context rates; judge cost comes from OpenRouter. See the [eval overview](../README.md#recipe-generation) for accounting limits and configuration details.
+The cost column reports generation USD. JSON output also records `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD`. Token usage, including reasoning and cache tokens, remains in AI usage logs. Generation cost is an estimate using standard short-context rates; judge cost comes from OpenRouter. See the [eval overview](../README.md#recipe-generation) for accounting limits and configuration details.
 
-On 2026-09-08, a one-case live check with `MODEL=gpt-5.6-luna REASONING_EFFORT=low -- --no-cache --filter-first-n 1` verified the exported reasoning and cost fields. Generation cost was $0.0061969, judge cost $0.032064, total $0.0382609; generation took 22.809s and used 323 reasoning tokens. The recipe scored 7/10 and failed only the quality assertion. This checks the reporting integration, not a repeated model comparison. Evaluation ID: `eval-dAr-2026-09-08T16:13:45`.
+Before the cost-only client refactor, on 2026-09-08, a one-case live check with `MODEL=gpt-5.6-luna REASONING_EFFORT=low -- --no-cache --filter-first-n 1` verified the exported reasoning and cost fields. Generation cost was $0.0061969, judge cost $0.032064, total $0.0382609; generation took 22.809s and used 323 reasoning tokens. The recipe scored 7/10 and failed only the quality assertion. This checks the reporting integration, not a repeated model comparison. Evaluation ID: `eval-dAr-2026-09-08T16:13:45`.
 
 ## Recipe model comparison — 2026-09-07
 

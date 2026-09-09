@@ -15,7 +15,7 @@ func TestEstimateResponseCostUSD(t *testing.T) {
 		wantErr                      string
 	}{
 		{name: "astra mixed cache", model: "gpt-6-astra", input: 1000, cached: 200, write: 300, output: 100, want: 0.01395},
-		{name: "sol mixed cache", model: "gpt-5.6-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.007475},
+		{name: "sol mixed cache", model: "gpt-5.6-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00558},
 		{name: "luna mixed cache", model: "gpt-5.6-luna", input: 1000, cached: 200, write: 300, output: 100, want: 0.000299},
 		{name: "unknown", model: "unknown", input: 1000, output: 100, wantErr: "price_not_configured"},
 		{name: "large context", model: "gpt-6-astra", input: 272001, output: 100, wantErr: "up to 272000"},
@@ -23,7 +23,7 @@ func TestEstimateResponseCostUSD(t *testing.T) {
 		{name: "missing tokens", model: "gpt-6-astra", wantErr: "invalid token usage"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimateResponseCostUSD(tc.model, tc.input, tc.cached, tc.write, tc.output)
+			got, err := estimateResponseCostUSD(tc.model, tc.input, tc.cached, tc.write, tc.output)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return

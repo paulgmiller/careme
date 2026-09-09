@@ -75,10 +75,10 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, c
 	}
 }
 
-// EstimateResponseCostUSD estimates standard short-context text response cost,
+// estimateResponseCostUSD estimates standard short-context text response cost,
 // including cache writes and reasoning tokens (already included in outputTokens).
 // Unknown pricing and inputs outside the short-context range fail explicitly.
-func EstimateResponseCostUSD(model string, inputTokens, cachedInputTokens, cacheWriteTokens, outputTokens int64) (float64, error) {
+func estimateResponseCostUSD(model string, inputTokens, cachedInputTokens, cacheWriteTokens, outputTokens int64) (float64, error) {
 	if inputTokens <= 0 || outputTokens <= 0 || cachedInputTokens < 0 || cacheWriteTokens < 0 || cachedInputTokens > inputTokens || cacheWriteTokens > inputTokens-cachedInputTokens {
 		return 0, fmt.Errorf("invalid token usage for eval cost")
 	}
@@ -100,7 +100,9 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 		// Verified 2026-09-08: https://developers.openai.com/api/docs/models/gpt-6-astra
 		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true
 	case "gpt-5.6", "gpt-5.6-sol":
-		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, cacheWriteUSDPerMillion: 6.25, outputUSDPerMillion: 30}, true
+		// Promotional rates verified 2026-09-09, available at least through 2026-11-21:
+		// https://developers.openai.com/api/docs/models/gpt-5.6-sol
+		return textTokenPrice{inputUSDPerMillion: 4, cachedInputUSDPerMillion: 0.40, cacheWriteUSDPerMillion: 5, outputUSDPerMillion: 20}, true
 	case "gpt-5.6-terra":
 		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 12}, true
 	case "gpt-5.6-luna":
