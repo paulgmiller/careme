@@ -8,10 +8,12 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }}'
+    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
     config:
       # model overrides RECIPE_EVAL_MODEL; empty uses the production default.
       model: '{{ env.RECIPE_EVAL_MODEL }}'
+      # Empty leaves reasoning effort unspecified, using the API default.
+      reasoning_effort: '{{ env.RECIPE_EVAL_REASONING_EFFORT }}'
       # Keep the judge fixed while comparing generation models.
       judge_model: google/gemini-3.1-pro-preview
 
