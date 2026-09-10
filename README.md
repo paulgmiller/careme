@@ -31,7 +31,7 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
-  - Email and campaign recipe/menu generation requests use flex processing, including retries. These jobs allow up to 60 minutes, with a 15-minute timeout per AI request. Interactive requests retain their existing processing tier.
+  - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation

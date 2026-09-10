@@ -96,7 +96,7 @@ func (s *Service) RunOnce(ctx context.Context) error {
 }
 
 func (s *Service) generateLocation(ctx context.Context, locationID string) error {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
 	if err != nil {
