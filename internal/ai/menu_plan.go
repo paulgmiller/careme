@@ -41,18 +41,45 @@ func (p MenuPlan) String() string {
 type RecipePlan struct {
 	Cuisine          string `json:"cuisine" yaml:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
-	Technique        string `json:"technique" yaml:"technique"`
-	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
-	Fancy            bool   `json:"fancy" yaml:"fancy"`
+	DishFormat       string `json:"dish_format" yaml:"dish_format"`
+	// Technique is retained for decoding older saved plans and test fixtures.
+	// New plans use DishFormat; it is intentionally excluded from the model schema.
+	Technique     string `json:"-" yaml:"-"`
+	SideVegetable string `json:"side_vegetable" yaml:"side_vegetable"`
+	Fancy         bool   `json:"fancy" yaml:"fancy"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
 }
 
+// UnmarshalJSON accepts the former technique label so cached plans can still
+// be read after the planner switches to dish formats.
+func (p *RecipePlan) UnmarshalJSON(data []byte) error {
+	type recipePlanJSON RecipePlan
+	var value struct {
+		recipePlanJSON
+		Technique string `json:"technique"`
+	}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*p = RecipePlan(value.recipePlanJSON)
+	if strings.TrimSpace(p.DishFormat) == "" {
+		p.DishFormat = value.Technique
+	}
+	return nil
+}
+
 func (p RecipePlan) Instructions() []string {
+	dishFormat := p.DishFormat
+	formatInstruction := "Suggested dish format for this recipe: %s."
+	if strings.TrimSpace(dishFormat) == "" {
+		dishFormat = p.Technique
+		formatInstruction = "Suggested technique for this recipe: %s."
+	}
 	instructions := []string{
 		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
 		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
-		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
+		fmt.Sprintf(formatInstruction, dishFormat),
 		fmt.Sprintf("Side vegetable direction for this recipe: %s.", p.SideVegetable),
 	}
 	if p.Fancy {
@@ -138,9 +165,10 @@ func pickN(xs []string, n int) []string {
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
-Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, side_vegetable, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
-Try and ensure variety across cuisines, anchor ingredients, techniques, and side vegetables.
+Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, dish_format, and side_vegetable. Set fancy to true only for the richer/splurgier/time intensive option.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
+Choose distinct dish formats across the menu when practical. Use this compact set of canonical formats: pasta, soup/stew, grain bowl, noodle bowl, salad, wrap/taco, sandwich/burger, stir-fry, curry, flatbread/pizza, egg-based, casserole/bake, sheet-pan/roast, stuffed vegetable, or small plates. Choose the dish format before deciding how to cook it. Vegetables may be incorporated into the main dish.
+Try and ensure variety across cuisines, anchor ingredients, dish formats, and side vegetables.
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
