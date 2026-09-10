@@ -9,9 +9,22 @@ prompts:
 providers:
   - id: 'file://provider.go'
     label: menu-plan
+    config:
+      judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
   assert:
+    - type: javascript
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        const score = Math.min(critique.request_fidelity, critique.culinary_coherence, critique.meaningful_variety);
+        return {
+          pass: score >= 8 && critique.issues.every((issue) => issue.severity === 'low'),
+          score: score / 10,
+          reason: [critique.summary, ...critique.issues.map((issue) =>
+            `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
+        };
+      metric: menu-quality
     - type: latency
       threshold: 15000
       metric: menu-plan-latency-under-15s

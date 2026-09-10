@@ -91,7 +91,8 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 Run `./task.sh evals EVAL=menu-plan -- --no-cache --output /tmp/menu-plan-eval.json`.
 The provider uses the production menu model (currently `gpt-6-astra`) with medium
-reasoning and requires `AI_API_KEY` through the existing configuration path.
+reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
+configuration path. Each case makes a menu generation call and a separate judge call.
 
 The suite checks requested plan count, catalog membership for every anchor and
 side, and no repeated ingredient across anchor/side slots (ignoring case and
@@ -106,6 +107,18 @@ by this suite.
 The latency budget is 15 seconds per menu call, including SDK retries and ingredient
 correction calls, excluding configuration, Go compilation, and JSON serialization.
 Use `--no-cache` for meaningful timing. The suite runs sequentially by default.
-There is no AI judge yet; a future judge should assess culinary fit, meaningful
-variety, and faithful interpretation of user requests from the original request
-and complete menu, separately from these deterministic checks.
+The suite pins `config.judge_model` to `google/gemini-3.1-pro-preview`. Its menu-specific
+rubric evaluates request fidelity, culinary coherence, and meaningful variety from
+the original request, catalog, location/date, recent recipe titles, and complete
+menu. Response IDs and cache keys are removed before judging. Each dimension must
+score at least 8/10, with no medium/high-severity issues, to pass `menu-quality`.
+Issues identify affected recipes using 1-based indexes and include evidence and a
+suggested fix. The judge assesses compact planning handoffs, not finished recipes;
+it does not demand steps, quantities, or cooking temperatures.
+
+Malformed responses and judge API errors fail explicitly. Full critique, returned
+judge model, timestamp, and separate `judgeLatencyMs` are retained in metadata.
+The 15-second latency assertion excludes judging. Judge scores can vary; calibrate
+against human-reviewed good/bad menus before treating them as a quality benchmark.
+This provider does not export cost or token usage; Promptfoo totals are not a
+billing estimate.
