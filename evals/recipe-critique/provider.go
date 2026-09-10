@@ -34,8 +34,8 @@ type recipeLoader interface {
 	SingleFromCache(context.Context, string) (*ai.Recipe, error)
 }
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	result, err := callAPI(ctx)
+func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	result, err := callAPI(options, ctx)
 	if err != nil {
 		// Promptfoo's generated Go wrapper exits without exposing the error text
 		// when CallApi returns an error. ProviderResponse.error keeps it visible.
@@ -44,7 +44,11 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	return result, nil
 }
 
-func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(options, ctx map[string]interface{}) (map[string]interface{}, error) {
+	model, err := critiqueModel(options)
+	if err != nil {
+		return nil, err
+	}
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
@@ -56,10 +60,6 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENROUTER_API_KEY is required for recipe critique evals")
-	}
-	model := strings.TrimSpace(os.Getenv("OPENROUTER_CRITIQUE_MODEL"))
-	if model == "" {
-		model = config.DefaultCritiqueModel
 	}
 	critiquer := ai.NewCritiquer(apiKey, model, http.DefaultClient)
 
@@ -76,6 +76,19 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("open recipe cache: %w", err)
 	}
 	return runEval(context.Background(), testCase, recipes.IO(cacheStore), critiquer)
+}
+
+func critiqueModel(options map[string]interface{}) (string, error) {
+	config, ok := options["config"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("promptfoo provider config.model is required")
+	}
+	model, ok := config["model"].(string)
+	model = strings.TrimSpace(model)
+	if !ok || model == "" {
+		return "", fmt.Errorf("promptfoo provider config.model is required")
+	}
+	return model, nil
 }
 
 func decodeEvalCase(body []byte) (evalCase, error) {
