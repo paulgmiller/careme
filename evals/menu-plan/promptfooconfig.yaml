@@ -46,6 +46,19 @@ defaultTest:
           .map((label) => label.trim().toLowerCase().replace(/\s+/g, ' '));
         return new Set(labels).size === labels.length;
       metric: distinct-menu-ingredients
+    - type: javascript
+      value: |
+        const plans = JSON.parse(output).plans;
+        const formats = new Set([
+          'pasta', 'soup/stew', 'grain bowl', 'noodle bowl', 'salad',
+          'wrap/taco', 'sandwich/burger', 'stir-fry', 'curry',
+          'flatbread/pizza', 'egg-based', 'casserole/bake',
+          'sheet-pan/roast', 'stuffed vegetable', 'small plates',
+        ]);
+        const planned = plans.map((recipe) => recipe.dish_format?.trim().toLowerCase());
+        if (planned.some((format) => !formats.has(format))) return false;
+        return plans.length < 3 || new Set(planned).size >= 3;
+      metric: canonical-dish-format-variety
 
 tests:
   - description: One quick seasonal chicken dinner

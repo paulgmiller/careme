@@ -98,6 +98,8 @@ The suite checks requested plan count, catalog membership for every anchor and
 side, and no repeated ingredient across anchor/side slots (ignoring case and
 whitespace). Fixtures provide enough distinct ingredients to satisfy this rule;
 menus that explicitly request ingredient reuse need separate expectations.
+A format assertion requires every plan to use one of the canonical dish formats
+and requires three distinct formats for a three-dinner menu.
 A three-dinner case checks that a limited ingredient is assigned to exactly one
 recipe's `recipe_instructions`, while serving count reaches every recipe.
 These keyword assertions check handoff coverage, not semantic correctness:
