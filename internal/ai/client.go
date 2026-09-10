@@ -74,7 +74,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 }
 
 // WithRecipeReasoningEffort returns a copy configured with an explicit effort for
-// GenerateRecipe. An empty effort leaves the API default unchanged.
+// GenerateRecipe. An empty effort preserves the production medium default.
 func (c *client) WithRecipeReasoningEffort(effort responses.ReasoningEffort) *client {
 	configured := *c
 	configured.recipeReasoningEffort = effort

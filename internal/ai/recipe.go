@@ -148,7 +148,6 @@ type QuestionResponse struct {
 
 const saltSeasoningStandard = `Use these salt starting points when quantities permit calculation: 1.25% by meat weight for boneless meat, 1.5% by meat weight for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water. Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams, and name the salt type because crystal sizes vary. Presalt meat and salt pasta or blanching water at the proper cooking stage rather than relying on salt or salty ingredients added later. Account for ingredients that are already brined or cured and for requests to reduce sodium.`
 
-// edited out. Which recipe should be richer?!
 const systemMessage = `
 You are a professional chef and recipe developer helping working families cook varied weeknight dinners.
 
@@ -214,6 +213,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
@@ -265,6 +265,7 @@ func (c *client) generateRecipe(ctx context.Context, instructions []string, menu
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
@@ -298,6 +299,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},

@@ -1,5 +1,7 @@
 # Recipe generation eval
 
+Latest prompt comparison: [new vs. old at medium reasoning, 2026-09-10](prompt-comparison-medium-2026-09-10.md). The recipe suite defaults to concurrency eight; override with `--max-concurrency`.
+
 Latest results: [Astra vs. Sol at explicit medium reasoning, 2026-09-09](model-comparison-medium-2026-09-09.md), including quality, latency, reasoning tokens, and generation cost.
 
 Run with an explicit recipe model and reasoning effort:
@@ -8,7 +10,7 @@ Run with an explicit recipe model and reasoning effort:
 ./task.sh evals EVAL=recipe-generation MODEL=gpt-6-astra REASONING_EFFORT=high -- --no-cache --output /tmp/recipe-eval-astra-high.json
 ```
 
-Omit `REASONING_EFFORT` to preserve the API default. For direct Promptfoo runs, use `RECIPE_EVAL_REASONING_EFFORT` or provider `config.reasoning_effort` (which takes precedence). The requested effort is recorded in metadata and the provider label; unsupported model/effort combinations fail at the API.
+Omit `REASONING_EFFORT` to use the production default of `medium`. For direct Promptfoo runs, use `RECIPE_EVAL_REASONING_EFFORT` or provider `config.reasoning_effort` (which takes precedence). The requested effort is recorded in metadata and the provider label; unsupported model/effort combinations fail at the API.
 
 The cost column reports generation USD. JSON output also records `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD`. Token usage, including reasoning and cache tokens, remains in AI usage logs. Generation cost is an estimate using standard short-context rates; judge cost comes from OpenRouter. See the [eval overview](../README.md#recipe-generation) for accounting limits and configuration details.
 

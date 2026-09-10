@@ -356,7 +356,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 			var sent map[string]interface{}
 			require.NoError(t, json.Unmarshal([]byte(requestBody), &sent))
 			if effort == "" {
-				assert.NotContains(t, sent, "reasoning")
+				assert.Equal(t, "medium", sent["reasoning"].(map[string]interface{})["effort"])
 			} else {
 				assert.Equal(t, string(effort), sent["reasoning"].(map[string]interface{})["effort"])
 			}
@@ -434,11 +434,11 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
 			slog.String("currency", "USD"),
-			slog.Float64("totalUSD", 0.0127),
-			slog.Float64("inputUSD", 0.0005),
-			slog.Float64("cachedInputUSD", 0.00045),
-			slog.Float64("cacheWriteInputUSD", 0.00125),
-			slog.Float64("outputUSD", 0.0105),
+			slog.Float64("totalUSD", 0.0219),
+			slog.Float64("inputUSD", 0.001),
+			slog.Float64("cachedInputUSD", 0.0009),
+			slog.Float64("cacheWriteInputUSD", 0.0025),
+			slog.Float64("outputUSD", 0.0175),
 		),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())

@@ -20,7 +20,7 @@ const (
 	defaultLocalOrigin = "http://localhost:8080"
 
 	// DefaultRecipeModel is the production model for recipe and menu generation.
-	DefaultRecipeModel openai.ResponsesModel = openai.ChatModelGPT5_6Sol
+	DefaultRecipeModel openai.ResponsesModel = openai.ChatModelGPT6Astra
 	// DefaultImageModel is the production model for recipe image generation.
 	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Sunburst
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.

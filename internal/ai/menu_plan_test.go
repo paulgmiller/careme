@@ -191,6 +191,8 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
 	for _, requestBody := range requestBodies {
+		assert.Contains(t, requestBody, `"model":"gpt-6-astra"`)
+		assert.Contains(t, requestBody, `"reasoning":{"effort":"medium"}`)
 		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
 			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
 		}

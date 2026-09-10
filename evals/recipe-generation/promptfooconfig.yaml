@@ -1,6 +1,6 @@
 description: Recipe generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 8
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
