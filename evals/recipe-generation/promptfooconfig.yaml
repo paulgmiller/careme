@@ -314,3 +314,60 @@ tests:
       - type: javascript
         value: JSON.parse(output).properties.total_minutes <= 60
         metric: requested-time-budget
+
+  # Pantry regressions from production recipes; preserve the original menu directions.
+  - description: pantry regression — Southern Smothered Chicken uses catalog garlic
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Southern American
+            anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
+            technique: stove-braise
+            side_vegetable: Fresh Bagged Green Beans
+            fancy: false
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more Pacific seafood
+        response_id: resp_0a4308480e90d07c006a974d45a52887d081b22f10c6dbce07
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    metadata:
+      source_recipe_hash: NEdlIRcPP6-2-9bWSR8eFA==
+      source_shopping_list_hash: 5eHRKzVSOM0
+      focus: Garlic available with a store price must use a catalog ID, even if usually considered pantry.
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const garlic = recipe.ingredients.filter((ingredient) => /\bgarlic\b/i.test(ingredient.name));
+          return garlic.length > 0 && garlic.every((ingredient) =>
+            typeof ingredient.id === 'string' && ingredient.id.trim().length > 0);
+        metric: catalog-garlic-not-pantry
+  - description: pantry regression — Summer Orzo omits cooking water from ingredients
+    metadata:
+      source_recipe_hash: mygw4NootTrbFUz4GTEE_A==
+      source_shopping_list_hash: aQPOv1Y__fI
+      focus: Cooking water belongs in instructions, not the ingredient list; purchased liquids remain valid.
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Italian
+            anchor_ingredient: Fresh Coho Salmon Fillet
+            technique: oven-roast
+            side_vegetable: Zucchini
+            fancy: false
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more budget meals
+        response_id: resp_0a4308480e90d07c006a96f69f1ac887d09ce9cbdefcf43779
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          // Match cooking water, including reserved pasta water, without rejecting
+          // purchased ingredients such as coconut water or water chestnuts.
+          const cookingWater = /^(?:(?:plain|tap|fresh|cold|cool|warm|hot|boiling|filtered|salted|unsalted|reserved|starchy|pasta|cooking|drinking)\s+)*water\b(?!\s+chestnuts?\b)/i;
+          return recipe.ingredients.every((ingredient) => !cookingWater.test(ingredient.name.trim()));
+        metric: no-cooking-water-ingredient

@@ -58,7 +58,7 @@ The suite requires `AI_API_KEY` and `OPENROUTER_API_KEY`, loaded through the exi
 
 A one-case integration smoke check on 2026-09-04 passed using the existing GPT-5.6 Sol default: generation 50.369 seconds, Gemini judging 25.366 seconds, quality 9/10. This verifies the harness, not a model comparison.
 
-The eight cases include the original chicken and tri-tip regressions plus six production saved-recipe examples selected on 2026-09-04:
+The original eight cases include chicken and tri-tip regressions plus six production saved-recipe examples selected on 2026-09-04:
 
 | Case | Historical score | Coverage |
 | --- | --- | --- |
@@ -69,7 +69,17 @@ The eight cases include the original chicken and tri-tip regressions plus six pr
 | Chilean pebre tri-tip | 7, Opus | Partial-roast quantities, seasoning, total time |
 | Sumac-pistachio coho | 7, Gemini | Salt allocation and mixture instructions |
 
-Each added case records source recipe/list hashes, historical judge/score/date, and its focus. Historical scores explain selection, not a baseline to subtract from new scores: judges and prompts have changed. Saved does not mean defect-free. The cases replay the associated original menu direction, not subsequent edits to the saved recipe. No user identities or saved recipe bodies are checked in. Serving-count and time-budget assertions complement the critiquer, which judges cookability but does not receive the original user request.
+Two additional pantry regression cases replay Southern Smothered Chicken (catalog garlic must have a product ID) and Lemon-Parmesan Coho with Summer Orzo (cooking water must not appear in ingredients). Water may still appear in instructions; purchased liquids such as coconut water remain valid ingredients.
+
+Run only these cases with:
+
+```sh
+./task.sh evals EVAL=recipe-generation -- --no-cache --filter-pattern 'pantry regression' --output /tmp/careme-pantry-eval.json
+```
+
+The 2026-09-10 baseline at `cef1c1a` with the then-current production prompt, default GPT-5.6 Sol, and concurrency one passed the garlic assertion and failed the water assertion, reproducing the water defect. Both quality checks passed (8/10 and 9/10); both generation latency checks failed (73.322s and 67.304s versus 60s). Evaluation ID: `eval-UQU-2026-09-10T17:14:57`. This is one sample per case, not a reliability estimate. Generated recipe bodies remain outside the repository.
+
+Each case above records source recipe/list hashes, historical judge/score/date, and its focus. Historical scores explain selection, not a baseline to subtract from new scores: judges and prompts have changed. Saved does not mean defect-free. The cases replay the associated original menu direction, not subsequent edits to the saved recipe. No user identities or saved recipe bodies are checked in. Serving-count and time-budget assertions complement the critiquer, which judges cookability but does not receive the original user request.
 
 These continuation cases depend on OpenAI retaining their menu response IDs and on access through the originating API project. An expired or inaccessible response fails explicitly; refresh affected cases using `cmd/evalcase`. They are not self-contained prompt replays.
 
