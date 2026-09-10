@@ -28,6 +28,20 @@ function initializeStarRating() {
   });
 }
 
+function initializeQuestionInput() {
+  const question = document.getElementById("question");
+  if (!question) return;
+
+  function resizeQuestionInput() {
+    question.style.height = "auto";
+    question.style.height = `${question.scrollHeight}px`;
+  }
+
+  question.addEventListener("input", resizeQuestionInput);
+  question.form?.addEventListener("reset", () => requestAnimationFrame(resizeQuestionInput));
+  resizeQuestionInput();
+}
+
 function initializeRecipeSteps() {
   const root = document.querySelector("[data-recipe-steps]");
   if (!root) return;
@@ -138,5 +152,6 @@ function initializeRecipeSteps() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeStarRating();
+  initializeQuestionInput();
   initializeRecipeSteps();
 });
