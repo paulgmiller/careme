@@ -160,10 +160,3 @@ func (s *fakeStatusStore) failure(hash string) error {
 	}
 	return nil
 }
-
-func (s *fakeStatusStore) started(hash string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, ok := s.statuses[hash]
-	return ok
-}

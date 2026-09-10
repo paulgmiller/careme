@@ -1497,56 +1497,6 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 	return nil
 }
 
-// Almost same as kick generation except
-// 1 saves params and skips if already there.
-// 2 generates images.
-// Could try and consolidate and
-func (s *server) KickGenerationIfNotPresent(ctx context.Context, p *GeneratorParams) {
-	s.wg.Go(func() {
-		// 5 minutes is magic what should it be?
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
-		defer cancel()
-		if err := s.SaveParams(ctx, p); err != nil {
-			if errors.Is(err, ErrAlreadyExists) {
-				slog.ErrorContext(ctx, "save params for campaigns already exists")
-				return
-			}
-			slog.ErrorContext(ctx, "save params for campaigns", "error", err)
-			return
-		}
-		hash := p.Hash()
-		if err := s.generationStatuses.Start(ctx, hash); err != nil {
-			slog.ErrorContext(ctx, "failed to start campaign recipe generation", "hash", hash, "error", err)
-			return
-		}
-
-		slog.InfoContext(ctx, "generating campaign recipes", "params", p.String(), "hash", hash)
-		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
-		if err != nil {
-			slog.ErrorContext(ctx, "generate error", "error", err)
-			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record campaign recipe generation failure", "hash", hash, "error", statusErr)
-			}
-			return
-		}
-
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
-			slog.ErrorContext(ctx, "save error", "error", err)
-			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record campaign shopping list save failure", "hash", hash, "error", statusErr)
-			}
-			return
-		}
-
-		// don't really need to wait on full shopping list but generator doesn't have a channel
-		for _, recipe := range shoppingList.Recipes {
-			s.wg.Go(func() {
-				s.ensureRecipeImage(ctx, recipe.ComputeHash(), recipe)
-			})
-		}
-	})
-}
-
 type spinnerData struct {
 	ClarityScript   template.HTML
 	GoogleTagScript template.HTML

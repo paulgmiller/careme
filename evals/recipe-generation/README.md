@@ -1,5 +1,7 @@
 # Recipe generation eval
 
+Latest results: [Astra vs. Sol at explicit medium reasoning, 2026-09-09](model-comparison-medium-2026-09-09.md), including quality, latency, reasoning tokens, and generation cost.
+
 Run with an explicit recipe model and reasoning effort:
 
 ```sh
