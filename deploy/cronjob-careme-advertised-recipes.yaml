@@ -26,15 +26,41 @@ spec:
             runAsGroup: 65532
           containers:
             - name: careme-advertised-recipes
-              image: curlimages/curl:latest
+              image: ghcr.io/paulgmiller/careme:${IMAGE_TAG}
               imagePullPolicy: IfNotPresent
-              args:
-                - --fail
-                - --silent
-                - --show-error
-                - --request
-                - POST
-                - http://careme/campaigns/advertised-recipes/generate
+              args: ["-campaigns"]
+              envFrom:
+                - secretRef:
+                    name: ai
+                - secretRef:
+                    name: auth
+                - secretRef:
+                    name: grafana
+                - secretRef:
+                    name: kroger
+                - secretRef:
+                    name: storage
+                - secretRef:
+                    name: walmart
+                - secretRef:
+                    name: brightdata-proxy
+              env:
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: WORKLOAD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['app']
+                - name: OTEL_RESOURCE_ATTRIBUTES
+                  value: "deployment.environment.name=production,k8s.namespace.name=$(POD_NAMESPACE),k8s.pod.name=$(POD_NAME),k8s.app=$(WORKLOAD_NAME)"
+                - name: PUBLIC_ORIGIN
+                  value: "${PUBLIC_ORIGIN}"
               resources:
                 requests:
                   cpu: 50m

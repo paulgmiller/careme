@@ -1,17 +1,9 @@
 package campaigns
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"time"
 
 	"careme/internal/locations"
-	"careme/internal/logsetup"
-	"careme/internal/recipes"
-	"careme/internal/routing"
 )
 
 // Campaign is a promoted store plus campaign-specific page context.
@@ -57,60 +49,4 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			HelpMessage: genericLocationHelp("Issaquah Fred Meyer"),
 		},
 	}
-}
-
-type recipeGenerationKickstarter interface {
-	KickGenerationIfNotPresent(ctx context.Context, p *recipes.GeneratorParams)
-}
-
-type advertisedLocationStore interface {
-	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
-}
-
-type advertisedGenerationServer struct {
-	generator recipeGenerationKickstarter
-	locations advertisedLocationStore
-}
-
-func RegisterAdvertisedRecipeGeneration(
-	mux routing.Registrar,
-	locations advertisedLocationStore,
-	generator recipeGenerationKickstarter,
-) {
-	h := advertisedGenerationServer{
-		generator: generator,
-		locations: locations,
-	}
-	mux.HandleFunc("POST /campaigns/advertised-recipes/generate", h.handleGenerate)
-}
-
-func (s advertisedGenerationServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var err error
-	for _, advertised := range AdvertisedRecipeLocations() {
-		err = errors.Join(err, s.generateLocation(ctx, advertised.Location.ID))
-	}
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to trigger advertised recipe generation", "error", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-func (s advertisedGenerationServer) generateLocation(ctx context.Context, locationID string) error {
-	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
-	ctx = logsetup.WithUserID(ctx, "campaign_ads")
-
-	loc, err := s.locations.GetLocationByID(ctx, locationID)
-	if err != nil {
-		return fmt.Errorf("hydrate location %s: %w", locationID, err)
-	}
-
-	date, err := recipes.StoreToDate(ctx, time.Now(), loc)
-	if err != nil {
-		return fmt.Errorf("resolve store date: %w", err)
-	}
-
-	s.generator.KickGenerationIfNotPresent(ctx, recipes.DefaultParams(loc, date))
-	return nil
 }

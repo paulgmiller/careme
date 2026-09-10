@@ -81,14 +81,13 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
 
-	var generator, campaignGenerator recipes.ExtGenerator
+	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
-		campaignGenerator = generator
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 
@@ -109,13 +108,6 @@ func runServer(cfg *config.Config, addr string) error {
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
-		}
-		campaignAIConfig := cfg.AI
-		campaignAIConfig.ServiceTier = "flex"
-		campaignAIClient := ai.NewClient(campaignAIConfig, aiHTTPClient, prompts.NewCacheRecorder(cache))
-		campaignGenerator, err = recipes.NewGenerator(campaignAIClient, critiquer, staples, ss, recipes.IO(cache))
-		if err != nil {
-			return fmt.Errorf("failed to create campaign recipe generator: %w", err)
 		}
 		waiters = append(waiters, critiquer)
 	}
@@ -141,10 +133,9 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, campaignGenerator, locationStorage, cache, imageCache, authClient, imageGen)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
