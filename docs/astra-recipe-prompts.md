@@ -1,5 +1,12 @@
 # Astra recipe prompting
 
+The experimental recipe and menu prompt text described below was reverted after
+the [September 10 comparison](../evals/recipe-generation/prompt-comparison-medium-2026-09-10.md).
+Astra's seven matched scores declined; its eighth case had an empty judge response,
+not a generation failure. The cause of the quality differences is not established
+by single samples. The previous text is restored for both stages; model and effort
+settings are unchanged. The menu stage was not measured by the recipe eval.
+
 The menu and recipe prompts in `internal/ai` define output contracts and constraints
 with minimal repetition. Recipe quality checks cover cross-field consistency. Menu ingredient labels retain full catalog descriptions;
 variety and fancy options yield to dietary, time, and equipment constraints.
