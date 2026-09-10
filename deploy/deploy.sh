@@ -93,6 +93,29 @@ export PUBLIX_SCRAPE_SCHEDULE="${publix_scrape_schedule}"
 export PUBLIX_ABCK_SCHEDULE="${publix_abck_schedule}"
 export WHOLEFOODS_SCRAPE_SCHEDULE="${wholefoods_scrape_schedule}"
 
+if ! deployed_image="$(kubectl get deployment/careme -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="careme")].image}')"; then
+  echo "error: could not get the image used by deployment/careme in namespace '${namespace}'" >&2
+  exit 1
+fi
+
+if [[ -z "${deployed_image}" || "${deployed_image}" != *:* ]]; then
+  echo "error: deployment/careme has an invalid careme container image: '${deployed_image}'" >&2
+  exit 1
+fi
+
+deployed_image_tag="${deployed_image##*:}"
+if ! deployed_commit="$(git rev-parse --verify "${deployed_image_tag}^{commit}" 2>/dev/null)"; then
+  echo "error: deployed image tag '${deployed_image_tag}' does not resolve to a Git commit" >&2
+  exit 1
+fi
+
+echo "Commits from deployed image ${deployed_image_tag} to target image ${IMAGE_TAG}:"
+if [[ "${deployed_commit}" == "${commit_hash}" ]]; then
+  echo "  (no commits; the target image is already deployed)"
+else
+  git log --oneline "${deployed_commit}..${commit_hash}"
+fi
+
 for manifest_path in "${manifest_paths[@]}"; do
   if ! git cat-file -e "${ref}:${manifest_path}" 2>/dev/null; then
     echo "error: deploy file not found in ref '${ref}': ${manifest_path}" >&2
