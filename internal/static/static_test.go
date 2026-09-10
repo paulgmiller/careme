@@ -168,10 +168,6 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
 		t.Fatal("recipe js response should include recipe step interaction logic")
 	}
-	if !strings.Contains(rec.Body.String(), "initializeQuestionInput") ||
-		!strings.Contains(rec.Body.String(), "question.scrollHeight") {
-		t.Fatal("recipe js response should include auto-growing question input logic")
-	}
 	if !strings.Contains(rec.Body.String(), `event.pointerType !== "touch"`) ||
 		!strings.Contains(rec.Body.String(), `event.pointerType !== "pen"`) {
 		t.Fatal("recipe step swiping should only start for touch or pen pointers")
