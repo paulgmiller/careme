@@ -104,16 +104,20 @@ if [[ -z "${deployed_image}" || "${deployed_image}" != *:* ]]; then
 fi
 
 deployed_image_tag="${deployed_image##*:}"
-if ! deployed_commit="$(git rev-parse --verify "${deployed_image_tag}^{commit}" 2>/dev/null)"; then
-  echo "error: deployed image tag '${deployed_image_tag}' does not resolve to a Git commit" >&2
-  exit 1
-fi
-
-echo "Commits from deployed image ${deployed_image_tag} to target image ${IMAGE_TAG}:"
-if [[ "${deployed_commit}" == "${commit_hash}" ]]; then
-  echo "  (no commits; the target image is already deployed)"
+if deployed_commit="$(git rev-parse --verify "${deployed_image_tag}^{commit}" 2>/dev/null)"; then
+  echo "Commits from deployed image ${deployed_image_tag} to target image ${IMAGE_TAG}:"
+  if [[ "${deployed_commit}" == "${commit_hash}" ]]; then
+    echo "  (no commits; the target image is already deployed)"
+  else
+    git log --oneline "${deployed_commit}..${commit_hash}"
+  fi
 else
-  git log --oneline "${deployed_commit}..${commit_hash}"
+  if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    echo "warning: deployed image tag '${deployed_image_tag}' is not available in the shallow Git checkout; skipping commit history" >&2
+  else
+    echo "error: deployed image tag '${deployed_image_tag}' does not resolve to a Git commit" >&2
+    exit 1
+  fi
 fi
 
 for manifest_path in "${manifest_paths[@]}"; do
