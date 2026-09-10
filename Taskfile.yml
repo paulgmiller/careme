@@ -138,7 +138,7 @@ tasks:
           echo "Running $eval_name eval"
           (
             cd "$eval_dir"
-            npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --config promptfooconfig.yaml {{.CLI_ARGS}}
+            npm exec --yes --package promptfoo@0.123.0 -- promptfoo eval --config promptfooconfig.yaml {{.CLI_ARGS}}
           )
         done
 

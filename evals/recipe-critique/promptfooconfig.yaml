@@ -1,15 +1,31 @@
-description: Recipe critique regression eval
+description: Recipe critique model quality, latency, and cost comparison
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 16
 
-# The Go provider ignores the rendered prompt and reads recipe or recipe_hash
-# from the test variables. It uses the production critique prompt and schema.
+# The candidate provider ignores the rendered prompt and reads recipe or
+# recipe_hash from the test variables. It uses the production critique prompt
+# and schema, with the model selected by each Promptfoo provider entry.
 prompts:
   - recipe-critique-eval
 
 providers:
   - id: 'file://provider.go'
-    label: recipe-critique
+    label: Gemini 3.1 Pro
+    config:
+      model: google/gemini-3.1-pro-preview
+  - id: 'file://provider.go'
+    label: Google Flash Latest
+    config:
+      model: '~google/gemini-flash-latest'
+  # both way slower and not cheaper than gemini pro
+  #- id: 'file://provider.go'
+  #  label: Claude Sonnet 5
+  #  config:
+  #    model: anthropic/claude-sonnet-5
+  #- id: 'file://provider.go'
+  #  label: Kimi K3
+  #  config:
+  #    model: moonshotai/kimi-k3
 
 defaultTest:
   assert:
@@ -40,91 +56,45 @@ defaultTest:
           && (critique.issues.length === 0
             || critique.suggested_fixes.some((fix) => typeof fix === 'string' && fix.trim().length >= 8));
       metric: valid-critique
+    - type: llm-rubric
+      metric: critique-usefulness
+      threshold: 0.7
+      provider: 'file://judge/provider.go'
+      value: |
+        Judge whether this critique is genuinely useful to a home cook deciding
+        whether and how to improve the recipe below.
 
-tests:
-  - description: Detect unsafe ground-beef serving temperature and propose a concrete fix
-    vars:
-      recipe:
-        title: Weeknight Beef Burgers
-        description: Simple skillet burgers with a crisp salad.
-        properties:
-          total_minutes: 25
-          servings: 2
-          estimated_cost_dollars: 14
-          calories_per_serving: 620
-          cooking_methods: [stovetop]
-        ingredients:
-          - name: Ground beef
-            quantity: 12 ounces
-          - name: Kosher salt
-            quantity: 1 teaspoon
-          - name: Burger buns
-            quantity: "2"
-          - name: Mixed greens
-            quantity: 4 ounces
-        instructions:
-          - Shape the 12 ounces ground beef with 1 teaspoon kosher salt into two patties.
-          - Sear the patties until their centers reach 145°F, then serve immediately on the 2 buns.
-          - Plate with the 4 ounces mixed greens.
-        health: ''
-        drink_pairing: Iced tea
-        wine_styles: []
-    assert:
-      - type: javascript
-        value: |
-          const critique = JSON.parse(output);
-          const issues = critique.issues.map((issue) => `${issue.category} ${issue.detail}`).join(' ');
-          const fixes = critique.suggested_fixes.join(' ');
-          return /safety/i.test(issues)
-            && /ground beef|burger/i.test(issues)
-            && /145|temperature|undercook/i.test(issues)
-            && /160\s*(?:°|degrees?)?\s*f?/i.test(fixes);
-        metric: detects-unsafe-ground-beef-temperature
+        Reward:
+        - accurate identification of consequential cooking, safety, timing,
+          ingredient-usage, seasoning, clarity, cost, nutrition, and presentation issues;
+        - coverage of the recipe's most important real defects without inventing others;
+        - concrete, proportionate fixes that preserve the recipe's intent;
+        - strengths and an overall score calibrated to the actual recipe quality.
 
-  - description: Do not invent a salt defect for brined chicken with restrained finishing salt
-    vars:
-      recipe:
-        title: Brined Chicken and Green Beans
-        description: A quick skillet dinner built around already-brined chicken.
-        properties:
-          total_minutes: 30
-          servings: 2
-          estimated_cost_dollars: 11
-          calories_per_serving: 380
-          cooking_methods: [stovetop]
-        ingredients:
-          - name: Pre-brined boneless chicken breasts
-            quantity: 12 ounces
-          - name: Green beans
-            quantity: 8 ounces
-          - name: Olive oil
-            quantity: 1 tablespoon
-          - name: Diamond Crystal kosher salt
-            quantity: 3/4 teaspoon
-          - name: Black pepper
-            quantity: 1/4 teaspoon
-          - name: Garlic
-            quantity: 1 clove
-          - name: Lemon
-            quantity: "1"
-        instructions:
-          - Pat dry the 12 ounces pre-brined chicken breasts and season them with 1/8 teaspoon black pepper; trim the 8 ounces green beans, thinly slice the 1 garlic clove, zest the 1 lemon, halve it, and cut one half into 2 wedges.
-          - Heat 2 teaspoons olive oil in a 10-inch skillet over medium-high heat. Cook the chicken undisturbed for 5 to 6 minutes until golden, flip, and cook for 4 to 6 minutes until the center reaches 160°F. Transfer it to a board and rest for 5 minutes to reach 165°F.
-          - While the chicken rests, keep the same skillet over medium-high heat and add the remaining 1 teaspoon olive oil. Sauté the 8 ounces green beans with the 3/4 teaspoon Diamond Crystal kosher salt, sliced garlic, and remaining 1/8 teaspoon black pepper for 4 to 6 minutes until blistered and crisp-tender. Stir in the lemon zest and juice from the remaining lemon half.
-          - Slice the rested chicken and arrange it beside the green beans with the 2 lemon wedges. Taste before adding any finishing salt because the chicken is already brined.
-        health: ''
-        drink_pairing: Sparkling water with lemon
-        wine_styles: []
-    assert:
-      - type: javascript
-        value: |
-          const critique = JSON.parse(output);
-          const saltCriticism = [
-            ...critique.issues.map((issue) => issue.detail),
-            ...critique.suggested_fixes,
-          ].filter((text) => /\bsalt(?:ed|ing|y)?\b|\bbrin(?:e|ed|ing)\b/i.test(text));
-          return saltCriticism.length === 0;
-        metric: respects-pre-brined-ingredient
+        Do not penalize a critique for omitting trivial stylistic preferences. Penalize
+        unsupported or distracting criticism, especially invented salt defects. Product
+        IDs, aisle numbers, prices, response IDs, hashes, and cache keys are server-owned
+        metadata and are not culinary defects.
 
-  # A production cache case can replace recipe with:
-  # recipe_hash: MnMrPhOaMIhdNVeTptogQg==
+        Treat these Careme editorial requirements as authoritative even when generic
+        cooking advice differs:
+        - recipes must give salt by volume in teaspoons or tablespoons and name the salt
+          type because crystal sizes vary;
+        - preferred concise doneness targets are 140–145°F for pork loin or chops,
+          160°F for ground meat, 165°F for poultry (with breast pulled near 160°F and
+          rested), 175–185°F for poultry thighs, 125–130°F for salmon, and 135–140°F
+          for lean white fish;
+        - a critique must not replace those preferred fish or intact-meat ranges with
+          a conventional or government-agency temperature merely because it is higher;
+        - preparation must precede active cooking, exact divided ingredient amounts
+          must reconcile across steps, and unrelated tangents should be removed.
+
+        Score 0.90–1.00 for an exceptionally accurate and actionable critique; 0.70–0.89
+        for a useful critique with only minor misses; 0.40–0.69 for a critique with a
+        material miss or distracting false positive; and 0.00–0.39 for a misleading or
+        largely unhelpful critique. Set pass=true exactly when score is at least 0.70.
+
+        Recipe JSON:
+        {{ recipe | dump }}
+
+tests: 'file://tests.yaml'

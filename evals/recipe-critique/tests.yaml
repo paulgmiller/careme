@@ -1,0 +1,338 @@
+- description: Detect unsafe ground-beef serving temperature and propose a concrete fix
+  vars:
+    recipe:
+      title: Weeknight Beef Burgers
+      description: Simple skillet burgers with a crisp salad.
+      properties:
+        total_minutes: 25
+        servings: 2
+        estimated_cost_dollars: 14
+        calories_per_serving: 620
+        cooking_methods: [stovetop]
+      ingredients:
+        - name: Ground beef
+          quantity: 12 ounces
+        - name: Kosher salt
+          quantity: 1 teaspoon
+        - name: Burger buns
+          quantity: "2"
+        - name: Mixed greens
+          quantity: 4 ounces
+      instructions:
+        - Shape the 12 ounces ground beef with 1 teaspoon kosher salt into two patties.
+        - Sear the patties until their centers reach 145°F, then serve immediately on the 2 buns.
+        - Plate with the 4 ounces mixed greens.
+      health: ''
+      drink_pairing: Iced tea
+      wine_styles: []
+  assert:
+    - type: javascript
+      value: |
+        const critique = JSON.parse(output);
+        const issues = critique.issues.map((issue) => `${issue.category} ${issue.detail}`).join(' ');
+        const fixes = critique.suggested_fixes.join(' ');
+        return /safety/i.test(issues)
+          && /ground beef|burger/i.test(issues)
+          && /145|temperature|undercook/i.test(issues)
+          && /160\s*(?:°|degrees?)?\s*f?/i.test(fixes);
+      metric: detects-unsafe-ground-beef-temperature
+
+- description: Review brined chicken with restrained finishing salt
+  vars:
+    recipe:
+      title: Brined Chicken and Green Beans
+      description: A quick skillet dinner built around already-brined chicken.
+      properties:
+        total_minutes: 30
+        servings: 2
+        estimated_cost_dollars: 11
+        calories_per_serving: 380
+        cooking_methods: [stovetop]
+      ingredients:
+        - name: Pre-brined boneless chicken breasts
+          quantity: 12 ounces
+        - name: Green beans
+          quantity: 8 ounces
+        - name: Olive oil
+          quantity: 1 tablespoon
+        - name: Diamond Crystal kosher salt
+          quantity: 3/4 teaspoon
+        - name: Black pepper
+          quantity: 1/4 teaspoon
+        - name: Garlic
+          quantity: 1 clove
+        - name: Lemon
+          quantity: "1"
+      instructions:
+        - Pat dry the 12 ounces pre-brined chicken breasts and season them with 1/8 teaspoon black pepper; trim the 8 ounces green beans, thinly slice the 1 garlic clove, zest the 1 lemon, halve it, and cut one half into 2 wedges.
+        - Heat 2 teaspoons olive oil in a 10-inch skillet over medium-high heat. Cook the chicken undisturbed for 5 to 6 minutes until golden, flip, and cook for 4 to 6 minutes until the center reaches 160°F. Transfer it to a board and rest for 5 minutes to reach 165°F.
+        - While the chicken rests, keep the same skillet over medium-high heat and add the remaining 1 teaspoon olive oil. Sauté the 8 ounces green beans with the 3/4 teaspoon Diamond Crystal kosher salt, sliced garlic, and remaining 1/8 teaspoon black pepper for 4 to 6 minutes until blistered and crisp-tender. Stir in the lemon zest and juice from the remaining lemon half.
+        - Slice the rested chicken and arrange it beside the green beans with the 2 lemon wedges. Taste before adding any finishing salt because the chicken is already brined.
+      health: ''
+      drink_pairing: Sparkling water with lemon
+      wine_styles: []
+- description: Real cooked recipe (4 stars) — Basque pork with summer pipérade
+  metadata:
+    source: cooked-production-recipe
+    source_recipe_hash: qlawhmJMpHubSnBPW4JHYw==
+    cooked_rating: 4
+  vars:
+    recipe:
+      title: Basque Pork with Summer Pipérade
+      description: Smoky-sweet summer pipérade and juicy golden pork chops make this vibrant Basque lunch worthy of an anniversary table.
+      properties:
+        total_minutes: 35
+        servings: 2
+        estimated_cost_dollars: 7
+        calories_per_serving: 470
+        cooking_methods: [stovetop]
+      ingredients:
+        - id: '0029319000000'
+          aisle_number: '101'
+          name: Boneless Pork Loin Center-Cut Thin Chops
+          quantity: 12 oz
+          price: $4.99
+        - id: '0000000004688'
+          aisle_number: '0'
+          name: Fresh Red Hothouse Bell Pepper
+          quantity: 1 pepper
+          price: $1.67
+        - id: '0000000004664'
+          aisle_number: '0'
+          name: Fresh On the Vine Red Tomatoes by the Bunch (4-5 tomatoes per bunch)
+          quantity: 8 oz
+          price: $2.49
+        - id: '0000000004093'
+          aisle_number: '0'
+          name: Jumbo Yellow Onions
+          quantity: 4 oz
+          price: $1.49
+        - id: '0000000004608'
+          aisle_number: '0'
+          name: Garlic
+          quantity: 1 clove
+          price: $1.29
+        - id: '0000000094901'
+          aisle_number: '0'
+          name: Organic Italian Parsley
+          quantity: 2 tbsp chopped
+          price: $2.69
+        - id: ''
+          name: olive oil
+          quantity: 2 tbsp
+        - id: ''
+          name: kosher salt
+          quantity: 9.25 g
+        - id: ''
+          name: black pepper
+          quantity: 1/4 tsp
+        - id: ''
+          name: smoked paprika
+          quantity: 1/2 tsp
+        - id: ''
+          name: sherry vinegar
+          quantity: 1 tsp
+      instructions:
+        - |-
+          Prepare the produce:
+
+          - 1 Fresh Red Hothouse Bell Pepper, stemmed, seeded, and thinly sliced
+          - 4 oz Jumbo Yellow Onions, thinly sliced
+          - 8 oz Fresh On the Vine Red Tomatoes, cored and diced
+          - 1 garlic clove, minced
+          - 2 tbsp Organic Italian Parsley, chopped
+
+          Keep each prepared ingredient separate.
+        - Pat 12 oz Boneless Pork Loin Center-Cut Thin Chops dry. Season all over with 4.25 g kosher salt and 1/4 tsp black pepper; let stand while starting the pipérade.
+        - Heat 1 tbsp olive oil in a large skillet over medium-high heat. Add the sliced pepper, sliced onion, and 5 g kosher salt. Cook for 6–7 minutes, stirring occasionally, until tender and lightly browned.
+        - Add the minced garlic and 1/2 tsp smoked paprika; stir for 30 seconds. Add the diced tomatoes and cook for 4–5 minutes, until saucy but still colorful. Stir in 1 tsp sherry vinegar, then transfer the pipérade to a bowl and cover.
+        - Carefully wipe the skillet clean with a paper towel held in tongs. Return it to medium-high heat and add 1 tbsp olive oil. Sear the seasoned pork for 2–3 minutes per side, pulling it from the heat when the centers reach 140°F. Rest for 5 minutes.
+        - Spoon the warm pipérade onto two plates. Slice the rested pork on a slight diagonal, arrange it over the vegetables, and finish with the chopped parsley.
+      health: ''
+      drink_pairing: A lightly chilled Rioja complements the sweet peppers, smoked paprika, and savory pork.
+      wine_styles: [Rioja]
+      response_id: resp_0994921b05044ccb006a91aa49650087d0aff781922f2a2662
+      origin_hash: 255RBYQaVCE
+      parent_hash: qIdEKJG0x_ci9Fo7CymZeg==
+      prompt_cache_key: careme:store-day:v1:55e6c2b8e683d807614c1192
+
+- description: Real cooked recipe (3 stars) — grilled jerk chicken with charred corn
+  metadata:
+    source: cooked-production-recipe
+    source_recipe_hash: CVn4Nb77MAfPD5lADFgsSg==
+    cooked_rating: 3
+  vars:
+    recipe:
+      title: Grilled Jerk Chicken with Charred Corn
+      description: Crisp-skinned jerk chicken meets smoky-sweet corn and juicy tomatoes in a vibrant, lime-bright summer dinner.
+      properties:
+        total_minutes: 50
+        servings: 2
+        estimated_cost_dollars: 11
+        calories_per_serving: 620
+        cooking_methods: [grill]
+      ingredients:
+        - id: '0027087300000'
+          aisle_number: '101'
+          name: Foster Farms Fresh & Natural Cage Free Chicken Thighs Value Pack
+          quantity: 1½ pounds bone-in, skin-on thighs (about 4)
+          price: $2.79
+        - id: '0001111018183'
+          aisle_number: '105'
+          name: Kroger® Sweet Corn on the Cob
+          quantity: 2 ears
+          price: $4.99
+        - id: '0001111091687'
+          aisle_number: '353'
+          name: Private Selection® Campari Tomatoes
+          quantity: 8 ounces
+          price: $3.33
+        - id: '0000000004082'
+          aisle_number: '354'
+          name: Jumbo Red Onion
+          quantity: 2 ounces
+          price: $1.19
+        - id: '0000000094048'
+          aisle_number: '351'
+          name: Fresh Organic Lime
+          quantity: '1'
+          price: $1.29
+        - id: '0000000004608'
+          aisle_number: '353'
+          name: Garlic
+          quantity: 2 cloves
+          price: $0.79
+        - id: ''
+          name: Extra-virgin olive oil
+          quantity: 2 tablespoons, divided
+        - id: ''
+          name: Brown sugar
+          quantity: 2 teaspoons
+        - id: ''
+          name: Ground allspice
+          quantity: 1½ teaspoons
+        - id: ''
+          name: Dried thyme
+          quantity: 1 teaspoon
+        - id: ''
+          name: Smoked paprika
+          quantity: 1 teaspoon
+        - id: ''
+          name: Cayenne pepper
+          quantity: ¼ teaspoon
+        - id: ''
+          name: Kosher salt
+          quantity: 2½ teaspoons, divided
+        - id: ''
+          name: Ground black pepper
+          quantity: ½ teaspoon
+      instructions:
+        - Heat a grill to 400–425°F, arranging hotter direct-heat and cooler indirect-heat zones. Clean the grates well.
+        - Pat 1½ pounds bone-in, skin-on chicken thighs dry. Gently loosen the skin without detaching it, then season the thighs all over and under the skin with 1¾ teaspoons kosher salt.
+        - |-
+          Make the jerk paste by combining:
+
+          - Zest and juice of 1 lime
+          - 2 minced garlic cloves
+          - 1½ tablespoons extra-virgin olive oil
+          - 2 teaspoons brown sugar
+          - 1½ teaspoons ground allspice
+          - 1 teaspoon dried thyme
+          - 1 teaspoon smoked paprika
+          - ¼ teaspoon cayenne pepper
+          - ½ teaspoon ground black pepper
+
+          Rub the paste over and under the chicken skin. Marinate at room temperature for 15 minutes while the grill finishes heating.
+        - Husk 2 ears sweet corn. Halve 8 ounces Campari tomatoes and finely dice 2 ounces red onion; set the prepared vegetables aside.
+        - Place the chicken skin-side up over indirect heat, close the grill, and cook for 15 minutes. Add the corn over direct heat and grill for 8–10 minutes, turning every 2–3 minutes, until lightly charred; transfer the corn to a cutting board.
+        - Move the chicken over direct heat, skin-side down, and grill for about 5 minutes until crisp and browned. Flip and grill for 3–5 minutes more, moving the thighs away from flare-ups, until an instant-read thermometer inserted beside but not touching the bone registers at least 165°F.
+        - Transfer the chicken to a clean platter and rest for 5 minutes. Meanwhile, cut the kernels from the grilled corn and toss them with the prepared tomatoes and onion, ½ tablespoon extra-virgin olive oil, and ¾ teaspoon kosher salt.
+        - Divide the charred corn and tomato salad between two plates and add two jerk chicken thighs to each, keeping the crisp skin facing up.
+      health: ''
+      drink_pairing: An off-dry Riesling cools the jerk spices while complementing the sweet grilled corn.
+      wine_styles: [Riesling]
+      response_id: resp_02dc75f5174b91f1006a89decd46d887d1bde08289897fb96b
+      origin_hash: 0LwATV94n8M
+      parent_hash: wSiKYwFanAaMG_qLnQgFjQ==
+      prompt_cache_key: careme:store-day:v1:3b190010d0090ffb15de994a
+
+- description: Real cooked recipe (5 stars) — Vietnamese ginger-lime grilled branzino
+  metadata:
+    source: cooked-production-recipe
+    source_recipe_hash: yK5QkaVuHyhJn454UxQqIA==
+    cooked_rating: 5
+  vars:
+    recipe:
+      title: Vietnamese Ginger-Lime Grilled Branzino
+      description: Smoky, crisp-skinned branzino meets punchy ginger-lime sauce and a cool cucumber-cilantro salad in this vibrant Vietnamese-inspired feast.
+      properties:
+        total_minutes: 50
+        servings: 3
+        estimated_cost_dollars: 25
+        calories_per_serving: 390
+        cooking_methods: [grill]
+      ingredients:
+        - id: ''
+          name: whole branzino, scaled and gutted
+          quantity: 3 fish (2.89 pounds total)
+        - id: '0000000094593'
+          name: Organic Long English Cucumber
+          quantity: 2 cucumbers
+        - id: '0007096900263'
+          name: Spice World™ Fresh Peeled Ginger
+          quantity: 3 tablespoons, cut into thin matchsticks
+        - id: '0000000094048'
+          name: Fresh Organic Limes
+          quantity: 4 limes, juiced (about 6 tablespoons)
+        - id: '0000000004608'
+          name: Garlic
+          quantity: 2 cloves, finely grated
+        - id: ''
+          name: scallions
+          quantity: 6, thinly sliced and divided
+        - id: ''
+          name: fresh cilantro leaves
+          quantity: 1 cup
+        - id: ''
+          name: fish sauce
+          quantity: 4 tablespoons
+        - id: ''
+          name: granulated sugar
+          quantity: 4 teaspoons
+        - id: ''
+          name: fresh red chile
+          quantity: 1 small chile, thinly sliced
+        - id: ''
+          name: kosher salt
+          quantity: 1 tablespoon
+        - id: ''
+          name: neutral cooking oil
+          quantity: 2 tablespoons
+        - id: ''
+          name: water
+          quantity: 4 tablespoons
+      instructions:
+        - Pat 3 whole branzino dry and cut three shallow diagonal slashes into each side. Season the cavities and exteriors evenly with 1 tablespoon kosher salt. Distribute 3 tablespoons ginger matchsticks and 3 sliced scallions among the cavities, keeping the aromatics inside so they do not burn. Brush the fish all over with 1 tablespoon neutral cooking oil.
+        - |-
+          Make the Vietnamese lime sauce by stirring together:
+
+          - 6 tablespoons fresh lime juice from 4 limes
+          - 4 tablespoons fish sauce
+          - 4 tablespoons water
+          - 4 teaspoons granulated sugar
+          - 2 finely grated garlic cloves
+          - 1 thinly sliced small red chile
+
+          Stir until the sugar dissolves.
+        - Thinly slice 2 Organic Long English Cucumbers and toss them with 3 sliced scallions and 4 tablespoons Vietnamese lime sauce. Refrigerate the cucumber salad while the fish cooks; do not add the cilantro yet.
+        - Preheat a covered grill to medium-high, about 400–425°F. Clean the hot grates, then use long-handled tongs and a folded paper towel to coat them carefully with 1 tablespoon neutral cooking oil.
+        - Arrange the branzino directly on the prepared grates without letting them touch. Cover and grill for 5 to 7 minutes, until the undersides release readily. Turn each fish once using two wide spatulas, cover, and grill for another 5 to 7 minutes. Cook until the flesh is opaque, separates easily from the backbone, and reaches 145°F at the thickest point. If the fish cannot fit without touching, grill them in batches and loosely cover the cooked fish.
+        - Transfer each grilled branzino to its own dinner plate and rest for 2 minutes. Spoon 4 tablespoons Vietnamese lime sauce evenly over the fish. If you opt to steam the fish on another occasion, use a large wok fitted with a bamboo steamer or a roasting pan spanning two burners so all three fish can cook in one layer without overlapping.
+        - Fold 1 cup cilantro leaves into the cucumber salad just before serving. Plate the salad alongside the branzino and serve about 6 tablespoons reserved Vietnamese lime sauce at the table.
+      health: ''
+      drink_pairing: A chilled Sauvignon Blanc balances the smoky fish, salty fish sauce, lime, and fresh herbs.
+      wine_styles: [Sauvignon Blanc]
+      response_id: resp_02dc75f5174b91f1006a8a4e1716f887d1b851cff729cbcf0c
+      origin_hash: XOyWxbFbQZU
+      parent_hash: Uez8o-5gadZIAPjVeWpI1A==
+      prompt_cache_key: careme:store-day:v1:3b190010d0090ffb15de994a

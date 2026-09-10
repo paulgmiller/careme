@@ -1,4 +1,4 @@
-package main
+package eval
 
 import (
 	"context"
@@ -27,6 +27,16 @@ type stubCritiquer struct {
 	critique *ai.RecipeCritique
 	err      error
 	recipe   ai.Recipe
+}
+
+type stubCostCritiquer struct {
+	stubCritiquer
+	cost float64
+}
+
+func (s *stubCostCritiquer) CritiqueRecipeWithCost(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, float64, error) {
+	s.recipe = recipe
+	return s.critique, s.cost, s.err
 }
 
 func (s *stubCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
@@ -62,6 +72,18 @@ func TestRunEvalUsesInlineRecipeWithoutLoader(t *testing.T) {
 	assert.Equal(t, "Inline supper", critiquer.recipe.Title)
 }
 
+func TestCritiqueRecipeReportsProviderCost(t *testing.T) {
+	critiquer := &stubCostCritiquer{
+		stubCritiquer: stubCritiquer{critique: &ai.RecipeCritique{OverallScore: 8, Summary: "Useful."}},
+		cost:          0.0123,
+	}
+
+	result, err := critiqueRecipe(t.Context(), ai.Recipe{Title: "Supper"}, critiquer)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0.0123, result["cost"])
+}
+
 func TestDecodeEvalCaseRequiresExactlyOneRecipeSource(t *testing.T) {
 	for _, body := range []string{
 		`{"vars":{}}`,
@@ -69,6 +91,26 @@ func TestDecodeEvalCaseRequiresExactlyOneRecipeSource(t *testing.T) {
 	} {
 		_, err := decodeEvalCase([]byte(body))
 		require.EqualError(t, err, "eval must provide exactly one of recipe or recipe_hash")
+	}
+}
+
+func TestCritiqueModelRequiresPromptfooProviderConfig(t *testing.T) {
+	t.Parallel()
+
+	model, err := critiqueModel(map[string]interface{}{
+		"config": map[string]interface{}{"model": "  google/gemini-3.7-flash  "},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "google/gemini-3.7-flash", model)
+
+	for _, options := range []map[string]interface{}{
+		nil,
+		{},
+		{"config": map[string]interface{}{}},
+		{"config": map[string]interface{}{"model": "  "}},
+	} {
+		_, err := critiqueModel(options)
+		require.EqualError(t, err, "promptfoo provider config.model is required")
 	}
 }
 
@@ -89,7 +131,9 @@ func TestCritiqueRecipeReturnsModelError(t *testing.T) {
 func TestCallApiReturnsReadableProviderError(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	result, err := CallApi("", nil, map[string]interface{}{})
+	result, err := CallApi("", map[string]interface{}{
+		"config": map[string]interface{}{"model": "google/gemini-3.7-flash"},
+	}, map[string]interface{}{})
 	require.NoError(t, err)
 
 	message, ok := result["error"].(string)
