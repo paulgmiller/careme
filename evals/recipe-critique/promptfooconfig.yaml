@@ -1,6 +1,6 @@
-description: Recipe critique model usefulness and latency comparison
+description: Recipe critique model quality, latency, and cost comparison
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 16
 
 # The candidate provider ignores the rendered prompt and reads recipe or
 # recipe_hash from the test variables. It uses the production critique prompt
@@ -10,25 +10,22 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: Gemini 3.7 Flash
-    config:
-      model: google/gemini-3.7-flash
-  - id: 'file://provider.go'
-    label: DeepSeek V4 Flash
-    config:
-      model: deepseek/deepseek-v4-flash
-  - id: 'file://provider.go'
-    label: Gemini 3.1 Pro Preview
+    label: Gemini 3.1 Pro
     config:
       model: google/gemini-3.1-pro-preview
   - id: 'file://provider.go'
-    label: DeepSeek V4 Pro
+    label: Google Flash Latest
     config:
-      model: deepseek/deepseek-v4-pro
-  - id: 'file://provider.go'
-    label: Claude Opus 5
-    config:
-      model: anthropic/claude-opus-5
+      model: '~google/gemini-flash-latest'
+  # both way slower and not cheaper than gemini pro
+  #- id: 'file://provider.go'
+  #  label: Claude Sonnet 5
+  #  config:
+  #    model: anthropic/claude-sonnet-5
+  #- id: 'file://provider.go'
+  #  label: Kimi K3
+  #  config:
+  #    model: moonshotai/kimi-k3
 
 defaultTest:
   assert:

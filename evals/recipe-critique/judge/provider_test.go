@@ -17,7 +17,7 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func TestCallJudgeUsesGPT56SolAndReturnsPromptfooGrade(t *testing.T) {
+func TestCallJudgeUsesAstraAndReturnsPromptfooGrade(t *testing.T) {
 	t.Setenv("AI_API_KEY", "test-key")
 
 	var requestBody string
@@ -49,7 +49,7 @@ func TestCallJudgeUsesGPT56SolAndReturnsPromptfooGrade(t *testing.T) {
 		"completion": int64(20),
 		"total":      int64(120),
 	}, result["tokenUsage"])
-	assert.Contains(t, requestBody, `"model":"gpt-5.6-sol"`)
+	assert.Contains(t, requestBody, `"model":"gpt-6-astra"`)
 	assert.Contains(t, requestBody, "grade this critique")
 	assert.Contains(t, requestBody, `"effort":"medium"`)
 }

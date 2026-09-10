@@ -29,6 +29,16 @@ type stubCritiquer struct {
 	recipe   ai.Recipe
 }
 
+type stubCostCritiquer struct {
+	stubCritiquer
+	cost float64
+}
+
+func (s *stubCostCritiquer) CritiqueRecipeWithCost(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, float64, error) {
+	s.recipe = recipe
+	return s.critique, s.cost, s.err
+}
+
 func (s *stubCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
 	s.recipe = recipe
 	return s.critique, s.err
@@ -60,6 +70,18 @@ func TestRunEvalUsesInlineRecipeWithoutLoader(t *testing.T) {
 
 	assert.NotNil(t, result)
 	assert.Equal(t, "Inline supper", critiquer.recipe.Title)
+}
+
+func TestCritiqueRecipeReportsProviderCost(t *testing.T) {
+	critiquer := &stubCostCritiquer{
+		stubCritiquer: stubCritiquer{critique: &ai.RecipeCritique{OverallScore: 8, Summary: "Useful."}},
+		cost:          0.0123,
+	}
+
+	result, err := critiqueRecipe(t.Context(), ai.Recipe{Title: "Supper"}, critiquer)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0.0123, result["cost"])
 }
 
 func TestDecodeEvalCaseRequiresExactlyOneRecipeSource(t *testing.T) {

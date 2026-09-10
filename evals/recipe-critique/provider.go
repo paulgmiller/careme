@@ -29,6 +29,10 @@ type recipeCritiquer interface {
 	CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
 }
 
+type costRecipeCritiquer interface {
+	CritiqueRecipeWithCost(context.Context, ai.Recipe) (*ai.RecipeCritique, float64, error)
+}
+
 type recipeLoader interface {
 	SingleFromCache(context.Context, string) (*ai.Recipe, error)
 }
@@ -119,7 +123,16 @@ func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiq
 
 func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCritiquer) (map[string]interface{}, error) {
 	start := time.Now()
-	critique, err := critiquer.CritiqueRecipe(ctx, recipe)
+	var (
+		critique *ai.RecipeCritique
+		cost     float64
+		err      error
+	)
+	if costCritiquer, ok := critiquer.(costRecipeCritiquer); ok {
+		critique, cost, err = costCritiquer.CritiqueRecipeWithCost(ctx, recipe)
+	} else {
+		critique, err = critiquer.CritiqueRecipe(ctx, recipe)
+	}
 	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
@@ -131,8 +144,12 @@ func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCriti
 	if err != nil {
 		return nil, fmt.Errorf("encode recipe critique: %w", err)
 	}
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"output":    string(output),
 		"latencyMs": latency.Milliseconds(),
-	}, nil
+	}
+	if _, ok := critiquer.(costRecipeCritiquer); ok {
+		result["cost"] = cost
+	}
+	return result, nil
 }

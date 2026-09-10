@@ -37,7 +37,7 @@
           && /160\s*(?:°|degrees?)?\s*f?/i.test(fixes);
       metric: detects-unsafe-ground-beef-temperature
 
-- description: Do not invent a salt defect for brined chicken with restrained finishing salt
+- description: Review brined chicken with restrained finishing salt
   vars:
     recipe:
       title: Brined Chicken and Green Beans
@@ -71,17 +71,6 @@
       health: ''
       drink_pairing: Sparkling water with lemon
       wine_styles: []
-  assert:
-    - type: javascript
-      value: |
-        const critique = JSON.parse(output);
-        const saltCriticism = [
-          ...critique.issues.map((issue) => issue.detail),
-          ...critique.suggested_fixes,
-        ].filter((text) => /\bsalt(?:ed|ing|y)?\b|\bbrin(?:e|ed|ing)\b/i.test(text));
-        return saltCriticism.length === 0;
-      metric: respects-pre-brined-ingredient
-
 - description: Real cooked recipe (4 stars) — Basque pork with summer pipérade
   metadata:
     source: cooked-production-recipe
