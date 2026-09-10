@@ -209,6 +209,10 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
+	if len(promptMessages) > 0 {
+		// Cache the expanded conversation for subsequent regenerations and questions.
+		promptMessages[len(promptMessages)-1].PromptCacheBreakpoint = true
+	}
 	messages := messagesToInput(promptMessages)
 
 	params := responses.ResponseNewParams{
