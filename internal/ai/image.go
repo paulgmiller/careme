@@ -19,7 +19,7 @@ const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
 - Home cooked by a above average cook, not a restaurant or food stylist.
 - Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
-- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use a simple dark wood dining table as backdrop.
 - Use natural colors, ordinary cookware or tableware, and realistic portions
 - Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes
 - If the recipe has multiple components, show them plated together
