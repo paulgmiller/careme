@@ -86,3 +86,26 @@ Run just this suite from the repository root:
 ```
 
 The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
+
+## Menu planning
+
+Run `./task.sh evals EVAL=menu-plan -- --no-cache --output /tmp/menu-plan-eval.json`.
+The provider uses the production menu model (currently `gpt-6-astra`) with medium
+reasoning and requires `AI_API_KEY` through the existing configuration path.
+
+The suite checks requested plan count, catalog membership for every anchor and
+side, and no repeated ingredient across anchor/side slots (ignoring case and
+whitespace). Fixtures provide enough distinct ingredients to satisfy this rule;
+menus that explicitly request ingredient reuse need separate expectations.
+A three-dinner case checks that a limited ingredient is assigned to exactly one
+recipe's `recipe_instructions`, while serving count reaches every recipe.
+These keyword assertions check handoff coverage, not semantic correctness:
+a negated instruction could still match. The generated recipes are not evaluated
+by this suite.
+
+The latency budget is 15 seconds per menu call, including SDK retries and ingredient
+correction calls, excluding configuration, Go compilation, and JSON serialization.
+Use `--no-cache` for meaningful timing. The suite runs sequentially by default.
+There is no AI judge yet; a future judge should assess culinary fit, meaningful
+variety, and faithful interpretation of user requests from the original request
+and complete menu, separately from these deterministic checks.

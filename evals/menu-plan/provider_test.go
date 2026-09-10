@@ -61,6 +61,7 @@ func TestRunEvalReturnsMenuPlanJSON(t *testing.T) {
 
 	output, ok := result["output"].(string)
 	require.True(t, ok)
+	assert.IsType(t, int64(0), result["latencyMs"])
 	assert.JSONEq(t, `{
 		"plans":[{"cuisine":"Italian","anchor_ingredient":"Chicken Thighs","technique":"sheet pan","side_vegetable":"Broccoli","fancy":false,"recipe_instructions":null}],
 		"chef_note_suggestion":"faster dinners"

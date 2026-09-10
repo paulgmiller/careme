@@ -12,17 +12,27 @@ providers:
 
 defaultTest:
   assert:
+    - type: latency
+      threshold: 15000
+      metric: menu-plan-latency-under-15s
     - type: is-json
       metric: menu-plan-json
     - type: javascript
       value: |
         const plan = JSON.parse(output);
-        if (plan.plans?.length !== 1) return false;
+        if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
-        const recipe = plan.plans[0];
-        return available.has(recipe.anchor_ingredient.toLowerCase())
-          && available.has(recipe.side_vegetable.toLowerCase());
+        return plan.plans.every((recipe) =>
+          available.has(recipe.anchor_ingredient.toLowerCase())
+          && available.has(recipe.side_vegetable.toLowerCase()));
       metric: available-menu-ingredients
+    - type: javascript
+      value: |
+        const recipes = JSON.parse(output).plans;
+        const labels = recipes.flatMap((recipe) => [recipe.anchor_ingredient, recipe.side_vegetable])
+          .map((label) => label.trim().toLowerCase().replace(/\s+/g, ' '));
+        return new Set(labels).size === labels.length;
+      metric: distinct-menu-ingredients
 
 tests:
   - description: One quick seasonal chicken dinner
@@ -71,3 +81,48 @@ tests:
           return recipe.anchor_ingredient === 'Simple Truth Organic Extra Firm Tofu Twin Pack'
             && recipe.side_vegetable === 'Simple Truth Organic Fresh Broccoli Florets Family Pack';
         metric: vegetarian-exact-catalog-labels
+
+  - description: Three distinct dinners preserve global directions and assign limited saffron once
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-10'
+      count: 3
+      instructions: Plan three dinners. Every dinner must serve 6 people. I have one pinch of saffron; use it in exactly one dinner. Use different anchor ingredients and different side vegetables across the dinners.
+      ingredients:
+        - id: chicken
+          description: Boneless Skinless Chicken Thighs
+          size: 2 lb
+        - id: salmon
+          description: Atlantic Salmon Fillet
+          size: 2 lb
+        - id: tofu
+          description: Extra Firm Tofu
+          size: 16 oz
+        - id: broccoli
+          description: Broccoli Crowns
+          size: 1 lb
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+        - id: carrots
+          description: Carrots
+          size: 1 lb
+        - id: rice
+          description: Basmati Rice
+          size: 2 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipes = JSON.parse(output).plans;
+          return recipes.filter((recipe) => recipe.recipe_instructions.some((instruction) =>
+            /\bsaffron\b/i.test(instruction))).length === 1;
+        metric: limited-ingredient-assigned-once
+      - type: javascript
+        value: |
+          return JSON.parse(output).plans.every((recipe) =>
+            recipe.recipe_instructions.some((instruction) =>
+              /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
+        metric: servings-preserved-in-every-recipe

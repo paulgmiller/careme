@@ -54,6 +54,7 @@ func runEval(body []byte, planner menuPlanner) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("invalid eval date %q: expected YYYY-MM-DD: %w", testCase.Date, err)
 	}
 
+	start := time.Now()
 	plan, err := planner.CreateMenuPlan(
 		context.Background(),
 		&testCase.Location,
@@ -63,6 +64,7 @@ func runEval(body []byte, planner menuPlanner) (map[string]interface{}, error) {
 		testCase.LastRecipes,
 		testCase.Count,
 	)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create menu plan: %w", err)
 	}
@@ -79,7 +81,7 @@ func runEval(body []byte, planner menuPlanner) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode menu plan: %w", err)
 	}
-	return map[string]interface{}{"output": string(output)}, nil
+	return map[string]interface{}{"output": string(output), "latencyMs": latency.Milliseconds()}, nil
 }
 
 func decodeEvalCase(body []byte) (evalCase, error) {
