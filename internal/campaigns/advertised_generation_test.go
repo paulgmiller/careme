@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,12 +28,15 @@ func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, id string)
 }
 
 type campaignGeneratorStub struct {
+	mu       sync.Mutex
 	params   []*recipes.GeneratorParams
 	contexts []context.Context
 	err      error
 }
 
 func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.params = append(g.params, p)
 	g.contexts = append(g.contexts, ctx)
 	if g.err != nil {
@@ -42,11 +46,14 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 }
 
 type campaignImageStub struct {
+	mu    sync.Mutex
 	calls int
 	err   error
 }
 
 func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.calls++
 	if g.err != nil {
 		return nil, g.err
