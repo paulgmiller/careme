@@ -153,10 +153,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		menuResponse := plan.ResponseRef()
 
-		//this is gross shows you why samber lo passes and index.
-		//could just give plan a hash and map on that.
-		results, err := parallelism.MapWithErrors(lo.Range(len(plan.Plans)), func(index int) (*ai.Recipe, error) {
-			plan := plan.Plans[index]
+		results, err := parallelism.MapWithErrorsI(plan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
@@ -236,8 +233,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		return nil, fmt.Errorf("publish meal plan: %w", err)
 	}
 
-	results, err := parallelism.MapWithErrors(lo.Range(len(menuPlan.Plans)), func(index int) (*ai.Recipe, error) {
-		plan := menuPlan.Plans[index]
+	results, err := parallelism.MapWithErrorsI(menuPlan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
