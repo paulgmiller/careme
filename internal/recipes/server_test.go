@@ -71,13 +71,13 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
-func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
+func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	statuses := newFakeStatusStore()
 	s := newTestServer(t, withTestGenerator(generator), withTestStatusStore(statuses))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	statuses.setProgress(p.Hash(), "Still chopping")
+	statuses.setProgress(p.Hash(), "Planning your meals…")
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
 	req.Header.Set("HX-Request", "true")
@@ -86,8 +86,8 @@ func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	s.notFound(t.Context(), rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Still chopping")
-	assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)
+	assert.Contains(t, rr.Body.String(), "Planning your meals…")
+	assert.Contains(t, rr.Body.String(), `hx-trigger="every 1s"`)
 	assert.NotContains(t, rr.Body.String(), "Try again, chef")
 	select {
 	case <-generator.called:
@@ -115,9 +115,9 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 		},
 		{
 			name:     "untimed legacy progress",
-			wantText: "Still chopping",
+			wantText: "Planning your meals…",
 			setup: func(t testing.TB, s *server, hash string) {
-				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Still chopping")
+				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Planning your meals…")
 			},
 		},
 		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
@@ -142,7 +142,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 				}
 			} else {
 				assert.Contains(t, rr.Body.String(), tt.wantText)
-				assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)
+				assert.Contains(t, rr.Body.String(), `hx-trigger="every 1s"`)
 				assert.NotContains(t, rr.Body.String(), "Try again, chef")
 			}
 		})
