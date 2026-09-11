@@ -72,8 +72,8 @@ func seedEvalCaseStore(t *testing.T) (evalCaseStore, string) {
 	require.NoError(t, store.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Plan: &ai.MenuPlan{
 			Plans: []ai.RecipePlan{
-				{Cuisine: "Italian", AnchorIngredient: "Chicken Thighs", Technique: "sheet pan", SideVegetable: "Broccoli"},
-				{Cuisine: "Mexican", AnchorIngredient: "Black Beans", Technique: "simmer", SideVegetable: "Peppers", Fancy: true},
+				{Cuisine: "Italian", AnchorIngredient: "Chicken Thighs", DishFormat: "sheet pan", SideVegetable: "Broccoli"},
+				{Cuisine: "Mexican", AnchorIngredient: "Black Beans", DishFormat: "simmer", SideVegetable: "Peppers", Fancy: true},
 			},
 			ChefNoteSuggestion: "faster dinners",
 			ResponseID:         "resp-menu-1",

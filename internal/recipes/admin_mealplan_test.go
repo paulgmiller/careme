@@ -155,7 +155,7 @@ func testAdminMealPlanList(cuisine, anchorIngredient, originHash string) *ai.Sho
 			Plans: []ai.RecipePlan{{
 				Cuisine:            cuisine,
 				AnchorIngredient:   anchorIngredient,
-				Technique:          "stir-fry",
+				DishFormat:         "stir-fry",
 				SideVegetable:      "greens",
 				RecipeInstructions: []string{"use the good pan"},
 			}},

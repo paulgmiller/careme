@@ -42,44 +42,17 @@ type RecipePlan struct {
 	Cuisine          string `json:"cuisine" yaml:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
 	DishFormat       string `json:"dish_format" yaml:"dish_format"`
-	// Technique is retained for decoding older saved plans and test fixtures.
-	// New plans use DishFormat; it is intentionally excluded from the model schema.
-	Technique     string `json:"-" yaml:"-"`
-	SideVegetable string `json:"side_vegetable" yaml:"side_vegetable"`
-	Fancy         bool   `json:"fancy" yaml:"fancy"`
+	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
+	Fancy            bool   `json:"fancy" yaml:"fancy"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
 }
 
-// UnmarshalJSON accepts the former technique label so cached plans can still
-// be read after the planner switches to dish formats.
-func (p *RecipePlan) UnmarshalJSON(data []byte) error {
-	type recipePlanJSON RecipePlan
-	var value struct {
-		recipePlanJSON
-		Technique string `json:"technique"`
-	}
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	*p = RecipePlan(value.recipePlanJSON)
-	if strings.TrimSpace(p.DishFormat) == "" {
-		p.DishFormat = value.Technique
-	}
-	return nil
-}
-
 func (p RecipePlan) Instructions() []string {
-	dishFormat := p.DishFormat
-	formatInstruction := "Suggested dish format for this recipe: %s."
-	if strings.TrimSpace(dishFormat) == "" {
-		dishFormat = p.Technique
-		formatInstruction = "Suggested technique for this recipe: %s."
-	}
 	instructions := []string{
 		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
 		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
-		fmt.Sprintf(formatInstruction, dishFormat),
+		fmt.Sprintf("Suggested dish format for this recipe: %s.", p.DishFormat),
 		fmt.Sprintf("Side vegetable direction for this recipe: %s.", p.SideVegetable),
 	}
 	if p.Fancy {

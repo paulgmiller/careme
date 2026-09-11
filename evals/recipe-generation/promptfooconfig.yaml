@@ -65,7 +65,7 @@ tests:
         plans:
           - cuisine: Yucatecan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
-            technique: grill
+            dish_format: grill
             side_vegetable: Fresh Sweet Corn on the Cob-Each
             fancy: false
             recipe_instructions:
@@ -97,7 +97,7 @@ tests:
         plans:
           - cuisine: Korean
             anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
-            technique: marinate and grill
+            dish_format: marinate and grill
             side_vegetable: Cucumber
             fancy: false
             recipe_instructions:
@@ -138,7 +138,7 @@ tests:
         plans:
           - cuisine: Moroccan
             anchor_ingredient: Simple Truth® Natural Lamb Shoulder
-            technique: quick braise
+            dish_format: quick braise
             side_vegetable: Carrots
             fancy: false
             recipe_instructions:
@@ -171,7 +171,7 @@ tests:
         plans:
           - cuisine: Sichuan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
-            technique: stir-fry
+            dish_format: stir-fry
             side_vegetable: Bok Choy
             fancy: false
             recipe_instructions:
@@ -204,7 +204,7 @@ tests:
         plans:
           - cuisine: Italian
             anchor_ingredient: Fresh Coho Salmon Fillet
-            technique: oven-roast
+            dish_format: oven-roast
             side_vegetable: Zucchini
             fancy: false
             recipe_instructions:
@@ -236,7 +236,7 @@ tests:
         plans:
           - cuisine: Tex-Mex
             anchor_ingredient: Jicama
-            technique: raw toss
+            dish_format: raw toss
             side_vegetable: Cucumber Long Hot House English
             fancy: false
             recipe_instructions:
@@ -269,7 +269,7 @@ tests:
         plans:
           - cuisine: Chilean
             anchor_ingredient: USDA Choice Beef Loin Tri Tip Roast - 2.5 Lb
-            technique: oven roast
+            dish_format: oven roast
             side_vegetable: Yellow Crookneck Squash
             fancy: false
             recipe_instructions:
@@ -298,7 +298,7 @@ tests:
         plans:
           - cuisine: Turkish
             anchor_ingredient: Fresh Coho Salmon Fillet
-            technique: oven roast
+            dish_format: oven roast
             side_vegetable: Fresh Sweet Corn on the Cob-Each
             fancy: true
             recipe_instructions:
@@ -322,7 +322,7 @@ tests:
         plans:
           - cuisine: Southern American
             anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
-            technique: stove-braise
+            dish_format: stove-braise
             side_vegetable: Fresh Bagged Green Beans
             fancy: false
             recipe_instructions:
@@ -353,7 +353,7 @@ tests:
         plans:
           - cuisine: Italian
             anchor_ingredient: Fresh Coho Salmon Fillet
-            technique: oven-roast
+            dish_format: oven-roast
             side_vegetable: Zucchini
             fancy: false
             recipe_instructions:
