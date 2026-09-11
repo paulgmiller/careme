@@ -46,7 +46,6 @@ const validRecipeContext = `{
 			"plans": [{
 				"cuisine": "Italian",
 				"anchor_ingredient": "Chicken Thighs",
-				"technique": "sheet pan",
 				"side_vegetable": "Broccoli",
 				"recipe_instructions": ["Keep dinner quick"]
 			}],
@@ -79,7 +78,6 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 	assert.Equal(t, []string{
 		"Cuisine direction for this recipe: Italian.",
 		"Anchor ingredient direction for this recipe: Chicken Thighs.",
-		"Suggested technique for this recipe: sheet pan.",
 		"Side vegetable direction for this recipe: Broccoli.",
 		"User direction for this recipe: Keep dinner quick",
 	}, generator.recipeInstructions)

@@ -36,6 +36,7 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "/admin/params/"+hash)
 	assert.Contains(t, rr.Body.String(), "/admin/ingredients/"+hash)
 	assert.Contains(t, rr.Body.String(), "Total plan entries: 1")
+	assert.NotContains(t, rr.Body.String(), "<th>Technique</th>")
 }
 
 func TestAdminMealPlanPageWalksBackThroughSavedRecipeOrigins(t *testing.T) {
@@ -155,7 +156,6 @@ func testAdminMealPlanList(cuisine, anchorIngredient, originHash string) *ai.Sho
 			Plans: []ai.RecipePlan{{
 				Cuisine:            cuisine,
 				AnchorIngredient:   anchorIngredient,
-				Technique:          "stir-fry",
 				SideVegetable:      "greens",
 				RecipeInstructions: []string{"use the good pan"},
 			}},

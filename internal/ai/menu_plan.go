@@ -41,7 +41,6 @@ func (p MenuPlan) String() string {
 type RecipePlan struct {
 	Cuisine          string `json:"cuisine" yaml:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
-	Technique        string `json:"technique" yaml:"technique"`
 	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
 	Fancy            bool   `json:"fancy" yaml:"fancy"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
@@ -52,7 +51,6 @@ func (p RecipePlan) Instructions() []string {
 	instructions := []string{
 		fmt.Sprintf("Cuisine direction for this recipe: %s.", p.Cuisine),
 		fmt.Sprintf("Anchor ingredient direction for this recipe: %s.", p.AnchorIngredient),
-		fmt.Sprintf("Suggested technique for this recipe: %s.", p.Technique),
 		fmt.Sprintf("Side vegetable direction for this recipe: %s.", p.SideVegetable),
 	}
 	if p.Fancy {
@@ -138,9 +136,9 @@ func pickN(xs []string, n int) []string {
 const menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
-Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, side_vegetable, and technique. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","technique":"braise","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
-Try and ensure variety across cuisines, anchor ingredients, techniques, and side vegetables.
+Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, and side_vegetable. Set fancy to true only for the richer/splurgier/time intensive option.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
+Try and ensure variety across cuisines, anchor ingredients, and side vegetables.
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.

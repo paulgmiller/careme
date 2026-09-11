@@ -109,7 +109,6 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 	plan := RecipePlan{
 		Cuisine:            "French",
 		AnchorIngredient:   "chicken",
-		Technique:          "braise",
 		SideVegetable:      "carrots",
 		RecipeInstructions: []string{"use the anise here", "  "},
 	}
@@ -127,7 +126,6 @@ func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testi
 	plan := &MenuPlan{Plans: []RecipePlan{{
 		Cuisine:          "Italian",
 		AnchorIngredient: "wild caught shrimp",
-		Technique:        "pasta",
 		SideVegetable:    " broccolini ",
 	}}}
 	ingredients := []InputIngredient{
@@ -176,7 +174,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 			responseID = "resp-menu-corrected"
 			sideVegetable = "Broccolini"
 		}
-		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","technique":"pasta","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
+		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
 	})}, recorder)
 	ingredients := []InputIngredient{
 		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
@@ -309,18 +307,16 @@ func TestRecipePlanInstructions(t *testing.T) {
 	plan := RecipePlan{
 		Cuisine:          "Korean",
 		AnchorIngredient: "tofu",
-		Technique:        "stir-fry",
 		SideVegetable:    "broccoli",
 		Fancy:            true,
 	}
 	got := plan.Instructions()
-	if len(got) != 5 {
-		t.Fatalf("expected five plan instructions, got %v", got)
+	if len(got) != 4 {
+		t.Fatalf("expected four plan instructions, got %v", got)
 	}
 	for _, phrase := range []string{
 		"Cuisine direction for this recipe: Korean.",
 		"Anchor ingredient direction for this recipe: tofu.",
-		"Suggested technique for this recipe: stir-fry.",
 		"Side vegetable direction for this recipe: broccoli.",
 		"fancier",
 	} {
@@ -392,13 +388,18 @@ func TestMenuPlanSchemaExcludesResponseID(t *testing.T) {
 	}
 }
 
+func TestMenuPlanSchemaExcludesTechnique(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	assert.NotContains(t, mustJSON(t, client.menuSchema), "technique")
+}
+
 func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 	t.Helper()
 	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
-		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","technique":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
+		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","side_vegetable":"Broccoli","fancy":false}]}`), nil
 	})}
 }
 
