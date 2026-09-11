@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 	locationtypes "careme/internal/locations/types"
 )
@@ -21,12 +22,11 @@ type ingredientCache interface {
 }
 
 type CachedProduceScorer struct {
-	cache        ingredientCache
-	locationHash func(locationtypes.Location, time.Time) string
+	cache ingredientCache
 }
 
-func NewCachedProduceScorer(c ingredientCache, locationHash func(locationtypes.Location, time.Time) string) *CachedProduceScorer {
-	return &CachedProduceScorer{cache: c, locationHash: locationHash}
+func NewCachedProduceScorer(c ingredientCache) *CachedProduceScorer {
+	return &CachedProduceScorer{cache: c}
 }
 
 func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtypes.Location) *int {
@@ -37,7 +37,7 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtype
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		ingredients, err := s.cache.IngredientsFromCache(ctx, s.locationHash(loc, candidate))
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate))
 		if err == nil {
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score

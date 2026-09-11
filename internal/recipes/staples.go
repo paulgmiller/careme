@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"testing"
 	"time"
 
 	"careme/internal/ai"
@@ -303,20 +302,6 @@ func StaplesWatchdogLocationIDs() []string {
 	}
 }
 
-func staplesSignatureForLocation(locationID string) string {
-	for _, provider := range defaultIdentityProviders() {
-		if provider.IsID(locationID) {
-			return provider.Signature()
-		}
-	}
-
-	if testing.Testing() && locationID == "loc-123" {
-		return kroger.NewIdentityProvider().Signature()
-	}
-
-	panic("unknown staples provider for location " + locationID)
-}
-
 func (p routingStaplesProvider) providerForLocation(locationID string) (backendStaplesProvider, error) {
 	for _, backend := range p.backends {
 		if backend.IsID(locationID) {
@@ -379,18 +364,4 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
 	}, nil
-}
-
-func defaultIdentityProviders() []identityProvider {
-	return []identityProvider{
-		kroger.NewIdentityProvider(),
-		// actowiz.NewIdentityProvider(),
-		albertsons.NewIdentityProvider(),
-		heb.NewIdentityProvider(),
-		aldi.NewIdentityProvider(),
-		publix.NewIdentityProvider(),
-		farmersmarket.NewIdentityProvider(),
-		wholefoods.NewIdentityProvider(),
-		walmart.NewIdentityProvider(),
-	}
 }

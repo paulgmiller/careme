@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 
 	"github.com/samber/lo"
@@ -62,11 +63,6 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	}
 }
 
-// ParamsLocationHash returns the ingredient cache hash for a store date.
-func ParamsLocationHash(l locations.Location, d time.Time) string {
-	return DefaultParams(&l, d).LocationHash()
-}
-
 func (g *generatorParams) String() string {
 	return fmt.Sprintf("%s on %s", g.Location.ID, g.Date.Format("2006-01-02"))
 }
@@ -77,7 +73,7 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
+	lo.Must(io.WriteString(fnv, cachekey.StaplesSignature(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -91,11 +87,7 @@ func (g *generatorParams) Hash() string {
 
 // so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, g.Location.ID))
-	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
-	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+	return cachekey.ForStore(g.Location.ID, g.Date)
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {

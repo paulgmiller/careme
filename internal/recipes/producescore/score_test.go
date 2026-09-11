@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,7 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	seedProduceScoreIngredients(t, c, loc, today, todayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score := NewCachedProduceScorer(c, testLocationHash).ProduceScore(t.Context(), *loc)
+	score := NewCachedProduceScorer(c).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
 	assert.Equal(t, 1, *score)
@@ -41,7 +42,7 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	seedProduceScoreIngredients(t, c, loc, yesterday, yesterdayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score := NewCachedProduceScorer(c, testLocationHash).ProduceScore(t.Context(), *loc)
+	score := NewCachedProduceScorer(c).ProduceScore(t.Context(), *loc)
 
 	require.NotNil(t, score)
 	assert.Equal(t, 1, *score)
@@ -52,7 +53,7 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 	loc := testProduceScoreLocation()
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
 
-	score := NewCachedProduceScorer(c, testLocationHash).ProduceScore(t.Context(), *loc)
+	score := NewCachedProduceScorer(c).ProduceScore(t.Context(), *loc)
 
 	assert.Nil(t, score)
 }
@@ -68,7 +69,7 @@ func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
 			cache := &canceledIngredientCache{err: contextErr}
 			loc := testProduceScoreLocation()
 
-			score := NewCachedProduceScorer(cache, testLocationHash).ProduceScore(t.Context(), *loc)
+			score := NewCachedProduceScorer(cache).ProduceScore(t.Context(), *loc)
 
 			assert.Nil(t, score)
 			assert.Equal(t, 1, cache.calls, "should not try yesterday after cancellation")
@@ -117,7 +118,7 @@ func repeatGradedIngredients(score, count int) []ai.InputIngredient {
 
 func seedProduceScoreIngredients(t *testing.T, c *testIngredientCache, loc *locations.Location, date time.Time, ingredients []ai.InputIngredient) {
 	t.Helper()
-	c.ingredients[testLocationHash(*loc, date)] = ingredients
+	c.ingredients[cachekey.ForStore(loc.ID, date)] = ingredients
 }
 
 func withNow(t *testing.T, now time.Time) {
@@ -139,10 +140,6 @@ type canceledIngredientCache struct {
 func (c *canceledIngredientCache) IngredientsFromCache(context.Context, string) ([]ai.InputIngredient, error) {
 	c.calls++
 	return nil, errors.Join(errors.New("cache read failed"), c.err)
-}
-
-func testLocationHash(loc locations.Location, date time.Time) string {
-	return loc.ID + "/" + date.Format("2006-01-02")
 }
 
 type testIngredientCache struct {

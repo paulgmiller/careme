@@ -117,7 +117,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache), recipes.ParamsLocationHash))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 

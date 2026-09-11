@@ -89,7 +89,7 @@ func main() {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore), recipes.ParamsLocationHash))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore)))
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
