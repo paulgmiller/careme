@@ -89,7 +89,7 @@ func main() {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore)))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore), recipes.ParamsLocationHash))
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
@@ -155,7 +155,7 @@ func scoreLocations(
 		}
 
 		row.IngredientCount = len(ingredients)
-		row.ProduceScore = scorer.ProduceScore(ctx, loc, recipes.ParamsLocationHash)
+		row.ProduceScore = scorer.ProduceScore(ctx, loc)
 		return row, nil
 	})
 }

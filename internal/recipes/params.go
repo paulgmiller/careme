@@ -62,7 +62,7 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	}
 }
 
-// should go away if params gets its own pacakge? needed by produce score.
+// ParamsLocationHash returns the ingredient cache hash for a store date.
 func ParamsLocationHash(l locations.Location, d time.Time) string {
 	return DefaultParams(&l, d).LocationHash()
 }
@@ -123,18 +123,15 @@ func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*g
 	if err != nil {
 		return nil, err
 	}
-	now := nowFn()
-	dateStr := r.FormValue("date")
-	if dateStr != "" {
-		parsedDate, err := time.Parse("2006-01-02", dateStr)
+	date, err := locations.StoreToDate(ctx, nowFn(), l)
+	if err != nil {
+		return nil, err
+	}
+	if dateStr := r.FormValue("date"); dateStr != "" {
+		date, err = time.ParseInLocation("2006-01-02", dateStr, date.Location())
 		if err != nil {
 			return nil, err
 		}
-		now = parsedDate
-	}
-	date, err := locations.StoreToDate(ctx, now, l)
-	if err != nil {
-		return nil, err
 	}
 
 	p := DefaultParams(l, date)
