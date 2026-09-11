@@ -153,6 +153,8 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		menuResponse := plan.ResponseRef()
 
+		//this is gross shows you why samber lo passes and index.
+		//could just give plan a hash and map on that.
 		results, err := parallelism.MapWithErrors(lo.Range(len(plan.Plans)), func(index int) (*ai.Recipe, error) {
 			plan := plan.Plans[index]
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
@@ -167,12 +169,14 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
+			//write out a recipe ready here but don't make it savable till critique?
 			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 			if err != nil {
 				return nil, err
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
-				return nil, fmt.Errorf("publish ready recipe: %w", err)
+				//going to be able to reload.
+				slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index)
 			}
 			return final, nil
 		})
@@ -248,6 +252,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
+		//write out a recipe ready here but don't make it savable till critique?
 		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		if err != nil {
 			return nil, err
@@ -351,7 +356,6 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", c.OverallScore)
-	// going to overwrite other statuses
 	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
 
 	// panic?

@@ -154,7 +154,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 				GenerationFailed: progress.Status.Failed != "",
 				Pending:          true,
 				SlotID:           fmt.Sprintf("shopping-slot-%d", i),
-				Recipe:           ai.Recipe{Title: slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient, Description: slot.Plan.Technique},
+				Recipe:           ai.Recipe{Title: slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient, Description: slot.Plan.DishFormat},
 			})
 		}
 		for _, recipe := range p.Saved {

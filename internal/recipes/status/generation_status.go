@@ -71,6 +71,8 @@ func IsValidID(id string) bool {
 }
 
 type Store struct {
+	//only upodate, and recipe ready use mutex. Rest have single caller.
+	// Need to replace with etags
 	mu    sync.Mutex
 	cache cache.Cache
 	now   func() time.Time
@@ -83,16 +85,12 @@ func NewStore(c cache.Cache) *Store {
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash string) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
 	})
 }
 
 func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
 	if err == nil {
 		return fmt.Errorf("generation failure is required")
 	}
@@ -123,8 +121,6 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 }
 
 func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
 	newHash = strings.TrimSpace(newHash)
 	if newHash == "" {
 		return fmt.Errorf("completed generation hash is required")
@@ -149,8 +145,6 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 
 // Plan publishes placeholders before any recipe workers start.
 func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
 	stored, err := ss.load(ctx, hash)
 	if err != nil {
 		return err
@@ -166,6 +160,7 @@ func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) e
 }
 
 // RecipeReady publishes only the persisted result of generation and revision.
+// Is index the best way to do this? Seems sketchy. Match plan instead?
 func (ss *Store) RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
