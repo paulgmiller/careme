@@ -8,13 +8,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-	"careme/internal/locations/geo"
 
 	"github.com/samber/lo"
 )
@@ -22,7 +20,6 @@ import (
 const (
 	legacyRecipeHashSeed      = "recipe"
 	legacyIngredientsHashSeed = "ingredients"
-	storeDayStartHour         = 9
 )
 
 var nowFn = time.Now
@@ -63,6 +60,11 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 		Date:     date, // shave time
 		Location: l,
 	}
+}
+
+// should go away if params gets its own pacakge? needed by produce score.
+func ParamsLocationHash(l locations.Location, d time.Time) string {
+	return DefaultParams(&l, d).LocationHash()
 }
 
 func (g *generatorParams) String() string {
@@ -121,58 +123,22 @@ func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*g
 	if err != nil {
 		return nil, err
 	}
-	storeLoc, err := resolveStoreTimeLocation(ctx, l)
-	if err != nil {
-		return nil, err
-	}
+	now := nowFn()
 	dateStr := r.FormValue("date")
-	date := defaultRecipeDate(nowFn(), storeLoc)
 	if dateStr != "" {
-		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
+		parsedDate, err := time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			return nil, err
 		}
-		date = parsedDate
+		now = parsedDate
+	}
+	date, err := locations.StoreToDate(ctx, now, l)
+	if err != nil {
+		return nil, err
 	}
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.FormValue("instructions")
 
 	return p, nil
-}
-
-func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {
-	if l == nil {
-		return nil, fmt.Errorf("nil location")
-	}
-	if l.Lat == nil || l.Lon == nil {
-		return nil, fmt.Errorf("location %s has no coordinates", l.ID)
-	}
-	tzName, ok := geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
-
-	if !ok {
-		return nil, fmt.Errorf("unable to estimate timezone for location %s", l.ID)
-	}
-	storeLoc, err := time.LoadLocation(tzName)
-	if err != nil {
-		slog.ErrorContext(ctx, "invalid estimated timezone", "location_id", l.ID, "timezone", tzName, "error", err)
-		return nil, err
-	}
-	return storeLoc, nil
-}
-
-func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (time.Time, error) {
-	tz, err := resolveStoreTimeLocation(ctx, l)
-	if err != nil {
-		return now, err
-	}
-	return defaultRecipeDate(now, tz), nil
-}
-
-func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
-	localNow := now.In(storeLoc)
-	if localNow.Hour() < storeDayStartHour {
-		localNow = localNow.AddDate(0, 0, -1)
-	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
 }

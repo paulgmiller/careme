@@ -20,6 +20,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/recipes"
+	"careme/internal/recipes/producescore"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -88,7 +89,7 @@ func main() {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, recipes.NewCachedProduceScorer(recipes.IO(cacheStore)))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore)))
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
@@ -131,7 +132,7 @@ func scoreLocations(
 	limit int,
 	hasInventory inventoryLookup,
 	staples staplesFetcher,
-	scorer *recipes.CachedProduceScorer,
+	scorer *producescore.CachedProduceScorer,
 ) ([]scoreRow, error) {
 	selected := topLocations(locs, limit)
 	return parallelism.MapWithErrors(selected, func(loc locations.Location) (scoreRow, error) {
@@ -143,7 +144,7 @@ func scoreLocations(
 			return row, nil
 		}
 
-		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
+		date, err := locations.StoreToDate(ctx, time.Now(), &loc)
 		if err != nil {
 			return row, err
 		}
@@ -154,7 +155,7 @@ func scoreLocations(
 		}
 
 		row.IngredientCount = len(ingredients)
-		row.ProduceScore = scorer.ProduceScore(ctx, loc)
+		row.ProduceScore = scorer.ProduceScore(ctx, loc, recipes.ParamsLocationHash)
 		return row, nil
 	})
 }

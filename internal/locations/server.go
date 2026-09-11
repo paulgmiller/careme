@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"careme/internal/auth"
 	"careme/internal/guest"
 	"careme/internal/httpx"
 	"careme/internal/locations/geo"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/recipes"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/templates"
@@ -35,7 +38,7 @@ type locationServer struct {
 }
 
 type produceScoreLookup interface {
-	ProduceScore(ctx context.Context, loc Location) *int
+	ProduceScore(context.Context, Location, func(locationtypes.Location, time.Time) string) *int
 }
 
 func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
@@ -179,7 +182,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		if l.produceScores != nil && supportsStaples && scored < 10 {
 			scored++
 			wg.Go(func() {
-				row.ProduceScore = l.produceScores.ProduceScore(ctx, loc)
+				row.ProduceScore = l.produceScores.ProduceScore(ctx, loc, recipes.ParamsLocationHash)
 			})
 		}
 		rows = append(rows, row)

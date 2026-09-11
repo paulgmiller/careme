@@ -190,7 +190,8 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded))
+	// "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
@@ -279,7 +280,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 		if err != nil {
 			return 0, err
 		}
-		date, err := StoreToDate(ctx, nowFn(), store)
+		date, err := locations.StoreToDate(ctx, nowFn(), store)
 		if err != nil {
 			return 0, err
 		}

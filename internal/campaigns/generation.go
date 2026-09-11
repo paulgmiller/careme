@@ -102,7 +102,7 @@ func (s *Service) generateLocation(ctx context.Context, locationID string) error
 	if err != nil {
 		return fmt.Errorf("hydrate location %s: %w", locationID, err)
 	}
-	date, err := recipes.StoreToDate(ctx, time.Now(), loc)
+	date, err := locations.StoreToDate(ctx, time.Now(), loc)
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
 	}

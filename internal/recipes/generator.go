@@ -12,14 +12,13 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/status"
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-const IngredientGradeCutoff = 6
 
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
@@ -135,7 +134,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 			// TODO make configurable?
-			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
+			return ing.Grade == nil || ing.Grade.Score > producescore.IngredientGradeCutoff
 		})
 		ingMap := inputIngredientMap(ingredients)
 		replacmentCount := max(len(p.Dismissed), 1) // if no dismissed then just regenerate one and hope for better, if dismissed then regenerate all dismissed
@@ -185,7 +184,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade.GetScore() > IngredientGradeCutoff
+		return ing.Grade.GetScore() > producescore.IngredientGradeCutoff
 	})
 	ingMap := inputIngredientMap(ingredients)
 
