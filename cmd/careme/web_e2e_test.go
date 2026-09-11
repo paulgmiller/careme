@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -54,7 +55,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	initialRecipesURL := mustStartRecipeGeneration(t, client, srv.URL+"/recipes", url.Values{
 		"location": {locationID},
 	})
-	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
+	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectProgress*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
 	recipesHash := extractRecipesHash(t, recipesBody)
@@ -82,7 +83,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	if !strings.HasPrefix(finalizeRedirect, "/recipes?") {
 		t.Fatalf("expected finalize redirect to /recipes, got %q", finalizeRedirect)
 	}
-	_, finalizedBody := followUntilRecipes(t, client, srv.URL+finalizeRedirect, false /*expectSpinner*/)
+	_, finalizedBody := followUntilRecipes(t, client, srv.URL+finalizeRedirect, false /*expectProgress*/)
 	recipeHashes = extractRecipeHashes(t, finalizedBody)
 	if len(recipeHashes) != 1 {
 		t.Fatalf("expected finalized page to show 1 recipe, got %d", len(recipeHashes))
@@ -202,7 +203,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore))
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
 	locationStorage, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
@@ -373,11 +374,11 @@ func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL strin
 	return redirect
 }
 
-func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
+func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectProgress bool) (string, string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	current := startURL
-	sawSpinner := false
+	sawProgress := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for recipes page starting at %s", startURL)
@@ -390,8 +391,8 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 			t.Fatalf("failed to close response body: %v", err)
 		}
 
-		if isSpinner(body) {
-			sawSpinner = true
+		if isGenerationProgress(body) {
+			sawProgress = true
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -400,16 +401,16 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 			t.Fatalf("expected recipes page 200, got %d: %s", resp.StatusCode, body)
 		}
 
-		if sawSpinner != expectSpinner {
-			t.Fatal("expected spinner but never got one")
+		if sawProgress != expectProgress {
+			t.Fatal("expected generation progress but never got it")
 		}
 
 		return current, body
 	}
 }
 
-func isSpinner(body string) bool {
-	return strings.Contains(body, "<title>Generating") || strings.Contains(body, "Please wait")
+func isGenerationProgress(body string) bool {
+	return strings.Contains(body, `hx-trigger="every 1s"`)
 }
 
 func extractLocationID(t *testing.T, body string) string {
