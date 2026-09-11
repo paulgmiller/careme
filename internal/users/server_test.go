@@ -387,7 +387,7 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, `/static/htmx@2.0.8.js`) {
+	if !strings.Contains(body, `/static/htmx@2.0.10.js`) {
 		t.Fatalf("expected user page to include htmx script, got body: %s", body)
 	}
 	if !strings.Contains(body, `Cooked Pasta</a> <span aria-label="Rated 4 stars" title="Rated 4 stars">⭐⭐⭐⭐</span>`) {
