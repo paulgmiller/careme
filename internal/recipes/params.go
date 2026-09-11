@@ -8,13 +8,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
-	"careme/internal/locations/geo"
 
 	"github.com/samber/lo"
 )
@@ -22,7 +21,6 @@ import (
 const (
 	legacyRecipeHashSeed      = "recipe"
 	legacyIngredientsHashSeed = "ingredients"
-	storeDayStartHour         = 9
 )
 
 var nowFn = time.Now
@@ -75,7 +73,7 @@ func (g *generatorParams) Hash() string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
+	lo.Must(io.WriteString(fnv, cachekey.StaplesSignature(g.Location.ID)))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -89,11 +87,7 @@ func (g *generatorParams) Hash() string {
 
 // so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, g.Location.ID))
-	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, staplesSignatureForLocation(g.Location.ID)))
-	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+	return cachekey.ForStore(g.Location.ID, g.Date)
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
@@ -121,58 +115,19 @@ func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*g
 	if err != nil {
 		return nil, err
 	}
-	storeLoc, err := resolveStoreTimeLocation(ctx, l)
+	date, err := locations.StoreToDate(ctx, nowFn(), l)
 	if err != nil {
 		return nil, err
 	}
-	dateStr := r.FormValue("date")
-	date := defaultRecipeDate(nowFn(), storeLoc)
-	if dateStr != "" {
-		parsedDate, err := time.ParseInLocation("2006-01-02", dateStr, storeLoc)
+	if dateStr := r.FormValue("date"); dateStr != "" {
+		date, err = time.ParseInLocation("2006-01-02", dateStr, date.Location())
 		if err != nil {
 			return nil, err
 		}
-		date = parsedDate
 	}
 
 	p := DefaultParams(l, date)
 	p.Instructions = r.FormValue("instructions")
 
 	return p, nil
-}
-
-func resolveStoreTimeLocation(ctx context.Context, l *locations.Location) (*time.Location, error) {
-	if l == nil {
-		return nil, fmt.Errorf("nil location")
-	}
-	if l.Lat == nil || l.Lon == nil {
-		return nil, fmt.Errorf("location %s has no coordinates", l.ID)
-	}
-	tzName, ok := geo.TimezoneNameForCoordinates(geo.Coordinate{Lat: *l.Lat, Lon: *l.Lon})
-
-	if !ok {
-		return nil, fmt.Errorf("unable to estimate timezone for location %s", l.ID)
-	}
-	storeLoc, err := time.LoadLocation(tzName)
-	if err != nil {
-		slog.ErrorContext(ctx, "invalid estimated timezone", "location_id", l.ID, "timezone", tzName, "error", err)
-		return nil, err
-	}
-	return storeLoc, nil
-}
-
-func StoreToDate(ctx context.Context, now time.Time, l *locations.Location) (time.Time, error) {
-	tz, err := resolveStoreTimeLocation(ctx, l)
-	if err != nil {
-		return now, err
-	}
-	return defaultRecipeDate(now, tz), nil
-}
-
-func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
-	localNow := now.In(storeLoc)
-	if localNow.Hour() < storeDayStartHour {
-		localNow = localNow.AddDate(0, 0, -1)
-	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
 }

@@ -1,4 +1,4 @@
-package recipes
+package producescore
 
 import (
 	"context"
@@ -8,27 +8,36 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
+	locationtypes "careme/internal/locations/types"
 )
 
-type CachedProduceScorer struct {
-	cache ingredientio
+const IngredientGradeCutoff = 6
+
+var nowFn = time.Now
+
+type ingredientCache interface {
+	IngredientsFromCache(context.Context, string) ([]ai.InputIngredient, error)
 }
 
-func NewCachedProduceScorer(c ingredientio) *CachedProduceScorer {
+type CachedProduceScorer struct {
+	cache ingredientCache
+}
+
+func NewCachedProduceScorer(c ingredientCache) *CachedProduceScorer {
 	return &CachedProduceScorer{cache: c}
 }
 
-func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locations.Location) *int {
-	date, err := StoreToDate(ctx, nowFn(), &loc)
+func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtypes.Location) *int {
+	date, err := locations.StoreToDate(ctx, nowFn(), &loc)
 	if err != nil {
 		slog.WarnContext(ctx, "bad store date", "zip", loc.ZipCode)
 		return nil
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		params := DefaultParams(&loc, candidate)
-		ingredients, err := s.cache.IngredientsFromCache(ctx, params.LocationHash())
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate))
 		if err == nil {
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score

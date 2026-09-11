@@ -35,7 +35,7 @@ type locationServer struct {
 }
 
 type produceScoreLookup interface {
-	ProduceScore(ctx context.Context, loc Location) *int
+	ProduceScore(context.Context, Location) *int
 }
 
 func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage userLookup, produceScores produceScoreLookup) *locationServer {

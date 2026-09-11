@@ -23,6 +23,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
@@ -116,7 +117,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 

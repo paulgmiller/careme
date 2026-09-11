@@ -123,7 +123,7 @@ func saveAdvertisedParams(t *testing.T, c cache.Cache) []string {
 	for _, campaign := range campaigns.AdvertisedRecipeLocations() {
 		loc, err := (sitemapLocationLookup{}).GetLocationByID(ctx, campaign.Location.ID)
 		require.NoError(t, err)
-		date, err := recipes.StoreToDate(ctx, time.Now(), loc)
+		date, err := locations.StoreToDate(ctx, time.Now(), loc)
 		require.NoError(t, err)
 		params := recipes.DefaultParams(loc, date)
 		require.NoError(t, rio.SaveParams(ctx, params))

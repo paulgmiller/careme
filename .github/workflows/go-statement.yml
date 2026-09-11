@@ -1,0 +1,35 @@
+name: Go statement diff
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  statements:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: go install github.com/paulgmiller/go-statement@latest
+
+      - name: Report statement diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          go-statement diff "$BASE_SHA...HEAD" > statement-diff.txt
+          cat statement-diff.txt
+          {
+            echo '### Go statement diff'
+            echo '```text'
+            cat statement-diff.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
