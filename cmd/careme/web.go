@@ -13,6 +13,7 @@ import (
 	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/ai"
+	"careme/internal/appredirect"
 	"careme/internal/auth"
 	"careme/internal/campaigns"
 	"careme/internal/config"
@@ -22,7 +23,9 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/prompts"
+	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
@@ -64,6 +67,7 @@ func runServer(cfg *config.Config, addr string) error {
 	authClient.Register(appRoutes)
 	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
+	appredirect.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
@@ -92,7 +96,7 @@ func runServer(cfg *config.Config, addr string) error {
 		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(critiquer)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, "TODOMODEL", aiHTTPClient, prompts.NewCacheRecorder(cache))
+		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
@@ -101,7 +105,7 @@ func runServer(cfg *config.Config, addr string) error {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
-		ss := recipes.StatusStore(cache)
+		ss := status.NewStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
@@ -113,7 +117,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -133,7 +137,6 @@ func runServer(cfg *config.Config, addr string) error {
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
@@ -163,6 +166,14 @@ func runServer(cfg *config.Config, addr string) error {
 		data := templates.NewPrivacyPageData(seasons.GetCurrentStyle())
 		if err := templates.Privacy.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "privacy template execute error", "error", err)
+			http.Error(w, "template error", http.StatusInternalServerError)
+		}
+	})
+	appRoutes.HandleFunc("GET /temperature-guide", func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		data := templates.NewTemperatureGuidePageData(seasons.GetCurrentStyle())
+		if err := templates.TemperatureGuide.Execute(w, data); err != nil {
+			slog.ErrorContext(ctx, "temperature guide template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})

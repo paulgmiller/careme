@@ -109,7 +109,7 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 			slog.ErrorContext(ctx, "failed to hydrate advertised location", "error", err, "location_id", campaign.Location.ID)
 			continue
 		}
-		date, err := recipes.StoreToDate(ctx, time.Now(), loc)
+		date, err := locations.StoreToDate(ctx, time.Now(), loc)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to get date for location", "error", err, "location", loc)
 			continue

@@ -45,7 +45,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to pick wine: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryWine, "model", c.wineModel, responseUsageLogAttr(c.wineModel, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryWine, "model", c.wineModel, responseUsageLogAttr(c.wineModel, resp.Usage, string(resp.ServiceTier)))
 
 	var selection WineSelection
 	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {

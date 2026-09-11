@@ -17,6 +17,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/routing"
+	"careme/internal/static"
 	"careme/internal/templates"
 
 	utypes "careme/internal/users/types"
@@ -310,10 +311,10 @@ func TestHandleUser_RendersBillingPricingTableUnderAccountInformation(t *testing
 		"Account Information",
 		"Subscription",
 		`data-clerk-pricing-table`,
-		`/static/user-clerk-billing.js`,
+		static.AssetPath + `user-clerk-billing.js`,
 	} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("expected user page to include %q, got body: %s", want, body)
+			t.Fatalf("expected user page to include %q, got body: %s, assetpath %s", want, body, static.AssetPath)
 		}
 	}
 	accountIndex := strings.Index(body, "Account Information")
@@ -346,6 +347,10 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 			{Title: "Cooked Three Weeks", Hash: "hash-cooked-three-weeks", CreatedAt: now.Add(-21 * 24 * time.Hour)},
 			{Title: "Saved Three Weeks", Hash: "hash-saved-three-weeks", CreatedAt: now.Add(-21 * 24 * time.Hour)},
 			{Title: "Cooked Five Weeks", Hash: "hash-cooked-five-weeks", CreatedAt: now.Add(-35 * 24 * time.Hour)},
+		},
+		ShoppingLists: []utypes.ShoppingList{
+			{Hash: "recent-shopping-hash", Name: "Neighborhood Market", CompletedAt: now.Add(-time.Hour)},
+			{Hash: "expired-shopping-hash", Name: "Old Market", CompletedAt: now.Add(-8 * 24 * time.Hour)},
 		},
 	}
 	if err := storage.Update(existing); err != nil {
@@ -408,6 +413,25 @@ func TestHandleUser_PastRecipesShowCookedIndicator(t *testing.T) {
 	}
 	if !strings.Contains(body, `hx-target="closest li"`) || !strings.Contains(body, `hx-swap="delete"`) {
 		t.Fatalf("expected remove recipe form to delete only the matching row, got body: %s", body)
+	}
+	if !strings.Contains(body, `Recent shopping lists`) || !strings.Contains(body, `/recipes?h=recent-shopping-hash`) {
+		t.Fatalf("expected recent shopping-list link, got body: %s", body)
+	}
+	if !strings.Contains(body, `Neighborhood Market`) {
+		t.Fatalf("expected shopping-list location label, got body: %s", body)
+	}
+	if strings.Contains(body, `Old Market`) || strings.Contains(body, `expired-shopping-hash`) {
+		t.Fatalf("expected expired shopping list to be pruned, got body: %s", body)
+	}
+	if strings.Contains(body, `>recent-shopping-hash<`) {
+		t.Fatalf("expected shopping-list hash not to be visible as link text, got body: %s", body)
+	}
+	updated, err := storage.GetByID(existing.ID)
+	if err != nil {
+		t.Fatalf("failed to reload pruned shopping lists: %v", err)
+	}
+	if len(updated.ShoppingLists) != 1 || updated.ShoppingLists[0].Hash != "recent-shopping-hash" {
+		t.Fatalf("expected expired shopping list to be removed from storage, got %#v", updated.ShoppingLists)
 	}
 }
 

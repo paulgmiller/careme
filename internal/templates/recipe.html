@@ -131,17 +131,23 @@
               </details>
               <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
-                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe or drag a step aside when it’s done. ↔</p>
+                <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe a step aside or click its number when it’s done.</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
                   {{range $index, $instruction := .InstructionsHTML}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
                     <div class="flex items-start gap-3">
-                      <span class="w-5 shrink-0 text-right" data-recipe-step-number>{{InstructionNumber $index}}.</span>
+                      <button type="button"
+                              class="w-5 shrink-0 cursor-pointer text-right transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
+                              data-recipe-step-number
+                              data-recipe-step-done
+                              aria-label="Mark step {{InstructionNumber $index}} done"
+                              title="Mark step done">{{InstructionNumber $index}}.</button>
                       <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{$instruction}}</div>
                     </div>
                   </li>
                   {{end}}
                 </ol>
+                {{template "temperature_guide_link" .}}
                 <button type="button"
                         class="print-hidden mt-3 hidden text-sm font-semibold text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
                         data-recipe-step-undo>
@@ -177,11 +183,12 @@
                   hx-on::response-error="document.getElementById('question-error').classList.remove('hidden');"
                   class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask Careme</label>
-              <input id="question"
-                     type="text"
+              <textarea id="question"
+                     rows="1"
                      name="question"
                      placeholder="e.g. Can I swap the protein?"
-                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                     style="field-sizing: content; min-height: 2.625rem; max-height: 12rem; overflow-y: auto;"
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400"></textarea>
               <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
               <input id="question-response-id" type="hidden" name="response_id" value="{{.ResponseID}}" />
               <input id="question-prompt-cache-key" type="hidden" name="prompt_cache_key" value="{{.PromptCacheKey}}" />
@@ -281,9 +288,9 @@
       </div>
     </section>
   </main>
-  <script src="/static/recipe.js"></script>
+  <script src="{{AssetPath}}recipe.js"></script>
   <script src="/static/htmx@2.0.8.js"></script>
-  <script src="/static/share.js"></script>
+  <script src="{{AssetPath}}share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>

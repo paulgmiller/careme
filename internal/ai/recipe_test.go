@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/config"
+
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,7 +149,7 @@ func TestRecipeSerializesMarkdownInstructions(t *testing.T) {
 }
 
 func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	ingredients := schemaObject(t, properties["ingredients"])
 	items := schemaObject(t, ingredients["items"])
@@ -175,7 +177,7 @@ func TestRecipeSchemaLeavesServerOwnedIngredientFieldsOut(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 
 	assert.Contains(t, properties, "properties")
@@ -214,7 +216,7 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 }
 
 func TestRecipeSchemaUsesStringInstructions(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	properties := schemaProperties(t, client.recipeSchema)
 	instructions := schemaObject(t, properties["instructions"])
 	items := schemaObject(t, instructions["items"])
@@ -253,8 +255,15 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
 		`Do not use an unquantified phrase such as "the remaining oil"`,
 		"Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount",
-		"Presalting meat and salting pasta or blanching water season food during cooking.",
-		"Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead.",
+		"1.25% by meat weight for boneless meat",
+		"1.5% by meat weight for bone-in meat including roast chicken",
+		"1% for vegetables and grains",
+		"2% salinity for pasta or vegetable-blanching water",
+		"Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams",
+		"name the salt type because crystal sizes vary",
+		"recommend the doneness that best suits the dish and give one concise target or pull temperature",
+		"Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer.",
+		"Careme provides a separate temperature guide beside the recipe.",
 	} {
 		if !strings.Contains(systemMessage, want) {
 			t.Fatalf("expected system message to contain %q", want)
@@ -263,21 +272,23 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 }
 
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
-	recorder := &capturePromptRecorder{}
-	var requestBody string
-	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if !strings.HasSuffix(req.URL.Path, "/responses") {
-			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
-		}
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
-		}
-		requestBody = string(body)
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
+	for _, effort := range []responses.ReasoningEffort{"", responses.ReasoningEffortLow, responses.ReasoningEffortMedium, responses.ReasoningEffortHigh, responses.ReasoningEffortNone} {
+		t.Run(string(effort), func(t *testing.T) {
+			recorder := &capturePromptRecorder{}
+			var requestBody string
+			client := NewClient(testAIConfig("candidate-model"), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if !strings.HasSuffix(req.URL.Path, "/responses") {
+					t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
+				}
+				body, err := io.ReadAll(req.Body)
+				if err != nil {
+					t.Fatalf("read request body: %v", err)
+				}
+				requestBody = string(body)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body: io.NopCloser(strings.NewReader(fmt.Sprintf(`{
 				"id": "resp-recipe",
 				"object": "response",
 				"created_at": 1778529600,
@@ -296,54 +307,109 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 				}],
 				"usage": {
 					"input_tokens": 20,
-					"input_tokens_details": {"cached_tokens": 15},
+					"input_tokens_details": {"cached_tokens": 15, "cache_write_tokens": 3},
 					"output_tokens": 5,
-					"output_tokens_details": {"reasoning_tokens": 0},
+					"output_tokens_details": {"reasoning_tokens": 2},
 					"total_tokens": 25
 				}
-			}`, defaultRecipeModel))),
-			Request: req,
-		}, nil
-	})}, recorder)
+			}`, "gpt-6-astra"))),
+					Request: req,
+				}, nil
+			})}, recorder).WithRecipeReasoningEffort(effort)
 
-	cacheKey := storeDayPromptCacheKey("store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
-	menu := ResponseRef{ID: "resp-menu-plan", PromptCacheKey: cacheKey}
-	got, err := client.GenerateRecipe(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
-	if err != nil {
-		t.Fatalf("GenerateRecipe returned error: %v", err)
+			cacheKey := storeDayPromptCacheKey("store-123", time.Date(2026, time.August, 4, 0, 0, 0, 0, time.UTC).Format("2006-01-02"))
+			menu := ResponseRef{ID: "resp-menu-plan", PromptCacheKey: cacheKey}
+			got, cost, err := client.GenerateRecipeWithCost(t.Context(), []string{"Cuisine direction for this recipe: Korean."}, menu)
+			if err != nil {
+				t.Fatalf("GenerateRecipe returned error: %v", err)
+			}
+			if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
+				t.Fatalf("unexpected recipe: %+v", got)
+			}
+			assert.InDelta(t, 0.0003225, cost, 1e-10)
+			assert.Equal(t, 35, got.Properties.TotalMinutes)
+			assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
+			if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
+				t.Fatalf("unexpected instructions: %+v", got.Instructions)
+			}
+			if got.PromptCacheKey != cacheKey {
+				t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)
+			}
+			if strings.Contains(requestBody, "Chicken thighs") {
+				t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
+			}
+			assert.Contains(t, requestBody, `"model":"candidate-model"`)
+			assert.Equal(t, "candidate-model", recorder.record.Model)
+			if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
+				t.Fatalf("expected previous response id in request: %s", requestBody)
+			}
+			if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) ||
+				!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
+				t.Fatalf("expected explicit prompt cache configuration: %s", requestBody)
+			}
+			if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
+				t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
+			}
+			if recorder.record == nil || recorder.record.PreviousResponseID != "resp-menu-plan" {
+				t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
+			}
+			var sent map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(requestBody), &sent))
+			if effort == "" {
+				assert.Equal(t, "medium", sent["reasoning"].(map[string]interface{})["effort"])
+			} else {
+				assert.Equal(t, string(effort), sent["reasoning"].(map[string]interface{})["effort"])
+			}
+		})
 	}
-	if got.ResponseID != "resp-recipe" || got.Title != "Korean Chicken" {
-		t.Fatalf("unexpected recipe: %+v", got)
-	}
-	assert.Equal(t, 35, got.Properties.TotalMinutes)
-	assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
-	if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
-		t.Fatalf("unexpected instructions: %+v", got.Instructions)
-	}
-	if got.PromptCacheKey != cacheKey {
-		t.Fatalf("expected recipe to retain prompt cache key %q, got %q", cacheKey, got.PromptCacheKey)
-	}
-	if strings.Contains(requestBody, "Chicken thighs") {
-		t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
-	}
-	if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
-		t.Fatalf("expected previous response id in request: %s", requestBody)
-	}
-	if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) ||
-		!strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
-		t.Fatalf("expected explicit prompt cache configuration: %s", requestBody)
-	}
-	if !strings.Contains(requestBody, "Cuisine direction for this recipe: Korean.") || !strings.Contains(requestBody, "professional chef and recipe developer") {
-		t.Fatalf("expected recipe instructions and system prompt in request: %s", requestBody)
-	}
-	if recorder.record == nil || recorder.record.PreviousResponseID != "resp-menu-plan" {
-		t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
+}
+
+func TestRegenerateAddsExplicitCacheBreakpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		instructions []string
+		wantMessages int
+	}{
+		{"multiple instructions", []string{" less salt ", "", "make it vegetarian", "  "}, 2},
+		{"empty instructions", []string{"  "}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := &capturePromptRecorder{}
+			var sent struct {
+				Input              []json.RawMessage `json:"input"`
+				PreviousResponseID string            `json:"previous_response_id"`
+				PromptCacheKey     string            `json:"prompt_cache_key"`
+			}
+			c := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				require.NoError(t, json.NewDecoder(req.Body).Decode(&sent))
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"id":"resp-after","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"title\":\"Vegetarian dinner\"}"}]}]}`)),
+				}, nil
+			})}, recorder)
+			previous := ResponseRef{ID: "resp-before", PromptCacheKey: "careme:store-day:v1:test"}
+			recipe, err := c.Regenerate(t.Context(), tc.instructions, previous)
+			require.NoError(t, err)
+			assert.Equal(t, "Vegetarian dinner", recipe.Title)
+			assert.Equal(t, previous.PromptCacheKey, recipe.PromptCacheKey)
+			assert.Equal(t, previous.ID, sent.PreviousResponseID)
+			assert.Equal(t, previous.PromptCacheKey, sent.PromptCacheKey)
+			require.Len(t, sent.Input, tc.wantMessages)
+			require.NotNil(t, recorder.record)
+			require.Len(t, recorder.record.Input, tc.wantMessages)
+			for i, input := range sent.Input {
+				wantBreakpoint := i == len(sent.Input)-1
+				assert.Equal(t, wantBreakpoint, strings.Contains(string(input), `"prompt_cache_breakpoint":{"mode":"explicit"}`))
+				assert.Equal(t, wantBreakpoint, recorder.record.Input[i].PromptCacheBreakpoint)
+			}
+		})
 	}
 }
 
 func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 	var requestBody string
-	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
@@ -357,7 +423,7 @@ func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 				"status":"completed","model":%q,
 				"output":[{"id":"msg-question","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Use half as much salt.","annotations":[]}]}],
 				"usage":{"input_tokens":20,"input_tokens_details":{"cached_tokens":15},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":25}
-			}`, defaultRecipeModel))),
+			}`, config.DefaultRecipeModel))),
 			Request: req,
 		}, nil
 	})}, nil)
@@ -380,7 +446,7 @@ func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 }
 
 func TestResponseUsageLogAttr(t *testing.T) {
-	attr := responseUsageLogAttr(defaultRecipeModel, responses.ResponseUsage{
+	attr := responseUsageLogAttr(config.DefaultRecipeModel, responses.ResponseUsage{
 		InputTokens:  1200,
 		OutputTokens: 350,
 		TotalTokens:  1550,
@@ -391,7 +457,7 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		OutputTokensDetails: responses.ResponseUsageOutputTokensDetails{
 			ReasoningTokens: 125,
 		},
-	})
+	}, "default")
 
 	if attr.Key != "usage" {
 		t.Fatalf("unexpected attr key: %s", attr.Key)
@@ -400,6 +466,7 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		t.Fatalf("unexpected attr kind: %v", attr.Value.Kind())
 	}
 	if !reflect.DeepEqual(attr.Value.Group(), []slog.Attr{
+		slog.String("serviceTier", "default"),
 		slog.Int64("inputTokens", 1200),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", 900),
@@ -410,11 +477,11 @@ func TestResponseUsageLogAttr(t *testing.T) {
 		slog.Int64("totalTokens", 1550),
 		slog.Group("spend",
 			slog.String("currency", "USD"),
-			slog.Float64("totalUSD", 0.0127),
-			slog.Float64("inputUSD", 0.0005),
-			slog.Float64("cachedInputUSD", 0.00045),
-			slog.Float64("cacheWriteInputUSD", 0.00125),
-			slog.Float64("outputUSD", 0.0105),
+			slog.Float64("totalUSD", 0.0219),
+			slog.Float64("inputUSD", 0.001),
+			slog.Float64("cachedInputUSD", 0.0009),
+			slog.Float64("cacheWriteInputUSD", 0.0025),
+			slog.Float64("outputUSD", 0.0175),
 		),
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())

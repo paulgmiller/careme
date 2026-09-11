@@ -122,13 +122,3 @@ func TestNormalizeLegacyRecipeHash(t *testing.T) {
 		t.Fatalf("expected canonical hash %q not to be treated as legacy", hash)
 	}
 }
-
-func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic for unknown location")
-		}
-	}()
-
-	_ = staplesSignatureForLocation("loc-unknown")
-}

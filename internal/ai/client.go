@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -17,18 +19,21 @@ import (
 )
 
 type client struct {
-	recipeSchema   map[string]any
-	wineSchema     map[string]any
-	menuSchema     map[string]any
-	model          string
-	wineModel      string
-	oai            openai.Client
-	promptRecorder PromptRecorder
+	serviceTier           responses.ResponseNewParamsServiceTier
+	recipeReasoningEffort responses.ReasoningEffort
+	recipeSchema          map[string]any
+	wineSchema            map[string]any
+	menuSchema            map[string]any
+	model                 openai.ResponsesModel
+	imageModel            openai.ImageModel
+	wineModel             string
+	oai                   openai.Client
+	promptRecorder        PromptRecorder
 }
 
-// ignoring model for now.
-func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	// ignor model for now.
+func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
+	model := strings.TrimSpace(cfg.RecipeModel)
+	imageModel := strings.TrimSpace(cfg.ImageModel)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
 	}
@@ -49,21 +54,31 @@ func NewClient(apiKey, _ string, httpClient *http.Client, promptRecorder PromptR
 	var menu map[string]any
 	_ = json.Unmarshal(menuSchemaJson, &menu)
 
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
 	aiClient := openai.NewClient(opts...)
 
 	return &client{
+		serviceTier:    cfg.ServiceTier,
 		oai:            aiClient,
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
-		model:          defaultRecipeModel,
+		model:          model,
+		imageModel:     imageModel,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
+}
+
+// WithRecipeReasoningEffort returns a copy configured with an explicit effort for
+// GenerateRecipe. An empty effort preserves the production medium default.
+func (c *client) WithRecipeReasoningEffort(effort responses.ReasoningEffort) *client {
+	configured := *c
+	configured.recipeReasoningEffort = effort
+	return &configured
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {

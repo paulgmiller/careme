@@ -19,11 +19,8 @@ import (
 )
 
 const (
-	gpt56Sol   = "gpt-5.6-sol"
 	gpt56Terra = "gpt-5.6-terra"
 	gpt56Luna  = "gpt-5.6-luna"
-
-	defaultRecipeModel = gpt56Sol
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
@@ -149,7 +146,8 @@ type QuestionResponse struct {
 	PromptCacheKey string
 }
 
-// edited out. Which recipe should be richer?!
+const saltSeasoningStandard = `Use these salt starting points when quantities permit calculation: 1.25% by meat weight for boneless meat, 1.5% by meat weight for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water. Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams, and name the salt type because crystal sizes vary. Presalt meat and salt pasta or blanching water at the proper cooking stage rather than relying on salt or salty ingredients added later. Account for ingredients that are already brined or cured and for requests to reduce sodium.`
+
 const systemMessage = `
 You are a professional chef and recipe developer helping working families cook varied weeknight dinners.
 
@@ -162,7 +160,8 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
 - Pantry items are allowed when common and inexpensive.
-- Presalting meat and salting pasta or blanching water season food during cooking. Do not reduce or omit those applications merely because salt or salty ingredients are added later; adjust finishing salt instead. Account for meat that is already brined or cured and for user requests to reduce sodium.
+- ` + saltSeasoningStandard + `
+- When doneness matters, recommend the doneness that best suits the dish and give one concise target or pull temperature, plus a brief rest when useful. Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer. Careme provides a separate temperature guide beside the recipe.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
 - Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
 
@@ -175,7 +174,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving.
 - properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other. Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide. Do not include no_cook with another method.
 - health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
-- ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Leave id empty only for pantry items or ingredients not present in the TSV. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
+- ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Use the catalog match even for common pantry staples such as garlic; leave id empty only when the ingredient is not present in the TSV. Keep cooking water (including reserved pasta water) out of ingredients; give its amount where needed in instructions. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps.
   Each instruction may use plain text and, when helpful, Markdown bullet lists. When measuring, preparing, or combining more than three ingredients is easier to scan as a list, place a "- " bullet list at the point those ingredients enter the action. Put a blank line before the first bullet and after the final bullet so surrounding prose stays outside the list. Give each bullet's exact amount and preparation, and continue with prose after the list when the action continues. Do not use lists for cooking, resting, serving, plating, one primary ingredient, or repeating an established component. Do not use HTML or other Markdown.
 Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet. Once quantified ingredients have been made into a named mixture or prepared component, later steps should refer to that component by name without restating its ingredients or their amounts. When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients. Do not use an unquantified phrase such as "the remaining oil"; write the amount, such as "the remaining 1 tablespoon oil."
@@ -190,7 +189,7 @@ Cross-check every ingredient mention in instruction prose and bullets for an exa
 Do not include these checks in the output.`
 
 func responseToRecipe(ctx context.Context, category, model, promptCacheKey string, resp *responses.Response) (*Recipe, error) {
-	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, responseUsageLogAttr(model, resp.Usage, string(resp.ServiceTier)))
 	var recipe Recipe
 	if err := json.Unmarshal([]byte(resp.OutputText()), &recipe); err != nil {
 		return nil, fmt.Errorf("failed to parse AI response: %w", err)
@@ -210,10 +209,16 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		return nil, fmt.Errorf("response ID is required for regeneration")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
+	if len(promptMessages) > 0 {
+		// Cache the expanded conversation for subsequent regenerations and questions.
+		promptMessages[len(promptMessages)-1].PromptCacheBreakpoint = true
+	}
 	messages := messagesToInput(promptMessages)
 
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -236,13 +241,36 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
+	recipe, _, err := c.generateRecipe(ctx, instructions, menu)
+	return recipe, err
+}
+
+// GenerateRecipeWithCost returns a recipe and its estimated generation cost in USD.
+// Pricing must be configured for the response model and usage must be valid.
+// Token details are logged, not added to the recipe.
+func (c *client) GenerateRecipeWithCost(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, float64, error) {
+	recipe, resp, err := c.generateRecipe(ctx, instructions, menu)
+	if err != nil {
+		return nil, 0, err
+	}
+	usage := resp.Usage
+	cost, err := estimateResponseCostUSD(resp.Model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)
+	if err != nil {
+		return nil, 0, fmt.Errorf("generation cost: %w", err)
+	}
+	return recipe, cost, nil
+}
+
+func (c *client) generateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, *responses.Response, error) {
 	menu.ID = strings.TrimSpace(menu.ID)
 	if menu.ID == "" {
-		return nil, fmt.Errorf("response ID is required for menu response generation")
+		return nil, nil, fmt.Errorf("response ID is required for menu response generation")
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(menu.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		Instructions: openai.String(systemMessage),
@@ -254,13 +282,17 @@ func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu
 		PromptCacheKey:     openai.String(menu.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
+	if c.recipeReasoningEffort != "" {
+		params.Reasoning = responses.ReasoningParam{Effort: c.recipeReasoningEffort}
+	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
+	recipe, err := responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
+	return recipe, resp, err
 }
 
 func (c *client) AskQuestion(ctx context.Context, question string, previous ResponseRef) (*QuestionResponse, error) {
@@ -271,6 +303,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 
 	params := responses.ResponseNewParams{
 		Model:        c.model,
+		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},
@@ -285,7 +318,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.model, responseUsageLogAttr(c.model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.model, responseUsageLogAttr(c.model, resp.Usage, string(resp.ServiceTier)))
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
 		return nil, fmt.Errorf("empty response from model")
@@ -300,8 +333,9 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	}, nil
 }
 
-func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr {
+func responseUsageLogAttr(model string, usage responses.ResponseUsage, serviceTier string) slog.Attr {
 	return slog.Group("usage",
+		slog.String("serviceTier", serviceTier),
 		slog.Int64("inputTokens", usage.InputTokens),
 		slog.Group("inputTokensDetails",
 			slog.Int64("cachedTokens", usage.InputTokensDetails.CachedTokens),
@@ -312,7 +346,7 @@ func responseUsageLogAttr(model string, usage responses.ResponseUsage) slog.Attr
 			slog.Int64("reasoningTokens", usage.OutputTokensDetails.ReasoningTokens),
 		),
 		slog.Int64("totalTokens", usage.TotalTokens),
-		estimatedSpendLogAttr(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens)),
+		estimatedSpendLogAttr(responseSpendForTier(estimateOpenAIResponseSpend(model, usage.InputTokens, usage.InputTokensDetails.CachedTokens, usage.InputTokensDetails.CacheWriteTokens, usage.OutputTokens), serviceTier)),
 	)
 }
 

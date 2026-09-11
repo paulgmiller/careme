@@ -11,6 +11,9 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	utypes "careme/internal/users/types"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubEmailFetcher struct {
@@ -61,6 +64,67 @@ func TestStorageGetByIDNotFound(t *testing.T) {
 	if err == nil || err != ErrNotFound {
 		t.Fatalf("GetByID() error = %v, want %v", err, ErrNotFound)
 	}
+}
+
+func TestStorageUpdateKeepsNewestShoppingListForTwoStoreNames(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	now := time.Now().Round(0)
+	user := &utypes.User{
+		ID:          "user-shopping-lists",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+		ShoppingLists: []utypes.ShoppingList{
+			{Hash: "old-market-list", Name: "Market", CompletedAt: now.Add(-6 * 24 * time.Hour)},
+			{Hash: "grocer-list", Name: "Grocer", CompletedAt: now.Add(-2 * time.Hour)},
+			{Hash: "new-market-list", Name: "market", CompletedAt: now},
+			{Hash: "third-list", Name: "Third Store", CompletedAt: now.Add(time.Hour)},
+		},
+	}
+	require.NoError(t, storage.Update(user))
+
+	user, err := storage.GetByID("user-shopping-lists")
+	require.NoError(t, err)
+	require.Len(t, user.ShoppingLists, 2)
+	assert.Equal(t, []string{"Third Store", "market"}, []string{user.ShoppingLists[0].Name, user.ShoppingLists[1].Name})
+	assert.Equal(t, []string{"third-list", "new-market-list"}, []string{user.ShoppingLists[0].Hash, user.ShoppingLists[1].Hash})
+}
+
+func TestStorageUpdatePrunesShoppingListsOlderThanSevenDays(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	now := time.Now()
+	user := &utypes.User{
+		ID:          "user-prune-shopping-lists",
+		Email:       []string{"chef@example.com"},
+		ShoppingDay: time.Saturday.String(),
+		ShoppingLists: []utypes.ShoppingList{
+			{Hash: "expired", Name: "Old Store", CompletedAt: now.Add(-8 * 24 * time.Hour)},
+			{Hash: "current", Name: "Current Store", CompletedAt: now.Add(-6 * 24 * time.Hour)},
+		},
+	}
+	require.NoError(t, storage.Update(user))
+	require.Len(t, user.ShoppingLists, 1)
+	assert.Equal(t, "current", user.ShoppingLists[0].Hash)
+
+	stored, err := storage.GetByID(user.ID)
+	require.NoError(t, err)
+	require.Len(t, stored.ShoppingLists, 1)
+	assert.Equal(t, user.ShoppingLists[0].Hash, stored.ShoppingLists[0].Hash)
+	assert.True(t, user.ShoppingLists[0].CompletedAt.Equal(stored.ShoppingLists[0].CompletedAt))
+}
+
+func TestNormalizeShoppingListsKeepsExactSevenDayBoundary(t *testing.T) {
+	t.Parallel()
+	now := time.Now().Round(0)
+	user := &utypes.User{ShoppingLists: []utypes.ShoppingList{
+		{Hash: "expired", Name: "Old Store", CompletedAt: now.Add(-7*24*time.Hour - time.Nanosecond)},
+		{Hash: "boundary", Name: "Current Store", CompletedAt: now.Add(-7 * 24 * time.Hour)},
+	}}
+
+	require.NoError(t, normalizeShoppingLists(user, now))
+	require.Len(t, user.ShoppingLists, 1)
+	assert.Equal(t, "boundary", user.ShoppingLists[0].Hash)
 }
 
 func TestStorageGetByEmailNotFound(t *testing.T) {

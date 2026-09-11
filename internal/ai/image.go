@@ -19,14 +19,13 @@ const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
 - Home cooked by a above average cook, not a restaurant or food stylist.
 - Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
-- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use a simple dark wood dining table as backdrop.
 - Use natural colors, ordinary cookware or tableware, and realistic portions
 - Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes
 - If the recipe has multiple components, show them plated together
 `
 
 const (
-	recipeImageModel = openai.ImageModelGPTImage2 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
@@ -41,7 +40,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
-		Model:        recipeImageModel,
+		Model:        c.imageModel,
 		N:            openai.Int(1),
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
@@ -51,7 +50,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(c.imageModel), imageUsageLogAttr(string(c.imageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}

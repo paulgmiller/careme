@@ -46,13 +46,15 @@ func TestRunEvalReturnsMenuPlanJSON(t *testing.T) {
 		ResponseID:         "resp-menu",
 		PromptCacheKey:     "cache-key",
 	}}
-	ctx := map[string]interface{}{"vars": map[string]interface{}{
-		"location":     map[string]interface{}{"id": "store-1", "state": "WA"},
-		"ingredients":  []interface{}{map[string]interface{}{"id": "chicken", "description": "Chicken Thighs"}},
-		"instructions": "Keep dinner quick",
-		"date":         "2026-08-21",
-		"last_recipes": []interface{}{"Chicken soup"},
-	}}
+	ctx := []byte(`{
+		"vars": {
+			"location": {"id": "store-1", "state": "WA"},
+			"ingredients": [{"id": "chicken", "description": "Chicken Thighs"}],
+			"instructions": "Keep dinner quick",
+			"date": "2026-08-21",
+			"last_recipes": ["Chicken soup"]
+		}
+	}`)
 
 	result, err := runEval(ctx, planner)
 	require.NoError(t, err)
@@ -73,11 +75,15 @@ func TestRunEvalReturnsMenuPlanJSON(t *testing.T) {
 }
 
 func TestRunEvalRejectsInvalidDate(t *testing.T) {
-	result, err := runEval(map[string]interface{}{"vars": map[string]interface{}{
-		"location":    map[string]interface{}{"id": "store-1"},
-		"ingredients": []interface{}{map[string]interface{}{"id": "chicken"}},
-		"date":        "August 21",
-	}}, &stubMenuPlanner{})
+	ctx := []byte(`{
+		"vars": {
+			"location": {"id": "store-1"},
+			"ingredients": [{"id": "chicken"}],
+			"date": "August 21"
+		}
+	}`)
+
+	result, err := runEval(ctx, &stubMenuPlanner{})
 
 	assert.Nil(t, result)
 	require.ErrorContains(t, err, `invalid eval date "August 21"`)
@@ -85,12 +91,23 @@ func TestRunEvalRejectsInvalidDate(t *testing.T) {
 
 func TestRunEvalReturnsPlannerError(t *testing.T) {
 	planner := &stubMenuPlanner{err: errors.New("model unavailable")}
-	result, err := runEval(map[string]interface{}{"vars": map[string]interface{}{
-		"location":    map[string]interface{}{"id": "store-1"},
-		"ingredients": []interface{}{map[string]interface{}{"id": "chicken"}},
-		"date":        "2026-08-21",
-	}}, planner)
+	ctx := []byte(`{
+		"vars": {
+			"location": {"id": "store-1"},
+			"ingredients": [{"id": "chicken"}],
+			"date": "2026-08-21"
+		}
+	}`)
+
+	result, err := runEval(ctx, planner)
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "failed to create menu plan: model unavailable")
+}
+
+func TestRunEvalRejectsInvalidJSON(t *testing.T) {
+	result, err := runEval([]byte(`{"vars":`), &stubMenuPlanner{})
+
+	assert.Nil(t, result)
+	require.ErrorContains(t, err, "failed to decode Promptfoo context")
 }

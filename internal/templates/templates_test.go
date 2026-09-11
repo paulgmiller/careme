@@ -11,10 +11,36 @@ import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/seasons"
+	"careme/internal/static"
 	utypes "careme/internal/users/types"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/html"
 )
+
+func TestRecipeImageURLsUseCloudflareForCaremeHosts(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(
+		t,
+		"/cdn-cgi/image/width=480,quality=75,format=auto,onerror=redirect/recipe/recipe_hash==/image",
+		shoppingRecipeImageURL("https://careme.cooking", hash),
+	)
+	assert.Equal(
+		t,
+		"https://test.careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/recipe_hash==/image",
+		emailRecipeImageURL("https://test.careme.cooking/", hash),
+	)
+}
+
+func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
+	t.Parallel()
+
+	const hash = "recipe_hash=="
+	assert.Equal(t, "/recipe/recipe_hash==/image", shoppingRecipeImageURL("http://localhost:8080", hash))
+	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
+}
 
 func TestClarityScriptIncludesSessionID(t *testing.T) {
 	prev := Clarityproject
@@ -244,7 +270,7 @@ func templateTitle(body string) (string, bool) {
 }
 
 func TestAboutTemplateRendersValidHTML(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -265,12 +291,12 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="faq"`, `id="github"`} {
+	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="install"`, `id="faq"`, `id="github"`} {
 		if !strings.Contains(rendered, sectionID) {
 			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
 		}
 	}
-	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">Install the app</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
 		if !strings.Contains(rendered, heading) {
 			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
 		}
@@ -279,16 +305,25 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 		"https://github.com/paulgmiller/careme/issues/472",
 		"https://www.facebook.com/careme.cooking",
 		"https://bsky.app/profile/northbriton.net",
+		"https://play.google.com/store/apps/details?id=cooking.careme",
 		"https://github.com/paulgmiller/careme",
 	} {
 		if !strings.Contains(rendered, link) {
 			t.Fatalf("about page should include %q link, body: %s", link, rendered)
 		}
 	}
-	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`} {
+	for _, label := range []string{`aria-label="Facebook"`, `aria-label="Instagram coming soon"`, `aria-label="Bluesky"`, `alt="Get it on Google Play"`} {
 		if !strings.Contains(rendered, label) {
 			t.Fatalf("about page should include %s social label, body: %s", label, rendered)
 		}
+	}
+	for _, appCopy := range []string{"keep saved recipes available offline", "Coming soon for Apple"} {
+		if !strings.Contains(rendered, appCopy) {
+			t.Fatalf("about page should include %q app copy, body: %s", appCopy, rendered)
+		}
+	}
+	if !strings.Contains(rendered, "connect with one partner from Your Kitchen") {
+		t.Fatalf("about page should explain partner sharing, body: %s", rendered)
 	}
 	if strings.Contains(rendered, `id="privacy"`) {
 		t.Fatalf("about page should not include old privacy section, body: %s", rendered)
@@ -316,7 +351,7 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 }
 
 func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -352,14 +387,55 @@ func TestPrivacyTemplateRendersGooglePlayDisclosureAndDeletionDetails(t *testing
 	}
 }
 
+func TestTemperatureGuideTemplateRendersChefGuidance(t *testing.T) {
+	if err := Init(&config.Config{}); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := TemperatureGuide.Execute(&buf, NewTemperatureGuidePageData(seasons.GetCurrentStyle())); err != nil {
+		t.Fatalf("TemperatureGuide.Execute() error = %v", err)
+	}
+
+	rendered := buf.String()
+	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
+		t.Fatalf("temperature guide rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
+	}
+	for _, want := range []string{
+		"Heat and doneness",
+		"Beef and lamb",
+		"125 to 130°F",
+		"Pork",
+		"Ground meat",
+		"160°F",
+		"Poultry",
+		"165°F",
+		"Fish and shellfish",
+		"Eggs",
+		"https://www.fda.gov/media/107000/download",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("temperature guide should include %q, body: %s", want, rendered)
+		}
+	}
+	for _, unwanted := range []string{
+		"U.S. safe minimum temperatures",
+		"<table",
+	} {
+		if strings.Contains(rendered, unwanted) {
+			t.Fatalf("temperature guide should not include %q, body: %s", unwanted, rendered)
+		}
+	}
+}
+
 func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -378,7 +454,7 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Ingredients are ready. Building your recipes.",
-		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
+		CurrentPath:     "/recipes?h=abc",
 	}
 
 	var buf bytes.Buffer
@@ -400,7 +476,7 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
-		!strings.Contains(rendered, `hx-get="/recipes?h=abc&amp;start=2026-07-10T00:00:00Z"`) ||
+		!strings.Contains(rendered, `hx-get="/recipes?h=abc"`) ||
 		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
 		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
 	}
@@ -409,11 +485,11 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -471,11 +547,11 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
 	cfg.Clerk.Domain = "clerk.example.com"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})
@@ -490,6 +566,9 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 		ActiveTab         string
 		PastRecipes       []utypes.Recipe
 		ServerSignedIn    bool
+		PartnerEmail      string
+		PartnerRecipes    []utypes.Recipe
+		PartnerStage      string
 	}{
 		Style:          seasons.GetCurrentStyle(),
 		User:           &utypes.User{Email: []string{"chef@example.com"}},
@@ -503,10 +582,13 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 	}
 
 	rendered := buf.String()
+	if !strings.Contains(rendered, "chef@example.com") || !strings.Contains(rendered, `action="/logout"`) || !strings.Contains(rendered, "Sign out") {
+		t.Fatalf("user page should include the signed-in account menu and sign-out action, body: %s", rendered)
+	}
 	if !strings.Contains(rendered, `data-clerk-pricing-table data-clerk-ui-bundle-url="https://clerk.example.com/npm/@clerk/ui@1/dist/ui.browser.js"`) {
 		t.Fatalf("user page should pass Clerk UI bundle URL to billing script, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `<script src="/static/user-clerk-billing.js"></script>`) {
+	if !strings.Contains(rendered, `<script src="`+static.AssetPath+`user-clerk-billing.js"></script>`) {
 		t.Fatalf("user page should load Clerk billing script asset, body: %s", rendered)
 	}
 	if strings.Contains(rendered, `mountPricingTable`) {
@@ -515,7 +597,7 @@ func TestUserTemplateLoadsClerkBillingScriptWhenEnabled(t *testing.T) {
 }
 
 func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -533,7 +615,7 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 		ServerSignedIn:  false,
 		RefreshInterval: "10",
 		StatusMessage:   "Considering ingredients\nHalf Off Spinach",
-		CurrentPath:     "/recipes?h=abc&start=2026-07-10T00:00:00Z",
+		CurrentPath:     "/recipes?h=abc",
 	}
 
 	var buf bytes.Buffer
@@ -551,7 +633,7 @@ func TestSpinTemplatePreservesStatusLineBreaks(t *testing.T) {
 }
 
 func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -577,6 +659,8 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
 		`hx-target="#farmers-market-work"`,
+		`<script type="module" src="` + static.AssetPath + `farmersmarket.js"></script>`,
+		`Large photos are resized before upload`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("farmers market page should include %q, body: %s", want, rendered)
@@ -585,7 +669,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 }
 
 func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -643,7 +727,7 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 }
 
 func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -683,7 +767,7 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 }
 
 func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
-	if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+	if err := Init(&config.Config{}); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 
@@ -739,11 +823,11 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 func TestAuthEstablishTemplateChecksUserExistenceBeforeRedirect(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Clerk.PublishableKey = "pk_test_123"
-	if err := Init(cfg, "dummyhash.css"); err != nil {
+	if err := Init(cfg); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}
 	t.Cleanup(func() {
-		if err := Init(&config.Config{}, "dummyhash.css"); err != nil {
+		if err := Init(&config.Config{}); err != nil {
 			t.Fatalf("cleanup Init() error = %v", err)
 		}
 	})

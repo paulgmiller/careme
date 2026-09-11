@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
 	if err != nil {
@@ -34,7 +35,7 @@ func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
 }
 
 func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 2)
 	if err != nil {
@@ -56,7 +57,7 @@ func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
 }
 
 func TestBuildMenuPlanMessagesExcludesIngredientAisleNumbers(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	ingredients := []InputIngredient{{
 		ProductID:   "asparagus-1",
@@ -74,7 +75,7 @@ func TestBuildMenuPlanMessagesExcludesIngredientAisleNumbers(t *testing.T) {
 }
 
 func TestBuildMenuPlanMessagesIncludesCuisineListInspiration(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 3)
 	if err != nil {
@@ -163,7 +164,7 @@ func TestAlignMenuPlanIngredientsRejectsUnavailableIngredientNames(t *testing.T)
 func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	var requestBodies []string
-	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
@@ -190,6 +191,8 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
 	}
 	for _, requestBody := range requestBodies {
+		assert.Contains(t, requestBody, `"model":"gpt-6-astra"`)
+		assert.Contains(t, requestBody, `"reasoning":{"effort":"medium"}`)
 		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
 			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
 		}
@@ -200,9 +203,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
 		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
 	}
-	if strings.Contains(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
-		t.Fatalf("did not expect a new cache breakpoint on menu regeneration: %s", requestBodies[1])
-	}
+	assert.Equal(t, 1, strings.Count(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`))
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
 	}
@@ -215,7 +216,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 }
 
 func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
 	messages, err := client.buildMenuPlanMessages(location, nil, nil, date, nil, 3)
@@ -229,7 +230,7 @@ func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 }
 
 func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	_, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, nil, nil, time.Now(), nil, 0)
 	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
 		t.Fatalf("expected count error, got %v", err)
@@ -237,8 +238,9 @@ func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 }
 
 func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
+	const model = "candidate-model"
 	recorder := &capturePromptRecorder{}
-	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-create"), recorder)
+	client := NewClient(testAIConfig(model), menuPlanResponseClient(t, "resp-menu-create"), recorder)
 	ingredients := []InputIngredient{
 		{Description: "tofu"},
 		{Description: "Broccoli"},
@@ -254,7 +256,7 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	if recorder.record.ResponseID != "resp-menu-create" {
 		t.Fatalf("unexpected response id: %#v", recorder.record)
 	}
-	if recorder.record.Model != string(recipePlanModel) {
+	if recorder.record.Model != model {
 		t.Fatalf("unexpected model: %#v", recorder.record)
 	}
 	if recorder.record.Instructions != strings.TrimSpace(menuPlanSystemMessage) {
@@ -277,10 +279,8 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
-	for _, message := range messages {
-		if message.PromptCacheBreakpoint {
-			t.Fatalf("did not expect regeneration message cache breakpoint: %#v", messages)
-		}
+	for i, message := range messages {
+		assert.Equal(t, i == len(messages)-1, message.PromptCacheBreakpoint)
 	}
 	body := mustJSON(t, messages)
 	for _, want := range []string{
@@ -331,7 +331,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 }
 
 func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	_, err := client.RegenerateMenuPlan(t.Context(), nil, ResponseRef{ID: "resp-menu"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "menu plan count must be greater than zero") {
 		t.Fatalf("expected count error, got %v", err)
@@ -340,7 +340,7 @@ func TestRegenerateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 
 func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	recorder := &capturePromptRecorder{}
-	client := NewClient("test-key", "ignored", menuPlanResponseClient(t, "resp-menu-after"), recorder)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), menuPlanResponseClient(t, "resp-menu-after"), recorder)
 
 	_, err := client.RegenerateMenuPlan(t.Context(), []string{"less spicy"}, ResponseRef{ID: "resp-menu-before"}, 1)
 	if err != nil {
@@ -356,6 +356,11 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	if !strings.Contains(body, "Build 1 replacement recipe plan(s) by default") || !strings.Contains(body, "less spicy") {
 		t.Fatalf("unexpected recorded regenerate prompt: %s", body)
 	}
+	for i, message := range recorder.record.Input {
+		assert.Equal(t, i == len(recorder.record.Input)-1, message.PromptCacheBreakpoint)
+	}
+	input := mustJSON(t, messagesToInput(recorder.record.Input))
+	assert.Equal(t, 1, strings.Count(input, `"prompt_cache_breakpoint":{"mode":"explicit"}`))
 }
 
 func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
@@ -380,7 +385,7 @@ func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {
 }
 
 func TestMenuPlanSchemaExcludesResponseID(t *testing.T) {
-	client := NewClient("test-key", "ignored", nil, nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	body := mustJSON(t, client.menuSchema)
 	if strings.Contains(body, "response_id") {
 		t.Fatalf("menu plan schema should not expose response_id to the model: %s", body)
@@ -425,7 +430,7 @@ func menuPlanHTTPResponse(req *http.Request, responseID, outputText string) *htt
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, responseID, recipePlanModel, outputText))),
+			}`, responseID, config.DefaultRecipeModel, outputText))),
 		Request: req,
 	}
 }

@@ -44,3 +44,30 @@ tests:
         - id: jasmine-rice
           description: Jasmine Rice
           size: 2 lb
+
+  - description: Preserve long catalog names while honoring vegetarian and equipment constraints
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-09'
+      count: 1
+      instructions: Make it vegetarian, stovetop only, and under 30 minutes.
+      ingredients:
+        - id: tofu
+          description: Simple Truth Organic Extra Firm Tofu Twin Pack
+          size: 16 oz
+        - id: broccoli
+          description: Simple Truth Organic Fresh Broccoli Florets Family Pack
+          size: 12 oz
+        - id: chicken
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Simple Truth Organic Extra Firm Tofu Twin Pack'
+            && recipe.side_vegetable === 'Simple Truth Organic Fresh Broccoli Florets Family Pack';
+        metric: vegetarian-exact-catalog-labels

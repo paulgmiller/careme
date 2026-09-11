@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +55,7 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 		`1 lemon, juiced`,
 		`"Roast until golden."`,
 		`Recipe JSON:`,
-		`Return JSON only using schema_version "recipe-critique-v1".`,
+		`Review this generated recipe for correctness and usefulness to a home cook.`,
 	} {
 		assert.Contains(t, prompt, want)
 	}
@@ -63,6 +65,14 @@ func TestBuildRecipeCritiquePrompt(t *testing.T) {
 	} {
 		assert.NotContains(t, prompt, unwanted)
 	}
+}
+
+func TestRecipeCritiqueUsesConfiguredModel(t *testing.T) {
+	t.Parallel()
+
+	client := NewCritiquer("openrouter-key", config.DefaultCritiqueModel, http.DefaultClient)
+
+	assert.Equal(t, config.DefaultCritiqueModel, client.model)
 }
 
 func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing.T) {
@@ -83,20 +93,56 @@ func TestRecipeCritiqueSystemInstructionChecksPrepFirstAndTotalTiming(t *testing
 	}
 }
 
+func TestRecipeCritiqueSystemInstructionRequiresProviderCompatibleOutput(t *testing.T) {
+	for _, want := range []string{
+		"overall_score must be an integer from 1 through 10",
+		"summary must be a non-empty, concise sentence",
+		"return one valid JSON object only",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+}
+
 func TestRecipeCritiqueSystemInstructionChecksSaltAtTheCorrectStage(t *testing.T) {
 	for _, want := range []string{
-		"1.25% salt by weight for boneless meat",
-		"1.5% for bone-in meat including roast chicken",
+		"1.25% by meat weight for boneless meat",
+		"1.5% by meat weight for bone-in meat including roast chicken",
 		"1% for vegetables and grains",
 		"2% salinity for pasta or vegetable-blanching water",
 		"do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water",
-		"evaluate salt by weight when available rather than assuming equal volume measures across salt types",
-		"if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised",
+		"Present every salt quantity to the user by volume in teaspoons or tablespoons, never in grams",
+		"name the salt type because crystal sizes vary",
+		"reflect substantial underseasoning or oversalting in the overall score",
 	} {
 		assert.Contains(t, recipeCritiqueSystemInstruction, want)
 	}
 	assert.NotContains(t, recipeCritiqueSystemInstruction, "flour")
 	assert.NotContains(t, recipeCritiqueSystemInstruction, "dough")
+}
+
+func TestRecipeCritiqueSystemInstructionKeepsTemperatureGuidanceConcise(t *testing.T) {
+	for _, want := range []string{
+		"recommend the doneness that best suits the dish with one concise target or pull temperature",
+		"Careme's temperature guide as context",
+		"intact beef or lamb 125-130 for medium-rare and 135-140 for medium",
+		"pork loin or chops 140-145 and pork shoulder 195-205",
+		"ground beef, pork, veal, or lamb 160",
+		"all poultry 165 for safety, with breast pulled near 160 and rested to 165",
+		"legs or thighs taken to 175-185",
+		"salmon 125-130 and lean white fish 135-140",
+		"egg dishes 160",
+		"flag instructions to serve ground beef, pork, veal, or lamb below 160, poultry below 165 after any stated rest, or egg dishes below 160 as high-severity safety issues",
+		"unless the recipe gives a validated time-at-temperature method that achieves equivalent safety",
+		"do not use the preferred doneness ranges for intact beef, lamb, pork, or fish as automatic safety cutoffs",
+		"evaluate temperature instructions in the context of the full cooking method, including time at temperature, carryover cooking, and whether the food is an intact or ground cut",
+		"do not flag a temperature merely because it differs from a conventional or government-agency target",
+		"Careme links a separate temperature guide beside the recipe",
+		"treat it as a clarity issue and suggest a concise cooking instruction",
+		"do not name the FDA, USDA, or other government agencies, quote official temperature guidance",
+	} {
+		assert.Contains(t, recipeCritiqueSystemInstruction, want)
+	}
+	assert.NotContains(t, recipeCritiqueSystemInstruction, "overall score below")
 }
 
 func TestParseRecipeCritique(t *testing.T) {
@@ -138,8 +184,9 @@ func TestRecipeCritiqueJSONSchemaTracksStruct(t *testing.T) {
 
 	overallScore, ok := properties["overall_score"].(map[string]any)
 	require.True(t, ok, "expected overall_score schema object, got %#v", properties["overall_score"])
-	assert.Equal(t, float64(1), overallScore["minimum"])
-	assert.Equal(t, float64(10), overallScore["maximum"])
+	assert.Equal(t, "integer", overallScore["type"])
+	assert.NotContains(t, overallScore, "minimum")
+	assert.NotContains(t, overallScore, "maximum")
 }
 
 func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {
@@ -190,9 +237,10 @@ func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {
 		}),
 	})
 
-	got, err := client.CritiqueRecipe(t.Context(), Recipe{Title: "Roast Chicken"})
+	got, cost, err := client.CritiqueRecipeWithCost(t.Context(), Recipe{Title: "Roast Chicken"})
 
 	require.NoError(t, err)
+	assert.Equal(t, 0.00125, cost)
 	assert.Equal(t, 8, got.OverallScore)
 	assert.Equal(t, "Ready to cook.", got.Summary)
 	assert.Equal(t, "anthropic/claude-sonnet-4.5", got.Model)

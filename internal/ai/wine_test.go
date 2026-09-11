@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"careme/internal/config"
 )
 
 func TestNormalizeWineStyle(t *testing.T) {
@@ -84,7 +86,7 @@ func TestBuildWineSelectionPrompt(t *testing.T) {
 }
 
 func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
-	client := NewClient("test-key", "ignored", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			t.Fatalf("read request body: %v", err)

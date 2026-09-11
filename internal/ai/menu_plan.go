@@ -17,8 +17,6 @@ import (
 	"github.com/samber/lo"
 )
 
-const recipePlanModel = defaultRecipeModel
-
 type MenuPlan struct {
 	Plans              []RecipePlan `json:"plans" yaml:"plans"`
 	ChefNoteSuggestion string       `json:"chef_note_suggestion" yaml:"chef_note_suggestion"`
@@ -163,7 +161,9 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	cacheKey := storeDayPromptCacheKey(location.ID, date.Format("2006-01-02"))
 
 	params := responses.ResponseNewParams{
-		Model:        recipePlanModel,
+		Model:        c.model,
+		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
+		ServiceTier:  c.serviceTier,
 		Instructions: openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: messagesToInput(promptMessages),
@@ -179,7 +179,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, cacheKey)
+	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp, cacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,9 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	feedback := fmt.Sprintf("The previous menu plan used an ingredient that was not available: %v. Regenerate the menu plan. Every anchor_ingredient and side_vegetable must exactly match a Description value from the ingredient TSV already provided.", validationErr)
 	promptMessages := buildRegenerateMenuPlanMessages([]string{feedback}, count)
 	params := responses.ResponseNewParams{
-		Model:              recipePlanModel,
+		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		Instructions:       openai.String(menuPlanSystemMessage),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -212,7 +214,7 @@ func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, pr
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, previous.PromptCacheKey)
+	plan, err := responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp, previous.PromptCacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +234,9 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	promptMessages := buildRegenerateMenuPlanMessages(instructions, count)
 
 	params := responses.ResponseNewParams{
-		Model:              recipePlanModel,
+		Model:              c.model,
+		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
+		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
 		// Previous response IDs do not carry over top-level instructions.
 		// https://developers.openai.com/api/docs/guides/text#message-roles-and-instruction-following
@@ -250,7 +254,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToMenuPlan(ctx, aiCategoryMenu, recipePlanModel, resp, previous.PromptCacheKey)
+	return responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp, previous.PromptCacheKey)
 }
 
 func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response, cacheKey string) (*MenuPlan, error) {
@@ -263,7 +267,7 @@ func responseToMenuPlan(ctx context.Context, category, model string, resp *respo
 	}
 	plan.ResponseID = resp.ID
 	plan.PromptCacheKey = cacheKey
-	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", category, "model", model, "plan", lo.Must(json.Marshal(plan)), responseUsageLogAttr(model, resp.Usage, string(resp.ServiceTier)))
 	return &plan, nil
 }
 
@@ -353,5 +357,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 
+	// Cache the expanded conversation for recipes and later menu regenerations.
+	messages[len(messages)-1].PromptCacheBreakpoint = true
 	return messages
 }

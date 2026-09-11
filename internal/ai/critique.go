@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -16,11 +17,12 @@ import (
 
 const (
 	openRouterBaseURL          = "https://openrouter.ai/api/v1"
-	defaultCritiqueModel       = "google/gemini-3.1-pro-preview"
 	recipeCritiqueSchemaV1     = "recipe-critique-v1"
 	openRouterApplicationTitle = "Careme"
 	openRouterApplicationURL   = "https://careme.cooking"
 )
+
+const recipeCritiquePromptFormat = "Review this generated recipe for correctness and usefulness to a home cook.\nRecipe JSON:\n%s"
 
 const recipeCritiqueSystemInstruction = `
 You are a strict recipe editor reviewing AI-generated recipes before they are given to human cooks and used for future fine tuning.
@@ -35,10 +37,17 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do later steps refer concisely to named mixtures or prepared components without needlessly restating their constituent ingredients and amounts
 - do the amounts used across instruction steps agree with each ingredient's total quantity in the ingredient list
 - are the applications of salt, acid, fat, and heat appropriate
-- when quantities permit calculation, use these salt amounts as starting points: 1.25% salt by weight for boneless meat, 1.5% for bone-in meat including roast chicken, 1% for vegetables and grains, and 2% salinity for pasta or vegetable-blanching water
-- do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water; salty ingredients added later may justify reducing finishing salt, but they do not correct food that was underseasoned during cooking
-- account for ingredients that are already brined or cured and user requests to reduce sodium; because salt crystal sizes vary, evaluate salt by weight when available rather than assuming equal volume measures across salt types
-- report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; if it leaves a main component substantially underseasoned or oversalted, keep the overall score below 8 so the recipe is revised
+- ` + saltSeasoningStandard + `
+- when evaluating that standard, do not treat salt added later as a substitute for presalting meat or salting pasta or blanching water; salty ingredients added later may justify reducing finishing salt, but they do not correct food that was underseasoned during cooking
+- report a material deviation from these salt starting points as a flavor issue and suggest a corrected amount at the proper cooking stage; reflect substantial underseasoning or oversalting in the overall score
+- when doneness matters, does the recipe recommend the doneness that best suits the dish with one concise target or pull temperature and a brief rest when useful
+- use this compact version of Careme's temperature guide as context (all temperatures are Fahrenheit): intact beef or lamb 125-130 for medium-rare and 135-140 for medium; pork loin or chops 140-145 and pork shoulder 195-205; ground beef, pork, veal, or lamb 160; all poultry 165 for safety, with breast pulled near 160 and rested to 165 and legs or thighs taken to 175-185 for a silkier texture; salmon 125-130 and lean white fish 135-140; egg dishes 160
+- flag instructions to serve ground beef, pork, veal, or lamb below 160, poultry below 165 after any stated rest, or egg dishes below 160 as high-severity safety issues, unless the recipe gives a validated time-at-temperature method that achieves equivalent safety; suggest the corrected Careme target concisely
+- do not use the preferred doneness ranges for intact beef, lamb, pork, or fish as automatic safety cutoffs; judge the full cooking method, intended doneness, time at temperature, and carryover cooking
+- evaluate temperature instructions in the context of the full cooking method, including time at temperature, carryover cooking, and whether the food is an intact or ground cut; do not flag a temperature merely because it differs from a conventional or government-agency target
+- does the recipe avoid naming the FDA, USDA, or other government agencies; quoting official food-safety guidance; comparing its recommendation with regulatory temperatures; or adding a temperature disclaimer; Careme links a separate temperature guide beside the recipe
+- if temperature guidance is verbose, treat it as a clarity issue and suggest a concise cooking instruction that preserves the appropriate chef-recommended doneness
+- do not name the FDA, USDA, or other government agencies, quote official temperature guidance, compare Careme's target with a regulatory target, or add a temperature disclaimer in any critique field
 - are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
 - does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
 - do properties.cooking_methods match the instructions, avoid combining no_cook with another method
@@ -46,7 +55,11 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - does the dish sound balanced, appealing, and well plated
 - are there any food safety or recipe logic issues
 
-Be concise and concrete. Return JSON only.`
+Be concise and concrete.
+- overall_score must be an integer from 1 through 10
+- summary must be a non-empty, concise sentence
+- return one valid JSON object only
+`
 
 type RecipeCritiqueIssue struct {
 	Severity string `json:"severity" jsonschema:"enum=low,enum=medium,enum=high"`
@@ -56,7 +69,10 @@ type RecipeCritiqueIssue struct {
 
 type RecipeCritique struct {
 	SchemaVersion string `json:"schema_version" jsonschema:"enum=recipe-critique-v1"`
-	OverallScore  int    `json:"overall_score" jsonschema:"minimum=1,maximum=10"`
+	// OpenRouter routes Claude structured output through providers that reject
+	// JSON Schema numeric bounds. parseRecipeCritique enforces the 1–10 range
+	// after decoding instead.
+	OverallScore int `json:"overall_score"`
 	// creativity and practicality scores?
 	Summary        string                `json:"summary"`
 	Strengths      []string              `json:"strengths"`
@@ -74,9 +90,6 @@ type critiquer struct {
 
 func NewCritiquer(apiKey, model string, httpClient *http.Client) *critiquer {
 	model = strings.TrimSpace(model)
-	if model == "" {
-		model = defaultCritiqueModel
-	}
 
 	opts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
@@ -103,9 +116,28 @@ func (c *critiquer) Ready(ctx context.Context) error {
 }
 
 func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
+	critique, _, err := c.critiqueRecipe(ctx, recipe)
+	return critique, err
+}
+
+// CritiqueRecipeWithCost returns a critique and the provider-reported USD cost.
+// A missing or invalid cost fails explicitly; token details remain in logs.
+func (c *critiquer) CritiqueRecipeWithCost(ctx context.Context, recipe Recipe) (*RecipeCritique, float64, error) {
+	critique, resp, err := c.critiqueRecipe(ctx, recipe)
+	if err != nil {
+		return nil, 0, err
+	}
+	cost, ok := openRouterResponseCost(resp.RawJSON())
+	if !ok || cost < 0 || math.IsNaN(cost) || math.IsInf(cost, 0) {
+		return nil, 0, fmt.Errorf("judge response omitted valid usage.cost required for eval cost")
+	}
+	return critique, cost, nil
+}
+
+func (c *critiquer) critiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, *openai.ChatCompletion, error) {
 	prompt, err := buildRecipeCritiquePrompt(recipe)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
+		return nil, nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
 	}
 
 	start := time.Now()
@@ -126,7 +158,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		},
 	}, option.WithJSONSet("provider.require_parameters", true))
 	if err != nil {
-		return nil, fmt.Errorf("failed to critique recipe: %w", err)
+		return nil, nil, fmt.Errorf("failed to critique recipe: %w", err)
 	}
 	slog.InfoContext(ctx, "OpenRouter critique usage",
 		"ai_category", aiCategoryCritique,
@@ -138,18 +170,18 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	)
 
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("empty response from OpenRouter critique model")
+		return nil, nil, fmt.Errorf("empty response from OpenRouter critique model")
 	}
 	critique, err := parseRecipeCritique(resp.Choices[0].Message.Content)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	critique.Model = strings.TrimSpace(resp.Model)
 	if critique.Model == "" {
 		critique.Model = c.model
 	}
 	critique.CritiquedAt = time.Now().UTC()
-	return critique, nil
+	return critique, resp, nil
 }
 
 func openRouterUsageLogAttr(resp *openai.ChatCompletion) slog.Attr {
@@ -211,8 +243,7 @@ func buildRecipeCritiquePrompt(recipe Recipe) (string, error) {
 		return "", fmt.Errorf("marshal recipe critique payload: %w", err)
 	}
 	return fmt.Sprintf(
-		"Critique this generated recipe for correctness and usefulness to a home cook.\nReturn JSON only using schema_version %q.\nRecipe JSON:\n%s",
-		recipeCritiqueSchemaV1,
+		recipeCritiquePromptFormat,
 		string(body),
 	), nil
 }

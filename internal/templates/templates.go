@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"fmt"
 	"html/template"
 	"net/url"
 	"os"
@@ -13,9 +14,16 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/logsetup"
+	"careme/internal/static"
 )
 
 const clerkJSVersion = "5.99.0"
+
+const (
+	shoppingRecipeImageWidth = 480
+	emailRecipeImageWidth    = 752
+	recipeImageQuality       = 75
+)
 
 // ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
 type ConversionEvent string
@@ -39,11 +47,13 @@ var Home,
 	Critique,
 	About,
 	Privacy,
+	TemperatureGuide,
 	Location,
 	FarmersMarket,
 	Mail *template.Template
 
-func Init(config *config.Config, tailwindAssetPath string) error {
+func Init(config *config.Config) error {
+	publicOrigin := config.ResolvedPublicOrigin()
 	funcs := template.FuncMap{
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
@@ -56,12 +66,14 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
 		"GoogleTagNoScript":         GoogleTagNoScript,
+		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
-		"PublicOrigin":              func() string { return config.ResolvedPublicOrigin() },
+		"PublicOrigin":              func() string { return publicOrigin },
 		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
-		"TailwindAssetPath":         func() string { return tailwindAssetPath },
+		"ShoppingRecipeImageURL":    func(hash string) string { return shoppingRecipeImageURL(publicOrigin, hash) },
+		"AssetPath":                 func() string { return static.AssetPath },
 		"UserInitial":               userInitial,
 	}
 	tmpls, err := template.New("all").Funcs(funcs).ParseFS(htmlFiles, "*.html")
@@ -78,6 +90,7 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")
 	Privacy = ensure(tmpls, "privacy.html")
+	TemperatureGuide = ensure(tmpls, "temperature_guide.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")
@@ -86,6 +99,39 @@ func Init(config *config.Config, tailwindAssetPath string) error {
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")
 	GoogleTagManagerID = os.Getenv("GOOGLE_TAG_MANAGER_ID")
 	return nil
+}
+
+func shoppingRecipeImageURL(publicOrigin, hash string) string {
+	return recipeImagePath(publicOrigin, hash, shoppingRecipeImageWidth, "auto")
+}
+
+func emailRecipeImageURL(publicOrigin, hash string) string {
+	return strings.TrimRight(publicOrigin, "/") + recipeImagePath(publicOrigin, hash, emailRecipeImageWidth, "jpeg")
+}
+
+func recipeImagePath(publicOrigin, hash string, width int, imageFormat string) string {
+	originalPath := "/recipe/" + hash + "/image"
+	if !supportsCloudflareImageTransformations(publicOrigin) {
+		return originalPath
+	}
+
+	return fmt.Sprintf(
+		"/cdn-cgi/image/width=%d,quality=%d,format=%s,onerror=redirect%s",
+		width,
+		recipeImageQuality,
+		imageFormat,
+		originalPath,
+	)
+}
+
+func supportsCloudflareImageTransformations(publicOrigin string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(publicOrigin))
+	if err != nil {
+		return false
+	}
+
+	hostname := strings.ToLower(parsed.Hostname())
+	return hostname == "careme.cooking" || strings.HasSuffix(hostname, ".careme.cooking")
 }
 
 func ensure(templates *template.Template, name string) *template.Template {

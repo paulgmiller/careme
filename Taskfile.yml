@@ -31,6 +31,20 @@ tasks:
       - k8s-lint
       - tailwind-check
 
+  verify-go:
+    desc: Format Go, then run vet, tests, and lint (pass test flags after --)
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: test
+      - task: lint
+
+  verify-ui:
+    desc: Regenerate Tailwind CSS and run tests; inspect the UI afterward
+    cmds:
+      - task: css
+      - task: test
+
   fmt:
     desc: Format Go code with gofumpt
     cmds:
@@ -78,13 +92,55 @@ tasks:
     env:
       ENABLE_MOCKS: '{{default "1" .ENABLE_MOCKS}}'
     cmds:
-      - go test ./...
+      - go test ./... {{.CLI_ARGS}}
 
   evals:
-    desc: Run ingredient grader evaluations
-    dir: evals/ingredient-grader
+    desc: List Promptfoo evaluations; run one with EVAL=recipe-critique or all with EVAL=all
+    silent: true
+    vars:
+      EVAL: '{{default "" .EVAL}}'
+      MODEL: '{{default "" .MODEL}}'
+      REASONING_EFFORT: '{{default "" .REASONING_EFFORT}}'
+    env:
+      CAREME_EVAL: "{{.EVAL}}"
+      RECIPE_EVAL_MODEL: "{{.MODEL}}"
+      RECIPE_EVAL_REASONING_EFFORT: "{{.REASONING_EFFORT}}"
     cmds:
-      - npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval
+      - |
+        if [ -z "$CAREME_EVAL" ]; then
+          echo "available evals:"
+          for available in evals/*/promptfooconfig.yaml; do
+            basename "$(dirname "$available")"
+          done
+          echo "run one with: ./task.sh evals EVAL=<name>"
+          echo "run all with: ./task.sh evals EVAL=all"
+          exit 0
+        fi
+
+        if [ "$CAREME_EVAL" = "all" ]; then
+          configs="evals/*/promptfooconfig.yaml"
+        else
+          config="evals/$CAREME_EVAL/promptfooconfig.yaml"
+          if [ ! -f "$config" ]; then
+            echo "unknown eval: $CAREME_EVAL" >&2
+            echo "available evals:" >&2
+            for available in evals/*/promptfooconfig.yaml; do
+              basename "$(dirname "$available")" >&2
+            done
+            exit 1
+          fi
+          configs="$config"
+        fi
+
+        for config in $configs; do
+          eval_dir="$(dirname "$config")"
+          eval_name="$(basename "$eval_dir")"
+          echo "Running $eval_name eval"
+          (
+            cd "$eval_dir"
+            npm exec --yes --package promptfoo@0.122.0 -- promptfoo eval --config promptfooconfig.yaml {{.CLI_ARGS}}
+          )
+        done
 
   css:
     desc: Rebuild Tailwind output

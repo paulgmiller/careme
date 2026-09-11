@@ -31,6 +31,8 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
+  - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
+  - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-3.1-pro-preview`)
@@ -48,6 +50,16 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
+
+## Mail placement tests
+
+Send today's real recipe email through the production sender to test Gmail placement:
+
+```sh
+go run ./cmd/mailtest -to you@gmail.com
+```
+
+This requires `SENDGRID_API_KEY` and an existing Careme profile for the address with a favorite store. It sends only to the requested address, ignoring the profile's opt-in, shopping day, and previous-send record without changing the next scheduled send.
 
 ## Ingredient grade review
 
@@ -73,3 +85,9 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 * Uptime https://stats.uptimerobot.com/ehEFlvlNM9
 * Cloudflare for dns and https proxying
+
+### Advertised recipe cronjob
+
+Run `careme -campaigns` to generate recipes and images for the advertised stores once. The job creates its own flex AI client and exits with an error if any store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+
+`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.

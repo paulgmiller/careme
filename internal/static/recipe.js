@@ -34,7 +34,8 @@ function initializeRecipeSteps() {
 
   // Keep this small pointer handler local instead of adding a swipe library
   // such as TinyGesture. Recipe steps only need horizontal dragging, while the
-  // page must preserve normal vertical scrolling and support desktop mice.
+  // page must preserve normal vertical scrolling. Mouse dragging is left to
+  // the browser so desktop users can select and copy instruction text.
   const steps = Array.from(root.querySelectorAll("[data-recipe-step]"));
   const undoButton = root.querySelector("[data-recipe-step-undo]");
   if (!steps.length || !undoButton) return;
@@ -70,6 +71,7 @@ function initializeRecipeSteps() {
     undoButton.classList.toggle("hidden", completedSteps.length === 0);
   });
   steps.forEach((step) => {
+    const doneButton = step.querySelector("[data-recipe-step-done]");
     let pointerID = null;
     let startX = 0;
     let startY = 0;
@@ -84,8 +86,14 @@ function initializeRecipeSteps() {
       restoreStepStyles(step);
     }
 
+    if (doneButton) {
+      doneButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+      doneButton.addEventListener("click", () => completeStep(step));
+    }
+
     step.addEventListener("pointerdown", (event) => {
-      if (event.pointerType === "mouse") event.preventDefault();
+      if (!event.isPrimary) return;
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
       pointerID = event.pointerId;
       startX = event.clientX;
       startY = event.clientY;

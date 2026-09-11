@@ -962,7 +962,7 @@ func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *tes
 
 type noopstatuswriter struct{}
 
-func (noopstatuswriter) SaveGenerationStatus(_ context.Context, _, _ string) error { return nil }
+func (noopstatuswriter) Update(_ context.Context, _, _ string) error { return nil }
 
 func seededStaples(t *testing.T, params *generatorParams) staplesService {
 	t.Helper()
@@ -1185,7 +1185,7 @@ type statusCounter struct {
 	status []string
 }
 
-func (s *statusCounter) SaveGenerationStatus(_ context.Context, _, stat string) error {
+func (s *statusCounter) Update(_ context.Context, _, stat string) error {
 	s.status = append(s.status, stat)
 	return nil
 }

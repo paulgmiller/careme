@@ -1,6 +1,7 @@
 package static
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -72,8 +73,14 @@ func TestFontFilesEmbedded(t *testing.T) {
 	}
 }
 
+func TestTailwindAllowsNativePageScrolling(t *testing.T) {
+	css := string(tailwindCSS)
+	if strings.Contains(css, "html,body{overscroll-behavior:none;touch-action:pan-x pan-y}") {
+		t.Fatal("global CSS must leave scrolling and gesture handling to the browser")
+	}
+}
+
 func TestRegisterServesFontFiles(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -96,21 +103,22 @@ func TestRegisterServesFontFiles(t *testing.T) {
 }
 
 func TestRegisterServesUserClerkBillingJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/user-clerk-billing.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"user-clerk-billing.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
+		fmt.Println(AssetPath)
+
 		t.Fatalf("billing js response status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("billing js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=3600" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("billing js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "mountPricingTable") {
@@ -119,11 +127,10 @@ func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 }
 
 func TestRegisterServesShareJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/share.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"share.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -133,7 +140,7 @@ func TestRegisterServesShareJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("share js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("share js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "navigator.share") {
@@ -142,11 +149,10 @@ func TestRegisterServesShareJS(t *testing.T) {
 }
 
 func TestRegisterServesRecipeJS(t *testing.T) {
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/static/recipe.js", nil)
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"recipe.js", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -156,17 +162,45 @@ func TestRegisterServesRecipeJS(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
 		t.Fatalf("recipe js content type = %q, want application/javascript; charset=utf-8", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
 		t.Fatalf("recipe js cache control = %q", got)
 	}
 	if !strings.Contains(rec.Body.String(), "initializeRecipeSteps") {
 		t.Fatal("recipe js response should include recipe step interaction logic")
 	}
+	if !strings.Contains(rec.Body.String(), `event.pointerType !== "touch"`) ||
+		!strings.Contains(rec.Body.String(), `event.pointerType !== "pen"`) {
+		t.Fatal("recipe step swiping should only start for touch or pen pointers")
+	}
+	if !strings.Contains(rec.Body.String(), "data-recipe-step-done") {
+		t.Fatal("recipe js should support clicking a step number to complete it")
+	}
+}
+
+func TestRegisterServesFarmersMarketJS(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, AssetPath+"farmersmarket.js", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("farmers market js response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/javascript; charset=utf-8" {
+		t.Fatalf("farmers market js content type = %q", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
+		t.Fatalf("farmers market js cache control = %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), "Compressor") {
+		t.Fatal("farmers market js should include image compression logic")
+	}
 }
 
 func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "spring")
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 
@@ -187,7 +221,6 @@ func TestRegisterServesSeasonalBackgroundFromEnv(t *testing.T) {
 
 func TestRegisterServesSeasonalFaviconFromEnv(t *testing.T) {
 	t.Setenv(seasons.EnvSeason, "winter")
-	Init()
 	mux := http.NewServeMux()
 	Register(mux)
 

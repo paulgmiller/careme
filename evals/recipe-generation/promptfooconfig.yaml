@@ -1,6 +1,6 @@
 description: Recipe generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 8
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
@@ -8,10 +8,29 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: recipe-generation
+    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
+    config:
+      # model overrides RECIPE_EVAL_MODEL; empty uses the production default.
+      model: '{{ env.RECIPE_EVAL_MODEL }}'
+      # Empty leaves reasoning effort unspecified, using the API default.
+      reasoning_effort: '{{ env.RECIPE_EVAL_REASONING_EFFORT }}'
+      # Keep the judge fixed while comparing generation models.
+      judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
   assert:
+    - type: latency
+      threshold: 60000
+      metric: generation-latency-under-60s
+    - type: javascript
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        return {
+          pass: critique.overall_score >= 8,
+          score: critique.overall_score / 10,
+          reason: `${critique.overall_score}/10: ${critique.summary} Fixes: ${critique.suggested_fixes.join("; ")}`,
+        };
+      metric: critique-quality
     - type: is-json
       metric: recipe-json
     - type: javascript
@@ -26,6 +45,16 @@ defaultTest:
           && recipe.properties?.servings > 0
         );
       metric: complete-recipe
+    # This assertion is intentionally generic, but it was prompted by recipe
+    # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA== from shopping list JcpTfxJ5UMM. The exact stored
+    # menu plan and its associated doneness eval are included below.
+    - type: javascript
+      value: |
+        const recipe = JSON.parse(output);
+        const instructions = recipe.instructions.join(' ');
+        const regulatoryAside = /\b(?:FDA|USDA)\b|government agency|official (?:food[- ]safety|temperature) guidance|safe minimum|regulatory temperature|guidance recommends/i;
+        return !regulatoryAside.test(instructions);
+      metric: concise-temperature-guidance
 
 tests:
   # Generate real cases with:
@@ -45,3 +74,300 @@ tests:
         chef_note_suggestion: skip the scallop splurge
         response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
         prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const saltIngredients = recipe.ingredients.filter((ingredient) => /\bsalt\b/i.test(ingredient.name));
+          const usesVolume = saltIngredients.length > 0 && saltIngredients.every((ingredient) =>
+            /\b(?:teaspoons?|tablespoons?)\b/i.test(ingredient.quantity)
+            && !/\b(?:grams?|g)\b/i.test(ingredient.quantity),
+          );
+          const saltText = [
+            ...saltIngredients.map((ingredient) => `${ingredient.quantity} ${ingredient.name}`),
+            ...recipe.instructions.filter((instruction) => /\bsalt\b/i.test(instruction)),
+          ].join(' ');
+          const exposesSaltWeight = /(?:\b(?:grams?|g)\b.{0,40}\bsalt\b|\bsalt\b.{0,40}\b(?:grams?|g)\b)/i.test(saltText);
+          return usesVolume && !exposesSaltWeight;
+        metric: salt-measured-by-volume
+  # https://careme.cooking/recipe/PtUhsZObI_8cUN07xNl4xA==
+  - description: Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Korean
+            anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
+            technique: marinate and grill
+            side_vegetable: Cucumber
+            fancy: false
+            recipe_instructions:
+              - Use the grill; serve 2; finish within 1 hour.
+              - Prioritize August WA produce.
+              - Avoid coffee crust and corn.
+        chef_note_suggestion: less sweet marinades
+        response_id: resp_0bce0de54c56c531006a838d24ae388198851b394bbcd0ae8e
+        prompt_cache_key: careme:store-day:v1:56417411224e2f1690f701fc
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const instructions = recipe.instructions.join(' ');
+          const fahrenheit = /(?:°\s*F|degrees?\s+F(?:ahrenheit)?)/i;
+          const mediumRareLabel = /medium[- ]rare/i.test(instructions) && fahrenheit.test(instructions);
+          const mediumRareTemperature = Array.from(
+            instructions.matchAll(/\b(\d{2,3})(?:\s*(?:-|–|to)\s*(\d{2,3}))?\s*(?:°\s*F|degrees?\s+F(?:ahrenheit)?)/gi),
+          ).some((match) => {
+            const temperatures = match[2] ? [Number(match[1]), Number(match[2])] : [Number(match[1])];
+            return temperatures.every((temperature) => temperature >= 125 && temperature <= 135);
+          });
+          return mediumRareLabel || mediumRareTemperature;
+        metric: chef-recommended-doneness
+
+  # https://careme.cooking/recipe/Js6q-SWGeq9iUR_6RmfJlQ==
+  - description: "saved — Moroccan Braised Lamb & Carrots"
+    metadata:
+      source_recipe_hash: "Js6q-SWGeq9iUR_6RmfJlQ=="
+      source_shopping_list_hash: "_swLqrZ2tRo"
+      cohort: saved
+      source_score: 10
+      source_judge: google/gemini-3.1-pro-preview
+      source_critiqued_at: "2026-09-04T21:51:46.223122287Z"
+      focus: "Braising timing and six-person scaling"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Moroccan
+            anchor_ingredient: Simple Truth® Natural Lamb Shoulder
+            technique: quick braise
+            side_vegetable: Carrots
+            fancy: false
+            recipe_instructions:
+              - Scale to serve 6.
+              - Keep total time under 1 hour.
+              - Use Diamond Crystal Salt flakes if salting.
+        chef_note_suggestion: even more lamb chops
+        response_id: resp_03f6f437ba5d7798006a9b3c44479087d08f8b97a8bd3bb52a
+        prompt_cache_key: careme:store-day:v1:e363a7845dd533e554298dbc
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 6
+        metric: requested-servings
+      - type: javascript
+        value: JSON.parse(output).properties.total_minutes <= 60
+        metric: requested-time-budget
+
+  # https://careme.cooking/recipe/F3ciCUUJUQ9Evyx6RF8vzw==
+  - description: "saved — Sichuan Chicken & Bok Choy Stir-Fry"
+    metadata:
+      source_recipe_hash: "F3ciCUUJUQ9Evyx6RF8vzw=="
+      source_shopping_list_hash: "Y21B_Hj31oI"
+      cohort: saved
+      source_score: 9
+      source_judge: google/gemini-3.1-pro-preview
+      source_critiqued_at: "2026-09-04T21:44:18.958160147Z"
+      focus: "High-heat prep order and six-person scaling"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Sichuan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            technique: stir-fry
+            side_vegetable: Bok Choy
+            fancy: false
+            recipe_instructions:
+              - Scale to serve 6.
+              - Keep total time under 1 hour.
+              - Use Diamond Crystal Salt flakes if salting.
+        chef_note_suggestion: more lamb, less heat
+        response_id: resp_03f6f437ba5d7798006a9b3b54282887d08a0bf69171dc2ca5
+        prompt_cache_key: careme:store-day:v1:e363a7845dd533e554298dbc
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 6
+        metric: requested-servings
+      - type: javascript
+        value: JSON.parse(output).properties.total_minutes <= 60
+        metric: requested-time-budget
+
+  # https://careme.cooking/recipe/mygw4NootTrbFUz4GTEE_A==
+  - description: "saved — Lemon-Parmesan Coho with Summer Orzo"
+    metadata:
+      source_recipe_hash: "mygw4NootTrbFUz4GTEE_A=="
+      source_shopping_list_hash: "aQPOv1Y__fI"
+      cohort: saved
+      source_score: 9
+      source_judge: google/gemini-3.1-pro-preview
+      source_critiqued_at: "2026-09-01T16:02:33.035864033Z"
+      focus: "Fish doneness and coordinating pasta with roasting"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Italian
+            anchor_ingredient: Fresh Coho Salmon Fillet
+            technique: oven-roast
+            side_vegetable: Zucchini
+            fancy: false
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more budget meals
+        response_id: resp_0a4308480e90d07c006a96f69f1ac887d09ce9cbdefcf43779
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 2
+        metric: requested-servings
+      - type: javascript
+        value: JSON.parse(output).properties.total_minutes <= 60
+        metric: requested-time-budget
+
+  # https://careme.cooking/recipe/G_Q1wK1V6qoQL7NoTuQVfA==
+  - description: "lower-scoring — Chile-Lime Jicama Cucumber Crunch"
+    metadata:
+      source_recipe_hash: "G_Q1wK1V6qoQL7NoTuQVfA=="
+      source_shopping_list_hash: "3_roC7AaYBc"
+      cohort: lower-scoring
+      source_score: 7
+      source_judge: anthropic/claude-opus-5
+      source_critiqued_at: "2026-08-29T20:08:14.358365055Z"
+      focus: "Side-dish yield, seasoning, and no-cook method"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Tex-Mex
+            anchor_ingredient: Jicama
+            technique: raw toss
+            side_vegetable: Cucumber Long Hot House English
+            fancy: false
+            recipe_instructions:
+              - Serve 2 as a BBQ side.
+        chef_note_suggestion: more make-ahead sides
+        response_id: resp_02af8c801f9d12dd006a933bda50b887d0bd9f6790a38a1c44
+        prompt_cache_key: careme:store-day:v1:0358e104ed8ec9b5eaab43b6
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 2
+        metric: requested-servings
+      - type: javascript
+        value: |
+          const methods = JSON.parse(output).properties.cooking_methods;
+          return methods.length === 1 && methods[0] === "no_cook";
+        metric: no-cook-side
+
+  # https://careme.cooking/recipe/MePosZOjz5olW79wlE7ecQ==
+  - description: "lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash"
+    metadata:
+      source_recipe_hash: "MePosZOjz5olW79wlE7ecQ=="
+      source_shopping_list_hash: "qQVHmHk9SRE"
+      cohort: lower-scoring
+      source_score: 7
+      source_judge: anthropic/claude-opus-5
+      source_critiqued_at: "2026-08-29T20:32:15.427310456Z"
+      focus: "Realistic total time and quantities for a partial roast"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Chilean
+            anchor_ingredient: USDA Choice Beef Loin Tri Tip Roast - 2.5 Lb
+            technique: oven roast
+            side_vegetable: Yellow Crookneck Squash
+            fancy: false
+            recipe_instructions:
+              - Serve 3.
+              - Keep this meal gluten-light.
+        chef_note_suggestion: less beef, more catfish
+        response_id: resp_02af8c801f9d12dd006a934172279087d089e091601fd2a4bf
+        prompt_cache_key: careme:store-day:v1:0358e104ed8ec9b5eaab43b6
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 3
+        metric: requested-servings
+
+  # https://careme.cooking/recipe/CsfUNbpWoH6IFDfwccoUqg==
+  - description: "lower-scoring — Sumac-Pistachio Coho with Charred Corn"
+    metadata:
+      source_recipe_hash: "CsfUNbpWoH6IFDfwccoUqg=="
+      source_shopping_list_hash: "cUS6FAd1zPM"
+      cohort: lower-scoring
+      source_score: 7
+      source_judge: google/gemini-3.1-pro-preview
+      source_critiqued_at: "2026-08-25T23:18:50.131537261Z"
+      focus: "Seasoning allocation and crust-mixture clarity"
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Turkish
+            anchor_ingredient: Fresh Coho Salmon Fillet
+            technique: oven roast
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            fancy: true
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: milder salmon spices
+        response_id: resp_0abb2932b7c5155d006a8e22121fc887d0955b97b7a65eecc1
+        prompt_cache_key: careme:store-day:v1:82a4a9a73b6021a3a892b8dc
+    assert:
+      - type: javascript
+        value: JSON.parse(output).properties.servings === 2
+        metric: requested-servings
+      - type: javascript
+        value: JSON.parse(output).properties.total_minutes <= 60
+        metric: requested-time-budget
+
+  # Pantry regressions from production recipes; preserve the original menu directions.
+  - description: pantry regression — Southern Smothered Chicken uses catalog garlic
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Southern American
+            anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
+            technique: stove-braise
+            side_vegetable: Fresh Bagged Green Beans
+            fancy: false
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more Pacific seafood
+        response_id: resp_0a4308480e90d07c006a974d45a52887d081b22f10c6dbce07
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    metadata:
+      source_recipe_hash: NEdlIRcPP6-2-9bWSR8eFA==
+      source_shopping_list_hash: 5eHRKzVSOM0
+      focus: Garlic available with a store price must use a catalog ID, even if usually considered pantry.
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const garlic = recipe.ingredients.filter((ingredient) => /\bgarlic\b/i.test(ingredient.name));
+          return garlic.length > 0 && garlic.every((ingredient) =>
+            typeof ingredient.id === 'string' && ingredient.id.trim().length > 0);
+        metric: catalog-garlic-not-pantry
+  - description: pantry regression — Summer Orzo omits cooking water from ingredients
+    metadata:
+      source_recipe_hash: mygw4NootTrbFUz4GTEE_A==
+      source_shopping_list_hash: aQPOv1Y__fI
+      focus: Cooking water belongs in instructions, not the ingredient list; purchased liquids remain valid.
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Italian
+            anchor_ingredient: Fresh Coho Salmon Fillet
+            technique: oven-roast
+            side_vegetable: Zucchini
+            fancy: false
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more budget meals
+        response_id: resp_0a4308480e90d07c006a96f69f1ac887d09ce9cbdefcf43779
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          // Match cooking water, including reserved pasta water, without rejecting
+          // purchased ingredients such as coconut water or water chestnuts.
+          const cookingWater = /^(?:(?:plain|tap|fresh|cold|cool|warm|hot|boiling|filtered|salted|unsalted|reserved|starchy|pasta|cooking|drinking)\s+)*water\b(?!\s+chestnuts?\b)/i;
+          return recipe.ingredients.every((ingredient) => !cookingWater.test(ingredient.name.trim()));
+        metric: no-cooking-water-ingredient

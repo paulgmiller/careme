@@ -12,14 +12,13 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/status"
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-const IngredientGradeCutoff = 6
 
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
@@ -42,6 +41,10 @@ type recipeSaver interface {
 type recipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 	CritiqueRecipeInBackground(ctx context.Context, recipe ai.Recipe)
+}
+
+type statusWriter interface {
+	Update(ctx context.Context, hash string, message string) error
 }
 
 type generatorService struct {
@@ -131,7 +134,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 			// TODO make configurable?
-			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
+			return ing.Grade == nil || ing.Grade.Score > producescore.IngredientGradeCutoff
 		})
 		ingMap := inputIngredientMap(ingredients)
 		replacmentCount := max(len(p.Dismissed), 1) // if no dismissed then just regenerate one and hope for better, if dismissed then regenerate all dismissed
@@ -181,7 +184,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade.GetScore() > IngredientGradeCutoff
+		return ing.Grade.GetScore() > producescore.IngredientGradeCutoff
 	})
 	ingMap := inputIngredientMap(ingredients)
 
@@ -315,7 +318,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", err)
 		return recipe, nil
 	}
-	if c.OverallScore >= critique.MinimumRecipeScore {
+	if c.OverallScore >= critique.MinimumRecipeScoreForModel(c.Model) {
 		return recipe, nil
 	}
 
@@ -379,7 +382,7 @@ func (g *generatorService) writeStatus(ctx context.Context, hash string, status 
 	if strings.TrimSpace(hash) == "" {
 		return
 	}
-	if err := g.statusWriter.SaveGenerationStatus(ctx, hash, status); err != nil {
+	if err := g.statusWriter.Update(ctx, hash, status); err != nil {
 		slog.ErrorContext(ctx, "failed to save generation status", "hash", hash, "status", status, "error", err)
 	}
 }

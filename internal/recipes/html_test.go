@@ -15,6 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes/feedback"
+	"careme/internal/static"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
@@ -55,7 +56,7 @@ func renderTestUser(signedIn bool) *utypes.User {
 }
 
 func TestMain(m *testing.M) {
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	if err := templates.Init(&config.Config{}); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())
@@ -120,6 +121,8 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("shopping list HTML should no longer use the old wrapped ingredient row layout")
 	}
+	assert.Contains(t, html, `href="/temperature-guide"`)
+	assert.Contains(t, html, `>See the temperature guide</a>`)
 	if !strings.Contains(html, `id="finalize-help"`) {
 		t.Error("shopping list HTML should include helper text for disabled finalize state")
 	}
@@ -403,13 +406,20 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 func TestFormatMail_ValidHTML(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
-	w := httptest.NewRecorder()
-	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
-	html := assertHTTPSuccess(t, w)
+	var w bytes.Buffer
+	recipeHash := list.Recipes[0].ComputeHash()
+	if err := FormatMail(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", &w); err != nil {
+		t.Fatalf("FormatMail() error = %v", err)
+	}
+	html := w.String()
 
 	isValidHTML(t, html)
-	if !strings.Contains(html, "quail") {
-		t.Error("HTML should contain 'quail'")
+	for _, want := range []string{
+		"Test Recipe", "https://careme.cooking/cdn-cgi/image/width=752,quality=75,format=jpeg,onerror=redirect/recipe/" + recipeHash + "/image", "35 min", "👥&nbsp;4</span>", "$21", "540 cal", "🍳", "Stovetop", "♨️", "Oven",
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("mail HTML should contain %q", want)
+		}
 	}
 }
 
@@ -603,16 +613,18 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.Contains(t, html, `id="recipe-instructions" data-recipe-steps`)
 	assert.Equal(t, len(recipe.Instructions), strings.Count(html, `data-recipe-step>`))
 	assert.Contains(t, html, `<ol class="recipe-step-list mt-3 space-y-2`)
-	assert.Contains(t, html, `data-recipe-step-number>1.</span>`)
-	assert.Contains(t, html, `data-recipe-step-number>2.</span>`)
-	assert.NotContains(t, html, `data-recipe-step-done`)
+	assert.Contains(t, html, `aria-label="Mark step 1 done"`)
+	assert.Contains(t, html, `aria-label="Mark step 2 done"`)
+	assert.Equal(t, len(recipe.Instructions), strings.Count(html, `data-recipe-step-done`))
 	assert.Contains(t, html, `data-recipe-step-undo`)
 	assert.NotContains(t, html, `data-recipe-step-reset`)
 	assert.NotContains(t, html, `Show all steps`)
 	assert.NotContains(t, html, `data-recipe-step-status`)
 	assert.NotContains(t, html, `data-recipe-step-message`)
-	assert.Contains(t, html, `Swipe or drag a step aside when it’s done. ↔`)
-	assert.Contains(t, html, `<script src="/static/recipe.js"></script>`)
+	assert.Contains(t, html, `href="/temperature-guide"`)
+	assert.Contains(t, html, `>See the temperature guide</a>`)
+	assert.Contains(t, html, `Swipe a step aside or click its number when it’s done.`)
+	assert.Contains(t, html, `<script src="`+static.AssetPath+`recipe.js"></script>`)
 	assert.NotContains(t, html, `initializeRecipeSteps`)
 	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group"[^>]*\sopen>`, html)
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
@@ -687,24 +699,17 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	score := 8
+	score := 7
+	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if !strings.Contains(html, "Recipe score:") {
-		t.Error("recipe HTML should contain recipe score text")
-	}
-	if !strings.Contains(html, `href="/critiques/`) {
-		t.Error("recipe HTML should contain public critique link")
-	}
-	if !strings.Contains(html, ">8/10<") {
-		t.Error("recipe HTML should contain critique score value")
-	}
-	if strings.Contains(html, "This recipe may need another look before cooking.") {
-		t.Error("recipe HTML should not show low-score warning at the retry threshold")
-	}
+	assert.Contains(t, html, "Recipe score:", "recipe HTML should contain recipe score text")
+	assert.Contains(t, html, `href="/critiques/`, "recipe HTML should contain public critique link")
+	assert.Contains(t, html, ">7/10<", "recipe HTML should contain critique score value")
+	assert.NotContains(t, html, "This recipe may need another look before cooking.", "recipe HTML should not show low-score warning at the retry threshold")
 }
 
 func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T) {
@@ -714,20 +719,16 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
 	score := 6
+	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), &score, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if !strings.Contains(html, "This recipe may need another look before cooking.") {
-		t.Error("recipe HTML should show a prominent low-score warning")
-	}
-	if !strings.Contains(html, "It scored 6/10, below our 8/10 retry mark.") {
-		t.Error("recipe HTML should explain why the warning appears")
-	}
-	if !strings.Contains(html, `Read the critique`) || !strings.Contains(html, `href="/critiques/`) {
-		t.Error("recipe HTML should link the warning to the public critique")
-	}
+	assert.Contains(t, html, "This recipe may need another look before cooking.", "recipe HTML should show a prominent low-score warning")
+	assert.Contains(t, html, "It scored 6/10, below our 7/10 retry mark.", "recipe HTML should explain why the warning appears")
+	assert.Contains(t, html, `Read the critique`, "recipe warning should contain critique link text")
+	assert.Contains(t, html, `href="/critiques/`, "recipe warning should link to the public critique")
 }
 
 func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {

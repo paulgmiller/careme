@@ -187,7 +187,11 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		start := time.Now()
 		locations, err := backend.GetLocationsByCoordinates(ctx, coordinates)
 		if err != nil {
-			slog.ErrorContext(ctx, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "lat", coordinates.Lat, "lon", coordinates.Lon)
+			level := slog.LevelError
+			if errors.Is(ctx.Err(), context.Canceled) && errors.Is(err, context.Canceled) {
+				level = slog.LevelDebug
+			}
+			slog.Log(ctx, level, "error fetching locations from backend", "error", err, "backend", fmt.Sprintf("%T", backend), "lat", coordinates.Lat, "lon", coordinates.Lon)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Got results for backend", "backend", fmt.Sprintf("%T", backend), "lat", coordinates.Lat, "lon", coordinates.Lon, "count", len(locations), "latencyMS", time.Since(start).Milliseconds())
@@ -203,6 +207,11 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		}
 		return hydrated, nil
 	})
+
+	// Cancellation applies to the whole search, even if some backends succeeded.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	for _, loc := range allLocations {
 		go func() {

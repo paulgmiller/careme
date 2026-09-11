@@ -499,7 +499,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 
 func mustInitLocationTemplates(t *testing.T) {
 	t.Helper()
-	if err := templates.Init(&config.Config{}, "dummyhash"); err != nil {
+	if err := templates.Init(&config.Config{}); err != nil {
 		t.Fatalf("failed to init templates: %v", err)
 	}
 }

@@ -2,14 +2,30 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"testing"
+	"time"
 
 	"careme/internal/ai"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+type stubCritiquer struct {
+	received ai.Recipe
+	err      error
+	delay    time.Duration
+}
+
+func (s *stubCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+	s.received = recipe
+	time.Sleep(s.delay)
+	return &ai.RecipeCritique{OverallScore: 8, Summary: "Good dinner.", SuggestedFixes: []string{}, Model: "fixed-judge"}, s.err
+}
 
 type stubRecipeGenerator struct {
 	recipe             *ai.Recipe
@@ -18,27 +34,27 @@ type stubRecipeGenerator struct {
 	menuRef            ai.ResponseRef
 }
 
-func (s *stubRecipeGenerator) GenerateRecipe(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
+func (s *stubRecipeGenerator) GenerateRecipeWithCost(_ context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, float64, error) {
 	s.recipeInstructions = instructions
 	s.menuRef = menu
-	return s.recipe, s.recipeErr
+	return s.recipe, 0.01395, s.recipeErr
 }
 
-func validRecipeContext() map[string]interface{} {
-	return map[string]interface{}{"vars": map[string]interface{}{
-		"menu_plan": map[string]interface{}{
-			"plans": []interface{}{map[string]interface{}{
-				"cuisine":             "Italian",
-				"anchor_ingredient":   "Chicken Thighs",
-				"technique":           "sheet pan",
-				"side_vegetable":      "Broccoli",
-				"recipe_instructions": []interface{}{"Keep dinner quick"},
-			}},
-			"response_id":      "resp-menu",
-			"prompt_cache_key": "cache-key",
-		},
-	}}
-}
+const validRecipeContext = `{
+	"vars": {
+		"menu_plan": {
+			"plans": [{
+				"cuisine": "Italian",
+				"anchor_ingredient": "Chicken Thighs",
+				"technique": "sheet pan",
+				"side_vegetable": "Broccoli",
+				"recipe_instructions": ["Keep dinner quick"]
+			}],
+			"response_id": "resp-menu",
+			"prompt_cache_key": "cache-key"
+		}
+	}
+}`
 
 func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 	generator := &stubRecipeGenerator{
@@ -51,7 +67,7 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 		},
 	}
 
-	result, err := runEval(validRecipeContext(), generator)
+	result, err := runEval([]byte(validRecipeContext), generator, &stubCritiquer{})
 	require.NoError(t, err)
 
 	output, ok := result["output"].(string)
@@ -70,35 +86,34 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 }
 
 func TestRunEvalRejectsEmptyMenuPlan(t *testing.T) {
-	ctx := validRecipeContext()
-	ctx["vars"].(map[string]interface{})["menu_plan"] = map[string]interface{}{
-		"response_id": "resp-menu",
-	}
+	ctx := []byte(`{"vars":{"menu_plan":{"response_id":"resp-menu"}}}`)
 
-	result, err := runEval(ctx, &stubRecipeGenerator{})
+	result, err := runEval(ctx, &stubRecipeGenerator{}, &stubCritiquer{})
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "eval menu plan must contain exactly one recipe plan")
 }
 
 func TestRunEvalRejectsMultipleRecipePlans(t *testing.T) {
-	ctx := validRecipeContext()
-	menu := ctx["vars"].(map[string]interface{})["menu_plan"].(map[string]interface{})
-	plans := menu["plans"].([]interface{})
-	menu["plans"] = append(plans, plans[0])
+	ctx := []byte(`{
+		"vars": {
+			"menu_plan": {
+				"plans": [{}, {}],
+				"response_id": "resp-menu"
+			}
+		}
+	}`)
 
-	result, err := runEval(ctx, &stubRecipeGenerator{})
+	result, err := runEval(ctx, &stubRecipeGenerator{}, &stubCritiquer{})
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "eval menu plan must contain exactly one recipe plan")
 }
 
 func TestRunEvalRejectsMissingMenuResponseID(t *testing.T) {
-	ctx := validRecipeContext()
-	menu := ctx["vars"].(map[string]interface{})["menu_plan"].(map[string]interface{})
-	delete(menu, "response_id")
+	ctx := []byte(`{"vars":{"menu_plan":{"plans":[{}]}}}`)
 
-	result, err := runEval(ctx, &stubRecipeGenerator{})
+	result, err := runEval(ctx, &stubRecipeGenerator{}, &stubCritiquer{})
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "eval menu plan response id is required")
@@ -107,8 +122,116 @@ func TestRunEvalRejectsMissingMenuResponseID(t *testing.T) {
 func TestRunEvalReturnsRecipeError(t *testing.T) {
 	generator := &stubRecipeGenerator{recipeErr: errors.New("model unavailable")}
 
-	result, err := runEval(validRecipeContext(), generator)
+	result, err := runEval([]byte(validRecipeContext), generator, &stubCritiquer{})
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "failed to generate recipe: model unavailable")
+}
+
+func TestRunEvalRejectsInvalidJSON(t *testing.T) {
+	result, err := runEval([]byte(`{"vars":`), &stubRecipeGenerator{}, &stubCritiquer{})
+
+	assert.Nil(t, result)
+	require.ErrorContains(t, err, "failed to decode Promptfoo context")
+}
+
+func TestRunEvalJudgesGeneratedRecipeAndSeparatesLatency(t *testing.T) {
+	generator := &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Fresh output", ResponseID: "private", OriginHash: "origin", ParentHash: "parent"}}
+	judge := &stubCritiquer{delay: 30 * time.Millisecond}
+	result, err := runEval([]byte(validRecipeContext), generator, judge)
+	require.NoError(t, err)
+	assert.Equal(t, "Fresh output", judge.received.Title)
+	assert.Empty(t, judge.received.ResponseID)
+	assert.Empty(t, judge.received.OriginHash)
+	assert.Empty(t, judge.received.ParentHash)
+	metadata := result["metadata"].(map[string]interface{})
+	assert.Equal(t, 8, metadata["critique"].(*ai.RecipeCritique).OverallScore)
+}
+
+func TestRunEvalFailsWhenJudgeFails(t *testing.T) {
+	generator := &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Dinner"}}
+	result, err := runEval([]byte(validRecipeContext), generator, &stubCritiquer{err: errors.New("unavailable")})
+	assert.Nil(t, result)
+	require.EqualError(t, err, "judge generated recipe: unavailable")
+}
+
+func TestDecodeOptionsModelSelection(t *testing.T) {
+	t.Setenv("RECIPE_EVAL_MODEL", "environment-model")
+	for _, tc := range []struct {
+		name    string
+		config  map[string]interface{}
+		want    string
+		wantErr bool
+	}{
+		{name: "environment", want: "environment-model"},
+		{name: "explicit", config: map[string]interface{}{"model": " candidate-model ", "judge_model": "judge"}, want: "candidate-model"},
+		{name: "invalid", config: map[string]interface{}{"model": 123}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			settings, err := decodeOptions(map[string]interface{}{"config": tc.config})
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, settings.Config.Model)
+		})
+	}
+}
+
+func TestCheckedInCasesGenerateAndJudge(t *testing.T) {
+	body, err := os.ReadFile("promptfooconfig.yaml")
+	require.NoError(t, err)
+	var suite struct {
+		Tests []struct {
+			Description string                 `yaml:"description"`
+			Vars        map[string]interface{} `yaml:"vars"`
+		} `yaml:"tests"`
+	}
+	require.NoError(t, yaml.Unmarshal(body, &suite))
+	require.Len(t, suite.Tests, 10)
+	for _, tc := range suite.Tests {
+		t.Run(tc.Description, func(t *testing.T) {
+			body, err := json.Marshal(map[string]interface{}{"vars": tc.Vars})
+			require.NoError(t, err)
+			generator := &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Generated"}}
+			_, err = runEval(body, generator, &stubCritiquer{})
+			require.NoError(t, err)
+			assert.NotEmpty(t, generator.recipeInstructions)
+		})
+	}
+}
+
+func TestDecodeOptionsReasoningEffort(t *testing.T) {
+	for _, tc := range []struct {
+		name, env, explicit, want string
+		invalid                   bool
+	}{
+		{name: "default"},
+		{name: "environment", env: " high ", want: "high"},
+		{name: "explicit wins", env: "high", explicit: " low ", want: "low"},
+		{name: "none is explicit", env: "high", explicit: "none", want: "none"},
+		{name: "max", explicit: "max", want: "max"},
+		{name: "invalid", explicit: "ultra", invalid: true},
+		{name: "invalid environment", env: "typo", invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("RECIPE_EVAL_REASONING_EFFORT", tc.env)
+			got, err := decodeOptions(map[string]interface{}{"config": map[string]interface{}{"reasoning_effort": tc.explicit}})
+			if tc.invalid {
+				require.ErrorContains(t, err, "invalid recipe reasoning effort")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, string(got.Config.ReasoningEffort))
+		})
+	}
+}
+
+func TestRunEvalReportsGenerationAndJudgeCostSeparately(t *testing.T) {
+	result, err := runEval([]byte(validRecipeContext), &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Dinner"}}, &stubCritiquer{})
+	require.NoError(t, err)
+	assert.Equal(t, 0.01395, result["cost"])
+	assert.NotContains(t, result, "tokenUsage")
+	assert.NotContains(t, result["output"], "costUSD")
 }

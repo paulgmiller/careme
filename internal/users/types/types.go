@@ -15,19 +15,40 @@ type Recipe struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type ShoppingList struct {
+	Hash        string    `json:"hash"`
+	Name        string    `json:"name"`
+	CompletedAt time.Time `json:"completed_at"`
+}
+
 type User struct {
-	ID            string    `json:"id"`
-	Email         []string  `json:"email"`
-	CreatedAt     time.Time `json:"created_at"`
-	LastRecipes   []Recipe  `json:"last_recipes,omitempty"`
-	FavoriteStore string    `json:"favorite_store,omitempty"`
-	ShoppingDay   string    `json:"shopping_day,omitempty"`
-	MailOptIn     bool      `json:"mail_opt_in,omitempty"`
-	Directive     string    `json:"directive,omitempty"`
+	ID string `json:"id"`
+	// TODO: Confirm whether users still need multiple email addresses. This may
+	// be leftover household/partner modeling; additional addresses are currently
+	// BCC'd on mail. Use a single string if that behavior is no longer intended.
+	Email            []string       `json:"email"`
+	CreatedAt        time.Time      `json:"created_at"`
+	PartnerID        string         `json:"partner_id,omitempty"`
+	PendingPartnerID string         `json:"pending_partner_id,omitempty"`
+	LastRecipes      []Recipe       `json:"last_recipes,omitempty"`
+	FavoriteStore    string         `json:"favorite_store,omitempty"`
+	ShoppingDay      string         `json:"shopping_day,omitempty"`
+	MailOptIn        bool           `json:"mail_opt_in,omitempty"`
+	Directive        string         `json:"directive,omitempty"`
+	ShoppingLists    []ShoppingList `json:"shopping_lists,omitempty"`
 }
 
 // need to take a look up to location cache?
 func (u User) Validate() error {
+	if u.PartnerID == u.ID && u.ID != "" {
+		return errors.New("user cannot be their own partner")
+	}
+	if u.PendingPartnerID == u.ID && u.ID != "" {
+		return errors.New("user cannot be their own pending partner")
+	}
+	if u.PartnerID != "" && u.PendingPartnerID != "" {
+		return errors.New("user cannot have a partner and a pending partner")
+	}
 	if _, err := ParseWeekday(u.ShoppingDay); err != nil {
 		return err
 	}
