@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -170,9 +171,9 @@ func topLocations(locs []locations.Location, limit int) []locations.Location {
 	return locs[:limit]
 }
 
-func printRows(out *os.File, rows []scoreRow) {
+func printRows(out io.Writer, rows []scoreRow) {
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tDATE\tSTATUS")
+	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tSTATUS")
 	for _, row := range rows {
 		score := ""
 		status := "ok"
@@ -182,7 +183,7 @@ func printRows(out *os.File, rows []scoreRow) {
 		case row.ProduceScore == nil:
 			status = "score unavailable"
 		default:
-			score = fmt.Sprintf("%d", row.ProduceScore)
+			score = fmt.Sprintf("%d", *row.ProduceScore)
 		}
 
 		_, _ = fmt.Fprintf(

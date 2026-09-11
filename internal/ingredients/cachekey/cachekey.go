@@ -36,6 +36,10 @@ func ForStore(locationID string, date time.Time) string {
 }
 
 // StaplesSignature returns the backend version used in ingredient and recipe cache hashes.
+// TODO: Inject a signature resolver at application construction so cachekey no
+// longer imports grocery providers. Wire it through recipe hashing and produce
+// scoring while preserving existing hashes; replace the loc-123 test special case
+// with an explicit fake resolver as part of that refactor.
 func StaplesSignature(locationID string) string {
 	for _, provider := range defaultIdentityProviders() {
 		if provider.IsID(locationID) {
