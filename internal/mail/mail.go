@@ -255,7 +255,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 		return nil, fmt.Errorf("get location %q: %w", user.FavoriteStore, err)
 	}
 
-	date, err := recipes.StoreToDate(ctx, time.Now(), l)
+	date, err := locations.StoreToDate(ctx, time.Now(), l)
 	if err != nil {
 		return nil, fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
 	}

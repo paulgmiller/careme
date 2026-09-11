@@ -192,7 +192,7 @@ func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, _ *recipes
 
 func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 	t.Helper()
-	date, err := recipes.StoreToDate(context.Background(), time.Now(), location)
+	date, err := locations.StoreToDate(context.Background(), time.Now(), location)
 	if err != nil {
 		t.Fatalf("failed to resolve store date: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	})
 
 	location := testMailLocation()
-	today, err := recipes.StoreToDate(context.Background(), time.Now(), location)
+	today, err := locations.StoreToDate(context.Background(), time.Now(), location)
 	if err != nil {
 		t.Fatalf("failed to resolve store date: %v", err)
 	}

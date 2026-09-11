@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"testing"
 	"time"
 
 	"careme/internal/ai"
@@ -190,7 +189,8 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 		slog.ErrorContext(ctx, "failed to cache ingredients", "location", p.String(), "error", err)
 		return nil, err
 	}
-	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded), "produce_score", sumIngredientGradesAboveCutoff(graded))
+	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded))
+	// "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
 }
 
@@ -279,7 +279,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 		if err != nil {
 			return 0, err
 		}
-		date, err := StoreToDate(ctx, nowFn(), store)
+		date, err := locations.StoreToDate(ctx, nowFn(), store)
 		if err != nil {
 			return 0, err
 		}
@@ -300,20 +300,6 @@ func StaplesWatchdogLocationIDs() []string {
 		"aldi_F219",
 		"heb_540",
 	}
-}
-
-func staplesSignatureForLocation(locationID string) string {
-	for _, provider := range defaultIdentityProviders() {
-		if provider.IsID(locationID) {
-			return provider.Signature()
-		}
-	}
-
-	if testing.Testing() && locationID == "loc-123" {
-		return kroger.NewIdentityProvider().Signature()
-	}
-
-	panic("unknown staples provider for location " + locationID)
 }
 
 func (p routingStaplesProvider) providerForLocation(locationID string) (backendStaplesProvider, error) {
@@ -378,18 +364,4 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
 	}, nil
-}
-
-func defaultIdentityProviders() []identityProvider {
-	return []identityProvider{
-		kroger.NewIdentityProvider(),
-		// actowiz.NewIdentityProvider(),
-		albertsons.NewIdentityProvider(),
-		heb.NewIdentityProvider(),
-		aldi.NewIdentityProvider(),
-		publix.NewIdentityProvider(),
-		farmersmarket.NewIdentityProvider(),
-		wholefoods.NewIdentityProvider(),
-		walmart.NewIdentityProvider(),
-	}
 }

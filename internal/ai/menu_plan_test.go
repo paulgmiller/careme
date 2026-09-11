@@ -203,9 +203,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
 		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
 	}
-	if strings.Contains(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`) {
-		t.Fatalf("did not expect a new cache breakpoint on menu regeneration: %s", requestBodies[1])
-	}
+	assert.Equal(t, 1, strings.Count(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`))
 	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
 		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
 	}
@@ -281,10 +279,8 @@ func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 
 func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages([]string{"make it vegetarian", "Passed on roast chicken"}, 1)
-	for _, message := range messages {
-		if message.PromptCacheBreakpoint {
-			t.Fatalf("did not expect regeneration message cache breakpoint: %#v", messages)
-		}
+	for i, message := range messages {
+		assert.Equal(t, i == len(messages)-1, message.PromptCacheBreakpoint)
 	}
 	body := mustJSON(t, messages)
 	for _, want := range []string{
@@ -360,6 +356,11 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	if !strings.Contains(body, "Build 1 replacement recipe plan(s) by default") || !strings.Contains(body, "less spicy") {
 		t.Fatalf("unexpected recorded regenerate prompt: %s", body)
 	}
+	for i, message := range recorder.record.Input {
+		assert.Equal(t, i == len(recorder.record.Input)-1, message.PromptCacheBreakpoint)
+	}
+	input := mustJSON(t, messagesToInput(recorder.record.Input))
+	assert.Equal(t, 1, strings.Count(input, `"prompt_cache_breakpoint":{"mode":"explicit"}`))
 }
 
 func TestMenuPlanSystemMessageIsSpecific(t *testing.T) {

@@ -385,5 +385,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
 	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
 
+	// Cache the expanded conversation for recipes and later menu regenerations.
+	messages[len(messages)-1].PromptCacheBreakpoint = true
 	return messages
 }

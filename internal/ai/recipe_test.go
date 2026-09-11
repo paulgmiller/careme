@@ -364,6 +364,49 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 	}
 }
 
+func TestRegenerateAddsExplicitCacheBreakpoint(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		instructions []string
+		wantMessages int
+	}{
+		{"multiple instructions", []string{" less salt ", "", "make it vegetarian", "  "}, 2},
+		{"empty instructions", []string{"  "}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := &capturePromptRecorder{}
+			var sent struct {
+				Input              []json.RawMessage `json:"input"`
+				PreviousResponseID string            `json:"previous_response_id"`
+				PromptCacheKey     string            `json:"prompt_cache_key"`
+			}
+			c := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				require.NoError(t, json.NewDecoder(req.Body).Decode(&sent))
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"id":"resp-after","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"title\":\"Vegetarian dinner\"}"}]}]}`)),
+				}, nil
+			})}, recorder)
+			previous := ResponseRef{ID: "resp-before", PromptCacheKey: "careme:store-day:v1:test"}
+			recipe, err := c.Regenerate(t.Context(), tc.instructions, previous)
+			require.NoError(t, err)
+			assert.Equal(t, "Vegetarian dinner", recipe.Title)
+			assert.Equal(t, previous.PromptCacheKey, recipe.PromptCacheKey)
+			assert.Equal(t, previous.ID, sent.PreviousResponseID)
+			assert.Equal(t, previous.PromptCacheKey, sent.PromptCacheKey)
+			require.Len(t, sent.Input, tc.wantMessages)
+			require.NotNil(t, recorder.record)
+			require.Len(t, recorder.record.Input, tc.wantMessages)
+			for i, input := range sent.Input {
+				wantBreakpoint := i == len(sent.Input)-1
+				assert.Equal(t, wantBreakpoint, strings.Contains(string(input), `"prompt_cache_breakpoint":{"mode":"explicit"}`))
+				assert.Equal(t, wantBreakpoint, recorder.record.Input[i].PromptCacheBreakpoint)
+			}
+		})
+	}
+}
+
 func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 	var requestBody string
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

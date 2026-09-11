@@ -189,7 +189,7 @@ func TestCheckedInCasesGenerateAndJudge(t *testing.T) {
 		} `yaml:"tests"`
 	}
 	require.NoError(t, yaml.Unmarshal(body, &suite))
-	require.Len(t, suite.Tests, 8)
+	require.Len(t, suite.Tests, 10)
 	for _, tc := range suite.Tests {
 		t.Run(tc.Description, func(t *testing.T) {
 			body, err := json.Marshal(map[string]interface{}{"vars": tc.Vars})

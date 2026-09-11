@@ -171,7 +171,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 }
 
 func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
-	today, err := StoreToDate(ctx, nowFn(), p.Location)
+	today, err := locations.StoreToDate(ctx, nowFn(), p.Location)
 	if err != nil {
 		return false
 	}
