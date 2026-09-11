@@ -88,8 +88,8 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 			},
 			Date: time.Date(2026, time.May, 13, 0, 0, 0, 0, time.UTC),
 			Plan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-				{Cuisine: "Korean", AnchorIngredient: "chicken thighs", Technique: "sheet pan", SideVegetable: "broccoli"},
-				{Cuisine: "Thai", AnchorIngredient: "rice noodles", Technique: "stir fry", SideVegetable: "snap peas", Fancy: true},
+				{Cuisine: "Korean", AnchorIngredient: "chicken thighs", DishFormat: "sheet pan", SideVegetable: "broccoli"},
+				{Cuisine: "Thai", AnchorIngredient: "rice noodles", DishFormat: "stir fry", SideVegetable: "snap peas", Fancy: true},
 			}},
 		},
 		{

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -109,7 +110,7 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 	plan := RecipePlan{
 		Cuisine:            "French",
 		AnchorIngredient:   "chicken",
-		Technique:          "braise",
+		DishFormat:         "braise",
 		SideVegetable:      "carrots",
 		RecipeInstructions: []string{"use the anise here", "  "},
 	}
@@ -127,7 +128,7 @@ func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testi
 	plan := &MenuPlan{Plans: []RecipePlan{{
 		Cuisine:          "Italian",
 		AnchorIngredient: "wild caught shrimp",
-		Technique:        "pasta",
+		DishFormat:       "pasta",
 		SideVegetable:    " broccolini ",
 	}}}
 	ingredients := []InputIngredient{
@@ -176,7 +177,7 @@ func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T
 			responseID = "resp-menu-corrected"
 			sideVegetable = "Broccolini"
 		}
-		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","technique":"pasta","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
+		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","dish_format":"pasta","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
 	})}, recorder)
 	ingredients := []InputIngredient{
 		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
@@ -309,7 +310,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 	plan := RecipePlan{
 		Cuisine:          "Korean",
 		AnchorIngredient: "tofu",
-		Technique:        "stir-fry",
+		DishFormat:       "stir-fry",
 		SideVegetable:    "broccoli",
 		Fancy:            true,
 	}
@@ -320,7 +321,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 	for _, phrase := range []string{
 		"Cuisine direction for this recipe: Korean.",
 		"Anchor ingredient direction for this recipe: tofu.",
-		"Suggested technique for this recipe: stir-fry.",
+		"Suggested dish format for this recipe: stir-fry.",
 		"Side vegetable direction for this recipe: broccoli.",
 		"fancier",
 	} {
@@ -398,7 +399,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
-		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","technique":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
+		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","dish_format":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
 	})}
 }
 
@@ -432,5 +433,23 @@ func menuPlanHTTPResponse(req *http.Request, responseID, outputText string) *htt
 				}
 			}`, responseID, config.DefaultRecipeModel, outputText))),
 		Request: req,
+	}
+}
+
+func TestRecipePlanDishFormatJSON(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "current field", input: `{"dish_format":"grain bowl"}`, want: "grain bowl"},
+		{name: "legacy field ignored", input: `{"technique":"grill"}`, want: ""},
+		{name: "current field with legacy field", input: `{"dish_format":"salad","technique":"grill"}`, want: "salad"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var plan RecipePlan
+			require.NoError(t, json.Unmarshal([]byte(tc.input), &plan))
+			assert.Equal(t, tc.want, plan.DishFormat)
+		})
 	}
 }

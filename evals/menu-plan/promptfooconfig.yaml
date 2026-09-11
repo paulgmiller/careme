@@ -1,6 +1,6 @@
 description: Menu plan generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 4
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
@@ -9,20 +9,56 @@ prompts:
 providers:
   - id: 'file://provider.go'
     label: menu-plan
+    config:
+      judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
   assert:
+    - type: javascript
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        const score = Math.min(critique.request_fidelity, critique.culinary_coherence, critique.meaningful_variety);
+        return {
+          pass: score >= 8 && critique.issues.every((issue) => issue.severity === 'low'),
+          score: score / 10,
+          reason: [critique.summary, ...critique.issues.map((issue) =>
+            `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
+        };
+      metric: menu-quality
+    - type: latency
+      threshold: 20000
+      metric: menu-plan-latency-under-20s
     - type: is-json
       metric: menu-plan-json
     - type: javascript
       value: |
         const plan = JSON.parse(output);
-        if (plan.plans?.length !== 1) return false;
+        if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
-        const recipe = plan.plans[0];
-        return available.has(recipe.anchor_ingredient.toLowerCase())
-          && available.has(recipe.side_vegetable.toLowerCase());
+        return plan.plans.every((recipe) =>
+          available.has(recipe.anchor_ingredient.toLowerCase())
+          && available.has(recipe.side_vegetable.toLowerCase()));
       metric: available-menu-ingredients
+    - type: javascript
+      value: |
+        const recipes = JSON.parse(output).plans;
+        const labels = recipes.flatMap((recipe) => [recipe.anchor_ingredient, recipe.side_vegetable])
+          .map((label) => label.trim().toLowerCase().replace(/\s+/g, ' '));
+        return new Set(labels).size === labels.length;
+      metric: distinct-menu-ingredients
+    - type: javascript
+      value: |
+        const plans = JSON.parse(output).plans;
+        const formats = new Set([
+          'pasta', 'soup/stew', 'grain bowl', 'noodle bowl', 'salad',
+          'wrap/taco', 'sandwich/burger', 'stir-fry', 'curry',
+          'flatbread/pizza', 'casserole/bake',
+          'sheet-pan/roast', 'stuffed vegetable', 'main with sides',
+        ]);
+        const planned = plans.map((recipe) => recipe.dish_format?.trim().toLowerCase());
+        if (planned.some((format) => !formats.has(format))) return false;
+        return plans.length < 3 || new Set(planned).size >= 3;
+      metric: canonical-dish-format-variety
 
 tests:
   - description: One quick seasonal chicken dinner
@@ -71,3 +107,48 @@ tests:
           return recipe.anchor_ingredient === 'Simple Truth Organic Extra Firm Tofu Twin Pack'
             && recipe.side_vegetable === 'Simple Truth Organic Fresh Broccoli Florets Family Pack';
         metric: vegetarian-exact-catalog-labels
+
+  - description: Three distinct dinners preserve global directions and assign limited saffron once
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-10'
+      count: 3
+      instructions: Plan three dinners. Every dinner must serve 6 people. I have one pinch of saffron; use it in exactly one dinner. Use different anchor ingredients and different side vegetables across the dinners.
+      ingredients:
+        - id: chicken
+          description: Boneless Skinless Chicken Thighs
+          size: 2 lb
+        - id: salmon
+          description: Atlantic Salmon Fillet
+          size: 2 lb
+        - id: tofu
+          description: Extra Firm Tofu
+          size: 16 oz
+        - id: broccoli
+          description: Broccoli Crowns
+          size: 1 lb
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+        - id: carrots
+          description: Carrots
+          size: 1 lb
+        - id: rice
+          description: Basmati Rice
+          size: 2 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipes = JSON.parse(output).plans;
+          return recipes.filter((recipe) => recipe.recipe_instructions.some((instruction) =>
+            /\bsaffron\b/i.test(instruction))).length === 1;
+        metric: limited-ingredient-assigned-once
+      - type: javascript
+        value: |
+          return JSON.parse(output).plans.every((recipe) =>
+            recipe.recipe_instructions.some((instruction) =>
+              /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
+        metric: servings-preserved-in-every-recipe

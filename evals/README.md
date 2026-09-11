@@ -96,3 +96,41 @@ Run just this suite from the repository root:
 ```
 
 The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
+
+## Menu planning
+
+Run `./task.sh evals EVAL=menu-plan -- --no-cache --output /tmp/menu-plan-eval.json`.
+The provider uses the production menu model (currently `gpt-6-astra`) with medium
+reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
+configuration path. Each case makes a menu generation call and a separate judge call.
+
+The suite checks requested plan count, catalog membership for every anchor and
+side, and no repeated ingredient across anchor/side slots (ignoring case and
+whitespace). Fixtures provide enough distinct ingredients to satisfy this rule;
+menus that explicitly request ingredient reuse need separate expectations.
+A format assertion requires every plan to use one of the canonical dish formats
+and requires three distinct formats for a three-dinner menu.
+A three-dinner case checks that a limited ingredient is assigned to exactly one
+recipe's `recipe_instructions`, while serving count reaches every recipe.
+These keyword assertions check handoff coverage, not semantic correctness:
+a negated instruction could still match. The generated recipes are not evaluated
+by this suite.
+
+The latency budget is 15 seconds per menu call, including SDK retries and ingredient
+correction calls, excluding configuration, Go compilation, and JSON serialization.
+Use `--no-cache` for meaningful timing. The suite runs sequentially by default.
+The suite pins `config.judge_model` to `google/gemini-3.1-pro-preview`. Its menu-specific
+rubric evaluates request fidelity, culinary coherence, and meaningful variety from
+the original request, catalog, location/date, recent recipe titles, and complete
+menu. Response IDs and cache keys are removed before judging. Each dimension must
+score at least 8/10, with no medium/high-severity issues, to pass `menu-quality`.
+Issues identify affected recipes using 1-based indexes and include evidence and a
+suggested fix. The judge assesses compact planning handoffs, not finished recipes;
+it does not demand steps, quantities, or cooking temperatures.
+
+Malformed responses and judge API errors fail explicitly. Full critique, returned
+judge model, timestamp, and separate `judgeLatencyMs` are retained in metadata.
+The 15-second latency assertion excludes judging. Judge scores can vary; calibrate
+against human-reviewed good/bad menus before treating them as a quality benchmark.
+This provider does not export cost or token usage; Promptfoo totals are not a
+billing estimate.

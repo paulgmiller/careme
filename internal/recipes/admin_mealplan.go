@@ -79,7 +79,7 @@ var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`
         <tr>
           <th>Cuisine</th>
           <th>Anchor</th>
-          <th>Technique</th>
+          <th>Dish format</th>
           <th>Side</th>
           <th>Fancy</th>
           <th>Recipe Instructions</th>
@@ -90,7 +90,7 @@ var adminMealPlanPageTmpl = template.Must(template.New("admin-mealplan").Parse(`
         <tr>
           <td>{{.Cuisine}}</td>
           <td>{{.AnchorIngredient}}</td>
-          <td>{{.Technique}}</td>
+          <td>{{.DishFormat}}</td>
           <td>{{.SideVegetable}}</td>
           <td>{{.Fancy}}</td>
           <td>

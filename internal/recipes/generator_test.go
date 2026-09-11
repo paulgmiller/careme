@@ -399,7 +399,7 @@ func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
 		plans = append(plans, ai.RecipePlan{
 			Cuisine:          "test",
 			AnchorIngredient: recipe.Title,
-			Technique:        "test",
+			DishFormat:       "test",
 		})
 	}
 	return &ai.MenuPlan{Plans: plans, ResponseID: "resp-menu-plan"}
@@ -622,7 +622,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:            "test",
 			AnchorIngredient:   "Brand New Dinner",
-			Technique:          "test",
+			DishFormat:         "test",
 			RecipeInstructions: []string{"make it vegetarian"},
 		}}, ResponseID: "resp-menu-next"},
 	}
@@ -654,7 +654,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	wantRecipeInstructions := ai.RecipePlan{
 		Cuisine:            "test",
 		AnchorIngredient:   "Brand New Dinner",
-		Technique:          "test",
+		DishFormat:         "test",
 		RecipeInstructions: []string{"make it vegetarian"},
 	}.Instructions()
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
@@ -703,8 +703,8 @@ func TestGenerateRecipes_RegenerateAllowsUserRequestedCountDifferentFromDismisse
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-			{Cuisine: "test", AnchorIngredient: "Slow Cooker Dinner", Technique: "slow cooker"},
-			{Cuisine: "test", AnchorIngredient: "Different Pasta", Technique: "pasta"},
+			{Cuisine: "test", AnchorIngredient: "Slow Cooker Dinner", DishFormat: "slow cooker"},
+			{Cuisine: "test", AnchorIngredient: "Different Pasta", DishFormat: "pasta"},
 		}, ResponseID: "resp-menu-next"},
 	}
 
@@ -750,7 +750,7 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t 
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "One More Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}, ResponseID: "resp-menu-next"},
 	}
 
@@ -776,7 +776,7 @@ func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *tes
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "One More Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}, ResponseID: "resp-menu-next"},
 	}
 
@@ -803,8 +803,8 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 	aiStub := &captureGenerateAIClient{
 		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{aniseRecipe, plainRecipe}},
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, Technique: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
-			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, Technique: "test"},
+			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, DishFormat: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
+			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, DishFormat: "test"},
 		}, ResponseID: "resp-menu-plan"},
 	}
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
@@ -990,7 +990,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "Brand New Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}},
 	}
 	g := newTestGenerator(t, aiStub, critiquer, seededStaples(t, params), noopstatuswriter{}, nil)
