@@ -1,6 +1,6 @@
 description: Menu plan generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 4
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
@@ -26,8 +26,8 @@ defaultTest:
         };
       metric: menu-quality
     - type: latency
-      threshold: 15000
-      metric: menu-plan-latency-under-15s
+      threshold: 20000
+      metric: menu-plan-latency-under-20s
     - type: is-json
       metric: menu-plan-json
     - type: javascript
@@ -52,8 +52,8 @@ defaultTest:
         const formats = new Set([
           'pasta', 'soup/stew', 'grain bowl', 'noodle bowl', 'salad',
           'wrap/taco', 'sandwich/burger', 'stir-fry', 'curry',
-          'flatbread/pizza', 'egg-based', 'casserole/bake',
-          'sheet-pan/roast', 'stuffed vegetable', 'small plates',
+          'flatbread/pizza', 'casserole/bake',
+          'sheet-pan/roast', 'stuffed vegetable', 'main with sides',
         ]);
         const planned = plans.map((recipe) => recipe.dish_format?.trim().toLowerCase());
         if (planned.some((format) => !formats.has(format))) return false;

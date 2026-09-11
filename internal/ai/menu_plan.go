@@ -135,7 +135,7 @@ var dishFormatList = []string{
 	"casserole/bake",
 	"sheet-pan/roast",
 	"stuffed vegetable",
-	"main and a side",
+	"main with sides",
 }
 
 func pickN(xs []string, n int) []string {

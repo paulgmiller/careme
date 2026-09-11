@@ -1,4 +1,4 @@
-package main
+package eval
 
 import (
 	"context"
@@ -42,6 +42,12 @@ func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{
 	return result, nil
 }
 
+type Settings struct {
+	Config struct {
+		JudgeModel string `json:"judge_model"`
+	} `json:"config"`
+}
+
 func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
@@ -52,11 +58,8 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
-	var settings struct {
-		Config struct {
-			JudgeModel string `json:"judge_model"`
-		} `json:"config"`
-	}
+
+	var settings Settings
 	encoded, err := json.Marshal(options)
 	if err != nil {
 		return nil, fmt.Errorf("encode provider options: %w", err)
