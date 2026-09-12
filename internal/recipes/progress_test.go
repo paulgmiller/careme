@@ -49,6 +49,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, body, `id="shopping-recipe-pending-0"`)
 	assert.Contains(t, body, `id="shopping-recipe-pending-1"`)
 	assert.NotContains(t, body, `hx-post="/recipe/`)
+	assert.NotContains(t, body, `href="/recipe/`)
 
 	ready := ai.Recipe{Title: "Thai tofu", Properties: ai.RecipeProperties{TotalMinutes: 35}, Ingredients: []ai.Ingredient{{Name: "Tofu"}}, Instructions: []string{"Cook."}, OriginHash: hash}
 	draft := ai.Recipe{Title: "Draft beans", OriginHash: hash}
@@ -62,6 +63,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, body, "35 min")
 	assert.Contains(t, body, `href="/recipe/`+ready.ComputeHash()+`"`)
 	assert.NotContains(t, body, `href="/recipe/pending-0"`)
+	assert.NotContains(t, body, `href="/recipe/`+draft.ComputeHash()+`"`)
 	assert.NotContains(t, body, "hx-preserve")
 	assert.NotContains(t, body, "hx-sync")
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/save`)
@@ -70,8 +72,6 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.NotContains(t, body, `/recipe/`+draft.ComputeHash()+`/save`)
 	assert.NotContains(t, body, `finalizeButton`)
 	assert.NotContains(t, body, `/recipes/`+hash+`/finalize`)
-	assert.ErrorIs(t, s.requireReadyRecipe(t.Context(), hash, draft.ComputeHash()), errRecipeNotReady)
-	require.NoError(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()))
 
 	save := func(recipeHash string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipeHash+"/save", strings.NewReader(url.Values{"h": {hash}}.Encode()))
@@ -82,11 +82,6 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 		s.handleSaveRecipe(rr, req)
 		return rr
 	}
-	rejected := save(draft.ComputeHash())
-	require.Equal(t, http.StatusConflict, rejected.Code)
-	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
-	require.NoError(t, err)
-	assert.Empty(t, selection.SavedHashes)
 	accepted := save(ready.ComputeHash())
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 	assert.NotContains(t, accepted.Body.String(), `/recipes/`+hash+`/finalize`)
@@ -101,7 +96,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, hidden.Body.String(), "Restore")
 	assert.NotContains(t, hidden.Body.String(), `/recipes/`+hash+`/finalize`)
 
-	selection, err = s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
+	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
 	assert.Empty(t, selection.SavedHashes)
 	assert.Equal(t, []string{ready.ComputeHash()}, selection.DismissedHashes)
@@ -122,14 +117,13 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, body, `/recipes/`+hash+`/retry`)
 	assert.Contains(t, body, `help=Welcome`)
 	assert.NotContains(t, body, `id="shopping-content"`)
-	require.NoError(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()))
 
-	// A retry clears progress; previously published recipes are no longer selectable.
+	// A retry clears progress and removes previously published cards.
 	require.NoError(t, statuses.Start(t.Context(), hash))
+	assert.NotContains(t, poll(true), `href="/recipe/`)
 	selection, err = s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
 	assert.Empty(t, selection.SavedHashes)
-	require.ErrorIs(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()), errRecipeNotReady)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{ready}, Plan: &ai.MenuPlan{Plans: plans}}, hash))
 	body = poll(true)
 	assert.NotContains(t, body, "<!doctype html>")
@@ -137,12 +131,10 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.NotContains(t, body, `hx-trigger="every 1s"`)
 	assert.NotContains(t, body, "shopping-recipe-pending-")
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/save`)
-	require.NoError(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()))
 	accepted = save(ready.ComputeHash())
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
 	assert.Contains(t, accepted.Body.String(), `/recipes/`+hash+`/finalize`)
 	assert.Contains(t, poll(false), "Recipe added")
-	assert.ErrorIs(t, s.requireReadyRecipe(t.Context(), hash, draft.ComputeHash()), errRecipeNotReady)
 	s.Wait()
 }
 
@@ -162,24 +154,8 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), `/recipe/`+saved.ComputeHash()+`/dismiss`)
 	assert.Contains(t, rr.Body.String(), "Recipe added")
 	assert.NotContains(t, rr.Body.String(), `/recipes/`+p.Hash()+`/finalize`)
-	require.NoError(t, s.requireReadyRecipe(t.Context(), p.Hash(), saved.ComputeHash()))
 	_, err := s.FromCache(t.Context(), p.Hash())
 	require.ErrorIs(t, err, cache.ErrNotFound)
-}
-
-func TestReadySingleRecipeReplacementRequiresCompletedJob(t *testing.T) {
-	s := newTestServer(t)
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
-	original := ai.Recipe{Title: "Original", OriginHash: p.Hash()}
-	replacement := ai.Recipe{Title: "Replacement", OriginHash: p.Hash(), ParentHash: original.ComputeHash()}
-	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, p.Hash()))
-	require.NoError(t, s.SaveRecipe(t.Context(), replacement))
-	require.NoError(t, s.SaveThread(t.Context(), original.ComputeHash(), []RecipeThreadEntry{{ResponseID: "answer"}}))
-	id := status.ID(original.ComputeHash(), "answer")
-	require.NoError(t, s.generationStatuses.Start(t.Context(), id))
-	require.ErrorIs(t, s.requireReadyRecipe(t.Context(), p.Hash(), replacement.ComputeHash()), errRecipeNotReady)
-	require.NoError(t, s.generationStatuses.Complete(t.Context(), id, replacement.ComputeHash()))
-	require.NoError(t, s.requireReadyRecipe(t.Context(), p.Hash(), replacement.ComputeHash()))
 }
 
 func TestAddingRecipeDuringGenerationCompletionPreservesProfile(t *testing.T) {

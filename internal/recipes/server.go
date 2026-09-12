@@ -653,10 +653,6 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	recipe, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
 	if err != nil {
-		if errors.Is(err, errRecipeNotReady) {
-			http.Error(w, "recipe not ready or not in this list", http.StatusConflict)
-			return
-		}
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe not found", http.StatusNotFound)
 			return
@@ -673,9 +669,6 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User, shoppingListHash, recipeHash string) (*ai.Recipe, error) {
-	if err := s.requireReadyRecipe(ctx, shoppingListHash, recipeHash); err != nil {
-		return nil, err
-	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
 	if err != nil {
 		return nil, fmt.Errorf("load recipe selection: %w", err)
@@ -732,15 +725,6 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 	selectionHash := strings.TrimSpace(r.FormValue(queryArgHash))
 	if selectionHash == "" {
 		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
-		return
-	}
-	if err := s.requireReadyRecipe(ctx, selectionHash, recipeHash); err != nil {
-		if !errors.Is(err, errRecipeNotReady) {
-			slog.ErrorContext(ctx, "failed to check recipe readiness", "hash", recipeHash, "error", err)
-			http.Error(w, "failed to check recipe readiness", http.StatusInternalServerError)
-			return
-		}
-		http.Error(w, "recipe not ready or not in this list", http.StatusConflict)
 		return
 	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
