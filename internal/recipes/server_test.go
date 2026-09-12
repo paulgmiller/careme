@@ -71,13 +71,13 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 	assert.Equal(t, "Save two dinners", u.Query().Get("help"))
 }
 
-func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
+func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	statuses := newFakeStatusStore()
 	s := newTestServer(t, withTestGenerator(generator), withTestStatusStore(statuses))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	statuses.setProgress(p.Hash(), "Still chopping")
+	statuses.setProgress(p.Hash(), "Planning your meals…")
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
 	req.Header.Set("HX-Request", "true")
@@ -86,8 +86,8 @@ func TestNotFoundRecentGenerationAttemptShowsSpinner(t *testing.T) {
 	s.notFound(t.Context(), rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Still chopping")
-	assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)
+	assert.Contains(t, rr.Body.String(), "Planning your meals…")
+	assert.Contains(t, rr.Body.String(), `hx-trigger="every 1s"`)
 	assert.NotContains(t, rr.Body.String(), "Try again, chef")
 	select {
 	case <-generator.called:
@@ -115,9 +115,9 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 		},
 		{
 			name:     "untimed legacy progress",
-			wantText: "Still chopping",
+			wantText: "Planning your meals…",
 			setup: func(t testing.TB, s *server, hash string) {
-				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Still chopping")
+				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Planning your meals…")
 			},
 		},
 		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
@@ -136,13 +136,15 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 
 			require.Equal(t, http.StatusOK, rr.Code)
 			if tt.wantRetry {
+				assert.Contains(t, rr.Body.String(), `id="spin-page-work"`)
+				assert.NotContains(t, rr.Body.String(), `id="shopping-content"`)
 				assert.Contains(t, rr.Body.String(), "Try again, chef")
 				if tt.wantError != "" {
 					assert.Contains(t, rr.Body.String(), tt.wantError)
 				}
 			} else {
 				assert.Contains(t, rr.Body.String(), tt.wantText)
-				assert.Contains(t, rr.Body.String(), `hx-trigger="load delay:10s"`)
+				assert.Contains(t, rr.Body.String(), `hx-trigger="every 1s"`)
 				assert.NotContains(t, rr.Body.String(), "Try again, chef")
 			}
 		})
@@ -1731,7 +1733,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.JSONEq(t, `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`, rr.Header().Get("HX-Trigger"))
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `Hide`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
@@ -1926,7 +1928,7 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 	s.Wait()
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `Recipe to recover`)
 	require.Contains(t, rr.Body.String(), `Details`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
@@ -1979,7 +1981,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `Dismiss`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
-	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.NotContains(t, rr.Body.String(), `Recipe to save from detail page`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
 	require.NotContains(t, rr.Body.String(), `/save"`)
@@ -2022,7 +2024,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
@@ -2105,7 +2107,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.Empty(t, rr.Header().Get("HX-Trigger"))
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `/save"`)
 	require.Contains(t, rr.Body.String(), `Restore`)
 	require.NotContains(t, rr.Body.String(), `Dismissed`)
@@ -2185,7 +2187,7 @@ func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `Save`)
 	require.Contains(t, rr.Body.String(), `/save"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
-	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.NotContains(t, rr.Body.String(), `Recipe to dismiss from detail page`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
 	require.NotContains(t, rr.Body.String(), `/dismiss"`)

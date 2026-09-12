@@ -88,7 +88,7 @@ func runServer(cfg *config.Config, addr string) error {
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 

@@ -54,8 +54,8 @@ type recipePropertyDisplay struct {
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	// Hash identifies the individual recipe card and backs recipe-scoped
-	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	// Hash identifies the card. Generated recipes use their recipe hash for
+	// links and HTMX endpoints; pending plan slots use a temporary ID.
 	Hash string
 	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
 	// used anywhere the card needs to refer back to the full list state.
@@ -68,6 +68,12 @@ type shoppingRecipeView struct {
 	Dismissed          bool
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
+	Ready              bool // the recipe has been generated
+}
+
+// DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
+func (v shoppingRecipeView) DOMID() string {
+	return "shopping-recipe-" + strings.TrimRight(v.Hash, "=")
 }
 
 type mailRecipeView struct {
@@ -81,10 +87,19 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
-// should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
+type shoppingProgress struct {
+	Unfinished []*ai.RecipePlan // nil entries mark slots with ready recipes
+	// Generating stays true until the final shopping list is cached; Unfinished
+	// is also empty before planning finishes.
+	Generating bool
+	// Fragment renders only shopping_content for an HTMX outerHTML swap of
+	// #shopping-content, including the final poll that removes polling controls.
+	// Ordinary page requests render the full shoppinglist.html document.
+	Fragment bool
+}
+
+func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, progress shoppingProgress, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
 	instructions := strings.TrimSpace(p.Instructions)
@@ -116,13 +131,36 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 			Dismissed:          selection.IsDismissed(recipeHash),
 			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
+			Ready:              true,
 		})
 		if saved {
 			hasSavedRecipes = true
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
+	if len(progress.Unfinished) > 0 {
+		ordered := make([]shoppingRecipeView, 0, len(progress.Unfinished)+len(p.Saved))
+		readyIndex := 0
+		for index, plan := range progress.Unfinished {
+			if plan != nil {
+				ordered = append(ordered, shoppingRecipeView{
+					Recipe: ai.Recipe{
+						Title:       plan.Cuisine + " with " + plan.AnchorIngredient,
+						Description: plan.DishFormat,
+					},
+					Hash: "pending-" + strconv.Itoa(index),
+				})
+			} else {
+				ordered = append(ordered, recipeViews[readyIndex])
+				readyIndex++
+			}
+		}
+		ordered = append(ordered, recipeViews[readyIndex:]...)
+		recipeViews = ordered
+	}
+
 	data := struct {
+		Progress             shoppingProgress
 		Location             locations.Location
 		Date                 string
 		DateDisplay          string
@@ -143,6 +181,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
+		Progress:             progress,
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
 		DateDisplay:          p.Date.Format("January 2, 2006"),
@@ -165,7 +204,11 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 	}
 
 	httpx.SetHTMLContentType(writer)
-	if err := templates.ShoppingList.Execute(writer, data); err != nil {
+	name := "shoppinglist.html"
+	if progress.Fragment {
+		name = "shopping_content"
+	}
+	if err := templates.ShoppingList.ExecuteTemplate(writer, name, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -343,6 +386,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		Dismissed:          !saved,
 		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
+		Ready:              true,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }

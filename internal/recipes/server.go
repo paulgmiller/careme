@@ -98,6 +98,8 @@ type statusStore interface {
 }
 
 type server struct {
+	// Serializes profile changes from generation completion and interactive cards.
+	profileMu sync.Mutex
 	recipeio
 	images             ImageStore
 	imagegen           ImageGen
@@ -738,7 +740,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.storage.RemoveRecipe(currentUser, recipeHash); err != nil {
+	if err := s.removeRecipeFromUserProfile(currentUser, recipeHash); err != nil {
 		slog.ErrorContext(ctx, "failed to remove recipe from storage", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
@@ -777,8 +779,13 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 		); err != nil {
 			return fmt.Errorf("render shopping recipe card: %w", err)
 		}
-		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-			return fmt.Errorf("render shopping finalize controls: %w", err)
+
+		if _, err := s.FromCache(ctx, shoppingListHash); err == nil {
+			if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+				return fmt.Errorf("render shopping finalize controls: %w", err)
+			}
+		} else if !errors.Is(err, cache.ErrNotFound) {
+			return fmt.Errorf("load shopping list for finalize controls: %w", err)
 		}
 	}
 
@@ -1121,42 +1128,73 @@ const (
 	QueryArgHelp = "help"
 )
 
-// notFound handles a missing generated shopping list by showing the generation
-// spinner while work is in progress and the retry page after failure or timeout.
+// notFound renders the shopping list while recipes are still being generated.
 func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	hashParam := r.URL.Query().Get(queryArgHash)
-	// both params and status are require
-	_, err := s.ParamsFromCache(ctx, hashParam)
+	hash := r.URL.Query().Get(queryArgHash)
+	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
-			// Random or expired hashes can reach this public endpoint without indicating an app bug.
-			slog.InfoContext(ctx, "failed to load params for hash", "hash", hashParam, "error", err)
 			http.Error(w, "shoppinglist not found", http.StatusNotFound)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load params", "hash", hashParam, "error", err)
-		http.Error(w, "failed to load status", http.StatusInternalServerError)
+		http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
 		return
 	}
-
-	status, err := s.generationStatuses.Load(ctx, hashParam)
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil && !errors.Is(err, auth.ErrNoSession) {
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+	progress, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to load generation status", "hash", hashParam, "error", err)
 		if errors.Is(err, cache.ErrNotFound) {
-			// allow them to try again but we shouldn't ever really get here
-			generationFailed(ctx, w, r, hashParam, "recipe start failure")
+			progress.Failed = "Recipe generation could not start."
+		} else {
+			slog.ErrorContext(ctx, "failed to load generation progress", "hash", hash, "error", err)
+			// A failed poll leaves existing cards intact; the next poll retries.
+			if isShoppingPoll(r) {
+				http.Error(w, "Unable to check progress. Please try again.", http.StatusServiceUnavailable)
+				return
+			}
+		}
+	}
+	if progress.Failed != "" {
+		if isShoppingPoll(r) {
+			w.Header().Set("HX-Redirect", r.URL.RequestURI())
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-		spin(ctx, w, r, "We couldn't check progress just now. We'll try again automatically.")
+		retryURL := url.URL{Path: "/recipes/" + url.PathEscape(hash) + "/retry"}
+		if help := r.URL.Query().Get(QueryArgHelp); help != "" {
+			retryURL.RawQuery = url.Values{QueryArgHelp: {help}}.Encode()
+		}
+		renderGenerationRetry(ctx, w, r, retryURL.String(), progress.Failed)
 		return
 	}
-
-	if status.Failed != "" {
-		generationFailed(ctx, w, r, hashParam, status.Failed)
-		return
+	list := ai.ShoppingList{}
+	unfinished := make([]*ai.RecipePlan, len(progress.Slots))
+	for index, slot := range progress.Slots {
+		if slot.RecipeHash == "" {
+			unfinished[index] = &progress.Slots[index].Plan
+			continue
+		}
+		recipe, err := s.SingleFromCache(ctx, slot.RecipeHash)
+		if err != nil {
+			http.Error(w, "failed to load ready recipe", http.StatusInternalServerError)
+			return
+		}
+		list.Recipes = append(list.Recipes, *recipe)
 	}
+	list.Recipes = append(list.Recipes, p.Saved...)
+	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
+		Unfinished: unfinished,
+		Generating: true,
+		Fragment:   isShoppingPoll(r),
+	})
+}
 
-	spin(ctx, w, r, status.Message)
+func isShoppingPoll(r *http.Request) bool {
+	return httpx.IsHTMX(r) && r.Header.Get("HX-Target") == "shopping-content"
 }
 
 var guestUser = &utypes.User{ID: "00000000", Email: []string{"guest@careme.cooking"}}
@@ -1228,6 +1266,12 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.renderShoppingList(w, r, p, slist, currentUser, shoppingProgress{Fragment: isShoppingPoll(r)})
+}
+
+func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *generatorParams, slist *ai.ShoppingList, currentUser *utypes.User, progress shoppingProgress) {
+	ctx := r.Context()
+	hashParam := r.URL.Query().Get(queryArgHash)
 	signedIn := currentUser != nil
 	selection := selectionFromSaved(p.Saved)
 	if signedIn {
@@ -1239,7 +1283,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		selection = selection.override(userSelection)
 	}
-	if r.URL.Query().Get("mail") == "true" {
+	if r.URL.Query().Get("mail") == "true" && !progress.Generating {
 		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
 		var unsubscribeURL string
 		if signedIn {
@@ -1254,7 +1298,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if !signedIn {
+	if !signedIn && !progress.Generating {
 		guest.EnsureShoppingListCount(w, r)
 	}
 	wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
@@ -1282,8 +1326,8 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	FormatShoppingListHTMLForHashWithHelp(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
-		hashParam, selection, help, instructions, w)
+	formatShoppingList(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
+		hashParam, selection, help, instructions, progress, w)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
@@ -1470,6 +1514,8 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 }
 
 func (s *server) recordShoppingListForUser(userID, hash string, location *locations.Location) error {
+	s.profileMu.Lock()
+	defer s.profileMu.Unlock()
 	if userID == guestUser.ID {
 		return nil
 	}
@@ -1543,15 +1589,6 @@ func spin(ctx context.Context, w http.ResponseWriter, r *http.Request, status st
 func (s *server) renderRecipeRegenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, hash string) {
 	retryURL := url.URL{Path: "/recipe/" + url.PathEscape(hash) + "/regenerate"}
 	renderGenerationRetry(ctx, w, r, retryURL.String(), "")
-}
-
-func generationFailed(ctx context.Context, w http.ResponseWriter, r *http.Request, hash, generationError string) {
-	retryURL := url.URL{Path: "/recipes/" + hash + "/retry"}
-	retryQuery := url.Values{}
-	retryQuery.Set(QueryArgHelp, r.URL.Query().Get(QueryArgHelp))
-	retryURL.RawQuery = retryQuery.Encode()
-
-	renderGenerationRetry(ctx, w, r, retryURL.String(), generationError)
 }
 
 func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, retryPath, generationError string) {
@@ -1645,11 +1682,19 @@ func (s *server) Wait() {
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
 func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utypes.User, recipe ai.Recipe) error {
+	s.profileMu.Lock()
+	defer s.profileMu.Unlock()
 	if currentUser == nil {
 		return fmt.Errorf("invalid user")
 	}
 
-	// Check if reciProfilepe already exists in user's last recipes
+	fresh, err := s.storage.GetByID(currentUser.ID)
+	if err != nil {
+		return fmt.Errorf("reload user before saving recipe: %w", err)
+	}
+	*currentUser = *fresh
+
+	// Check if the recipe already exists in the user's last recipes
 	hash := recipe.ComputeHash()
 
 	_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {
@@ -1672,4 +1717,16 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 	slog.InfoContext(ctx, "added saved recipe to user profile", "title", recipe.Title)
 
 	return nil
+}
+
+func (s *server) removeRecipeFromUserProfile(currentUser *utypes.User, recipeHash string) error {
+	s.profileMu.Lock()
+	defer s.profileMu.Unlock()
+	fresh, err := s.storage.GetByID(currentUser.ID)
+	if err != nil {
+		return fmt.Errorf("reload user before removing recipe: %w", err)
+	}
+	*currentUser = *fresh
+	_, err = s.storage.RemoveRecipe(currentUser, recipeHash)
+	return err
 }

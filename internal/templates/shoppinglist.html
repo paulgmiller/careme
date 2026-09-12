@@ -47,7 +47,246 @@
           </div>
         </div>
 
-        <div class="p-8">
+        {{template "shopping_content" .}}
+      </div>
+
+      {{if .AdminURL}}
+      <p class="text-center text-[0.6875rem] text-ink-400">
+        <a href="{{.AdminURL}}" class="hover:text-ink-500">Admin</a>
+      </p>
+      {{end}}
+      <p class="text-center text-sm text-ink-500">Planned by Careme.</p>
+    </section>
+  </main>
+  <script src="/static/htmx@2.0.10.js"></script>
+  <script src="{{AssetPath}}share.js"></script>
+  {{template "clerk_refresh.html" .}}
+</body>
+</html>
+
+{{define "shopping_finalize_controls"}}
+<div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_finalize_controls_content"}}
+  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
+    <button type="button"
+            id="finalizeButton"
+            {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
+            hx-swap="none"{{else}}disabled
+            aria-disabled="true"
+            aria-describedby="finalize-help"{{end}}
+            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
+      Build Shopping List
+    </button>
+  </span>
+  {{template "shopping_list_share_button" .}}
+  {{if not .HasSavedRecipes}}
+  <p id="finalize-help" class="text-sm text-ink-600">
+    Add at least one recipe to assemble your shopping list.
+  </p>
+  {{end}}
+{{end}}
+
+{{define "shopping_finalize_controls_response"}}
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
+  {{template "shopping_finalize_controls_content" .}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_card"}}
+{{if not .Ready}}
+<article id="{{.DOMID}}" class="shopping-recipe-card min-h-48 space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <h2 class="text-2xl font-semibold text-brand-700">{{.Title}}</h2>
+  <p class="text-sm text-ink-500">{{.Description}}</p>
+</article>
+{{else if .Dismissed}}
+<article id="{{.DOMID}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="min-w-0">
+      <a href="/recipe/{{.Hash}}" class="block truncate text-lg font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+        {{.Title}}
+      </a>
+    </div>
+    {{template "shopping_recipe_actions" .}}
+  </div>
+</article>
+{{else}}
+<article id="{{.DOMID}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <div class="space-y-5 sm:grid {{if .HasImage}}sm:grid-cols-[minmax(0,1fr)_25%]{{else}}sm:grid-cols-1{{end}} sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
+    <header class="space-y-4 sm:contents">
+      <div class="flex items-start gap-4 sm:contents">
+        <div class="min-w-0 flex-1 sm:col-start-1 sm:row-start-1">
+          <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+            {{.Title}}
+          </a>
+          <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
+        </div>
+        {{if .HasImage}}
+        <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
+          <img src="{{ShoppingRecipeImageURL .Hash}}"
+               alt="{{.Title}}"
+               class="h-auto w-full object-cover"
+               loading="lazy" />
+        </a>
+        {{end}}
+      </div>
+      <div class="flex flex-wrap items-center gap-3 sm:col-start-1 sm:row-start-2">
+        {{template "shopping_recipe_actions" .}}
+        {{if or .Ingredients .Instructions}}
+        <button type="button"
+                onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
+                class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+          Details
+        </button>
+        {{end}}
+      </div>
+    </header>
+
+    <div class="space-y-3 text-sm text-ink-600 sm:col-start-1 sm:row-start-3">
+      {{template "recipe_properties" .PropertyDisplay}}
+      {{if .Health}}
+      <p><span class="font-semibold text-brand-700">Health:</span> {{.Health}}</p>
+      {{end}}
+      <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
+    </div>
+  </div>
+
+  {{if or .Ingredients .Instructions}}
+  <details class="space-y-4">
+    <summary class="hidden">Details</summary>
+    <section class="space-y-6">
+    <div class="grid gap-6 md:grid-cols-2">
+      <div>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
+        <ul class="mt-3 space-y-2 text-ink-700">
+          {{range .DisplayIngredients}}
+          <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+            <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
+              <span class="font-medium text-brand-700">{{.Name}}</span>
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
+                {{if .Quantity}}
+                <span class="text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+                {{else}}
+                <span class="hidden sm:block" aria-hidden="true"></span>
+                {{end}}
+                {{if .Price}}
+                <span class="text-ink-500 sm:text-right sm:text-sm">{{.Price}}</span>
+                {{else}}
+                <span class="hidden sm:block" aria-hidden="true"></span>
+                {{end}}
+              </div>
+            </div>
+          </li>
+          {{end}}
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Instructions</h3>
+        <ol class="mt-3 list-decimal space-y-2 pl-5 text-ink-700">
+          {{range .InstructionsHTML}}
+          <li>
+            <div class="space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-ink-600">{{.}}</div>
+          </li>
+          {{end}}
+        </ol>
+        {{template "temperature_guide_link" .}}
+      </div>
+    </div>
+
+    <div class="space-y-2 text-sm text-ink-600">
+      {{template "shopping_recipe_wine_details" .}}
+    </div>
+  </section>
+  </details>
+  {{end}}
+</article>
+{{end}}
+{{end}}
+
+{{define "shopping_recipe_actions"}}
+<div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
+  {{if .Dismissed}}
+  {{if .ServerSignedIn}}
+  <button type="button"
+          hx-post="/recipe/{{.Hash}}/save"
+          hx-vals='{"h":"{{.ShoppingListHash}}"}'
+          hx-target="closest .shopping-recipe-card"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Restore
+  </button>
+  {{end}}
+  {{else}}
+  {{if not .Saved}}
+  <button type="button"
+          hx-post="/recipe/{{.Hash}}/save"
+          hx-vals='{"h":"{{.ShoppingListHash}}"}'
+          hx-target="closest .shopping-recipe-card"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Add
+  </button>
+  {{else}}
+  <span aria-label="Recipe added"
+        class="inline-flex items-center text-sm font-semibold text-action-green-700">
+    ✓ Added
+  </span>
+  {{end}}
+  {{if .ServerSignedIn}}
+  <button type="button"
+          hx-post="/recipe/{{.Hash}}/dismiss"
+          hx-vals='{"h":"{{.ShoppingListHash}}"}'
+          hx-target="closest .shopping-recipe-card"
+          hx-swap="outerHTML"
+          hx-disabled-elt="this"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Hide
+  </button>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+
+{{define "shopping_recipe_wine_details"}}
+  {{if .WineRecommendation}}
+  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
+    {{if .WineRecommendation.Wines}}
+    <p class="font-semibold text-brand-700">Wine picks:</p>
+    <ul class="mt-1 space-y-1">
+      {{range .WineRecommendation.Wines}}
+      <li class="flex flex-wrap items-baseline gap-x-2">
+        <span class="font-medium text-brand-800">{{.Name}}</span>
+        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
+        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{if .WineRecommendation.Commentary}}
+    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
+      <span class="font-semibold text-brand-700">Why it works:</span>
+      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
+    </p>
+    {{end}}
+  </div>
+  {{end}}
+{{end}}
+
+{{define "shopping_content"}}
+  {{if .Progress.Generating}}
+    {{template "shopping_progress" .}}
+  {{else}}
+    {{template "shopping_ready" .}}
+  {{end}}
+{{end}}
+
+{{define "shopping_ready"}}
+        <div id="shopping-content" class="p-8">
           {{if .HelpMessage}}
           <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
           <aside id="shopping-list-help"
@@ -149,222 +388,4 @@
             {{end}}
           </div>
         </div>
-      </div>
-
-      {{if .AdminURL}}
-      <p class="text-center text-[0.6875rem] text-ink-400">
-        <a href="{{.AdminURL}}" class="hover:text-ink-500">Admin</a>
-      </p>
-      {{end}}
-      <p class="text-center text-sm text-ink-500">Planned by Careme.</p>
-    </section>
-  </main>
-  <script src="/static/htmx@2.0.10.js"></script>
-  <script src="{{AssetPath}}share.js"></script>
-  {{template "clerk_refresh.html" .}}
-</body>
-</html>
-
-{{define "shopping_finalize_controls"}}
-<div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
-  {{template "shopping_finalize_controls_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_finalize_controls_content"}}
-  <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
-    <button type="button"
-            id="finalizeButton"
-            {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
-            hx-swap="none"{{else}}disabled
-            aria-disabled="true"
-            aria-describedby="finalize-help"{{end}}
-            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
-      Build Shopping List
-    </button>
-  </span>
-  {{template "shopping_list_share_button" .}}
-  {{if not .HasSavedRecipes}}
-  <p id="finalize-help" class="text-sm text-ink-600">
-    Add at least one recipe to assemble your shopping list.
-  </p>
-  {{end}}
-{{end}}
-
-{{define "shopping_finalize_controls_response"}}
-<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
-  {{template "shopping_finalize_controls_content" .}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_card"}}
-{{if .Dismissed}}
-<article id="shopping-recipe-{{.Hash}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
-  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-    <div class="min-w-0">
-      <a href="/recipe/{{.Hash}}" class="block truncate text-lg font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-        {{.Title}}
-      </a>
-    </div>
-    {{template "shopping_recipe_actions" .}}
-  </div>
-</article>
-{{else}}
-<article id="shopping-recipe-{{.Hash}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-  <div class="space-y-5 sm:grid {{if .HasImage}}sm:grid-cols-[minmax(0,1fr)_25%]{{else}}sm:grid-cols-1{{end}} sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
-    <header class="space-y-4 sm:contents">
-      <div class="flex items-start gap-4 sm:contents">
-        <div class="min-w-0 flex-1 sm:col-start-1 sm:row-start-1">
-          <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-            {{.Title}}
-          </a>
-          <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
-        </div>
-        {{if .HasImage}}
-        <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
-          <img src="{{ShoppingRecipeImageURL .Hash}}"
-               alt="{{.Title}}"
-               class="h-auto w-full object-cover"
-               loading="lazy" />
-        </a>
-        {{end}}
-      </div>
-      <div class="flex flex-wrap items-center gap-3 sm:col-start-1 sm:row-start-2">
-        {{template "shopping_recipe_actions" .}}
-        <button type="button"
-                onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
-                class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-          Details
-        </button>
-      </div>
-    </header>
-
-    <div class="space-y-3 text-sm text-ink-600 sm:col-start-1 sm:row-start-3">
-      {{template "recipe_properties" .PropertyDisplay}}
-      {{if .Health}}
-      <p><span class="font-semibold text-brand-700">Health:</span> {{.Health}}</p>
-      {{end}}
-      <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
-    </div>
-  </div>
-
-  <details class="space-y-4">
-    <summary class="hidden">Details</summary>
-    <section class="space-y-6">
-    <div class="grid gap-6 md:grid-cols-2">
-      <div>
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Ingredients</h3>
-        <ul class="mt-3 space-y-2 text-ink-700">
-          {{range .DisplayIngredients}}
-          <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-            <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
-              <span class="font-medium text-brand-700">{{.Name}}</span>
-              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
-                {{if .Quantity}}
-                <span class="text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                {{else}}
-                <span class="hidden sm:block" aria-hidden="true"></span>
-                {{end}}
-                {{if .Price}}
-                <span class="text-ink-500 sm:text-right sm:text-sm">{{.Price}}</span>
-                {{else}}
-                <span class="hidden sm:block" aria-hidden="true"></span>
-                {{end}}
-              </div>
-            </div>
-          </li>
-          {{end}}
-        </ul>
-      </div>
-      <div>
-        <h3 class="text-sm font-semibold uppercase tracking-wide text-ink-500">Instructions</h3>
-        <ol class="mt-3 list-decimal space-y-2 pl-5 text-ink-700">
-          {{range .InstructionsHTML}}
-          <li>
-            <div class="space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-ink-600">{{.}}</div>
-          </li>
-          {{end}}
-        </ol>
-        {{template "temperature_guide_link" .}}
-      </div>
-    </div>
-
-    <div class="space-y-2 text-sm text-ink-600">
-      {{template "shopping_recipe_wine_details" .}}
-    </div>
-  </section>
-  </details>
-</article>
-{{end}}
-{{end}}
-
-{{define "shopping_recipe_actions"}}
-<div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
-  {{if .Dismissed}}
-  {{if .ServerSignedIn}}
-  <button type="button"
-          hx-post="/recipe/{{.Hash}}/save"
-          hx-vals='{"h":"{{.ShoppingListHash}}"}'
-          hx-target="closest .shopping-recipe-card"
-          hx-swap="outerHTML"
-          hx-disabled-elt="this"
-          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
-    Restore
-  </button>
-  {{end}}
-  {{else}}
-  {{if not .Saved}}
-  <button type="button"
-          hx-post="/recipe/{{.Hash}}/save"
-          hx-vals='{"h":"{{.ShoppingListHash}}"}'
-          hx-target="closest .shopping-recipe-card"
-          hx-swap="outerHTML"
-          hx-disabled-elt="this"
-          class="inline-flex items-center justify-center rounded-lg border-2 border-action-green-500 bg-action-green-50 px-4 py-2 text-sm font-medium text-action-green-700 transition hover:bg-action-green-100 focus:outline-none focus:ring-2 focus:ring-action-green-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
-    Add
-  </button>
-  {{else}}
-  <span aria-label="Recipe added"
-        class="inline-flex items-center text-sm font-semibold text-action-green-700">
-    ✓ Added
-  </span>
-  {{end}}
-  {{if .ServerSignedIn}}
-  <button type="button"
-          hx-post="/recipe/{{.Hash}}/dismiss"
-          hx-vals='{"h":"{{.ShoppingListHash}}"}'
-          hx-target="closest .shopping-recipe-card"
-          hx-swap="outerHTML"
-          hx-disabled-elt="this"
-          class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
-    Hide
-  </button>
-  {{end}}
-  {{end}}
-</div>
-{{end}}
-
-{{define "shopping_recipe_wine_details"}}
-  {{if .WineRecommendation}}
-  <div class="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
-    {{if .WineRecommendation.Wines}}
-    <p class="font-semibold text-brand-700">Wine picks:</p>
-    <ul class="mt-1 space-y-1">
-      {{range .WineRecommendation.Wines}}
-      <li class="flex flex-wrap items-baseline gap-x-2">
-        <span class="font-medium text-brand-800">{{.Name}}</span>
-        {{if .Price}}<span class="text-brand-700">{{.Price}}</span>{{end}}
-        {{if .Quantity}}<span class="text-brand-600">{{.Quantity}}</span>{{end}}
-      </li>
-      {{end}}
-    </ul>
-    {{end}}
-    {{if .WineRecommendation.Commentary}}
-    <p class="{{if .WineRecommendation.Wines}}mt-2{{end}}">
-      <span class="font-semibold text-brand-700">Why it works:</span>
-      <span class="whitespace-pre-line">{{.WineRecommendation.Commentary}}</span>
-    </p>
-    {{end}}
-  </div>
-  {{end}}
 {{end}}
