@@ -11,8 +11,8 @@ import (
 
 var errRecipeNotReady = errors.New("recipe not ready or not in shopping list")
 
-// requireReadyRecipe allows selection only after the complete list is persisted.
-// Individually finished recipes remain read-only while the list is generating.
+// requireReadyRecipe allows selection of recipes in a completed list, recipes
+// published in a generation slot, and recipes carried forward in saved params.
 func (s *server) requireReadyRecipe(ctx context.Context, listHash, recipeHash string) error {
 	list, err := s.FromCache(ctx, listHash)
 	if err == nil {
@@ -25,6 +25,26 @@ func (s *server) requireReadyRecipe(ctx context.Context, listHash, recipeHash st
 	}
 	if !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("load completed list: %w", err)
+	}
+	progress, err := s.generationStatuses.Load(ctx, listHash)
+	if err == nil {
+		for _, slot := range progress.Slots {
+			if slot.RecipeHash == recipeHash {
+				return nil
+			}
+		}
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return fmt.Errorf("load generation status: %w", err)
+	}
+	params, err := s.ParamsFromCache(ctx, listHash)
+	if err == nil {
+		for _, recipe := range params.Saved {
+			if recipe.ComputeHash() == recipeHash {
+				return nil
+			}
+		}
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return fmt.Errorf("load recipe params: %w", err)
 	}
 	return errRecipeNotReady
 }

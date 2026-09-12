@@ -97,7 +97,12 @@
 {{end}}
 
 {{define "shopping_recipe_card"}}
-{{if .Dismissed}}
+{{if not .Ready}}
+<article id="{{.DOMID}}" class="shopping-recipe-card min-h-48 space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <h2 class="text-2xl font-semibold text-brand-700">{{.Title}}</h2>
+  <p class="text-sm text-ink-500">{{.Description}}</p>
+</article>
+{{else if .Dismissed}}
 <article id="{{.DOMID}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="min-w-0">
@@ -130,11 +135,13 @@
       </div>
       <div class="flex flex-wrap items-center gap-3 sm:col-start-1 sm:row-start-2">
         {{template "shopping_recipe_actions" .}}
+        {{if or .Ingredients .Instructions}}
         <button type="button"
                 onclick="var d=this.closest('article').querySelector('details'); if (d) d.open=!d.open;"
                 class="inline-flex items-center justify-center rounded-lg border-2 border-brand-400 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
           Details
         </button>
+        {{end}}
       </div>
     </header>
 
@@ -147,6 +154,7 @@
     </div>
   </div>
 
+  {{if or .Ingredients .Instructions}}
   <details class="space-y-4">
     <summary class="hidden">Details</summary>
     <section class="space-y-6">
@@ -193,6 +201,7 @@
     </div>
   </section>
   </details>
+  {{end}}
 </article>
 {{end}}
 {{end}}

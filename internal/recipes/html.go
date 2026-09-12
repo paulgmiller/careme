@@ -24,8 +24,6 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
-
-	"github.com/samber/lo"
 )
 
 type recipeImageView struct {
@@ -57,8 +55,8 @@ type recipePropertyDisplay struct {
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	// Hash identifies the individual recipe card and backs recipe-scoped
-	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	// Hash identifies the card. Generated recipes use their recipe hash for
+	// links and HTMX endpoints; pending plan slots use a temporary ID.
 	Hash string
 	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
 	// used anywhere the card needs to refer back to the full list state.
@@ -71,6 +69,7 @@ type shoppingRecipeView struct {
 	Dismissed          bool
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
+	Ready              bool // the recipe has been generated
 }
 
 // DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
@@ -97,14 +96,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 	formatShoppingList(ctx, p, l, wineRecommendations, recipeImages, currentUser, hash, selection, helpMessage, pendingInstructions, shoppingProgress{}, writer)
 }
 
-type shoppingProgressCard struct {
-	Title       string
-	Description string
-	Recipe      *shoppingRecipeView
-}
-
 type shoppingProgress struct {
-	Cards    []shoppingProgressCard
 	Status   *status.Status
 	PollURL  string
 	Fragment bool
@@ -143,6 +135,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 			Dismissed:          selection.IsDismissed(recipeHash),
 			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
+			Ready:              true,
 		})
 		if saved {
 			hasSavedRecipes = true
@@ -150,21 +143,24 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		}
 	}
 	if progress.Status != nil {
-		ready := lo.SliceToMap(recipeViews, func(v shoppingRecipeView) (string, shoppingRecipeView) { return v.Hash, v })
-		addReady := func(hash string) {
-			recipe := ready[hash]
-			progress.Cards = append(progress.Cards, shoppingProgressCard{Title: recipe.Title, Description: recipe.Description, Recipe: &recipe})
-		}
-		for _, slot := range progress.Status.Slots {
+		ordered := make([]shoppingRecipeView, 0, len(progress.Status.Slots)+len(p.Saved))
+		readyIndex := 0
+		for index, slot := range progress.Status.Slots {
 			if slot.RecipeHash != "" {
-				addReady(slot.RecipeHash)
+				ordered = append(ordered, recipeViews[readyIndex])
+				readyIndex++
 			} else {
-				progress.Cards = append(progress.Cards, shoppingProgressCard{Title: slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient, Description: slot.Plan.DishFormat})
+				ordered = append(ordered, shoppingRecipeView{
+					Recipe: ai.Recipe{
+						Title:       slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient,
+						Description: slot.Plan.DishFormat,
+					},
+					Hash: "pending-" + strconv.Itoa(index),
+				})
 			}
 		}
-		for _, recipe := range p.Saved {
-			addReady(recipe.ComputeHash())
-		}
+		ordered = append(ordered, recipeViews[readyIndex:]...)
+		recipeViews = ordered
 	}
 
 	data := struct {
@@ -394,6 +390,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		Dismissed:          !saved,
 		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
+		Ready:              true,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }

@@ -796,8 +796,12 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 			return fmt.Errorf("render shopping recipe card: %w", err)
 		}
 
-		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
-			return fmt.Errorf("render shopping finalize controls: %w", err)
+		if _, err := s.FromCache(ctx, shoppingListHash); err == nil {
+			if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
+				return fmt.Errorf("render shopping finalize controls: %w", err)
+			}
+		} else if !errors.Is(err, cache.ErrNotFound) {
+			return fmt.Errorf("load shopping list for finalize controls: %w", err)
 		}
 	}
 
