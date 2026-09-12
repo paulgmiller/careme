@@ -100,7 +100,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	}
 	assert.NotContains(t, html, "Health note:")
 	assert.NotContains(t, html, "🌿")
-	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+	if !strings.Contains(html, `/static/htmx@2.0.10.js`) {
 		t.Error("shopping list HTML should include htmx script")
 	}
 	if !strings.Contains(html, `aria-label="Share shopping list"`) {
@@ -568,7 +568,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="recipe_title"`) {
 		t.Error("recipe HTML should include recipe title hidden input")
 	}
-	if !strings.Contains(html, `/static/htmx@2.0.8.js`) {
+	if !strings.Contains(html, `/static/htmx@2.0.10.js`) {
 		t.Error("recipe HTML should include htmx script")
 	}
 	if !strings.Contains(html, `aria-label="Share recipe"`) {

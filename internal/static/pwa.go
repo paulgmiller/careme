@@ -157,7 +157,7 @@ func renderServiceWorker(w io.Writer) error {
 		"/manifest.webmanifest",
 		"/static/app-icon-192.png",
 		"/static/app-icon-512.png",
-		"/static/htmx@2.0.8.js",
+		"/static/htmx@2.0.10.js",
 		AssetPath + "tailwind.css",
 		// not not other javascript?
 	}

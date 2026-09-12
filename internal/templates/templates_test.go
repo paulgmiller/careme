@@ -475,7 +475,7 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	if strings.Contains(rendered, `http-equiv="refresh"`) {
 		t.Fatalf("spinner page should use htmx polling instead of meta refresh, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.8.js"></script>`) ||
+	if !strings.Contains(rendered, `<script src="/static/htmx@2.0.10.js"></script>`) ||
 		!strings.Contains(rendered, `hx-get="/recipes?h=abc"`) ||
 		!strings.Contains(rendered, `hx-trigger="load delay:10s"`) {
 		t.Fatalf("spinner page should poll with htmx, body: %s", rendered)
@@ -654,7 +654,7 @@ func TestFarmersMarketTemplateUsesHTMXUpload(t *testing.T) {
 
 	rendered := buf.String()
 	for _, want := range []string{
-		`<script src="/static/htmx@2.0.8.js"></script>`,
+		`<script src="/static/htmx@2.0.10.js"></script>`,
 		`id="farmers-market-error"`,
 		`hx-post="/farmersmarket"`,
 		`hx-encoding="multipart/form-data"`,
