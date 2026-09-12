@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
+	"careme/internal/recipes/status"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -88,9 +89,9 @@ type shoppingListGroup struct {
 }
 
 type shoppingProgress struct {
-	Unfinished []*ai.RecipePlan // nil entries mark slots with ready recipes
-	// Generating stays true until the final shopping list is cached; Unfinished
-	// is also empty before planning finishes.
+	Slots []status.Slot // meal-plan order, with hashes for finished recipes
+	// Generating stays true until the final shopping list is cached; the slots
+	// are also empty before planning finishes.
 	Generating bool
 	// Fragment renders only shopping_content for an HTMX outerHTML swap of
 	// #shopping-content, including the final poll that removes polling controls.
@@ -98,7 +99,7 @@ type shoppingProgress struct {
 	Fragment bool
 }
 
-func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList, finishedRecipes map[string]ai.Recipe,
 	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, progress shoppingProgress, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
@@ -106,11 +107,10 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 	if instructions == "" && l.Plan != nil {
 		instructions = l.Plan.ChefNoteSuggestion
 	}
-	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
+	viewsByHash := make(map[string]shoppingRecipeView, len(finishedRecipes))
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
-	for _, recipe := range l.Recipes {
-		recipeHash := recipe.ComputeHash()
+	for recipeHash, recipe := range finishedRecipes {
 		wineRecommendation := wineRecommendations[recipeHash]
 		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
 		instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
@@ -119,7 +119,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 			return
 		}
 		saved := selection.IsSaved(recipeHash)
-		recipeViews = append(recipeViews, shoppingRecipeView{
+		viewsByHash[recipeHash] = shoppingRecipeView{
 			Recipe:             recipe,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
@@ -132,31 +132,36 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 			HasImage:           recipeImages[recipeHash],
 			WineRecommendation: wineRecommendation,
 			Ready:              true,
-		})
-		if saved {
-			hasSavedRecipes = true
-			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
-	if len(progress.Unfinished) > 0 {
-		ordered := make([]shoppingRecipeView, 0, len(progress.Unfinished)+len(p.Saved))
-		readyIndex := 0
-		for index, plan := range progress.Unfinished {
-			if plan != nil {
-				ordered = append(ordered, shoppingRecipeView{
+	recipeViews := make([]shoppingRecipeView, 0, len(progress.Slots)+len(l.Recipes))
+	if progress.Generating {
+		for index, slot := range progress.Slots {
+			if slot.RecipeHash == "" {
+				recipeViews = append(recipeViews, shoppingRecipeView{
 					Recipe: ai.Recipe{
-						Title:       plan.Cuisine + " with " + plan.AnchorIngredient,
-						Description: plan.DishFormat,
+						Title:       slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient,
+						Description: slot.Plan.DishFormat,
 					},
 					Hash: "pending-" + strconv.Itoa(index),
 				})
 			} else {
-				ordered = append(ordered, recipeViews[readyIndex])
-				readyIndex++
+				recipeViews = append(recipeViews, viewsByHash[slot.RecipeHash])
 			}
 		}
-		ordered = append(ordered, recipeViews[readyIndex:]...)
-		recipeViews = ordered
+		for _, recipe := range p.Saved {
+			recipeViews = append(recipeViews, viewsByHash[recipe.ComputeHash()])
+		}
+	} else {
+		for _, recipe := range l.Recipes {
+			recipeViews = append(recipeViews, viewsByHash[recipe.ComputeHash()])
+		}
+	}
+	for _, view := range recipeViews {
+		if view.Saved {
+			hasSavedRecipes = true
+			combinedIngredients = append(combinedIngredients, view.DisplayIngredients...)
+		}
 	}
 
 	data := struct {

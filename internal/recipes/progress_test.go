@@ -114,7 +114,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, body, `id="spin-page-work"`)
 	assert.Contains(t, body, "Recipe service unavailable")
 	assert.Contains(t, body, `/recipes/`+hash+`/retry`)
-	assert.Contains(t, body, `help=Welcome`)
+	assert.NotContains(t, body, `help=Welcome`)
 	assert.NotContains(t, body, `id="shopping-content"`)
 
 	// A retry clears progress and removes previously published cards.
@@ -187,4 +187,42 @@ func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
 	assert.NotContains(t, body, `id="shopping-recipe-`+hash+`"`)
 	assert.Contains(t, body, `/recipe/`+hash+`/save`, "recipe identity must retain padding")
 	assert.Contains(t, body, `/recipe/`+hash+`/dismiss`)
+}
+
+func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
+	first := ai.Recipe{Title: "First ready recipe"}
+	last := ai.Recipe{Title: "Last ready recipe"}
+	saved := ai.Recipe{Title: "Previously saved recipe"}
+	p.Saved = []ai.Recipe{saved}
+	// Loaded recipes deliberately differ from slot order.
+	list := ai.ShoppingList{Recipes: []ai.Recipe{last, saved, first}}
+	finished := map[string]ai.Recipe{
+		first.ComputeHash(): first,
+		last.ComputeHash():  last,
+		saved.ComputeHash(): saved,
+	}
+	progress := shoppingProgress{
+		Generating: true,
+		Fragment:   true,
+		Slots: []status.Slot{
+			{RecipeHash: first.ComputeHash()},
+			{Plan: ai.RecipePlan{Cuisine: "Thai", AnchorIngredient: "tofu"}},
+			{RecipeHash: last.ComputeHash()},
+		},
+	}
+	rr := httptest.NewRecorder()
+	formatShoppingList(t.Context(), p, list, finished, map[string]*ai.WineSelection{}, map[string]bool{},
+		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	titles := []string{first.Title, "Thai with tofu", last.Title, saved.Title}
+	for _, title := range titles {
+		require.Contains(t, body, title)
+	}
+	for i := 1; i < len(titles); i++ {
+		assert.Less(t, strings.Index(body, titles[i-1]), strings.Index(body, titles[i]))
+	}
+	assert.NotContains(t, body, `href="/recipe/pending-1"`)
+	assert.Contains(t, body, "Recipe added")
 }
