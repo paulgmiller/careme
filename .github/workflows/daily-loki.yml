@@ -1,0 +1,123 @@
+name: Daily Loki repair
+
+on:
+  schedule:
+    - cron: '23 16 * * *' # 16:23 UTC; 09:23 PDT / 08:23 PST
+  workflow_dispatch:
+
+concurrency:
+  group: daily-loki-repair
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      ENABLE_MOCKS: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for an existing repair PR
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh pr list --head automation/daily-loki-repair --state open --json number --jq length)
+          echo "exists=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo 'Daily repair skipped: review the existing automation/daily-loki-repair PR first.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Test Loki query helper
+        run: python3 -B -m unittest discover -s .github/codex -p 'test_*.py'
+
+      - uses: actions/setup-go@v6
+        if: steps.pending.outputs.exists == 'false'
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/tool.sum
+
+      - name: Check credentials
+        if: steps.pending.outputs.exists == 'false'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LOKI_TOKEN: ${{ secrets.LOKI_TOKEN }}
+        run: |
+          test -n "$LOKI_TOKEN" || { echo "Set the LOKI_TOKEN repository secret." >&2; exit 1; }
+          test -n "$OPENAI_API_KEY" || { echo "Set the OPENAI_API_KEY repository secret." >&2; exit 1; }
+
+      - name: Install pinned Loki skill and prepare dependencies
+        if: steps.pending.outputs.exists == 'false'
+        run: |
+          git clone --no-checkout https://github.com/grafana/skills.git "$RUNNER_TEMP/grafana-skills"
+          git -C "$RUNNER_TEMP/grafana-skills" checkout 51d33e71e191b409bbd25fc7be2684c610d18166
+          mkdir -p "$HOME/.agents/skills"
+          cp -R "$RUNNER_TEMP/grafana-skills/skills/grafana-lgtm/loki" "$HOME/.agents/skills/loki"
+          go mod download
+          go mod download -modfile=tools/tool.mod
+          bash tools/install-golangci-lint.sh
+
+      - name: Investigate and fix one error
+        if: steps.pending.outputs.exists == 'false'
+        id: codex
+        env:
+          LOKI_TOKEN: ${{ secrets.LOKI_TOKEN }}
+          LOKI_USER: ${{ vars.LOKI_USER || '1563943' }}
+          LOKI_URL: ${{ vars.LOKI_URL || 'https://logs-prod-021.grafana.net' }}
+        uses: openai/codex-action@f367b1e9572fd064ea71ef925ca24ee0f01080af # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/daily-loki.md
+          output-file: ${{ runner.temp }}/loki-repair-summary.md
+          sandbox: workspace-write
+          codex-args: '["-c", "sandbox_workspace_write.network_access=true", "-c", "shell_environment_policy.ignore_default_excludes=true", "-c", "shell_environment_policy.include_only=[\"PATH\",\"HOME\",\"TMPDIR\",\"RUNNER_TEMP\",\"ENABLE_MOCKS\",\"LOKI_TOKEN\",\"LOKI_USER\",\"LOKI_URL\"]"]'
+          safety-strategy: drop-sudo
+
+      - name: Validate proposed changes
+        if: steps.pending.outputs.exists == 'false'
+        run: |
+          # Reject changes outside application source/tests and existing UI assets.
+          git add -N .
+          while IFS= read -r path; do
+            case "$path" in
+              internal/*|cmd/*) ;;
+              *) echo "Unexpected changed path: $path" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          ./task.sh fmt-check
+          go test ./...
+          go vet ./...
+          ./task.sh lint
+          git diff --check
+
+      - name: Open draft repair PR
+        if: steps.pending.outputs.exists == 'false'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          token: ${{ secrets.LOKI_REPAIR_PR_TOKEN || github.token }}
+          branch: automation/daily-loki-repair
+          delete-branch: true
+          draft: true
+          title: 'Fix a production error found by daily Loki review'
+          commit-message: 'Fix production error identified by daily Loki review'
+          body-path: ${{ runner.temp }}/loki-repair-summary.md
+          add-paths: |
+            internal/
+            cmd/
+
+      - name: Publish run summary
+        if: always() && steps.codex.outcome == 'success'
+        run: cat "$RUNNER_TEMP/loki-repair-summary.md" >> "$GITHUB_STEP_SUMMARY"
