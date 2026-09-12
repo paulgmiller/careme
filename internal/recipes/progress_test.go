@@ -39,10 +39,12 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 		return rr.Body.String()
 	}
-	assert.Contains(t, poll(false), "Planning your meals…")
+	body := poll(false)
+	assert.Contains(t, body, "Planning your meals…")
+	assert.Contains(t, body, `hx-get="" hx-trigger="every 1s"`)
 	plans := []ai.RecipePlan{{Cuisine: "Italian", AnchorIngredient: "beans"}, {Cuisine: "Thai", AnchorIngredient: "tofu"}}
 	require.NoError(t, statuses.Plan(t.Context(), hash, plans))
-	body := poll(true)
+	body = poll(true)
 	assert.NotContains(t, body, "<!doctype html>")
 	assert.Contains(t, body, `id="shopping-recipe-pending-0"`)
 	assert.Contains(t, body, `id="shopping-recipe-pending-1"`)
@@ -130,6 +132,8 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	require.ErrorIs(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()), errRecipeNotReady)
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{ready}, Plan: &ai.MenuPlan{Plans: plans}}, hash))
 	body = poll(true)
+	assert.NotContains(t, body, "<!doctype html>")
+	assert.Contains(t, body, `id="shopping-content"`)
 	assert.NotContains(t, body, `hx-trigger="every 1s"`)
 	assert.NotContains(t, body, "shopping-recipe-pending-")
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/save`)

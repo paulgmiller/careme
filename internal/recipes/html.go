@@ -89,8 +89,13 @@ type shoppingListGroup struct {
 
 type shoppingProgress struct {
 	Unfinished []*ai.RecipePlan // nil entries mark slots with ready recipes
-	PollURL    string
-	Fragment   bool
+	// Generating stays true until the final shopping list is cached; Unfinished
+	// is also empty before planning finishes.
+	Generating bool
+	// Fragment renders only shopping_content for an HTMX outerHTML swap of
+	// #shopping-content, including the final poll that removes polling controls.
+	// Ordinary page requests render the full shoppinglist.html document.
+	Fragment bool
 }
 
 func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList,
@@ -133,7 +138,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
-	if progress.PollURL != "" {
+	if len(progress.Unfinished) > 0 {
 		ordered := make([]shoppingRecipeView, 0, len(progress.Unfinished)+len(p.Saved))
 		readyIndex := 0
 		for index, plan := range progress.Unfinished {

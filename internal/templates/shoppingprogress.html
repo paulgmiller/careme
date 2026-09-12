@@ -1,6 +1,6 @@
 {{define "shopping_progress"}}
 <div id="shopping-content" class="p-8"
-     hx-get="{{.Progress.PollURL}}" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML">
+     hx-get="" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML">
   <div class="mb-6 rounded-2xl border border-brand-200 bg-brand-50 p-4" role="status" aria-live="polite">
     {{if .Progress.Unfinished}}
     <p>Your meals are taking shape. You can add finished recipes as they arrive.</p>

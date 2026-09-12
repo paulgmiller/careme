@@ -119,15 +119,22 @@ func (p failingProgress) RecipeReady(context.Context, string, int, string) error
 	return errors.New("progress storage unavailable")
 }
 
-func TestGenerationFailsWhenStructuredProgressCannotBeStored(t *testing.T) {
+func TestGenerationHandlesProgressWriteFailures(t *testing.T) {
 	for _, failPlan := range []bool{true, false} {
 		t.Run(map[bool]string{true: "plan", false: "ready recipe"}[failPlan], func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			client := &captureGenerateAIClient{shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Dinner"}}}}
 			generator := newTestGenerator(t, client, &captureCritiqueService{}, fixedStaplesService{}, failingProgress{failPlan: failPlan}, noopRecipeSaver{})
 			list, err := generator.GenerateRecipes(t.Context(), p)
-			require.ErrorContains(t, err, "progress storage unavailable")
-			assert.Nil(t, list)
+			if failPlan {
+				require.ErrorContains(t, err, "progress storage unavailable")
+				assert.Nil(t, list)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, list)
+			require.Len(t, list.Recipes, 1)
+			assert.Equal(t, "Dinner", list.Recipes[0].Title)
 		})
 	}
 }

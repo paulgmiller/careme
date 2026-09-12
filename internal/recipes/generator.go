@@ -166,13 +166,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			//write out a recipe ready here but don't make it savable till critique?
+			// write out a recipe ready here but don't make it savable till critique?
 			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 			if err != nil {
 				return nil, err
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
-				//going to be able to reload.
+				// going to be able to reload.
 				slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index)
 			}
 			return final, nil
@@ -248,13 +248,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		//write out a recipe ready here but don't make it savable till critique?
+		// write out a recipe ready here but don't make it savable till critique?
 		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		if err != nil {
 			return nil, err
 		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
-			return nil, fmt.Errorf("publish ready recipe: %w", err)
+			slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
 		}
 		return final, nil
 	})

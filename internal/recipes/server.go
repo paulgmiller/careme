@@ -1204,7 +1204,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	list.Recipes = append(list.Recipes, p.Saved...)
 	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
 		Unfinished: unfinished,
-		PollURL:    r.URL.RequestURI(),
+		Generating: true,
 		Fragment:   isShoppingPoll(r),
 	})
 }
@@ -1299,7 +1299,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		}
 		selection = selection.override(userSelection)
 	}
-	if r.URL.Query().Get("mail") == "true" && progress.PollURL == "" {
+	if r.URL.Query().Get("mail") == "true" && !progress.Generating {
 		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
 		var unsubscribeURL string
 		if signedIn {
@@ -1314,7 +1314,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		}
 		return
 	}
-	if !signedIn && progress.PollURL == "" {
+	if !signedIn && !progress.Generating {
 		guest.EnsureShoppingListCount(w, r)
 	}
 	wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))

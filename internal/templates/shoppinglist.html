@@ -278,7 +278,7 @@
 {{end}}
 
 {{define "shopping_content"}}
-  {{if .Progress.PollURL}}
+  {{if .Progress.Generating}}
     {{template "shopping_progress" .}}
   {{else}}
     {{template "shopping_ready" .}}
