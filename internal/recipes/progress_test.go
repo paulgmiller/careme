@@ -83,7 +83,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	}
 	accepted := save(ready.ComputeHash())
 	require.Equal(t, http.StatusOK, accepted.Code, accepted.Body.String())
-	assert.NotContains(t, accepted.Body.String(), `/recipes/`+hash+`/finalize`)
+	assert.Contains(t, accepted.Body.String(), `/recipes/`+hash+`/finalize`)
 	assert.Contains(t, poll(true), "Recipe added")
 	dismiss := httptest.NewRequest(http.MethodPost, "/recipe/"+ready.ComputeHash()+"/dismiss", strings.NewReader(url.Values{"h": {hash}}.Encode()))
 	dismiss.SetPathValue("hash", ready.ComputeHash())
@@ -93,7 +93,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	s.handleDismissRecipe(hidden, dismiss)
 	require.Equal(t, http.StatusOK, hidden.Code, hidden.Body.String())
 	assert.Contains(t, hidden.Body.String(), "Restore")
-	assert.NotContains(t, hidden.Body.String(), `/recipes/`+hash+`/finalize`)
+	assert.Contains(t, hidden.Body.String(), `/recipes/`+hash+`/finalize`)
 
 	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
@@ -195,14 +195,14 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 	last := ai.Recipe{Title: "Last ready recipe"}
 	saved := ai.Recipe{Title: "Previously saved recipe"}
 	p.Saved = []ai.Recipe{saved}
-	// Loaded recipes deliberately differ from slot order.
-	list := ai.ShoppingList{Recipes: []ai.Recipe{last, saved, first}}
+	// The stub list contains only saved recipes; slots supply generated cards.
+	list := ai.ShoppingList{Recipes: []ai.Recipe{saved}}
 	finished := map[string]ai.Recipe{
 		first.ComputeHash(): first,
 		last.ComputeHash():  last,
-		saved.ComputeHash(): saved,
 	}
 	progress := shoppingProgress{
+		Finished:   finished,
 		Generating: true,
 		Fragment:   true,
 		Slots: []status.Slot{
@@ -212,7 +212,7 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		},
 	}
 	rr := httptest.NewRecorder()
-	formatShoppingList(t.Context(), p, list, finished, map[string]*ai.WineSelection{}, map[string]bool{},
+	formatShoppingList(t.Context(), p, list, map[string]*ai.WineSelection{}, map[string]bool{},
 		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()

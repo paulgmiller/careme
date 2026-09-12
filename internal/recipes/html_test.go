@@ -48,11 +48,7 @@ func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai
 func formatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
 	wines map[string]*ai.WineSelection, images map[string]bool, user *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, w http.ResponseWriter,
 ) {
-	finishedRecipes := make(map[string]ai.Recipe, len(l.Recipes))
-	for _, recipe := range l.Recipes {
-		finishedRecipes[recipe.ComputeHash()] = recipe
-	}
-	formatShoppingList(ctx, p, l, finishedRecipes, wines, images, user, hash, selection, helpMessage, pendingInstructions, shoppingProgress{}, w)
+	formatShoppingList(ctx, p, l, wines, images, user, hash, selection, helpMessage, pendingInstructions, shoppingProgress{}, w)
 }
 
 func renderTestUser(signedIn bool) *utypes.User {

@@ -175,7 +175,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	redirect, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
 	assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
-	assert.Empty(t, redirect.Query().Get(QueryArgHelp))
+	assert.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
 	select {
 	case <-generator.called:
 	case <-time.After(2 * time.Second):

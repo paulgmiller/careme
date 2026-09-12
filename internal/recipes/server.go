@@ -778,7 +778,7 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 			return fmt.Errorf("render shopping recipe card: %w", err)
 		}
 
-		//Can finalize after any adds.
+		// Can finalize after any adds.
 		if err := RenderShoppingFinalizeControlsHTML(shoppingListHash, &response); err != nil {
 			return fmt.Errorf("render shopping finalize controls: %w", err)
 		}
@@ -1167,8 +1167,9 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		renderGenerationRetry(ctx, w, r, retryURL.String(), progress.Failed)
 		return
 	}
-	list := ai.ShoppingList{}
-	//TODO parallize
+	list := ai.ShoppingList{Recipes: p.Saved}
+	finished := make(map[string]ai.Recipe, len(progress.Slots))
+	// TODO parallize
 	for _, slot := range progress.Slots {
 		if slot.RecipeHash == "" {
 			continue
@@ -1178,11 +1179,11 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			http.Error(w, "failed to load ready recipe", http.StatusInternalServerError)
 			return
 		}
-		list.Recipes = append(list.Recipes, *recipe)
+		finished[slot.RecipeHash] = *recipe
 	}
-	list.Recipes = append(list.Recipes, p.Saved...)
 	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
 		Slots:      progress.Slots,
+		Finished:   finished,
 		Generating: true,
 		Fragment:   isShoppingPoll(r),
 	})
@@ -1281,13 +1282,17 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	if !signedIn && !progress.Generating {
 		guest.EnsureShoppingListCount(w, r)
 	}
-	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes))
+	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
+	for hash, recipe := range progress.Finished {
+		finishedRecipes[hash] = recipe
+	}
+	for _, recipe := range slist.Recipes {
+		finishedRecipes[recipe.ComputeHash()] = recipe
+	}
 	wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
 	images := parallelism.NewSafeMap[string, bool](len(slist.Recipes))
 	var recipeWG sync.WaitGroup
-	for _, recipe := range slist.Recipes {
-		recipeHash := recipe.ComputeHash()
-		finishedRecipes[recipeHash] = recipe
+	for recipeHash := range finishedRecipes {
 		recipeWG.Go(func() {
 			wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
 			if wineErr != nil {
@@ -1308,7 +1313,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	formatShoppingList(ctx, p, *slist, finishedRecipes, wines.Clone(), images.Clone(), currentUser,
+	formatShoppingList(ctx, p, *slist, wines.Clone(), images.Clone(), currentUser,
 		hashParam, selection, help, instructions, progress, w)
 }
 
@@ -1388,7 +1393,7 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 	// cached parameters from a generation request that already passed the
 	// signed-in or guest-generation allowance check.
 	if _, err := s.FromCache(ctx, hash); err == nil {
-		redirectToHash(w, r, hash)
+		redirectToHash(w, r, hash, QueryArgHelp)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to check recipe list before retry", "hash", hash, "error", err)
@@ -1422,7 +1427,7 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
 		return
 	}
-	redirectToHashWithArgs(w, r, hash, url.Values{queryArgConversion: {string(templates.RecipeGenerationConversion)}})
+	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
 }
 
 // best effort attempt to set favorite store if non is thre

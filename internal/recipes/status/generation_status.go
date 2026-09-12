@@ -71,7 +71,7 @@ func IsValidID(id string) bool {
 }
 
 type Store struct {
-	//only upodate, and recipe ready use mutex. Rest have single caller.
+	// only upodate, and recipe ready use mutex. Rest have single caller.
 	// Need to replace with etags
 	mu    sync.Mutex
 	cache cache.Cache
