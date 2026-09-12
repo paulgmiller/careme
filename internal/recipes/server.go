@@ -98,8 +98,6 @@ type statusStore interface {
 }
 
 type server struct {
-	// Serializes profile changes from generation completion and interactive cards.
-	profileMu sync.Mutex
 	recipeio
 	images             ImageStore
 	imagegen           ImageGen
@@ -1514,8 +1512,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 }
 
 func (s *server) recordShoppingListForUser(userID, hash string, location *locations.Location) error {
-	s.profileMu.Lock()
-	defer s.profileMu.Unlock()
 	if userID == guestUser.ID {
 		return nil
 	}
@@ -1682,8 +1678,6 @@ func (s *server) Wait() {
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile
 func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utypes.User, recipe ai.Recipe) error {
-	s.profileMu.Lock()
-	defer s.profileMu.Unlock()
 	if currentUser == nil {
 		return fmt.Errorf("invalid user")
 	}
@@ -1720,8 +1714,6 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 }
 
 func (s *server) removeRecipeFromUserProfile(currentUser *utypes.User, recipeHash string) error {
-	s.profileMu.Lock()
-	defer s.profileMu.Unlock()
 	fresh, err := s.storage.GetByID(currentUser.ID)
 	if err != nil {
 		return fmt.Errorf("reload user before removing recipe: %w", err)

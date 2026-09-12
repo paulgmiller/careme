@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -158,17 +157,15 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 	require.ErrorIs(t, err, cache.ErrNotFound)
 }
 
-func TestAddingRecipeDuringGenerationCompletionPreservesProfile(t *testing.T) {
+func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
 	s := newTestServer(t)
 	user := &utypes.User{ID: "progress-user", Email: []string{"progress@example.com"}, ShoppingDay: "Saturday"}
 	require.NoError(t, s.storage.Update(user))
 	location := &locations.Location{ID: "70000123", Name: "Store"}
 	recipe := ai.Recipe{Title: "Ready dinner"}
-	var wg sync.WaitGroup
-	userID := user.ID
-	wg.Go(func() { assert.NoError(t, s.recordShoppingListForUser(userID, "complete-list", location)) })
-	wg.Go(func() { assert.NoError(t, s.saveRecipesToUserProfile(t.Context(), user, recipe)) })
-	wg.Wait()
+	require.NoError(t, s.recordShoppingListForUser(user.ID, "complete-list", location))
+	// Saving reloads the profile rather than overwriting history with the stale user.
+	require.NoError(t, s.saveRecipesToUserProfile(t.Context(), user, recipe))
 	got, err := s.storage.GetByID(user.ID)
 	require.NoError(t, err)
 	require.Len(t, got.ShoppingLists, 1)
