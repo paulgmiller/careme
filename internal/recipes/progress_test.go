@@ -106,11 +106,20 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, poll(true), "Restore")
 
 	require.NoError(t, statuses.Fail(t.Context(), hash, errors.New("Recipe service unavailable")))
-	body = poll(true)
-	assert.Contains(t, body, ready.Title)
+	failedPoll := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&help=Welcome", nil)
+	failedPoll.Header.Set("HX-Request", "true")
+	failedPoll.Header.Set("HX-Target", "shopping-content")
+	failedResponse := httptest.NewRecorder()
+	s.handleRecipes(failedResponse, failedPoll)
+	require.Equal(t, http.StatusOK, failedResponse.Code)
+	assert.Equal(t, failedPoll.URL.RequestURI(), failedResponse.Header().Get("HX-Redirect"))
+	assert.Empty(t, failedResponse.Body.String())
+	body = poll(false)
+	assert.Contains(t, body, `id="spin-page-work"`)
 	assert.Contains(t, body, "Recipe service unavailable")
 	assert.Contains(t, body, `/recipes/`+hash+`/retry`)
-	assert.NotContains(t, body, `hx-trigger="every 1s"`)
+	assert.Contains(t, body, `help=Welcome`)
+	assert.NotContains(t, body, `id="shopping-content"`)
 	require.NoError(t, s.requireReadyRecipe(t.Context(), hash, ready.ComputeHash()))
 
 	// A retry clears progress; previously published recipes are no longer selectable.

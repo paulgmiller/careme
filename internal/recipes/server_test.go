@@ -136,6 +136,8 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 
 			require.Equal(t, http.StatusOK, rr.Code)
 			if tt.wantRetry {
+				assert.Contains(t, rr.Body.String(), `id="spin-page-work"`)
+				assert.NotContains(t, rr.Body.String(), `id="shopping-content"`)
 				assert.Contains(t, rr.Body.String(), "Try again, chef")
 				if tt.wantError != "" {
 					assert.Contains(t, rr.Body.String(), tt.wantError)

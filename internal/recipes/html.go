@@ -20,7 +20,6 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
-	"careme/internal/recipes/status"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -88,18 +87,10 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
-// should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
-) {
-	formatShoppingList(ctx, p, l, wineRecommendations, recipeImages, currentUser, hash, selection, helpMessage, pendingInstructions, shoppingProgress{}, writer)
-}
-
 type shoppingProgress struct {
-	Status   *status.Status
-	PollURL  string
-	Fragment bool
+	Unfinished []*ai.RecipePlan // nil entries mark slots with ready recipes
+	PollURL    string
+	Fragment   bool
 }
 
 func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList,
@@ -142,21 +133,21 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 			combinedIngredients = append(combinedIngredients, displayIngredients...)
 		}
 	}
-	if progress.Status != nil {
-		ordered := make([]shoppingRecipeView, 0, len(progress.Status.Slots)+len(p.Saved))
+	if progress.PollURL != "" {
+		ordered := make([]shoppingRecipeView, 0, len(progress.Unfinished)+len(p.Saved))
 		readyIndex := 0
-		for index, slot := range progress.Status.Slots {
-			if slot.RecipeHash != "" {
-				ordered = append(ordered, recipeViews[readyIndex])
-				readyIndex++
-			} else {
+		for index, plan := range progress.Unfinished {
+			if plan != nil {
 				ordered = append(ordered, shoppingRecipeView{
 					Recipe: ai.Recipe{
-						Title:       slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient,
-						Description: slot.Plan.DishFormat,
+						Title:       plan.Cuisine + " with " + plan.AnchorIngredient,
+						Description: plan.DishFormat,
 					},
 					Hash: "pending-" + strconv.Itoa(index),
 				})
+			} else {
+				ordered = append(ordered, recipeViews[readyIndex])
+				readyIndex++
 			}
 		}
 		ordered = append(ordered, recipeViews[readyIndex:]...)

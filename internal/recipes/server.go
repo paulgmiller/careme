@@ -1174,9 +1174,24 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 			}
 		}
 	}
+	if progress.Failed != "" {
+		if isShoppingPoll(r) {
+			w.Header().Set("HX-Redirect", r.URL.RequestURI())
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		retryURL := url.URL{Path: "/recipes/" + url.PathEscape(hash) + "/retry"}
+		if help := r.URL.Query().Get(QueryArgHelp); help != "" {
+			retryURL.RawQuery = url.Values{QueryArgHelp: {help}}.Encode()
+		}
+		renderGenerationRetry(ctx, w, r, retryURL.String(), progress.Failed)
+		return
+	}
 	list := ai.ShoppingList{}
-	for _, slot := range progress.Slots {
+	unfinished := make([]*ai.RecipePlan, len(progress.Slots))
+	for index, slot := range progress.Slots {
 		if slot.RecipeHash == "" {
+			unfinished[index] = &progress.Slots[index].Plan
 			continue
 		}
 		recipe, err := s.SingleFromCache(ctx, slot.RecipeHash)
@@ -1187,7 +1202,11 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		list.Recipes = append(list.Recipes, *recipe)
 	}
 	list.Recipes = append(list.Recipes, p.Saved...)
-	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{Status: &progress, PollURL: r.URL.RequestURI(), Fragment: isShoppingPoll(r)})
+	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
+		Unfinished: unfinished,
+		PollURL:    r.URL.RequestURI(),
+		Fragment:   isShoppingPoll(r),
+	})
 }
 
 func isShoppingPoll(r *http.Request) bool {
@@ -1280,7 +1299,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		}
 		selection = selection.override(userSelection)
 	}
-	if r.URL.Query().Get("mail") == "true" && progress.Status == nil {
+	if r.URL.Query().Get("mail") == "true" && progress.PollURL == "" {
 		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
 		var unsubscribeURL string
 		if signedIn {
@@ -1295,7 +1314,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		}
 		return
 	}
-	if !signedIn && progress.Status == nil {
+	if !signedIn && progress.PollURL == "" {
 		guest.EnsureShoppingListCount(w, r)
 	}
 	wines := parallelism.NewSafeMap[string, *ai.WineSelection](len(slist.Recipes))
