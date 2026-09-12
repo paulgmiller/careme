@@ -11,8 +11,8 @@ import (
 
 var errRecipeNotReady = errors.New("recipe not ready or not in shopping list")
 
-// requireReadyRecipe checks membership before any user state is changed. Drafts
-// may already exist in the recipe cache while critique is still running.
+// requireReadyRecipe allows selection only after the complete list is persisted.
+// Individually finished recipes remain read-only while the list is generating.
 func (s *server) requireReadyRecipe(ctx context.Context, listHash, recipeHash string) error {
 	list, err := s.FromCache(ctx, listHash)
 	if err == nil {
@@ -26,25 +26,7 @@ func (s *server) requireReadyRecipe(ctx context.Context, listHash, recipeHash st
 	if !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("load completed list: %w", err)
 	}
-	params, err := s.ParamsFromCache(ctx, listHash)
-	if err != nil {
-		return fmt.Errorf("load generation parameters: %w", err)
-	}
-	for _, recipe := range params.Saved {
-		if recipe.ComputeHash() == recipeHash {
-			return nil
-		}
-	}
-	progress, err := s.generationStatuses.Load(ctx, listHash)
-	if err != nil {
-		return fmt.Errorf("load generation progress: %w", err)
-	}
-	for _, slot := range progress.Slots {
-		if slot.RecipeHash == recipeHash {
-			return nil
-		}
-	}
-	return s.requireReadyReplacement(ctx, listHash, recipeHash)
+	return errRecipeNotReady
 }
 
 // Single-recipe refreshes intentionally do not rewrite their original list.

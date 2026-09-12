@@ -1731,7 +1731,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.JSONEq(t, `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`, rr.Header().Get("HX-Trigger"))
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `Hide`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
@@ -1926,7 +1926,7 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 	s.Wait()
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `Recipe to recover`)
 	require.Contains(t, rr.Body.String(), `Details`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
@@ -1979,7 +1979,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `Dismiss`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
-	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.NotContains(t, rr.Body.String(), `Recipe to save from detail page`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
 	require.NotContains(t, rr.Body.String(), `/save"`)
@@ -2022,7 +2022,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	s.handleSaveRecipe(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `✓ Added`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
@@ -2105,7 +2105,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 	require.Empty(t, rr.Header().Get("HX-Trigger"))
-	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.Contains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.Contains(t, rr.Body.String(), `/save"`)
 	require.Contains(t, rr.Body.String(), `Restore`)
 	require.NotContains(t, rr.Body.String(), `Dismissed`)
@@ -2185,7 +2185,7 @@ func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `Save`)
 	require.Contains(t, rr.Body.String(), `/save"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
-	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+recipeHash+`"`)
+	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
 	require.NotContains(t, rr.Body.String(), `Recipe to dismiss from detail page`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-finalize-controls"`)
 	require.NotContains(t, rr.Body.String(), `/dismiss"`)

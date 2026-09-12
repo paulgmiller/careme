@@ -56,10 +56,6 @@ type recipePropertyDisplay struct {
 // The remaining extra fields are shopping-list-specific UI state that ai.Recipe
 // should not own.
 type shoppingRecipeView struct {
-	Pending          bool
-	GenerationFailed bool
-	SlotID           string
-	Preserve         bool
 	ai.Recipe
 	// Hash identifies the individual recipe card and backs recipe-scoped
 	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
@@ -75,6 +71,11 @@ type shoppingRecipeView struct {
 	Dismissed          bool
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
+}
+
+// DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
+func (v shoppingRecipeView) DOMID() string {
+	return "shopping-recipe-" + strings.TrimRight(v.Hash, "=")
 }
 
 type mailRecipeView struct {
@@ -96,7 +97,14 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 	formatShoppingList(ctx, p, l, wineRecommendations, recipeImages, currentUser, hash, selection, helpMessage, pendingInstructions, shoppingProgress{}, writer)
 }
 
+type shoppingProgressCard struct {
+	Title       string
+	Description string
+	Recipe      *shoppingRecipeView
+}
+
 type shoppingProgress struct {
+	Cards    []shoppingProgressCard
 	Status   *status.Status
 	PollURL  string
 	Fragment bool
@@ -125,7 +133,6 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		saved := selection.IsSaved(recipeHash)
 		recipeViews = append(recipeViews, shoppingRecipeView{
 			Recipe:             recipe,
-			Preserve:           progress.Fragment,
 			Hash:               recipeHash,
 			ShoppingListHash:   hash,
 			ServerSignedIn:     serverSignedIn,
@@ -144,26 +151,24 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 	}
 	if progress.Status != nil {
 		ready := lo.SliceToMap(recipeViews, func(v shoppingRecipeView) (string, shoppingRecipeView) { return v.Hash, v })
-		recipeViews = nil
-		for i, slot := range progress.Status.Slots {
+		addReady := func(hash string) {
+			recipe := ready[hash]
+			progress.Cards = append(progress.Cards, shoppingProgressCard{Title: recipe.Title, Description: recipe.Description, Recipe: &recipe})
+		}
+		for _, slot := range progress.Status.Slots {
 			if slot.RecipeHash != "" {
-				recipeViews = append(recipeViews, ready[slot.RecipeHash])
-				continue
+				addReady(slot.RecipeHash)
+			} else {
+				progress.Cards = append(progress.Cards, shoppingProgressCard{Title: slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient, Description: slot.Plan.DishFormat})
 			}
-			recipeViews = append(recipeViews, shoppingRecipeView{
-				GenerationFailed: progress.Status.Failed != "",
-				Pending:          true,
-				SlotID:           fmt.Sprintf("shopping-slot-%d", i),
-				Recipe:           ai.Recipe{Title: slot.Plan.Cuisine + " with " + slot.Plan.AnchorIngredient, Description: slot.Plan.DishFormat},
-			})
 		}
 		for _, recipe := range p.Saved {
-			recipeViews = append(recipeViews, ready[recipe.ComputeHash()])
+			addReady(recipe.ComputeHash())
 		}
 	}
+
 	data := struct {
 		Progress             shoppingProgress
-		Generating           bool
 		Location             locations.Location
 		Date                 string
 		DateDisplay          string
@@ -185,7 +190,6 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		AdminURL             string
 	}{
 		Progress:             progress,
-		Generating:           progress.Status != nil,
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
 		DateDisplay:          p.Date.Format("January 2, 2006"),
@@ -360,14 +364,12 @@ func FormatRecipeThreadHTML(thread []RecipeThreadEntry, signedIn bool, response 
 	}
 }
 
-func RenderShoppingFinalizeControlsHTML(hash string, generating bool, writer io.Writer) error {
+func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 	data := struct {
-		Generating      bool
 		Hash            string
 		HasSavedRecipes bool
 	}{
 		Hash:            hash,
-		Generating:      generating,
 		HasSavedRecipes: true,
 	}
 

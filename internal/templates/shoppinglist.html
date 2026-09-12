@@ -74,18 +74,16 @@
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
-            {{if and .HasSavedRecipes (not .Generating)}}hx-post="/recipes/{{.Hash}}/finalize"
+            {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
             hx-swap="none"{{else}}disabled
             aria-disabled="true"
             aria-describedby="finalize-help"{{end}}
-            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if and .HasSavedRecipes (not .Generating)}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
+            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
       Build Shopping List
     </button>
   </span>
   {{template "shopping_list_share_button" .}}
-  {{if .Generating}}
- <p id="finalize-help" class="text-sm text-ink-600">Your shopping list can be built once all recipes are ready.</p>
- {{else if not .HasSavedRecipes}}
+  {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
   </p>
@@ -99,15 +97,8 @@
 {{end}}
 
 {{define "shopping_recipe_card"}}
-{{if .Pending}}
-<article id="{{.SlotID}}" class="shopping-recipe-card min-h-48 space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md" aria-busy="{{not .GenerationFailed}}">
- <h2 class="text-2xl font-semibold text-brand-700">{{.Title}}</h2>
- <p class="text-sm text-ink-500">{{.Description}}</p>
- <p class="text-sm text-ink-600">{{if .GenerationFailed}}This recipe couldn’t finish.{{else}}The chef is working on this recipe…{{end}}</p>
- <button type="button" disabled aria-disabled="true" class="cursor-not-allowed rounded-lg bg-gray-200 px-4 py-2 text-sm text-gray-500">Add</button>
-</article>
-{{else if .Dismissed}}
-<article {{if .Preserve}}hx-preserve{{end}} id="shopping-recipe-{{.Hash}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
+{{if .Dismissed}}
+<article id="{{.DOMID}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="min-w-0">
       <a href="/recipe/{{.Hash}}" class="block truncate text-lg font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -118,7 +109,7 @@
   </div>
 </article>
 {{else}}
-<article {{if .Preserve}}hx-preserve{{end}} id="shopping-recipe-{{.Hash}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+<article id="{{.DOMID}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <div class="space-y-5 sm:grid {{if .HasImage}}sm:grid-cols-[minmax(0,1fr)_25%]{{else}}sm:grid-cols-1{{end}} sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
     <header class="space-y-4 sm:contents">
       <div class="flex items-start gap-4 sm:contents">
@@ -278,22 +269,17 @@
 {{end}}
 
 {{define "shopping_content"}}
-        <div id="shopping-content" class="p-8" hx-sync="this:queue all"
- {{if and .Generating (not .Progress.Status.Failed)}}hx-get="{{.Progress.PollURL}}" hx-trigger="every 1s" hx-target="this" hx-swap="outerHTML"{{end}}>
- {{if .Generating}}
- <div class="mb-6 rounded-2xl border border-brand-200 bg-brand-50 p-4" role="status" aria-live="polite">
-  {{if .Progress.Status.Failed}}
-  <p>Some recipes couldn’t finish. Your ready recipes are still available.</p>
-  <p class="mt-2 text-sm">{{.Progress.Status.Failed}}</p>
-  <form method="POST" action="/recipes/{{.Hash}}/retry?help={{.HelpMessage}}">
-   <button type="submit" class="mt-3 rounded-lg bg-brand-600 px-4 py-2 text-white">Try again, chef</button>
-  </form>
-  {{else if .Progress.Status.Slots}}<p>Your meals are taking shape. Add each recipe as it becomes ready.</p>
-  {{else}}<p>Planning your meals…</p>{{end}}
- </div>
- {{end}}
+  {{if .Progress.Status}}
+    {{template "shopping_progress" .}}
+  {{else}}
+    {{template "shopping_ready" .}}
+  {{end}}
+{{end}}
+
+{{define "shopping_ready"}}
+        <div id="shopping-content" class="p-8">
           {{if .HelpMessage}}
-          <input hx-preserve id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
+          <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
           <aside id="shopping-list-help"
                  class="mb-6 rounded-2xl border border-brand-200 bg-brand-50/80 p-4 text-sm text-ink-700 shadow-sm peer-checked/help:hidden">
             <div class="flex items-start justify-between gap-3">
@@ -310,9 +296,7 @@
           </aside>
           {{end}}
 
-          {{if .Generating}}
- <p class="text-sm text-ink-600">You can ask the chef for changes once all recipes are ready.</p>
- {{else if .UseTodaysIngredients}}
+          {{if .UseTodaysIngredients}}
           <form id="regenerateForm"
                 method="POST"
                 action="/recipes">
