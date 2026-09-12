@@ -1147,7 +1147,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	progress, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
-			progress.Failed = "Recipe generation could not start."
+			progress.Failed = "Recipe generation did not start."
 		} else {
 			slog.ErrorContext(ctx, "failed to load generation progress", "hash", hash, "error", err)
 			// A failed poll leaves existing cards intact; the next poll retries.
@@ -1168,6 +1168,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 	list := ai.ShoppingList{}
+	//TODO parallize
 	for _, slot := range progress.Slots {
 		if slot.RecipeHash == "" {
 			continue
@@ -1276,21 +1277,6 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 			return
 		}
 		selection = selection.override(userSelection)
-	}
-	if r.URL.Query().Get("mail") == "true" && !progress.Generating {
-		tf := users.NewUnsubscribeTokenFactory(*s.cfg)
-		var unsubscribeURL string
-		if signedIn {
-			unsubscribeURL = s.cfg.ResolvedPublicOrigin() + "/user/unsubscribe?" + url.Values{
-				"user":  []string{currentUser.ID},
-				"token": []string{tf.UnsubscribeToken(currentUser.ID)},
-			}.Encode()
-		}
-		if err := FormatMail(p, *slist, s.cfg.ResolvedPublicOrigin(), unsubscribeURL, w); err != nil {
-			slog.ErrorContext(ctx, "failed to render mail template", "error", err)
-			http.Error(w, "failed to render mail template", http.StatusInternalServerError)
-		}
-		return
 	}
 	if !signedIn && !progress.Generating {
 		guest.EnsureShoppingListCount(w, r)
@@ -1679,12 +1665,6 @@ func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utyp
 	if currentUser == nil {
 		return fmt.Errorf("invalid user")
 	}
-
-	fresh, err := s.storage.GetByID(currentUser.ID)
-	if err != nil {
-		return fmt.Errorf("reload user before saving recipe: %w", err)
-	}
-	*currentUser = *fresh
 
 	// Check if the recipe already exists in the user's last recipes
 	hash := recipe.ComputeHash()
