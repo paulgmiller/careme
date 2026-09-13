@@ -84,9 +84,10 @@ func NewStore(c cache.Cache) *Store {
 
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
-func (ss *Store) Start(ctx context.Context, hash string) error {
+func (ss *Store) Start(ctx context.Context, hash, message string) error {
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
+		Message:   message,
 	})
 }
 

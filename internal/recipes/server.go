@@ -91,7 +91,7 @@ type ImageStore interface {
 }
 
 type statusStore interface {
-	Start(ctx context.Context, hash string) error
+	Start(ctx context.Context, hash, message string) error
 	Update(ctx context.Context, hash, message string) error
 	Fail(ctx context.Context, hash string, err error) error
 	Load(ctx context.Context, hash string) (status.Status, error)
@@ -475,7 +475,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err = s.generationStatuses.Start(ctx, id)
+	err = s.generationStatuses.Start(ctx, id, "") //put thread questin or critique here?
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
@@ -1470,11 +1470,8 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID string) error {
 	hash := p.Hash()
-	if err := s.generationStatuses.Start(ctx, hash); err != nil {
+	if err := s.generationStatuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start generation status %w", err)
-	}
-	if err := s.generationStatuses.Update(ctx, hash, status.InitialMessage); err != nil {
-		return fmt.Errorf("write initial generation status: %w", err)
 	}
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {

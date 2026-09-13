@@ -109,7 +109,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 			wantRetry: true,
 			wantError: "store returned 404",
 			setup: func(t testing.TB, s *server, hash string) {
-				require.NoError(t, s.generationStatuses.Start(t.Context(), hash))
+				require.NoError(t, s.generationStatuses.Start(t.Context(), hash, ""))
 				require.NoError(t, s.generationStatuses.Fail(t.Context(), hash, errors.New("store returned 404")))
 			},
 		},
@@ -162,7 +162,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	}))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash()))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(), ""))
 	require.NoError(t, s.generationStatuses.Fail(t.Context(), p.Hash(), errors.New("first attempt failed")))
 
 	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/retry?help=Save+two+dinners", nil)
@@ -1187,7 +1187,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
 
-	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID, ""))
 	require.NoError(t, s.generationStatuses.Fail(t.Context(), jobID, fmt.Errorf("timed out")))
 	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
 	timedOutReq.Header.Set("HX-Request", "true")

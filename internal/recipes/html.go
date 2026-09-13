@@ -139,6 +139,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		Recipes              []shoppingRecipeView
 		ShoppingList         []shoppingListGroup
 		HasSavedRecipes      bool
+		HasMissingImages     bool
 		Style                seasons.Style
 		ServerSignedIn       bool
 		User                 *utypes.User
@@ -161,6 +162,9 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		Recipes:              recipeViews,
 		ShoppingList:         shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes:      hasSavedRecipes,
+		HasMissingImages:     slices.ContainsFunc(recipeViews, func(view shoppingRecipeView) bool {
+			return view.Ready && !view.Dismissed && !view.HasImage
+		}),
 		Style:                seasons.GetCurrentStyle(),
 		ServerSignedIn:       serverSignedIn,
 		User:                 currentUser,

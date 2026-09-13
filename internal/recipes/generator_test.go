@@ -1061,7 +1061,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 
 	saver := &captureRecipeSaver{}
 	progress := status.NewStore(cacheStore)
-	require.NoError(t, progress.Start(t.Context(), params.Hash()))
+	require.NoError(t, progress.Start(t.Context(), params.Hash(), ""))
 	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, progress, saver)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
@@ -1488,7 +1488,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			store := cache.NewInMemoryCache()
 			progress := status.NewStore(store)
 			saver := IO(store)
-			require.NoError(t, progress.Start(t.Context(), params.Hash()))
+	require.NoError(t, progress.Start(t.Context(), params.Hash(), ""))
 			critiquer := &captureCritiqueService{fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
 				if recipe.Title == initial.Title {
 					published, err := progress.Load(t.Context(), params.Hash())

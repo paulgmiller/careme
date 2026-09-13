@@ -57,7 +57,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
 	statuses.now = func() time.Time { return startedAt }
 
-	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle"))
+	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle", ""))
 	require.NoError(t, statuses.Update(t.Context(), "status-lifecycle", "Gathering ingredients"))
 
 	got, err := statuses.load(t.Context(), "status-lifecycle")
@@ -74,7 +74,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 
 	retriedAt := startedAt.Add(time.Minute)
 	statuses.now = func() time.Time { return retriedAt }
-	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle"))
+	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle", ""))
 	got, err = statuses.load(t.Context(), "status-lifecycle")
 	require.NoError(t, err)
 	assert.Empty(t, got.Error)
@@ -85,7 +85,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
-	require.NoError(t, statuses.Start(t.Context(), hash))
+	require.NoError(t, statuses.Start(t.Context(), hash, ""))
 
 	require.NoError(t, statuses.Update(t.Context(), hash, "one\ntwo\n"))
 	require.NoError(t, statuses.Update(t.Context(), hash, "three\nfour\nfive"))
@@ -103,7 +103,7 @@ func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
-	require.NoError(t, statuses.Start(t.Context(), hash))
+	require.NoError(t, statuses.Start(t.Context(), hash, ""))
 
 	require.NoError(t, statuses.Update(t.Context(), hash, "one\ntwo\nthree\nfour\nfive\nsix"))
 
@@ -115,7 +115,7 @@ func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 func TestUpdateKeepsConcurrentLines(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-concurrent"
-	require.NoError(t, statuses.Start(t.Context(), hash))
+	require.NoError(t, statuses.Start(t.Context(), hash, ""))
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 3)
@@ -140,7 +140,7 @@ func TestUpdateKeepsConcurrentLines(t *testing.T) {
 
 func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
-	require.NoError(t, statuses.Start(t.Context(), "failed"))
+	require.NoError(t, statuses.Start(t.Context(), "failed", ""))
 
 	require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
 
@@ -153,7 +153,7 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 	t.Run("completed generation cannot fail", func(t *testing.T) {
 		statuses := NewStore(cache.NewInMemoryCache())
-		require.NoError(t, statuses.Start(t.Context(), "completed"))
+		require.NoError(t, statuses.Start(t.Context(), "completed", ""))
 		require.NoError(t, statuses.Complete(t.Context(), "completed", "new-hash"))
 
 		err := statuses.Fail(t.Context(), "completed", errors.New("late failure"))
@@ -167,7 +167,7 @@ func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 
 	t.Run("failed generation cannot complete", func(t *testing.T) {
 		statuses := NewStore(cache.NewInMemoryCache())
-		require.NoError(t, statuses.Start(t.Context(), "failed"))
+		require.NoError(t, statuses.Start(t.Context(), "failed", ""))
 		require.NoError(t, statuses.Fail(t.Context(), "failed", errors.New("plan exploded")))
 
 		err := statuses.Complete(t.Context(), "failed", "new-hash")
@@ -182,7 +182,7 @@ func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 
 func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
 	statuses := NewStore(cache.NewInMemoryCache())
-	require.NoError(t, statuses.Start(t.Context(), "running"))
+	require.NoError(t, statuses.Start(t.Context(), "running", ""))
 
 	err := statuses.Complete(t.Context(), "running", "  ")
 	require.ErrorContains(t, err, "completed generation hash is required")
@@ -191,7 +191,7 @@ func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
 func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
 	const hash = "progress"
-	require.NoError(t, store.Start(t.Context(), hash))
+	require.NoError(t, store.Start(t.Context(), hash, ""))
 	plans := make([]ai.RecipePlan, 12)
 	for i := range plans {
 		plans[i].Cuisine = fmt.Sprintf("Cuisine %d", i)
@@ -217,7 +217,7 @@ func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "failed", got.Failed)
 	assert.Equal(t, "recipe-0", got.Slots[0].RecipeHash)
-	require.NoError(t, store.Start(t.Context(), hash))
+	require.NoError(t, store.Start(t.Context(), hash, ""))
 	got, err = store.Load(t.Context(), hash)
 	require.NoError(t, err)
 	assert.Empty(t, got.Slots)

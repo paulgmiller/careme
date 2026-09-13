@@ -52,7 +52,7 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 				p.PreviousMenuPlanResponseID = "previous-menu"
 			}
 			progress := notifyingProgress{Store: status.NewStore(c), ready: make(chan int, 4)}
-			require.NoError(t, progress.Start(t.Context(), p.Hash()))
+			require.NoError(t, progress.Start(t.Context(), p.Hash(), ""))
 			releaseReview := make(chan struct{})
 			reviewStarted := make(chan struct{})
 			defer close(releaseReview)

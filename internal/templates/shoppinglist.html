@@ -286,7 +286,8 @@
 {{end}}
 
 {{define "shopping_ready"}}
-        <div id="shopping-content" class="p-8">
+        <div id="shopping-content" class="p-8"
+             {{if .HasMissingImages}}hx-get="" hx-trigger="every 5s" hx-target="this" hx-swap="outerHTML"{{end}}>
           {{if .HelpMessage}}
           <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
           <aside id="shopping-list-help"
