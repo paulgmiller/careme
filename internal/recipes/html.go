@@ -123,7 +123,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 	}
 
 	data := struct {
-		Progress             shoppingProgress
+		Generating           bool
 		Location             locations.Location
 		Date                 string
 		DateDisplay          string
@@ -144,7 +144,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
-		Progress:             progress,
+		Generating:           progress.Generating,
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
 		DateDisplay:          p.Date.Format("January 2, 2006"),
