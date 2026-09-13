@@ -39,9 +39,12 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 		return rr.Body.String()
 	}
 	body := poll(false)
-	assert.Contains(t, body, "Planning your meals…")
+	assert.Contains(t, body, "Your meals are taking shape. You can add finished recipes as they arrive.")
 	assert.Contains(t, body, `hx-get="" hx-trigger="every 1s"`)
-	plans := []ai.RecipePlan{{Cuisine: "Italian", AnchorIngredient: "beans"}, {Cuisine: "Thai", AnchorIngredient: "tofu"}}
+	plans := []ai.RecipePlan{
+		{Cuisine: "Italian", DishFormat: "stew", AnchorIngredient: "beans", SideVegetable: "kale"},
+		{Cuisine: "Thai", DishFormat: "stir-fry", AnchorIngredient: "tofu", SideVegetable: "broccoli"},
+	}
 	require.NoError(t, statuses.Plan(t.Context(), hash, plans))
 	body = poll(true)
 	assert.NotContains(t, body, "<!doctype html>")
@@ -56,7 +59,10 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	require.NoError(t, s.SaveRecipe(t.Context(), draft))
 	require.NoError(t, statuses.RecipeReady(t.Context(), hash, 1, ready.ComputeHash()))
 	body = poll(true)
-	assert.Less(t, strings.Index(body, "Italian with beans"), strings.Index(body, "Thai tofu"))
+	require.Contains(t, body, "Italian  stew")
+	require.Contains(t, body, "using beans  kale")
+	require.Contains(t, body, ready.Title)
+	assert.Less(t, strings.Index(body, "Italian  stew"), strings.Index(body, ready.Title))
 	assert.Contains(t, body, `id="shopping-recipe-pending-0"`)
 	assert.Contains(t, body, `id="shopping-recipe-`+strings.TrimRight(ready.ComputeHash(), "=")+`"`)
 	assert.Contains(t, body, "35 min")
@@ -164,7 +170,9 @@ func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
 	location := &locations.Location{ID: "70000123", Name: "Store"}
 	recipe := ai.Recipe{Title: "Ready dinner"}
 	require.NoError(t, s.recordShoppingListForUser(user.ID, "complete-list", location))
-	// Saving reloads the profile rather than overwriting history with the stale user.
+	// A save request loads the current profile after generation completes.
+	user, err := s.storage.GetByID(user.ID)
+	require.NoError(t, err)
 	require.NoError(t, s.saveRecipesToUserProfile(t.Context(), user, recipe))
 	got, err := s.storage.GetByID(user.ID)
 	require.NoError(t, err)
@@ -172,6 +180,8 @@ func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
 	require.Len(t, got.LastRecipes, 1)
 	assert.Equal(t, "complete-list", got.ShoppingLists[0].Hash)
 	assert.Equal(t, recipe.ComputeHash(), got.LastRecipes[0].Hash)
+	assert.Equal(t, user.Email, got.Email)
+	assert.Equal(t, "Saturday", got.ShoppingDay)
 }
 
 func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
@@ -207,7 +217,7 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		Fragment:   true,
 		Slots: []status.Slot{
 			{RecipeHash: first.ComputeHash()},
-			{Plan: ai.RecipePlan{Cuisine: "Thai", AnchorIngredient: "tofu"}},
+			{Plan: ai.RecipePlan{Cuisine: "Thai", DishFormat: "stir-fry", AnchorIngredient: "tofu", SideVegetable: "broccoli"}},
 			{RecipeHash: last.ComputeHash()},
 		},
 	}
@@ -216,7 +226,8 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	titles := []string{first.Title, "Thai with tofu", last.Title, saved.Title}
+	assert.Contains(t, body, "using tofu  broccoli")
+	titles := []string{first.Title, "Thai  stir-fry", last.Title, saved.Title}
 	for _, title := range titles {
 		require.Contains(t, body, title)
 	}

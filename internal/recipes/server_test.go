@@ -86,7 +86,7 @@ func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
 	s.notFound(t.Context(), rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Planning your meals…")
+	assert.Contains(t, rr.Body.String(), "Your meals are taking shape. You can add finished recipes as they arrive.")
 	assert.Contains(t, rr.Body.String(), `hx-trigger="every 1s"`)
 	assert.NotContains(t, rr.Body.String(), "Try again, chef")
 	select {
@@ -115,7 +115,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 		},
 		{
 			name:     "untimed legacy progress",
-			wantText: "Planning your meals…",
+			wantText: "Your meals are taking shape. You can add finished recipes as they arrive.",
 			setup: func(t testing.TB, s *server, hash string) {
 				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Planning your meals…")
 			},
