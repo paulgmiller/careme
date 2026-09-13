@@ -475,7 +475,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err = s.generationStatuses.Start(ctx, id, "") //put thread questin or critique here?
+	err = s.generationStatuses.Start(ctx, id, "") // put thread questin or critique here?
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)

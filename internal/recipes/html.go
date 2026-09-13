@@ -147,22 +147,22 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
-		StatusMessage:        progress.StatusMessage,
-		Generating:           progress.Generating,
-		Location:             *p.Location,
-		Date:                 p.Date.Format("2006-01-02"),
-		DateDisplay:          p.Date.Format("January 2, 2006"),
-		MetaDescription:      shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
-		ClarityScript:        templates.ClarityScript(ctx),
-		GoogleTagScript:      templates.GoogleTagScript(),
-		Instructions:         instructions,
-		PendingInstructions:  pendingInstructions,
-		HelpMessage:          strings.TrimSpace(helpMessage),
-		Hash:                 hash,
-		Recipes:              recipeViews,
-		ShoppingList:         shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes:      hasSavedRecipes,
-		HasMissingImages:     slices.ContainsFunc(recipeViews, func(view shoppingRecipeView) bool {
+		StatusMessage:       progress.StatusMessage,
+		Generating:          progress.Generating,
+		Location:            *p.Location,
+		Date:                p.Date.Format("2006-01-02"),
+		DateDisplay:         p.Date.Format("January 2, 2006"),
+		MetaDescription:     shoppingListMetaDescription(l.Recipes, p.Location.Name, p.Date.Format("2006-01-02")),
+		ClarityScript:       templates.ClarityScript(ctx),
+		GoogleTagScript:     templates.GoogleTagScript(),
+		Instructions:        instructions,
+		PendingInstructions: pendingInstructions,
+		HelpMessage:         strings.TrimSpace(helpMessage),
+		Hash:                hash,
+		Recipes:             recipeViews,
+		ShoppingList:        shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:     hasSavedRecipes,
+		HasMissingImages: slices.ContainsFunc(recipeViews, func(view shoppingRecipeView) bool {
 			return view.Ready && !view.Dismissed && !view.HasImage
 		}),
 		Style:                seasons.GetCurrentStyle(),

@@ -119,7 +119,7 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
 	missing := errors.Is(err, cache.ErrNotFound)
-	if err := s.statuses.Start(ctx, hash); err != nil {
+	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
 
