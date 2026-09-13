@@ -166,14 +166,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			// write out a recipe ready here but don't make it savable till critique?
-			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+			if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+				slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+			}
+			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
 			if err != nil {
 				return nil, err
-			}
-			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
-				// going to be able to reload.
-				slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index)
 			}
 			return final, nil
 		})
@@ -248,13 +246,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		// write out a recipe ready here but don't make it savable till critique?
-		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+		}
+		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
 		if err != nil {
 			return nil, err
-		}
-		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
-			slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
 		}
 		return final, nil
 	})
@@ -335,7 +332,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, index int, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
 	ctx, span := tracer.Start(ctx, "recipes.critique.recipe")
 	defer span.End()
 
@@ -367,6 +364,9 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
 		return nil, err
+	}
+	if err := g.statusWriter.RecipeReady(ctx, hash, index, retry.ComputeHash()); err != nil {
+		slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
 	}
 	// don't block
 	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)

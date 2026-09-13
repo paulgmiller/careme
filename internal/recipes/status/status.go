@@ -11,6 +11,8 @@ import (
 	"github.com/samber/lo"
 )
 
+const InitialMessage = "Your meals are taking shape. You can add finished recipes as they arrive."
+
 func Sales(ings []ai.InputIngredient) []string {
 	sales := lo.Filter(ings, func(ing ai.InputIngredient, _ int) bool {
 		return ing.PercentOff() > 0

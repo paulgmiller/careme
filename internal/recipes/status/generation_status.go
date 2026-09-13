@@ -159,7 +159,7 @@ func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) e
 	return ss.save(ctx, hash, stored)
 }
 
-// RecipeReady publishes only the persisted result of generation and revision.
+// RecipeReady publishes a persisted recipe, then replaces it if critique revises it.
 // Is index the best way to do this? Seems sketchy. Match plan instead?
 func (ss *Store) RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error {
 	ss.mu.Lock()

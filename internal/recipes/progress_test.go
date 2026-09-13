@@ -27,6 +27,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	hash := p.Hash()
 	statuses := s.generationStatuses.(*status.Store)
 	require.NoError(t, statuses.Start(t.Context(), hash))
+	require.NoError(t, statuses.Update(t.Context(), hash, status.InitialMessage))
 	poll := func(fragment bool) string {
 		req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&help=Welcome", nil)
 		if fragment {
@@ -47,6 +48,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	for _, fragment := range []bool{false, true} {
 		body = poll(fragment)
 		assert.Contains(t, body, "Considering 12 out of 30 ingredients\nCarrots &amp; greens &lt;fresh&gt;")
+		assert.Less(t, strings.Index(body, "Considering 12"), strings.Index(body, status.InitialMessage))
 		assert.Contains(t, body, "whitespace-pre-line")
 	}
 	plans := []ai.RecipePlan{
