@@ -68,7 +68,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	require.NoError(t, statuses.RecipeReady(t.Context(), hash, 1, ready.ComputeHash()))
 	body = poll(true)
 	require.Contains(t, body, "Italian  stew")
-	require.Contains(t, body, "using beans  kale")
+	require.Contains(t, body, "using beans and kale")
 	require.Contains(t, body, ready.Title)
 	assert.Less(t, strings.Index(body, "Italian  stew"), strings.Index(body, ready.Title))
 	assert.Contains(t, body, `id="shopping-recipe-pending-0"`)
@@ -235,7 +235,7 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	assert.Contains(t, body, "using tofu  broccoli")
+	assert.Contains(t, body, "using tofu and broccoli")
 	titles := []string{first.Title, "Thai  stir-fry", last.Title, saved.Title}
 	for _, title := range titles {
 		require.Contains(t, body, title)

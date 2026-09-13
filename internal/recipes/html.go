@@ -213,7 +213,7 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 			views = append(views, shoppingRecipeView{
 				Recipe: ai.Recipe{
 					Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
-					Description: "using " + slot.Plan.AnchorIngredient + "  " + slot.Plan.SideVegetable,
+					Description: "using " + slot.Plan.AnchorIngredient + " and " + slot.Plan.SideVegetable,
 				},
 				Hash: "pending-" + strconv.Itoa(index),
 			})
