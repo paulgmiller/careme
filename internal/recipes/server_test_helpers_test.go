@@ -111,10 +111,10 @@ func newFakeStatusStore() *fakeStatusStore {
 	return &fakeStatusStore{statuses: make(map[string]status.Status)}
 }
 
-func (s *fakeStatusStore) Start(_ context.Context, hash string) error {
+func (s *fakeStatusStore) Start(_ context.Context, hash, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.statuses[hash] = status.Status{}
+	s.statuses[hash] = status.Status{Message: message}
 	return nil
 }
 

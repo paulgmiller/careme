@@ -26,8 +26,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	hash := p.Hash()
 	statuses := s.generationStatuses.(*status.Store)
-	require.NoError(t, statuses.Start(t.Context(), hash))
-	require.NoError(t, statuses.Update(t.Context(), hash, status.InitialMessage))
+	require.NoError(t, statuses.Start(t.Context(), hash, status.InitialMessage))
 	poll := func(fragment bool) string {
 		req := httptest.NewRequest(http.MethodGet, "/recipes?h="+hash+"&help=Welcome", nil)
 		if fragment {
@@ -134,7 +133,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.NotContains(t, body, `id="shopping-content"`)
 
 	// A retry clears progress and removes previously published cards.
-	require.NoError(t, statuses.Start(t.Context(), hash))
+	require.NoError(t, statuses.Start(t.Context(), hash, ""))
 	assert.NotContains(t, poll(true), `href="/recipe/`)
 	selection, err = s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
@@ -160,7 +159,7 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{saved}
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash()))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(), ""))
 	require.NoError(t, s.generationStatuses.(*status.Store).Plan(t.Context(), p.Hash(), []ai.RecipePlan{{Cuisine: "French", AnchorIngredient: "beans"}}))
 	rr := httptest.NewRecorder()
 	s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil))

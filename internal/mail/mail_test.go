@@ -152,7 +152,7 @@ type fakeGenerationStatusStore struct {
 	failedErr   error
 }
 
-func (f *fakeGenerationStatusStore) Start(_ context.Context, hash string) error {
+func (f *fakeGenerationStatusStore) Start(_ context.Context, hash, _ string) error {
 	f.startedHash = hash
 	return nil
 }
