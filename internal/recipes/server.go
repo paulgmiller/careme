@@ -1183,10 +1183,11 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	}
 
 	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
-		Slots:      progress.Slots,
-		Finished:   finished,
-		Generating: true,
-		Fragment:   isShoppingPoll(r),
+		StatusMessage: progress.Message,
+		Slots:         progress.Slots,
+		Finished:      finished,
+		Generating:    true,
+		Fragment:      isShoppingPoll(r),
 	})
 }
 

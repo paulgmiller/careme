@@ -41,6 +41,14 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	body := poll(false)
 	assert.Contains(t, body, "Your meals are taking shape. You can add finished recipes as they arrive.")
 	assert.Contains(t, body, `hx-get="" hx-trigger="every 1s"`)
+	assert.Contains(t, body, "animate-spin")
+	message := "Considering 12 out of 30 ingredients\nCarrots & greens <fresh>"
+	require.NoError(t, statuses.Update(t.Context(), hash, message))
+	for _, fragment := range []bool{false, true} {
+		body = poll(fragment)
+		assert.Contains(t, body, "Considering 12 out of 30 ingredients\nCarrots &amp; greens &lt;fresh&gt;")
+		assert.Contains(t, body, "whitespace-pre-line")
+	}
 	plans := []ai.RecipePlan{
 		{Cuisine: "Italian", DishFormat: "stew", AnchorIngredient: "beans", SideVegetable: "kale"},
 		{Cuisine: "Thai", DishFormat: "stir-fry", AnchorIngredient: "tofu", SideVegetable: "broccoli"},
@@ -60,7 +68,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	require.NoError(t, statuses.RecipeReady(t.Context(), hash, 1, ready.ComputeHash()))
 	body = poll(true)
 	require.Contains(t, body, "Italian  stew")
-	require.Contains(t, body, "using beans  kale")
+	require.Contains(t, body, "using beans and kale")
 	require.Contains(t, body, ready.Title)
 	assert.Less(t, strings.Index(body, "Italian  stew"), strings.Index(body, ready.Title))
 	assert.Contains(t, body, `id="shopping-recipe-pending-0"`)
@@ -134,6 +142,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.NotContains(t, body, "<!doctype html>")
 	assert.Contains(t, body, `id="shopping-content"`)
 	assert.NotContains(t, body, `hx-trigger="every 1s"`)
+	assert.NotContains(t, body, "Considering 12 out of 30 ingredients")
 	assert.NotContains(t, body, "shopping-recipe-pending-")
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/save`)
 	accepted = save(ready.ComputeHash())
@@ -226,7 +235,7 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	assert.Contains(t, body, "using tofu  broccoli")
+	assert.Contains(t, body, "using tofu and broccoli")
 	titles := []string{first.Title, "Thai  stir-fry", last.Title, saved.Title}
 	for _, title := range titles {
 		require.Contains(t, body, title)
