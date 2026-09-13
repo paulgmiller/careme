@@ -2,11 +2,13 @@ package status
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
 
 	"github.com/stretchr/testify/assert"
@@ -184,4 +186,52 @@ func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
 
 	err := statuses.Complete(t.Context(), "running", "  ")
 	require.ErrorContains(t, err, "completed generation hash is required")
+}
+
+func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
+	store := NewStore(cache.NewInMemoryCache())
+	const hash = "progress"
+	require.NoError(t, store.Start(t.Context(), hash))
+	plans := make([]ai.RecipePlan, 12)
+	for i := range plans {
+		plans[i].Cuisine = fmt.Sprintf("Cuisine %d", i)
+	}
+	require.NoError(t, store.Plan(t.Context(), hash, plans))
+	var wg sync.WaitGroup
+	for i := range plans {
+		wg.Go(func() { assert.NoError(t, store.RecipeReady(t.Context(), hash, i, fmt.Sprintf("recipe-%d", i))) })
+	}
+	wg.Go(func() { assert.NoError(t, store.Update(t.Context(), hash, "Reviewing recipes")) })
+	wg.Wait()
+	got, err := store.Load(t.Context(), hash)
+	require.NoError(t, err)
+	require.Len(t, got.Slots, len(plans))
+	for i, slot := range got.Slots {
+		assert.Equal(t, plans[i], slot.Plan)
+		assert.Equal(t, fmt.Sprintf("recipe-%d", i), slot.RecipeHash)
+	}
+	require.NoError(t, store.Fail(t.Context(), hash, errors.New("failed")))
+	require.NoError(t, store.Update(t.Context(), hash, "Late message"))
+	require.Error(t, store.RecipeReady(t.Context(), hash, 0, "late-recipe"))
+	got, err = store.Load(t.Context(), hash)
+	require.NoError(t, err)
+	assert.Equal(t, "failed", got.Failed)
+	assert.Equal(t, "recipe-0", got.Slots[0].RecipeHash)
+	require.NoError(t, store.Start(t.Context(), hash))
+	got, err = store.Load(t.Context(), hash)
+	require.NoError(t, err)
+	assert.Empty(t, got.Slots)
+}
+
+func TestRecipeProgressTimeoutRetainsReadyRecipes(t *testing.T) {
+	store := NewStore(cache.NewInMemoryCache())
+	require.NoError(t, store.save(t.Context(), "timeout", payload{
+		StartedAt: time.Now().Add(-11 * time.Minute),
+		Slots:     []Slot{{RecipeHash: "ready"}},
+	}))
+	got, err := store.Load(t.Context(), "timeout")
+	require.NoError(t, err)
+	assert.Equal(t, "Recipe generation timed out.", got.Failed)
+	assert.Equal(t, "ready", got.Slots[0].RecipeHash)
+	require.Error(t, store.RecipeReady(t.Context(), "timeout", 0, "late"))
 }

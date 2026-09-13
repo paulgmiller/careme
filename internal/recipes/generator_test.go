@@ -12,6 +12,7 @@ import (
 	"careme/internal/cache"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/recipes/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1059,12 +1060,20 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	saver := &captureRecipeSaver{}
-	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
+	progress := status.NewStore(cacheStore)
+	require.NoError(t, progress.Start(t.Context(), params.Hash()))
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, progress, saver)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
 		t.Fatalf("GenerateRecipes returned error: %v", err)
 	}
+	published, progressErr := progress.Load(t.Context(), params.Hash())
+	require.NoError(t, progressErr)
+	require.Len(t, published.Slots, 1)
+	assert.Equal(t, retried.ComputeHash(), published.Slots[0].RecipeHash)
+	assert.NotEqual(t, initial.ComputeHash(), published.Slots[0].RecipeHash)
+
 	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].Title != "Better Dinner" {
 		t.Fatalf("expected retried shopping list, got %+v", got)
 	}
@@ -1182,6 +1191,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 }
 
 type statusCounter struct {
+	noopstatuswriter
 	status []string
 }
 
@@ -1462,3 +1472,6 @@ func TestNewlySaved(t *testing.T) {
 		t.Fatalf("unexpected saved avoid instruction: got %q want %q", got, want)
 	}
 }
+
+func (noopstatuswriter) Plan(context.Context, string, []ai.RecipePlan) error    { return nil }
+func (noopstatuswriter) RecipeReady(context.Context, string, int, string) error { return nil }

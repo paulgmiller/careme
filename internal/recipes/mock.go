@@ -16,14 +16,15 @@ import (
 type mock struct {
 	saver     recipeSaver
 	critiquer mockRecipeCritiquer
+	statuses  statusWriter
 }
 
 type mockRecipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer) mock {
-	return mock{saver: saver, critiquer: critiquer}
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter) mock {
+	return mock{saver: saver, critiquer: critiquer, statuses: statuses}
 }
 
 func NewMockImageGen() mock {
@@ -396,7 +397,7 @@ var mockRecipes = []ai.Recipe{
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	originHash := p.Hash()
-	// fake like we're taking time to call an LLM so we get the spinner.
+	// Keep the planning stage observable in local mock mode.
 	time.Sleep(100 * time.Millisecond)
 
 	// Select 3 random recipes from the pool of 20
@@ -429,16 +430,27 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
-	if m.saver != nil {
-		for _, recipe := range selectedRecipes {
+	plan := &ai.MenuPlan{}
+	for _, recipe := range selectedRecipes[:len(selectedRecipes)-len(p.Saved)] {
+		plan.Plans = append(plan.Plans, ai.RecipePlan{Cuisine: recipe.Title, AnchorIngredient: recipe.Ingredients[0].Name})
+	}
+	if err := m.statuses.Plan(ctx, originHash, plan.Plans); err != nil {
+		return nil, err
+	}
+	for i, recipe := range selectedRecipes {
+		if m.saver != nil {
 			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
 				return nil, err
 			}
 		}
-	}
-	if m.critiquer != nil {
-		for _, recipe := range selectedRecipes {
+		if m.critiquer != nil {
 			if _, err := m.critiquer.CritiqueRecipe(ctx, recipe); err != nil {
+				return nil, err
+			}
+		}
+		if i < len(plan.Plans) {
+			time.Sleep(100 * time.Millisecond)
+			if err := m.statuses.RecipeReady(ctx, originHash, i, recipe.ComputeHash()); err != nil {
 				return nil, err
 			}
 		}
@@ -446,6 +458,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 
 	return &ai.ShoppingList{
 		Recipes: selectedRecipes,
+		Plan:    plan,
 	}, nil
 }
 

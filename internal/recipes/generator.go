@@ -44,6 +44,8 @@ type recipeCritiquer interface {
 }
 
 type statusWriter interface {
+	Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error
+	RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error
 	Update(ctx context.Context, hash string, message string) error
 }
 
@@ -66,6 +68,9 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 	}
 	if staples == nil {
 		return nil, fmt.Errorf("staples service is required")
+	}
+	if statuses == nil {
+		return nil, fmt.Errorf("status writer is required")
 	}
 	if recipeSaver == nil {
 		return nil, fmt.Errorf("recipe saver is required")
@@ -143,9 +148,12 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
 		g.writeStatus(ctx, hash, plan.String())
+		if err := g.statusWriter.Plan(ctx, hash, plan.Plans); err != nil {
+			return nil, fmt.Errorf("publish replacement plan: %w", err)
+		}
 		menuResponse := plan.ResponseRef()
 
-		results, err := parallelism.MapWithErrors(plan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+		results, err := parallelism.MapWithErrorsI(plan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
@@ -158,7 +166,16 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+			// write out a recipe ready here but don't make it savable till critique?
+			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+			if err != nil {
+				return nil, err
+			}
+			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+				// going to be able to reload.
+				slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index)
+			}
+			return final, nil
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
@@ -212,8 +229,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	menuResponse := menuPlan.ResponseRef()
 
 	g.writeStatus(ctx, hash, menuPlan.String())
+	if err := g.statusWriter.Plan(ctx, hash, menuPlan.Plans); err != nil {
+		return nil, fmt.Errorf("publish meal plan: %w", err)
+	}
 
-	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+	results, err := parallelism.MapWithErrorsI(menuPlan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
@@ -228,7 +248,15 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		// write out a recipe ready here but don't make it savable till critique?
+		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		if err != nil {
+			return nil, err
+		}
+		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
+		}
+		return final, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -324,7 +352,6 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", c.OverallScore)
-	// going to overwrite other statuses
 	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
 
 	// panic?

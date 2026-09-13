@@ -101,6 +101,32 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 	}
 }
 
+func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
+	tests := []struct {
+		name    string
+		recipe  ai.Recipe
+		details bool
+	}{
+		{name: "empty", recipe: ai.Recipe{Title: "Bare recipe"}},
+		{name: "ingredients", recipe: ai.Recipe{Title: "Ingredient recipe", Ingredients: []ai.Ingredient{{Name: "Beans"}}}, details: true},
+		{name: "instructions", recipe: ai.Recipe{Title: "Instruction recipe", Instructions: []string{"Cook."}}, details: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: "70000001", Name: "Store"}, time.Now())
+			w := httptest.NewRecorder()
+			formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{tt.recipe}}, true, recipeSelection{}, w)
+			html := assertHTTPSuccess(t, w)
+			if got := strings.Contains(html, `onclick="var d=this.closest('article').querySelector('details');`); got != tt.details {
+				t.Errorf("Details button present = %t, want %t", got, tt.details)
+			}
+			if got := strings.Contains(html, `<details class="space-y-4">`); got != tt.details {
+				t.Errorf("Details panel present = %t, want %t", got, tt.details)
+			}
+		})
+	}
+}
+
 func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	listWithSavedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{

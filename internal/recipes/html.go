@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
+	"careme/internal/recipes/status"
 	"careme/internal/seasons"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -54,8 +55,8 @@ type recipePropertyDisplay struct {
 // should not own.
 type shoppingRecipeView struct {
 	ai.Recipe
-	// Hash identifies the individual recipe card and backs recipe-scoped
-	// links and HTMX endpoints like /recipe/{hash}/save or /recipe/{hash}/wine.
+	// Hash identifies the card. Generated recipes use their recipe hash for
+	// links and HTMX endpoints; pending plan slots use a temporary ID.
 	Hash string
 	// ShoppingListHash identifies the surrounding /recipes?h=... page and is
 	// used anywhere the card needs to refer back to the full list state.
@@ -68,6 +69,12 @@ type shoppingRecipeView struct {
 	Dismissed          bool
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
+	Ready              bool // the recipe has been generated
+}
+
+// DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
+func (v shoppingRecipeView) DOMID() string {
+	return "shopping-recipe-" + strings.TrimRight(v.Hash, "=")
 }
 
 type mailRecipeView struct {
@@ -81,48 +88,42 @@ type shoppingListGroup struct {
 	Items []*ai.Ingredient
 }
 
-// FormatShoppingListHTMLForHashWithHelp renders the multi-recipe shopping list view for a specific hash.
-// should shove wine recs into recipe instead of having them seperate.
-func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorParams, l ai.ShoppingList,
-	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, writer http.ResponseWriter,
+type shoppingProgress struct {
+	Slots    []status.Slot        // meal-plan order, with hashes for finished recipes
+	Finished map[string]ai.Recipe // generated recipes referenced by slots
+	// Generating stays true until the final shopping list is cached; the slots
+	// are also empty before planning finishes.
+	Generating bool
+	// Fragment renders only shopping_content for an HTMX outerHTML swap of
+	// #shopping-content, including the final poll that removes polling controls.
+	// Ordinary page requests render the full shoppinglist.html document.
+	Fragment bool
+}
+
+func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingList,
+	wineRecommendations map[string]*ai.WineSelection, recipeImages map[string]bool, currentUser *utypes.User, hash string, selection recipeSelection, helpMessage, pendingInstructions string, progress shoppingProgress, writer http.ResponseWriter,
 ) {
 	serverSignedIn := currentUser != nil
 	instructions := strings.TrimSpace(p.Instructions)
 	if instructions == "" && l.Plan != nil {
 		instructions = l.Plan.ChefNoteSuggestion
 	}
-	recipeViews := make([]shoppingRecipeView, 0, len(l.Recipes))
+	recipeViews, err := shoppingRecipeViews(l.Recipes, progress, hash, selection, wineRecommendations, recipeImages, serverSignedIn)
+	if err != nil {
+		http.Error(writer, "recipe rendering error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
-	for _, recipe := range l.Recipes {
-		recipeHash := recipe.ComputeHash()
-		wineRecommendation := wineRecommendations[recipeHash]
-		displayIngredients := ingredientsForDisplay(recipe.Ingredients, wineRecommendation)
-		instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
-		if err != nil {
-			http.Error(writer, "instruction rendering error: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		saved := selection.IsSaved(recipeHash)
-		recipeViews = append(recipeViews, shoppingRecipeView{
-			Recipe:             recipe,
-			Hash:               recipeHash,
-			ShoppingListHash:   hash,
-			ServerSignedIn:     serverSignedIn,
-			DisplayIngredients: displayIngredients,
-			PropertyDisplay:    newRecipePropertyDisplay(recipe),
-			InstructionsHTML:   instructionsHTML,
-			Saved:              saved,
-			Dismissed:          selection.IsDismissed(recipeHash),
-			HasImage:           recipeImages[recipeHash],
-			WineRecommendation: wineRecommendation,
-		})
-		if saved {
+	for _, view := range recipeViews {
+		if view.Saved {
 			hasSavedRecipes = true
-			combinedIngredients = append(combinedIngredients, displayIngredients...)
+			combinedIngredients = append(combinedIngredients, view.DisplayIngredients...)
 		}
 	}
+
 	data := struct {
+		Generating           bool
 		Location             locations.Location
 		Date                 string
 		DateDisplay          string
@@ -143,6 +144,7 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
+		Generating:           progress.Generating,
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
 		DateDisplay:          p.Date.Format("January 2, 2006"),
@@ -165,9 +167,63 @@ func FormatShoppingListHTMLForHashWithHelp(ctx context.Context, p *generatorPara
 	}
 
 	httpx.SetHTMLContentType(writer)
-	if err := templates.ShoppingList.Execute(writer, data); err != nil {
+	name := "shoppinglist.html"
+	if progress.Fragment {
+		name = "shopping_content"
+	}
+	if err := templates.ShoppingList.ExecuteTemplate(writer, name, data); err != nil {
 		http.Error(writer, "shopping list template error: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// shoppingRecipeViews renders slots first, followed by the list's recipes.
+// During generation the list contains only carried-forward saved recipes;
+// completed lists contain every recipe and have no slots.
+func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHash string, selection recipeSelection,
+	wines map[string]*ai.WineSelection, images map[string]bool, signedIn bool,
+) ([]shoppingRecipeView, error) {
+	views := make([]shoppingRecipeView, 0, len(progress.Slots)+len(recipes))
+	appendReady := func(recipe ai.Recipe) error {
+		hash := recipe.ComputeHash()
+		instructions, err := renderRecipeInstructions(recipe.Instructions)
+		if err != nil {
+			return fmt.Errorf("render instructions for recipe %s: %w", hash, err)
+		}
+		views = append(views, shoppingRecipeView{
+			Recipe:             recipe,
+			Hash:               hash,
+			ShoppingListHash:   listHash,
+			ServerSignedIn:     signedIn,
+			DisplayIngredients: ingredientsForDisplay(recipe.Ingredients, wines[hash]),
+			PropertyDisplay:    newRecipePropertyDisplay(recipe),
+			InstructionsHTML:   instructions,
+			Saved:              selection.IsSaved(hash),
+			Dismissed:          selection.IsDismissed(hash),
+			HasImage:           images[hash],
+			WineRecommendation: wines[hash],
+			Ready:              true,
+		})
+		return nil
+	}
+	for index, slot := range progress.Slots {
+		if slot.RecipeHash == "" {
+			views = append(views, shoppingRecipeView{
+				Recipe: ai.Recipe{
+					Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
+					Description: "using " + slot.Plan.AnchorIngredient + "  " + slot.Plan.SideVegetable,
+				},
+				Hash: "pending-" + strconv.Itoa(index),
+			})
+		} else if err := appendReady(progress.Finished[slot.RecipeHash]); err != nil {
+			return nil, err
+		}
+	}
+	for _, recipe := range recipes {
+		if err := appendReady(recipe); err != nil {
+			return nil, err
+		}
+	}
+	return views, nil
 }
 
 func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
@@ -343,6 +399,7 @@ func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash
 		Dismissed:          !saved,
 		HasImage:           hasImage,
 		WineRecommendation: wineRecommendation,
+		Ready:              true,
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
 }
