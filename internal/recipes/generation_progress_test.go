@@ -93,6 +93,7 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			slow, err := rio.SingleFromCache(t.Context(), got.Slots[0].RecipeHash)
 			require.NoError(t, err)
 			assert.Equal(t, "Slow", slow.Title, "recipe is visible during review")
+			assert.False(t, got.Slots[0].Reviewed)
 			assert.Equal(t, "Slow", got.Slots[0].Plan.Cuisine)
 			recipe, err := rio.SingleFromCache(t.Context(), got.Slots[1].RecipeHash)
 			require.NoError(t, err)
@@ -101,6 +102,10 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			t.Cleanup(func() {
 				require.NoError(t, <-done)
 				assert.Len(t, progress.ready, 2, "unchanged recipes should each be published once")
+				final, err := progress.Load(t.Context(), p.Hash())
+				require.NoError(t, err)
+				assert.True(t, final.Slots[0].Reviewed)
+				assert.True(t, final.Slots[1].Reviewed)
 			})
 		})
 	}

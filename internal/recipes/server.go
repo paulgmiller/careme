@@ -238,7 +238,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				ID:   "",
 				Name: "Unknown Location",
 			}, time.Now())
-			FormatRecipeHTML(ctx, p, *recipe, false, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
+			FormatRecipeHTML(ctx, p, *recipe, false, false, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
 			return
 		}
 		slog.ErrorContext(ctx, "No origin hash for recipe", "hash", hash, "error", err)
@@ -266,7 +266,12 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
-	FormatRecipeHTML(ctx, p, *recipe, saved, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
+	reviewPending, err := s.recipeReviewPending(ctx, *recipe, recipe.OriginHash)
+	if err != nil {
+		http.Error(w, "failed to load recipe review state", http.StatusInternalServerError)
+		return
+	}
+	FormatRecipeHTML(ctx, p, *recipe, saved, reviewPending, currentUser, recipeCritique, hasRecipeImage, thread, feedback, wineRecommendation, w)
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
@@ -652,6 +657,10 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	recipe, err := s.saveRecipeForUser(ctx, currentUser, shoppingListHash, recipeHash)
 	if err != nil {
+		if errors.Is(err, errRecipeReviewPending) {
+			http.Error(w, "This recipe is still being reviewed. Please wait for the finished recipe.", http.StatusConflict)
+			return
+		}
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe not found", http.StatusNotFound)
 			return
@@ -667,7 +676,20 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var errRecipeReviewPending = errors.New("recipe review pending")
+
 func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User, shoppingListHash, recipeHash string) (*ai.Recipe, error) {
+	recipe, err := s.SingleFromCache(ctx, recipeHash)
+	if err != nil {
+		return nil, fmt.Errorf("load recipe: %w", err)
+	}
+	reviewPending, err := s.recipeReviewPending(ctx, *recipe, shoppingListHash)
+	if err != nil {
+		return nil, err
+	}
+	if reviewPending {
+		return nil, errRecipeReviewPending
+	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, shoppingListHash)
 	if err != nil {
 		return nil, fmt.Errorf("load recipe selection: %w", err)
@@ -677,10 +699,6 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 		return nil, fmt.Errorf("save recipe selection: %w", err)
 	}
 
-	recipe, err := s.SingleFromCache(ctx, recipeHash)
-	if err != nil {
-		return nil, fmt.Errorf("load recipe: %w", err)
-	}
 	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
 		return nil, fmt.Errorf("save recipe to user profile: %w", err)
 	}
@@ -762,15 +780,20 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, recipeHash string, recipe ai.Recipe, shoppingListHash string, saved bool) error {
+	reviewPending, err := s.recipeReviewPending(ctx, recipe, shoppingListHash)
+	if err != nil {
+		return err
+	}
 	var response bytes.Buffer
 	if isSingleRecipeAction(r) {
-		if err := RenderRecipeSaveActionHTML(recipe, shoppingListHash, saved, &response); err != nil {
+		if err := RenderRecipeSaveActionHTML(recipe, shoppingListHash, saved, reviewPending, &response); err != nil {
 			return fmt.Errorf("render recipe save action: %w", err)
 		}
 	} else {
 		if err := RenderShoppingRecipeCardHTML(
 			recipe,
 			saved,
+			reviewPending,
 			shoppingListHash,
 			s.wineRecommendationForCard(ctx, recipeHash),
 			s.recipeImageExistsForCard(ctx, recipeHash),

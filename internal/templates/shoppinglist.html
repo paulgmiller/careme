@@ -208,7 +208,10 @@
 
 {{define "shopping_recipe_actions"}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
-  {{if .Dismissed}}
+  {{if .ReviewPending}}
+  <button type="button" disabled aria-label="Add unavailable while recipe is being reviewed"
+          class="rounded-lg border-2 border-brand-200 px-4 py-2 text-sm text-ink-500">Reviewing recipe…</button>
+  {{else if .Dismissed}}
   {{if .ServerSignedIn}}
   <button type="button"
           hx-post="/recipe/{{.Hash}}/save"

@@ -370,7 +370,10 @@
 {{define "recipe_save_action"}}
 {{if .OriginHash}}
 <div class="recipe-save-action pt-2">
-  {{if and .ServerSignedIn .Saved}}
+  {{if .ReviewPending}}
+  <button type="button" disabled aria-label="Save unavailable while recipe is being reviewed"
+          class="rounded-lg border-2 border-brand-200 px-4 py-2 text-sm text-ink-500">Reviewing recipe…</button>
+  {{else if and .ServerSignedIn .Saved}}
   <button type="button"
           hx-post="/recipe/{{.RecipeHash}}/dismiss"
           hx-vals='{"h":"{{.OriginHash}}","source":"recipe"}'

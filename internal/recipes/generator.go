@@ -46,6 +46,7 @@ type recipeCritiquer interface {
 type statusWriter interface {
 	Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error
 	RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error
+	RecipeDraft(ctx context.Context, hash string, index int, recipeHash string) error
 	Update(ctx context.Context, hash string, message string) error
 }
 
@@ -166,12 +167,15 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+			if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
 				slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
 			}
 			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
 			if err != nil {
 				return nil, err
+			}
+			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+				slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 			}
 			return final, nil
 		})
@@ -246,12 +250,15 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+		if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
 			slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
 		}
 		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
 		if err != nil {
 			return nil, err
+		}
+		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 		}
 		return final, nil
 	})
@@ -341,7 +348,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	c, err := g.critiquer.CritiqueRecipe(ctx, *recipe)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", err)
-		return recipe, nil
+		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
 	}
 	if c.OverallScore >= critique.MinimumRecipeScoreForModel(c.Model) {
 		return recipe, nil
@@ -365,11 +372,16 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
 		return nil, err
 	}
-	if err := g.statusWriter.RecipeReady(ctx, hash, index, retry.ComputeHash()); err != nil {
+	if err := g.statusWriter.RecipeDraft(ctx, hash, index, retry.ComputeHash()); err != nil {
 		slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
 	}
-	// don't block
-	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)
+	review, err := g.critiquer.CritiqueRecipe(ctx, *retry)
+	if err != nil {
+		return nil, fmt.Errorf("critique revised recipe %q: %w", retry.Title, err)
+	}
+	if review.OverallScore < critique.MinimumRecipeScoreForModel(review.Model) {
+		return nil, fmt.Errorf("revised recipe %q did not pass critique", retry.Title)
+	}
 
 	return retry, nil
 }
