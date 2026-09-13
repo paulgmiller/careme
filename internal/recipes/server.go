@@ -1139,11 +1139,6 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
 		return
 	}
-	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
-	if err != nil && !errors.Is(err, auth.ErrNoSession) {
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
-		return
-	}
 	progress, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -1181,6 +1176,12 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		}
 		finished[slot.RecipeHash] = *recipe
 	}
+	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
+	if err != nil && !errors.Is(err, auth.ErrNoSession) {
+		http.Error(w, "unable to load account", http.StatusInternalServerError)
+		return
+	}
+
 	s.renderShoppingList(w, r, p, &list, currentUser, shoppingProgress{
 		Slots:      progress.Slots,
 		Finished:   finished,
