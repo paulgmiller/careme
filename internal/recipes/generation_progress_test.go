@@ -38,7 +38,7 @@ func (p notifyingProgress) RecipeReady(ctx context.Context, hash string, index i
 	return nil
 }
 
-func TestGenerationPublishesFinalRecipesInPlanOrder(t *testing.T) {
+func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 	for _, replacement := range []bool{false, true} {
 		name := "initial"
 		if replacement {
@@ -51,7 +51,7 @@ func TestGenerationPublishesFinalRecipesInPlanOrder(t *testing.T) {
 			if replacement {
 				p.PreviousMenuPlanResponseID = "previous-menu"
 			}
-			progress := notifyingProgress{Store: status.NewStore(c), ready: make(chan int, 2)}
+			progress := notifyingProgress{Store: status.NewStore(c), ready: make(chan int, 4)}
 			require.NoError(t, progress.Start(t.Context(), p.Hash()))
 			releaseReview := make(chan struct{})
 			reviewStarted := make(chan struct{})
@@ -83,16 +83,16 @@ func TestGenerationPublishesFinalRecipesInPlanOrder(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("review did not start")
 			}
-			select {
-			case index := <-progress.ready:
-				assert.Equal(t, 1, index)
-			case <-time.After(5 * time.Second):
-				t.Fatal("ready recipe not published")
-			}
+			require.Eventually(t, func() bool {
+				got, err := progress.Load(t.Context(), p.Hash())
+				return err == nil && len(got.Slots) == 2 && got.Slots[0].RecipeHash != "" && got.Slots[1].RecipeHash != ""
+			}, 5*time.Second, time.Millisecond)
 			got, err := progress.Load(t.Context(), p.Hash())
 			require.NoError(t, err)
 			require.Len(t, got.Slots, 2)
-			assert.Empty(t, got.Slots[0].RecipeHash, "draft must stay hidden during review")
+			slow, err := rio.SingleFromCache(t.Context(), got.Slots[0].RecipeHash)
+			require.NoError(t, err)
+			assert.Equal(t, "Slow", slow.Title, "recipe is visible during review")
 			assert.Equal(t, "Slow", got.Slots[0].Plan.Cuisine)
 			recipe, err := rio.SingleFromCache(t.Context(), got.Slots[1].RecipeHash)
 			require.NoError(t, err)

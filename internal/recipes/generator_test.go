@@ -1475,3 +1475,42 @@ func TestNewlySaved(t *testing.T) {
 
 func (noopstatuswriter) Plan(context.Context, string, []ai.RecipePlan) error    { return nil }
 func (noopstatuswriter) RecipeReady(context.Context, string, int, string) error { return nil }
+
+func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
+	for _, replacement := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial", true: "replacement"}[replacement], func(t *testing.T) {
+			params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+			if replacement {
+				params.PreviousMenuPlanResponseID = "previous-menu"
+			}
+			initial := ai.Recipe{Title: "First dinner", ResponseID: "first-response"}
+			revised := ai.Recipe{Title: "Revised dinner", ResponseID: "revised-response"}
+			store := cache.NewInMemoryCache()
+			progress := status.NewStore(store)
+			saver := IO(store)
+			require.NoError(t, progress.Start(t.Context(), params.Hash()))
+			critiquer := &captureCritiqueService{fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
+				if recipe.Title == initial.Title {
+					published, err := progress.Load(t.Context(), params.Hash())
+					assert.NoError(t, err)
+					if assert.Len(t, published.Slots, 1) {
+						assert.Equal(t, recipe.ComputeHash(), published.Slots[0].RecipeHash)
+					}
+					persisted, err := saver.SingleFromCache(t.Context(), recipe.ComputeHash())
+					assert.NoError(t, err)
+					assert.NotNil(t, persisted)
+					return &ai.RecipeCritique{OverallScore: 1}, nil
+				}
+				return &ai.RecipeCritique{OverallScore: 10}, nil
+			}}
+			client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{initial}}}, regenerateResponses: []*ai.Recipe{&revised}}
+			g := newTestGenerator(t, client, critiquer, seededStaples(t, params), progress, saver)
+			_, err := g.GenerateRecipes(t.Context(), params)
+			require.NoError(t, err)
+			published, err := progress.Load(t.Context(), params.Hash())
+			require.NoError(t, err)
+			require.Len(t, published.Slots, 1)
+			assert.Equal(t, revised.ComputeHash(), published.Slots[0].RecipeHash)
+		})
+	}
+}

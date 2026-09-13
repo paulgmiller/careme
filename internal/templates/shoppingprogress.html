@@ -4,11 +4,8 @@
   <div class="mb-6 rounded-2xl border border-brand-200 bg-brand-50 p-4" role="status" aria-live="polite">
     <div class="flex items-center gap-3">
       <span class="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" aria-hidden="true"></span>
-      <p>Your meals are taking shape. You can add finished recipes as they arrive.</p>
+      <p class="whitespace-pre-line text-sm text-ink-600">{{.StatusMessage}}</p>
     </div>
-    {{if .StatusMessage}}
-    <p class="mt-2 whitespace-pre-line text-sm text-ink-600">{{.StatusMessage}}</p>
-    {{end}}
   </div>
 
   <div class="space-y-8">

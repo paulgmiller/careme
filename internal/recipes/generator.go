@@ -166,7 +166,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			// write out a recipe ready here but don't make it savable till critique?
+			if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+				slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+			}
 			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 			if err != nil {
 				return nil, err
@@ -248,7 +250,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		// write out a recipe ready here but don't make it savable till critique?
+		if err := g.statusWriter.RecipeReady(ctx, hash, index, recipe.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+		}
 		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		if err != nil {
 			return nil, err

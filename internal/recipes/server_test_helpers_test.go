@@ -118,6 +118,15 @@ func (s *fakeStatusStore) Start(_ context.Context, hash string) error {
 	return nil
 }
 
+func (s *fakeStatusStore) Update(_ context.Context, hash, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	payload := s.statuses[hash]
+	payload.Message = message
+	s.statuses[hash] = payload
+	return nil
+}
+
 func (s *fakeStatusStore) Fail(_ context.Context, hash string, err error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
