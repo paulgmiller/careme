@@ -89,8 +89,9 @@ type shoppingListGroup struct {
 }
 
 type shoppingProgress struct {
-	Slots    []status.Slot        // meal-plan order, with hashes for finished recipes
-	Finished map[string]ai.Recipe // generated recipes referenced by slots
+	StatusMessage string
+	Slots         []status.Slot        // meal-plan order, with hashes for finished recipes
+	Finished      map[string]ai.Recipe // generated recipes referenced by slots
 	// Generating stays true until the final shopping list is cached; the slots
 	// are also empty before planning finishes.
 	Generating bool
@@ -123,6 +124,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 	}
 
 	data := struct {
+		StatusMessage        string
 		Generating           bool
 		Location             locations.Location
 		Date                 string
@@ -144,6 +146,7 @@ func formatShoppingList(ctx context.Context, p *generatorParams, l ai.ShoppingLi
 		UseTodaysIngredients bool
 		AdminURL             string
 	}{
+		StatusMessage:        progress.StatusMessage,
 		Generating:           progress.Generating,
 		Location:             *p.Location,
 		Date:                 p.Date.Format("2006-01-02"),
