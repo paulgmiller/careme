@@ -98,7 +98,10 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "Fast", recipe.Title)
 			// Release in a defer so failed assertions also unblock the worker.
-			t.Cleanup(func() { require.NoError(t, <-done) })
+			t.Cleanup(func() {
+				require.NoError(t, <-done)
+				assert.Len(t, progress.ready, 2, "unchanged recipes should each be published once")
+			})
 		})
 	}
 }
