@@ -46,7 +46,17 @@ func (l *logger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	lrw := &loggingResponseWriter{w, http.StatusOK}
 	l.Handler.ServeHTTP(lrw, r)
 
-	slog.InfoContext(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "user_agent", r.UserAgent(), "form", r.Form, "duration", time.Since(start))
+	log := slog.InfoContext
+	if isRecipePollRequest(r) {
+		log = slog.DebugContext
+	}
+	log(r.Context(), "request", "method", r.Method, "url", r.URL.Path, "query", r.URL.Query(), "response", lrw.statusCode, "user", user, "user_agent", r.UserAgent(), "form", r.Form, "duration", time.Since(start))
+}
+
+func isRecipePollRequest(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.URL.Path == "/recipes" &&
+		r.Header.Get("HX-Request") == "true" &&
+		(r.Header.Get("HX-Target") == "shopping-content" || r.Header.Get("HX-Target") == "spin-page-work")
 }
 
 type telemetryHandler struct {
