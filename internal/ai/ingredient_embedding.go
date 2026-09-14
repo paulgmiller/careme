@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"slices"
 	"strings"
+
+	"careme/internal/collections"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -73,7 +74,8 @@ type IngredientNeighbor struct {
 	Similarity float64         `json:"similarity"`
 }
 
-// NearestIngredients ranks a store's graded catalog by cosine similarity.
+// NearestIngredients returns the highest similarities in descending order.
+// Selection uses a bounded heap, taking O(n log limit) time.
 func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient, limit int) ([]IngredientNeighbor, error) {
 	if limit < 1 {
 		return nil, fmt.Errorf("neighbor limit must be positive")
@@ -95,17 +97,15 @@ func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient
 		ingredient.Embedding = nil
 		neighbors = append(neighbors, IngredientNeighbor{Ingredient: ingredient, Similarity: similarity})
 	}
-	// replace with  containers heap
-	slices.SortFunc(neighbors, func(a, b IngredientNeighbor) int {
-		if a.Similarity > b.Similarity {
-			return -1
-		}
-		if a.Similarity < b.Similarity {
-			return 1
-		}
-		return strings.Compare(a.Ingredient.ProductID, b.Ingredient.ProductID)
-	})
-	return neighbors[:min(limit, len(neighbors))], nil
+	return collections.Top(neighbors, limit, worseNeighbor), nil
+}
+
+// Lower similarity ranks worse; ties prefer the smaller product ID.
+func worseNeighbor(a, b IngredientNeighbor) bool {
+	if a.Similarity != b.Similarity {
+		return a.Similarity < b.Similarity
+	}
+	return a.Ingredient.ProductID > b.Ingredient.ProductID
 }
 
 // OpenAI embeddings are normalized, so cosine similarity is their dot product.

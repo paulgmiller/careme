@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -109,4 +110,38 @@ func TestNearestIngredientsLimitsAndTies(t *testing.T) {
 	got, err = NearestIngredients(query, nil, 1)
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+func TestNearestIngredientsKeepsBestAtLimit(t *testing.T) {
+	query := IngredientEmbedding{1, 0}
+	catalog := []InputIngredient{
+		{ProductID: "low", Embedding: IngredientEmbedding{-1, 0}},
+		{ProductID: "z", Embedding: IngredientEmbedding{0.8, 0.6}},
+		{ProductID: "best", Embedding: query},
+		{ProductID: "a", Embedding: IngredientEmbedding{0.8, 0.6}},
+		{ProductID: "worse", Embedding: IngredientEmbedding{0, 1}},
+		{ProductID: "b", Embedding: IngredientEmbedding{0.8, 0.6}},
+	}
+	for _, tc := range []struct {
+		limit int
+		want  []string
+	}{
+		{1, []string{"best"}},
+		{2, []string{"best", "a"}},
+		{3, []string{"best", "a", "b"}},
+		{10, []string{"best", "a", "b", "z", "worse", "low"}},
+	} {
+		t.Run(fmt.Sprint(tc.limit), func(t *testing.T) {
+			got, err := NearestIngredients(query, catalog, tc.limit)
+			require.NoError(t, err)
+			ids := make([]string, len(got))
+			for i, neighbor := range got {
+				ids[i] = neighbor.Ingredient.ProductID
+			}
+			assert.Equal(t, tc.want, ids)
+		})
+	}
+	// A full heap must not prevent validation of later catalog entries.
+	_, err := NearestIngredients(query, append(catalog, InputIngredient{ProductID: "invalid"}), 1)
+	require.ErrorContains(t, err, `ingredient "invalid" has no embedding`)
 }
