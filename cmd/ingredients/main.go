@@ -75,7 +75,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		neighbors, err := ai.NearestIngredients(vectors[0], graded, limit)
+		neighbors, err := ai.NearestIngredients(vectors[0], graded, ai.IngredientEmbeddingModel, limit)
 		if err != nil {
 			log.Fatal(err)
 		}

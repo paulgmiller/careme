@@ -3,19 +3,16 @@ package ai
 import (
 	"context"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 
 	openai "github.com/openai/openai-go/v3"
+	"github.com/tphakala/simd/f64"
 )
 
 const IngredientEmbeddingModel = openai.EmbeddingModelTextEmbedding3Small
 
-type IngredientEmbedding struct {
-	Model  string    `json:"model"`
-	Vector []float64 `json:"vector"`
-}
+type IngredientEmbedding []float64
 
 // EmbedIngredients embeds descriptions, excluding prices, IDs, and grades.
 func (g *ingredientGrader) EmbedIngredients(ctx context.Context, descriptions []string) ([]IngredientEmbedding, error) {
@@ -31,6 +28,7 @@ func (g *ingredientGrader) EmbedIngredients(ctx context.Context, descriptions []
 		Model:          IngredientEmbeddingModel,
 		Input:          openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: descriptions},
 		EncodingFormat: openai.EmbeddingNewParamsEncodingFormatFloat,
+		Dimensions:     openai.Int(256), //https://chatgpt.com/share/6aa863fa-5a50-83e8-8c88-177fe8d257c2
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create ingredient embeddings: %w", err)
@@ -40,13 +38,10 @@ func (g *ingredientGrader) EmbedIngredients(ctx context.Context, descriptions []
 	}
 	result := make([]IngredientEmbedding, len(descriptions))
 	for _, item := range resp.Data {
-		if item.Index < 0 || item.Index >= int64(len(result)) || result[item.Index].Vector != nil {
+		if item.Index < 0 || item.Index >= int64(len(result)) || result[item.Index] != nil {
 			return nil, fmt.Errorf("invalid embedding index %d", item.Index)
 		}
-		if _, err := cosineSimilarity(item.Embedding, item.Embedding); err != nil {
-			return nil, fmt.Errorf("embedding %d: %w", item.Index, err)
-		}
-		result[item.Index] = IngredientEmbedding{Model: string(IngredientEmbeddingModel), Vector: item.Embedding}
+		result[item.Index] = IngredientEmbedding(item.Embedding)
 	}
 	return result, nil
 }
@@ -57,32 +52,27 @@ type IngredientNeighbor struct {
 }
 
 // NearestIngredients ranks a store's graded catalog by cosine similarity.
-func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient, limit int) ([]IngredientNeighbor, error) {
+func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient, model string, limit int) ([]IngredientNeighbor, error) {
 	if limit < 1 {
 		return nil, fmt.Errorf("neighbor limit must be positive")
 	}
-	if _, err := cosineSimilarity(query.Vector, query.Vector); err != nil {
-		return nil, fmt.Errorf("query embedding: %w", err)
-	}
 	neighbors := make([]IngredientNeighbor, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		if ingredient.Grade == nil || ingredient.Grade.Embedding == nil {
-			return nil, fmt.Errorf("ingredient %q has no embedding", ingredient.ProductID)
+		if ingredient.Grade == nil || ingredient.Grade.Embeddings[model] == nil {
+			return nil, fmt.Errorf("ingredient %q has no embedding for model %q", ingredient.ProductID, model)
 		}
-		embedding := ingredient.Grade.Embedding
-		if embedding.Model != query.Model {
-			return nil, fmt.Errorf("ingredient %q embedding model mismatch", ingredient.ProductID)
-		}
-		similarity, err := cosineSimilarity(query.Vector, embedding.Vector)
+		embedding := ingredient.Grade.Embeddings[model]
+		similarity, err := cosineSimilarity(query, embedding)
 		if err != nil {
 			return nil, fmt.Errorf("ingredient %q: %w", ingredient.ProductID, err)
 		}
 		// Keep the CLI result readable without copying vectors into its output.
 		grade := *ingredient.Grade
-		grade.Embedding = nil
+		grade.Embeddings = nil
 		ingredient.Grade = &grade
 		neighbors = append(neighbors, IngredientNeighbor{Ingredient: ingredient, Similarity: similarity})
 	}
+	//replace with  containers heap
 	slices.SortFunc(neighbors, func(a, b IngredientNeighbor) int {
 		if a.Similarity > b.Similarity {
 			return -1
@@ -95,8 +85,12 @@ func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient
 	return neighbors[:min(limit, len(neighbors))], nil
 }
 
+// because openai embeeddings are normalizerd we just need a dot product?
 func cosineSimilarity(a, b []float64) (float64, error) {
-	if len(a) == 0 || len(a) != len(b) {
+	return f64.DotProduct(a, b), nil
+}
+
+/*	if len(a) == 0 || len(a) != len(b) {
 		return 0, fmt.Errorf("embedding dimensions differ or are empty")
 	}
 	var dot, aa, bb float64
@@ -109,4 +103,4 @@ func cosineSimilarity(a, b []float64) (float64, error) {
 		return 0, fmt.Errorf("embedding contains invalid values or has zero norm")
 	}
 	return dot / (math.Sqrt(aa) * math.Sqrt(bb)), nil
-}
+}*/

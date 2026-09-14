@@ -92,9 +92,9 @@ func (ii InputIngredient) PercentOff() float32 {
 }
 
 type IngredientGrade struct {
-	Score     int                  `json:"score"`
-	Reason    string               `json:"reason"`
-	Embedding *IngredientEmbedding `json:"embedding,omitempty"`
+	Score      int                            `json:"score"`
+	Reason     string                         `json:"reason"`
+	Embeddings map[string]IngredientEmbedding `json:"embedding,omitempty"`
 }
 
 func (i *IngredientGrade) GetScore() int {
@@ -225,7 +225,10 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("embed graded ingredients: %w", err)
 	}
 	for i := range graded {
-		graded[i].Grade.Embedding = &embeddings[i]
+		if graded[i].Grade.Embeddings == nil {
+			graded[i].Grade.Embeddings = map[string]IngredientEmbedding{}
+		}
+		graded[i].Grade.Embeddings[IngredientEmbeddingModel] = embeddings[i]
 	}
 	return graded, nil
 }
