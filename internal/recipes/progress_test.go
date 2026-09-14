@@ -232,8 +232,18 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		},
 	}
 	rr := httptest.NewRecorder()
-	formatShoppingList(t.Context(), p, list, map[string]*ai.WineSelection{}, map[string]bool{},
-		&utypes.User{ID: "test-user"}, p.Hash(), selectionFromSaved(p.Saved), "", "", progress, rr)
+	writeShoppingListPage(t.Context(), rr, shoppingListViewInput{
+		params:              p,
+		list:                list,
+		wineRecommendations: map[string]*ai.WineSelection{},
+		recipeImages:        map[string]bool{},
+		currentUser:         &utypes.User{ID: "test-user"},
+		hash:                p.Hash(),
+		selection:           selectionFromSaved(p.Saved),
+		helpMessage:         "",
+		pendingInstructions: "",
+		progress:            progress,
+	})
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	assert.Contains(t, body, "using tofu and broccoli")
