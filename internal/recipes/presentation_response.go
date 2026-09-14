@@ -2,17 +2,17 @@ package recipes
 
 import (
 	"bytes"
-	"io"
+	"html/template"
 	"log/slog"
 	"net/http"
 
 	"careme/internal/httpx"
 )
 
-// writeHTMLResponse commits HTML only after the complete view renders successfully.
-func writeHTMLResponse(w http.ResponseWriter, render func(io.Writer) error) {
+// renderHTML commits HTML only after the complete view renders successfully.
+func renderHTML(w http.ResponseWriter, tmpl *template.Template, name string, view any) {
 	var body bytes.Buffer
-	if err := render(&body); err != nil {
+	if err := tmpl.ExecuteTemplate(&body, name, view); err != nil {
 		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

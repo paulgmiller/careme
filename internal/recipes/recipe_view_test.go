@@ -10,6 +10,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/static"
+	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -431,7 +432,7 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 		},
 	}
 
-	writeRecipeThread(w, newRecipeThreadView(thread, true, ai.ResponseRef{
+	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(thread, true, ai.ResponseRef{
 		ID:             "conv123",
 		PromptCacheKey: "careme:store-day:v1:test",
 	}, "recipe123"))
@@ -461,7 +462,7 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 
 func TestFormatRecipeThreadHTML_RendersEmptyContinuationFields(t *testing.T) {
 	w := httptest.NewRecorder()
-	writeRecipeThread(w, newRecipeThreadView(nil, true, ai.ResponseRef{}, "recipe123"))
+	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(nil, true, ai.ResponseRef{}, "recipe123"))
 	body := assertHTTPSuccess(t, w)
 
 	assert.Contains(t, body, `name="response_id" value=""`)

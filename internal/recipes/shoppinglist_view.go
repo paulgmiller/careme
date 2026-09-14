@@ -3,7 +3,6 @@ package recipes
 import (
 	"fmt"
 	"html/template"
-	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/status"
 	"careme/internal/seasons"
-	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -223,10 +221,6 @@ func newShoppingFinalizeView(hash string) shoppingFinalizeView {
 	return data
 }
 
-func renderShoppingFinalizeControls(writer io.Writer, data shoppingFinalizeView) error {
-	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_finalize_controls_response", data)
-}
-
 // shoppingRecipeInput is the card state supplied by the controller or list builder.
 type shoppingRecipeInput struct {
 	ShoppingListHash   string
@@ -258,12 +252,4 @@ func newShoppingRecipeView(recipe ai.Recipe, state shoppingRecipeInput) (shoppin
 		Ready:              state.Ready,
 	}
 	return data, nil
-}
-
-func renderShoppingRecipeCard(writer io.Writer, data shoppingRecipeView) error {
-	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", data)
-}
-
-func renderShoppingListPage(writer io.Writer, name string, data shoppingListPageView) error {
-	return templates.ShoppingList.ExecuteTemplate(writer, name, data)
 }

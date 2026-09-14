@@ -276,7 +276,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeRecipeThread(w, newRecipeThreadView(thread, true, ai.ResponseRef{
+	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(thread, true, ai.ResponseRef{
 		ID:             answer.ResponseID,
 		PromptCacheKey: promptCacheKey,
 	}, hash))
@@ -569,15 +569,10 @@ func writeRecipePage(ctx context.Context, w http.ResponseWriter, input recipeVie
 	input.clarityScript = templates.ClarityScript(ctx)
 	input.googleTagScript = templates.GoogleTagScript()
 	input.style = seasons.GetCurrentStyle()
-	writeHTMLResponse(w, func(writer io.Writer) error {
-		view, err := newRecipePageView(input)
-		if err != nil {
-			return err
-		}
-		return renderRecipePage(writer, view)
-	})
-}
-
-func writeRecipeThread(w http.ResponseWriter, view recipeThreadView) {
-	writeHTMLResponse(w, func(writer io.Writer) error { return renderRecipeThread(writer, view) })
+	view, err := newRecipePageView(input)
+	if err != nil {
+		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	renderHTML(w, templates.Recipe, "recipe.html", view)
 }

@@ -3,7 +3,6 @@ package recipes
 import (
 	"fmt"
 	"html/template"
-	"io"
 	"slices"
 
 	"careme/internal/ai"
@@ -11,7 +10,6 @@ import (
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
 	"careme/internal/seasons"
-	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -155,10 +153,6 @@ func newRecipeThreadView(thread []RecipeThreadEntry, signedIn bool, response ai.
 	return data
 }
 
-func renderRecipeThread(writer io.Writer, data recipeThreadView) error {
-	return templates.Recipe.ExecuteTemplate(writer, "recipe_thread", data)
-}
-
 type recipeSaveActionView struct {
 	Recipe         ai.Recipe
 	Saved          bool
@@ -176,12 +170,4 @@ func newRecipeSaveActionView(recipe ai.Recipe, originHash string, saved bool) re
 		ServerSignedIn: true,
 	}
 	return data
-}
-
-func renderRecipeSaveAction(writer io.Writer, data recipeSaveActionView) error {
-	return templates.Recipe.ExecuteTemplate(writer, "recipe_save_action", data)
-}
-
-func renderRecipePage(writer io.Writer, data recipePageView) error {
-	return templates.Recipe.Execute(writer, data)
 }

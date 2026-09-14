@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -674,11 +673,10 @@ func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input sho
 	if input.progress.Fragment {
 		name = "shopping_content"
 	}
-	writeHTMLResponse(w, func(writer io.Writer) error {
-		view, err := newShoppingListPageView(input)
-		if err != nil {
-			return err
-		}
-		return renderShoppingListPage(writer, name, view)
-	})
+	view, err := newShoppingListPageView(input)
+	if err != nil {
+		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	renderHTML(w, templates.ShoppingList, name, view)
 }

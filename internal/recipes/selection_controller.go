@@ -15,6 +15,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpx"
+	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
@@ -169,7 +170,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, recipeHash string, recipe ai.Recipe, shoppingListHash string, saved bool) error {
 	var response bytes.Buffer
 	if isSingleRecipeAction(r) {
-		if err := renderRecipeSaveAction(&response, newRecipeSaveActionView(recipe, shoppingListHash, saved)); err != nil {
+		if err := templates.Recipe.ExecuteTemplate(&response, "recipe_save_action", newRecipeSaveActionView(recipe, shoppingListHash, saved)); err != nil {
 			return fmt.Errorf("render recipe save action: %w", err)
 		}
 	} else {
@@ -186,7 +187,7 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 		}
 
 		// Can finalize after any adds.
-		if err := renderShoppingFinalizeControls(&response, newShoppingFinalizeView(shoppingListHash)); err != nil {
+		if err := templates.ShoppingList.ExecuteTemplate(&response, "shopping_finalize_controls_response", newShoppingFinalizeView(shoppingListHash)); err != nil {
 			return fmt.Errorf("render shopping finalize controls: %w", err)
 		}
 
@@ -317,5 +318,5 @@ func writeShoppingRecipeCard(writer io.Writer, recipe ai.Recipe, state shoppingR
 	if err != nil {
 		return fmt.Errorf("build shopping recipe card: %w", err)
 	}
-	return renderShoppingRecipeCard(writer, view)
+	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", view)
 }

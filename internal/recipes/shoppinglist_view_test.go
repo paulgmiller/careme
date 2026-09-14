@@ -608,8 +608,8 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 		Saved:            true,
 		Ready:            true,
 	}))
-	assert.NoError(t, renderShoppingListPage(&full, "shoppinglist.html", page))
-	assert.NoError(t, renderShoppingListPage(&fragment, "shopping_content", page))
+	assert.NoError(t, templates.ShoppingList.ExecuteTemplate(&full, "shoppinglist.html", page))
+	assert.NoError(t, templates.ShoppingList.ExecuteTemplate(&fragment, "shopping_content", page))
 	assert.Contains(t, full.String(), card.String())
 	assert.Contains(t, fragment.String(), card.String())
 	assert.Equal(t, hash, page.Recipes[0].Hash)
