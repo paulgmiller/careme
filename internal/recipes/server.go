@@ -87,7 +87,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux routing.Registrar) {
 	s.registerRecipeRoutes(mux)
 	s.registerShoppingListRoutes(mux)
-	//save/dimsiss
+	// save/dimsiss
 	s.registerSelectionRoutes(mux)
 }
 
