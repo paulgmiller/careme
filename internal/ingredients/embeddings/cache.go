@@ -12,6 +12,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
 )
 
 type Embedder interface {
@@ -55,24 +56,37 @@ func (s *Service) EmbedIngredients(ctx context.Context, ingredients []ai.InputIn
 			result[i].Embedding = vector
 		}
 	}
-	for _, description := range descriptions {
-		key := cacheKey(s.embedder.CacheVersion(), description)
-		reader, err := s.cache.Get(ctx, key)
+	type lookupResult struct {
+		vector  ai.IngredientEmbedding
+		missing bool
+	}
+	version := s.embedder.CacheVersion()
+	lookups, err := parallelism.MapWithErrors(descriptions, func(description string) (lookupResult, error) {
+		reader, err := s.cache.Get(ctx, cacheKey(version, description))
 		if errors.Is(err, cache.ErrNotFound) {
-			missing = append(missing, description)
+			return lookupResult{missing: true}, nil
+		}
+		if err != nil {
+			return lookupResult{}, fmt.Errorf("load ingredient embedding %q: %w", description, err)
+		}
+		defer func() { _ = reader.Close() }()
+		var vector ai.IngredientEmbedding
+		if err := json.NewDecoder(reader).Decode(&vector); err != nil {
+			return lookupResult{}, fmt.Errorf("decode ingredient embedding %q: %w", description, err)
+		}
+		return lookupResult{vector: vector}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, lookup := range lookups {
+		if lookup.missing {
+			missing = append(missing, descriptions[i])
 			continue
 		}
-		if err != nil {
-			return nil, fmt.Errorf("load ingredient embedding %q: %w", description, err)
-		}
-		var vector ai.IngredientEmbedding
-		err = json.NewDecoder(reader).Decode(&vector)
-		_ = reader.Close()
-		if err != nil {
-			return nil, fmt.Errorf("decode ingredient embedding %q: %w", description, err)
-		}
-		assign(description, vector)
+		assign(descriptions[i], lookup.vector)
 	}
+
 	// Match the grading batch size while keeping embedding requests independent.
 	for start := 0; start < len(missing); start += 30 {
 		batch := missing[start:min(start+30, len(missing))]

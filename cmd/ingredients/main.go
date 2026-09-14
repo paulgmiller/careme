@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 
@@ -29,7 +27,7 @@ func main() {
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
 	flag.StringVar(&ingredient, "ingredient", "", "Find nearest ingredients to this description")
-	flag.IntVar(&limit, "limit", 1, "Number of nearest ingredients to return")
+	flag.IntVar(&limit, "limit", 20, "Number of nearest ingredients to return")
 	flag.Parse()
 	if strings.TrimSpace(location) == "" {
 		log.Fatal("-location is required")
@@ -79,9 +77,10 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := json.NewEncoder(os.Stdout).Encode(neighbors); err != nil {
-			log.Fatal(err)
+		for _, n := range neighbors {
+			fmt.Printf("%f %s\n", n.Similarity, n.Ingredient.Description)
 		}
+
 		return
 	}
 	slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
