@@ -181,7 +181,7 @@ func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 
 	t.Run("single recipe", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), nil, false, nil, feedback.Feedback{}, nil, w)
+		FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, nil, feedback.Feedback{}, nil, w)
 		html := assertHTTPSuccess(t, w)
 		isValidHTML(t, html)
 		assertInstructionMarkdown(t, html)
@@ -541,7 +541,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -668,7 +668,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, nil, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, nil, nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -702,7 +702,7 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	score := 7
 	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -721,7 +721,7 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 	score := 6
 	recipeCritique := &ai.RecipeCritique{OverallScore: score, Model: "anthropic/claude-opus-5"}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), recipeCritique, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -789,7 +789,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Oregon Pinot Noir", Price: "$14.99"},
 			{Name: "Backup Chardonnay", Price: "$11.99"},
@@ -835,7 +835,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 		ResponseID:   "resp-123",
 	}
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, false, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
@@ -895,7 +895,7 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	recipe.ResponseID = "resp-123"
 	recipeHash := recipe.ComputeHash()
 
-	FormatRecipeHTML(t.Context(), p, recipe, false, false, renderTestUser(true), nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
+	FormatRecipeHTML(t.Context(), p, recipe, false, renderTestUser(true), nil, true, []RecipeThreadEntry{}, feedback.Feedback{}, nil, w)
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)

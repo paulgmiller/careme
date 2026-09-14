@@ -170,7 +170,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
 				slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
 			}
-			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
+			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 			if err != nil {
 				return nil, err
 			}
@@ -253,7 +253,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
 			slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
 		}
-		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, index, recipe, ingMap)
+		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +339,7 @@ func regenerateInstructions(p *generatorParams) []string {
 	return instructions
 }
 
-func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, index int, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
+func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash string, recipe *ai.Recipe, ingMap map[string]ai.InputIngredient) (*ai.Recipe, error) {
 	ctx, span := tracer.Start(ctx, "recipes.critique.recipe")
 	defer span.End()
 
@@ -372,16 +372,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
 		return nil, err
 	}
-	if err := g.statusWriter.RecipeDraft(ctx, hash, index, retry.ComputeHash()); err != nil {
-		slog.ErrorContext(ctx, "failed to update ready recipe in status", "hash", hash, "index", index, "error", err)
-	}
-	review, err := g.critiquer.CritiqueRecipe(ctx, *retry)
-	if err != nil {
-		return nil, fmt.Errorf("critique revised recipe %q: %w", retry.Title, err)
-	}
-	if review.OverallScore < critique.MinimumRecipeScoreForModel(review.Model) {
-		return nil, fmt.Errorf("revised recipe %q did not pass critique", retry.Title)
-	}
+	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)
 
 	return retry, nil
 }

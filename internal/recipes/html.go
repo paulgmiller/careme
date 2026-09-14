@@ -258,7 +258,7 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 }
 
 // FormatRecipeHTML renders a single recipe view with a browser session id for analytics.
-func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved, reviewPending bool,
+func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe, saved bool,
 	currentUser *utypes.User, recipeCritique *ai.RecipeCritique, hasRecipeImage bool, thread []RecipeThreadEntry,
 	fb feedback.Feedback, wineRecommendation *ai.WineSelection, writer http.ResponseWriter,
 ) {
@@ -288,7 +288,6 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript           template.HTML
 		GoogleTagScript         template.HTML
 		Recipe                  ai.Recipe
-		ReviewPending           bool
 		InstructionsHTML        []template.HTML
 		Saved                   bool
 		DisplayIngredients      []ai.Ingredient
@@ -316,7 +315,6 @@ func FormatRecipeHTML(ctx context.Context, p *generatorParams, recipe ai.Recipe,
 		ClarityScript:           templates.ClarityScript(ctx),
 		GoogleTagScript:         templates.GoogleTagScript(),
 		Recipe:                  recipe,
-		ReviewPending:           reviewPending,
 		InstructionsHTML:        instructionsHTML,
 		Saved:                   saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, wineRecommendation),
@@ -393,14 +391,13 @@ func RenderShoppingFinalizeControlsHTML(hash string, writer io.Writer) error {
 }
 
 // called from shoppping list and will either mimimize dimissed or bring back in all on undo.
-func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved, reviewPending bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
+func RenderShoppingRecipeCardHTML(recipe ai.Recipe, saved bool, shoppingListHash string, wineRecommendation *ai.WineSelection, hasImage bool, writer io.Writer) error {
 	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
 	if err != nil {
 		return err
 	}
 	data := shoppingRecipeView{
 		Recipe:             recipe,
-		ReviewPending:      reviewPending,
 		Hash:               recipe.ComputeHash(),
 		ShoppingListHash:   shoppingListHash,
 		ServerSignedIn:     true, // have to be signed in to toggle
@@ -489,17 +486,15 @@ func newCookingMethodDisplay(method ai.CookingMethod) cookingMethodDisplay {
 }
 
 // called from single recipe page just swaps save dimiss
-func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, saved, reviewPending bool, writer io.Writer) error {
+func RenderRecipeSaveActionHTML(recipe ai.Recipe, originHash string, saved bool, writer io.Writer) error {
 	data := struct {
 		Recipe         ai.Recipe
-		ReviewPending  bool
 		Saved          bool
 		OriginHash     string
 		RecipeHash     string
 		ServerSignedIn bool
 	}{
 		Recipe:         recipe,
-		ReviewPending:  reviewPending,
 		Saved:          saved,
 		OriginHash:     originHash,
 		RecipeHash:     recipe.ComputeHash(),

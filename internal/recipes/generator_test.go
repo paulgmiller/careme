@@ -1446,8 +1446,9 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
-	require.ErrorContains(t, err, "did not pass critique")
-	assert.Nil(t, got)
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	assert.Equal(t, "Second Try", got.Recipes[0].Title)
 	if aiStub.regenerateCalls != 1 {
 		t.Fatalf("expected exactly one critique-driven retry, got %d", aiStub.regenerateCalls)
 	}
@@ -1498,12 +1499,6 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 					assert.NoError(t, err)
 					assert.NotNil(t, persisted)
 					return &ai.RecipeCritique{OverallScore: 1}, nil
-				}
-				published, err := progress.Load(t.Context(), params.Hash())
-				assert.NoError(t, err)
-				if assert.Len(t, published.Slots, 1) {
-					assert.Equal(t, recipe.ComputeHash(), published.Slots[0].RecipeHash)
-					assert.False(t, published.Slots[0].Reviewed, "revision is still under review")
 				}
 				return &ai.RecipeCritique{OverallScore: 10}, nil
 			}}
