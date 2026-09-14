@@ -143,7 +143,6 @@ type ingredientGrader struct {
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, model))
-	lo.Must(io.WriteString(fnv, IngredientEmbeddingModel))
 	lo.Must(io.WriteString(fnv, systemInstruction))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
@@ -154,7 +153,7 @@ func IngredientGradeCacheVersion(model string) string {
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction+"\nembedding-description-v1:"+string(IngredientEmbeddingModel))
+	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction)
 }
 
 func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
@@ -213,22 +212,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage, string(resp.ServiceTier)))
 
-	graded, err := parseIngredientGrades(ctx, resp.OutputText(), items)
-	if err != nil {
-		return nil, err
-	}
-	texts := make([]string, len(graded))
-	for i, item := range graded {
-		texts[i] = item.Description
-	}
-	embeddings, err := g.EmbedIngredients(ctx, texts)
-	if err != nil {
-		return nil, fmt.Errorf("embed graded ingredients: %w", err)
-	}
-	for i := range graded {
-		graded[i].Embedding = embeddings[i]
-	}
-	return graded, nil
+	return parseIngredientGrades(ctx, resp.OutputText(), items)
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {

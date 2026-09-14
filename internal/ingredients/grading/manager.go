@@ -8,6 +8,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients/embeddings"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -48,7 +49,10 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 		return rubberstamp{}
 	}
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
-	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
+	return &enrichingGrader{
+		grader:     newCachingGrader(&multiGrader{grader: base}, NewStore(c)),
+		embeddings: embeddings.New(c, ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient)),
+	}
 }
 
 func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
@@ -76,4 +80,17 @@ func ingredientLabel(ingredient ai.InputIngredient) string {
 		return value
 	}
 	return strings.TrimSpace(ingredient.ProductID)
+}
+
+type enrichingGrader struct {
+	grader     grader
+	embeddings *embeddings.Service
+}
+
+func (g *enrichingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	graded, err := g.grader.GradeIngredients(ctx, ingredients)
+	if err != nil {
+		return nil, err
+	}
+	return g.embeddings.EmbedIngredients(ctx, graded)
 }

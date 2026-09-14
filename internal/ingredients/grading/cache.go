@@ -46,15 +46,14 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	lookups, err := parallelism.MapWithErrors(ingredients, func(ingredient ai.InputIngredient) (lookupResult, error) {
-		if ingredient.Grade != nil && ingredient.Embedding != nil {
+		if ingredient.Grade != nil {
 			return lookupResult{cached: &ingredient}, nil
 		}
 
-		ingredient.Grade = nil
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
 		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
-			if gradedIngredient.Grade == nil || gradedIngredient.Embedding == nil {
+			if gradedIngredient.Grade == nil {
 				return lookupResult{missing: &ingredient}, nil
 			}
 			// should probably only cache grade as rest of ingredient may change
@@ -97,7 +96,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		}
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
 		if err := c.store.Save(ctx, key, &ingredient); err != nil {
-			return struct{}{}, fmt.Errorf("cache ingredient grade and embedding for %q: %w", ingredientLabel(ingredient), err)
+			return struct{}{}, fmt.Errorf("cache ingredient grade for %q: %w", ingredientLabel(ingredient), err)
 		}
 		return struct{}{}, nil
 	})

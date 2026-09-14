@@ -3,12 +3,16 @@ package grading
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +42,6 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 			Score:  10,
 			Reason: "default",
 		}
-		ingredient.Embedding = ai.IngredientEmbedding([]float64{1, 0})
 
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
@@ -84,7 +87,6 @@ func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 			Score:  9,
 			Reason: "already graded",
 		},
-		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 	ungraded := ai.InputIngredient{
 		ProductID:   "ingredient-01",
@@ -122,11 +124,9 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		Description: current.Description,
 		Size:        current.Size,
 		Grade: &ai.IngredientGrade{
-
 			Score:  9,
 			Reason: "cached grade",
 		},
-		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 	key := cacheKey(testIngredientGradeCacheVersion + "/" + ingredientHash(current))
 	require.NoError(t, cacheStore.Save(t.Context(), key, &cached))
@@ -239,28 +239,6 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
 }
 
-func TestCachingGraderRefreshesLegacyGrades(t *testing.T) {
-	for _, cached := range []bool{false, true} {
-		t.Run(fmt.Sprint(cached), func(t *testing.T) {
-			store := NewStore(cache.NewInMemoryCache())
-			backend := &stubGradeBackend{}
-			grader := newCachingGrader(backend, store)
-			ingredient := ai.InputIngredient{ProductID: "legacy", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 7, Reason: "Old grade"}}
-			if cached {
-				require.NoError(t, store.Save(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(ingredient)), &ingredient))
-				ingredient.Grade = nil
-			}
-			got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
-			require.NoError(t, err)
-			require.Len(t, got, 1)
-			require.NotNil(t, got[0].Embedding)
-			saved, err := store.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(ingredient)))
-			require.NoError(t, err)
-			assert.Equal(t, got[0].Embedding, saved.Embedding)
-		})
-	}
-}
-
 type failingWriteCache struct{ cache.ListCache }
 
 func (f failingWriteCache) Put(context.Context, string, string, cache.PutOptions) error {
@@ -270,7 +248,34 @@ func (f failingWriteCache) Put(context.Context, string, string, cache.PutOptions
 func TestCachingGraderReturnsPersistenceFailure(t *testing.T) {
 	grader := newCachingGrader(&stubGradeBackend{}, NewStore(failingWriteCache{cache.NewInMemoryCache()}))
 	got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{{ProductID: "a", Description: "Broccoli"}})
-	require.ErrorContains(t, err, "cache ingredient grade and embedding")
+	require.ErrorContains(t, err, "cache ingredient grade")
 	require.ErrorContains(t, err, "write failed")
 	assert.Nil(t, got)
+}
+
+type embeddingTransport func(*http.Request) (*http.Response, error)
+
+func (f embeddingTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestManagerBackfillsEmbeddingWithoutRegrading(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	calls := 0
+	httpClient := &http.Client{Transport: embeddingTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		require.Equal(t, "/v1/embeddings", r.URL.Path)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"index":0,"embedding":[1,0]}]}`)), Request: r}, nil
+	})}
+	cfg := &config.Config{AI: config.AIConfig{APIKey: "test"}, IngredientGrading: config.IngredientGradingConfig{Enable: true}}
+	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 8, Reason: "already graded"}}
+	got, err := NewManager(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, ingredient.Grade, got[0].Grade)
+	// A different grader still resolves the same embedding cache entry.
+	cfg.IngredientGrading.Model = "another-grader"
+	got, err = NewManager(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, 1, calls)
 }

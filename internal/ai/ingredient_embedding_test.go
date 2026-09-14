@@ -16,19 +16,20 @@ func testEmbeddingResponse(req *http.Request, body string) *http.Response {
 }
 
 func TestEmbedIngredientsAPI(t *testing.T) {
-	g := NewIngredientGrader("test", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	g := NewIngredientEmbedder("test", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		assert.Equal(t, "/v1/embeddings", req.URL.Path)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 		assert.Equal(t, "text-embedding-3-small", body["model"])
 		assert.Equal(t, "float", body["encoding_format"])
+		assert.Equal(t, float64(256), body["dimensions"])
 		assert.Equal(t, []any{"broccoli", "asparagus"}, body["input"])
 		return testEmbeddingResponse(req, `{"data":[{"index":1,"embedding":[0,1]},{"index":0,"embedding":[1,0]}]}`), nil
 	})})
 	got, err := g.EmbedIngredients(t.Context(), []string{"broccoli", "asparagus"})
 	require.NoError(t, err)
-	assert.Equal(t, []float64{1, 0}, got[0])
-	assert.Equal(t, []float64{0, 1}, got[1])
+	assert.Equal(t, IngredientEmbedding{1, 0}, got[0])
+	assert.Equal(t, IngredientEmbedding{0, 1}, got[1])
 }
 
 func TestEmbedIngredientsRejectsInvalidResponses(t *testing.T) {
@@ -39,7 +40,7 @@ func TestEmbedIngredientsRejectsInvalidResponses(t *testing.T) {
 		"index":   `{"data":[{"index":2,"embedding":[1,0]}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			g := NewIngredientGrader("test", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) { return testEmbeddingResponse(req, body), nil })})
+			g := NewIngredientEmbedder("test", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) { return testEmbeddingResponse(req, body), nil })})
 			got, err := g.EmbedIngredients(t.Context(), []string{"broccoli"})
 			require.Error(t, err)
 			assert.Nil(t, got)
@@ -47,26 +48,12 @@ func TestEmbedIngredientsRejectsInvalidResponses(t *testing.T) {
 	}
 }
 
-func TestGradeIngredientsFailsWhenEmbeddingFails(t *testing.T) {
-	g := NewIngredientGrader("test", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if strings.HasSuffix(req.URL.Path, "/embeddings") {
-			r := testEmbeddingResponse(req, `{"error":{"message":"bad input"}}`)
-			r.StatusCode = 400
-			return r, nil
-		}
-		return ingredientGradeHTTPResponse(req, `{"grades":[{"id":"a","score":9,"reason":"Fresh."}]}`), nil
-	})})
-	got, err := g.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "a", Description: "broccoli"}})
-	require.ErrorContains(t, err, "embed graded ingredients")
-	assert.Nil(t, got)
-}
-
 func TestNearestIngredients(t *testing.T) {
 	query := IngredientEmbedding([]float64{1, 0})
 	item := func(id string, vector []float64) InputIngredient {
 		return InputIngredient{ProductID: id, Grade: &IngredientGrade{Score: 8}, Embedding: IngredientEmbedding(vector)}
 	}
-	catalog := []InputIngredient{item("far", []float64{-1, 0}), item("near", []float64{2, 1}), item("exact", []float64{4, 0})}
+	catalog := []InputIngredient{item("far", []float64{-1, 0}), item("near", []float64{2 / 2.23606797749979, 1 / 2.23606797749979}), item("exact", []float64{1, 0})}
 	got, err := NearestIngredients(query, catalog, 2)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
@@ -86,7 +73,7 @@ func TestNearestIngredients(t *testing.T) {
 }
 
 func TestEmbedIngredientsRejectsDuplicateIndices(t *testing.T) {
-	g := NewIngredientGrader("test", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	g := NewIngredientEmbedder("test", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return testEmbeddingResponse(req, `{"data":[{"index":0,"embedding":[1,0]},{"index":0,"embedding":[0,1]}]}`), nil
 	})})
 	_, err := g.EmbedIngredients(t.Context(), []string{"broccoli", "asparagus"})
@@ -94,7 +81,7 @@ func TestEmbedIngredientsRejectsDuplicateIndices(t *testing.T) {
 }
 
 func TestEmbedIngredientsEmptyInputs(t *testing.T) {
-	g := NewIngredientGrader("test", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	g := NewIngredientEmbedder("test", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		t.Fatal("unexpected API request")
 		return nil, nil
 	})})

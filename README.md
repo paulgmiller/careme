@@ -96,7 +96,9 @@ Run `careme -campaigns` to generate recipes and images for the advertised stores
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
 OpenAI `text-embedding-3-small` embedding of each ingredient description alongside
-its grade. Existing ingredients without embeddings are refreshed on access.
+its grade, using a separate embedding cache keyed by model, dimensions, and
+description. Existing grades are reused when missing embeddings are filled in;
+changing the grader does not invalidate embeddings.
 
 Find the nearest ingredient in a store's current staple catalog:
 

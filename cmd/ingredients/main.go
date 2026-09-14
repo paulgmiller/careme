@@ -70,12 +70,12 @@ func main() {
 		log.Fatalf("failed to grade ingredients: %s", err)
 	}
 	if ingredient != "" {
-		embedder := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, http.DefaultClient)
+		embedder := ai.NewIngredientEmbedder(cfg.AI.APIKey, http.DefaultClient)
 		vectors, err := embedder.EmbedIngredients(ctx, []string{ingredient})
 		if err != nil {
 			log.Fatal(err)
 		}
-		neighbors, err := ai.NearestIngredients(vectors[0], graded, ai.IngredientEmbeddingModel, limit)
+		neighbors, err := ai.NearestIngredients(vectors[0], graded, limit)
 		if err != nil {
 			log.Fatal(err)
 		}

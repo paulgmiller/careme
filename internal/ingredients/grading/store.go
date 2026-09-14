@@ -50,7 +50,9 @@ func (s store) Save(ctx context.Context, key string, ingredient *ai.InputIngredi
 	if ingredient == nil {
 		return fmt.Errorf("graded ingredient is required")
 	}
-	body, err := json.Marshal(ingredient)
+	snapshot := *ingredient
+	snapshot.Embedding = nil
+	body, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
 	}
