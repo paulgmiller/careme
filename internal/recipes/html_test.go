@@ -529,6 +529,31 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	}
 }
 
+func TestShoppingCardDetailsIndependentOfReadiness(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		for _, content := range []string{"none", "ingredients", "instructions"} {
+			t.Run(content+map[bool]string{false: " draft", true: " ready"}[ready], func(t *testing.T) {
+				recipe := ai.Recipe{Title: "Dinner"}
+				if content == "ingredients" {
+					recipe.Ingredients = []ai.Ingredient{{Name: "Beans"}}
+				}
+				if content == "instructions" {
+					recipe.Instructions = []string{"Cook the beans."}
+				}
+				view := shoppingRecipeView{Recipe: recipe, Hash: recipe.ComputeHash(), Ready: ready, ServerSignedIn: true}
+				var body bytes.Buffer
+				if err := templates.ShoppingList.ExecuteTemplate(&body, "shopping_recipe_card", view); err != nil {
+					t.Fatal(err)
+				}
+				assert.Equal(t, content != "none", strings.Contains(body.String(), "<details"))
+				assert.Equal(t, ready, strings.Contains(body.String(), `hx-post="/recipe/`+view.Hash+`/save"`))
+				assert.Equal(t, ready, strings.Contains(body.String(), `hx-post="/recipe/`+view.Hash+`/dismiss"`))
+				assert.Equal(t, ready, strings.Contains(body.String(), `href="/recipe/`+view.Hash+`"`))
+			})
+		}
+	}
+}
+
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	lat := 47.6097
 	lon := -122.3331
