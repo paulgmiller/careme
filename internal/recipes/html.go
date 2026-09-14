@@ -69,7 +69,7 @@ type shoppingRecipeView struct {
 	Dismissed          bool
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
-	Ready              bool // the recipe has been generated
+	Ready              bool // enables saving, dismissing, and links to the recipe
 }
 
 // DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
@@ -190,7 +190,7 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 	wines map[string]*ai.WineSelection, images map[string]bool, signedIn bool,
 ) ([]shoppingRecipeView, error) {
 	views := make([]shoppingRecipeView, 0, len(progress.Slots)+len(recipes))
-	appendReady := func(recipe ai.Recipe) error {
+	appendRecipe := func(recipe ai.Recipe, ready bool) error {
 		hash := recipe.ComputeHash()
 		instructions, err := renderRecipeInstructions(recipe.Instructions)
 		if err != nil {
@@ -208,7 +208,7 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 			Dismissed:          selection.IsDismissed(hash),
 			HasImage:           images[hash],
 			WineRecommendation: wines[hash],
-			Ready:              true,
+			Ready:              ready,
 		})
 		return nil
 	}
@@ -221,12 +221,12 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 				},
 				Hash: "pending-" + strconv.Itoa(index),
 			})
-		} else if err := appendReady(progress.Finished[slot.RecipeHash]); err != nil {
+		} else if err := appendRecipe(progress.Finished[slot.RecipeHash], slot.Reviewed); err != nil {
 			return nil, err
 		}
 	}
 	for _, recipe := range recipes {
-		if err := appendReady(recipe); err != nil {
+		if err := appendRecipe(recipe, true); err != nil {
 			return nil, err
 		}
 	}

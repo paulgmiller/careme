@@ -25,6 +25,7 @@ const (
 type Slot struct {
 	Plan       ai.RecipePlan `json:"plan"`
 	RecipeHash string        `json:"recipe_hash,omitempty"`
+	Reviewed   bool          `json:"reviewed,omitempty"`
 }
 
 type Status struct {
@@ -160,9 +161,17 @@ func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) e
 	return ss.save(ctx, hash, stored)
 }
 
-// RecipeReady publishes a persisted recipe, then replaces it if critique revises it.
-// Is index the best way to do this? Seems sketchy. Match plan instead?
+// RecipeDraft makes a persisted recipe visible while critique is still running.
+func (ss *Store) RecipeDraft(ctx context.Context, hash string, index int, recipeHash string) error {
+	return ss.publishRecipe(ctx, hash, index, recipeHash, false)
+}
+
+// RecipeReady enables saving the final, reviewed recipe in a slot.
 func (ss *Store) RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error {
+	return ss.publishRecipe(ctx, hash, index, recipeHash, true)
+}
+
+func (ss *Store) publishRecipe(ctx context.Context, hash string, index int, recipeHash string, reviewed bool) error {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	stored, err := ss.load(ctx, hash)
@@ -176,6 +185,7 @@ func (ss *Store) RecipeReady(ctx context.Context, hash string, index int, recipe
 		return fmt.Errorf("invalid ready recipe slot %d", index)
 	}
 	stored.Slots[index].RecipeHash = recipeHash
+	stored.Slots[index].Reviewed = reviewed
 	return ss.save(ctx, hash, stored)
 }
 

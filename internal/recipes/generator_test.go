@@ -1446,12 +1446,9 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
-	if err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
-	}
-	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].Title != "Second Try" {
-		t.Fatalf("unexpected retried shopping list: %+v", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	assert.Equal(t, "Second Try", got.Recipes[0].Title)
 	if aiStub.regenerateCalls != 1 {
 		t.Fatalf("expected exactly one critique-driven retry, got %d", aiStub.regenerateCalls)
 	}
@@ -1475,6 +1472,7 @@ func TestNewlySaved(t *testing.T) {
 
 func (noopstatuswriter) Plan(context.Context, string, []ai.RecipePlan) error    { return nil }
 func (noopstatuswriter) RecipeReady(context.Context, string, int, string) error { return nil }
+func (noopstatuswriter) RecipeDraft(context.Context, string, int, string) error { return nil }
 
 func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 	for _, replacement := range []bool{false, true} {
@@ -1495,6 +1493,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 					assert.NoError(t, err)
 					if assert.Len(t, published.Slots, 1) {
 						assert.Equal(t, recipe.ComputeHash(), published.Slots[0].RecipeHash)
+						assert.False(t, published.Slots[0].Reviewed)
 					}
 					persisted, err := saver.SingleFromCache(t.Context(), recipe.ComputeHash())
 					assert.NoError(t, err)
@@ -1511,6 +1510,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, published.Slots, 1)
 			assert.Equal(t, revised.ComputeHash(), published.Slots[0].RecipeHash)
+			assert.True(t, published.Slots[0].Reviewed)
 		})
 	}
 }

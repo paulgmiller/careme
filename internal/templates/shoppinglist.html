@@ -97,12 +97,7 @@
 {{end}}
 
 {{define "shopping_recipe_card"}}
-{{if not .Ready}}
-<article id="{{.DOMID}}" class="shopping-recipe-card min-h-48 space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-  <h2 class="text-2xl font-semibold text-brand-700">{{.Title}}</h2>
-  <p class="text-sm text-ink-500">{{.Description}}</p>
-</article>
-{{else if .Dismissed}}
+{{if .Dismissed}}
 <article id="{{.DOMID}}" class="shopping-recipe-card rounded-2xl border border-gray-200 bg-gray-50/90 p-4 shadow-sm">
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="min-w-0">
@@ -119,9 +114,13 @@
     <header class="space-y-4 sm:contents">
       <div class="flex items-start gap-4 sm:contents">
         <div class="min-w-0 flex-1 sm:col-start-1 sm:row-start-1">
+          {{if not .Ready}}
+          <h2 class="text-2xl font-semibold text-brand-700">{{.Title}}</h2>
+          {{else}}
           <a href="/recipe/{{.Hash}}" class="text-2xl font-semibold text-brand-700 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
             {{.Title}}
           </a>
+          {{end}}
           <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
         </div>
         {{if .HasImage}}
@@ -145,6 +144,7 @@
       </div>
     </header>
 
+    {{if or .Ingredients .Instructions}}
     <div class="space-y-3 text-sm text-ink-600 sm:col-start-1 sm:row-start-3">
       {{template "recipe_properties" .PropertyDisplay}}
       {{if .Health}}
@@ -152,6 +152,7 @@
       {{end}}
       <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.DrinkPairing}}</p>
     </div>
+    {{end}}
   </div>
 
   {{if or .Ingredients .Instructions}}
@@ -207,6 +208,7 @@
 {{end}}
 
 {{define "shopping_recipe_actions"}}
+{{if .Ready}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
   {{if .Dismissed}}
   {{if .ServerSignedIn}}
@@ -250,6 +252,7 @@
   {{end}}
   {{end}}
 </div>
+{{end}}
 {{end}}
 
 {{define "shopping_recipe_wine_details"}}
