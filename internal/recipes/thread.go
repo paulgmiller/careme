@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"careme/internal/cache"
@@ -45,4 +46,17 @@ func (rio recipeio) SaveThread(ctx context.Context, hash string, entries []Recip
 		return err
 	}
 	return nil
+}
+
+// latestThreadResponseID finds the newest continuation without reordering entries.
+func latestThreadResponseID(thread []RecipeThreadEntry) string {
+	var latest time.Time
+	var responseID string
+	for _, entry := range thread {
+		id := strings.TrimSpace(entry.ResponseID)
+		if id != "" && (responseID == "" || entry.CreatedAt.After(latest)) {
+			latest, responseID = entry.CreatedAt, id
+		}
+	}
+	return responseID
 }
