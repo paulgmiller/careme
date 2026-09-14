@@ -40,7 +40,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
 | `recipe_critiques/` | JSON `ai.RecipeCritique` (`schema_version`, `overall_score`, `summary`, `strengths`, `issues`, `suggested_fixes`, `model`, `critiqued_at`) per recipe hash | `internal/recipes/critique.go` (`SaveCritique`) via `internal/recipes/generator.go` (`GenerateRecipes`) after OpenAI recipe generation/regeneration | `internal/recipes/critique.go` (`CritiqueFromCache`) for internal analysis and future tuning workflows |
-| `ingredient_grades/` | JSON `ai.InputIngredient` with embedded `grade` (`score`, `reason`) keyed by `<cache_version>/<ingredient_hash>` | `internal/ingredients/grading/store.go` (`Save`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) during recipe ingredient prioritization and admin inspection | `internal/ingredients/grading/store.go` (`Load`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) and `internal/ingredients/server.go` (`GET /ingredients/{hash}/graded`) |
+| `ingredient_grades/` | JSON `ai.InputIngredient` with embedded `grade` (`score`, `reason`, `embedding` containing `model` and `vector`) keyed by `<cache_version>/<ingredient_hash>` | `internal/ingredients/grading/store.go` (`Save`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) during recipe ingredient prioritization and admin inspection | `internal/ingredients/grading/store.go` (`Load`) via `internal/ingredients/grading/cache.go` (`GradeIngredients`) and `internal/ingredients/server.go` (`GET /ingredients/{hash}/graded`) |
 | `ingredient_grade_reviews/` | JSON `gradereview.Review` with the graded ingredient snapshot, human verdict (`too_high`, `correct`, or `too_low`), and review time, keyed by the matching `<cache_version>/<ingredient_hash>` | Standalone `cmd/ingredientreview` web app | Offline ingredient-grade evaluation and calibration workflows |
 | `locations/` in the `farmersmarket` backend | JSON shared farmers market metadata (`id`, submitted names, average lat/lon, nearest ZIP, photo count, timestamps) keyed by farmers market location ID | `internal/farmersmarket` upload handler/store | `internal/farmersmarket` location backend and upload merge logic |
 | `inventory/` in the `farmersmarket` backend | JSON `{cached_at, ingredients}` keyed by `<farmersmarket_location_id>/<YYYY-MM-DD>.json`; item brand is the visible farm/stall/store name when available, otherwise `Farmers market` | `internal/farmersmarket` upload handler/store after GPT image extraction | `internal/farmersmarket` staples provider reads the freshest cached list from the last 24 hours via recipe generation |
@@ -143,3 +143,18 @@ Compatibility implications:
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.
 - Recipe records store `instructions` as a string array. Each string may contain the constrained Markdown supported by the instruction renderer: plain paragraphs and `- ` bullet lists.
 - Do not create nested keys under `recipe/<hash>` (for example `recipe/<hash>/wine`) because `FileCache` stores `recipe/<hash>` as a file path.
+
+### Ingredient embeddings
+
+Real ingredient grading also batches description embeddings through OpenAI's
+`text-embedding-3-small` model at its default dimensions. The embedding is stored
+inside `grade.embedding` in both ingredient-grade and staple records. Prices,
+product IDs, brands, and grade reasons are excluded from embedding input.
+The grade cache version now includes the embedding model and description input
+format version. Existing grade cache entries remain on disk; legacy ingredients
+without embeddings are graded and embedded again on access. Grading-disabled
+mode does not request or store embeddings.
+
+The ingredients CLI fetches the selected store's current staple catalog, reuses
+cached grades and embeddings, embeds the query description, and ranks that
+catalog by cosine similarity. It does not search other stores or filter by grade.

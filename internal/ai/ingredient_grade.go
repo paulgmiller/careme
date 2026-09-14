@@ -92,8 +92,9 @@ func (ii InputIngredient) PercentOff() float32 {
 }
 
 type IngredientGrade struct {
-	Score  int    `json:"score"`
-	Reason string `json:"reason"`
+	Score     int                  `json:"score"`
+	Reason    string               `json:"reason"`
+	Embedding *IngredientEmbedding `json:"embedding,omitempty"`
 }
 
 func (i *IngredientGrade) GetScore() int {
@@ -152,7 +153,7 @@ func IngredientGradeCacheVersion(model string) string {
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction)
+	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction+"\nembedding-description-v1:"+string(IngredientEmbeddingModel))
 }
 
 func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
@@ -211,7 +212,22 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage, string(resp.ServiceTier)))
 
-	return parseIngredientGrades(ctx, resp.OutputText(), items)
+	graded, err := parseIngredientGrades(ctx, resp.OutputText(), items)
+	if err != nil {
+		return nil, err
+	}
+	texts := make([]string, len(graded))
+	for i, item := range graded {
+		texts[i] = item.Description
+	}
+	embeddings, err := g.EmbedIngredients(ctx, texts)
+	if err != nil {
+		return nil, fmt.Errorf("embed graded ingredients: %w", err)
+	}
+	for i := range graded {
+		graded[i].Grade.Embedding = &embeddings[i]
+	}
+	return graded, nil
 }
 
 func buildIngredientGradePrompt(items []InputIngredient) (string, error) {

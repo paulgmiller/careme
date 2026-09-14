@@ -35,8 +35,9 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	var out []ai.InputIngredient
 	for _, ingredient := range ingredients {
 		ingredient.Grade = &ai.IngredientGrade{
-			Score:  10,
-			Reason: "default",
+			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
+			Score:     10,
+			Reason:    "default",
 		}
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
@@ -79,8 +80,9 @@ func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 		ProductID:   "ingredient-00",
 		Description: "Ingredient 00",
 		Grade: &ai.IngredientGrade{
-			Score:  9,
-			Reason: "already graded",
+			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
+			Score:     9,
+			Reason:    "already graded",
 		},
 	}
 	ungraded := ai.InputIngredient{
@@ -119,8 +121,9 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		Description: current.Description,
 		Size:        current.Size,
 		Grade: &ai.IngredientGrade{
-			Score:  9,
-			Reason: "cached grade",
+			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
+			Score:     9,
+			Reason:    "cached grade",
 		},
 	}
 	key := cacheKey(testIngredientGradeCacheVersion + "/" + ingredientHash(current))
@@ -232,4 +235,40 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
+}
+
+func TestCachingGraderRefreshesLegacyGrades(t *testing.T) {
+	for _, cached := range []bool{false, true} {
+		t.Run(fmt.Sprint(cached), func(t *testing.T) {
+			store := NewStore(cache.NewInMemoryCache())
+			backend := &stubGradeBackend{}
+			grader := newCachingGrader(backend, store)
+			ingredient := ai.InputIngredient{ProductID: "legacy", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 7, Reason: "Old grade"}}
+			if cached {
+				require.NoError(t, store.Save(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(ingredient)), &ingredient))
+				ingredient.Grade = nil
+			}
+			got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			require.NotNil(t, got[0].Grade.Embedding)
+			saved, err := store.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(ingredient)))
+			require.NoError(t, err)
+			assert.Equal(t, got[0].Grade.Embedding, saved.Grade.Embedding)
+		})
+	}
+}
+
+type failingWriteCache struct{ cache.ListCache }
+
+func (f failingWriteCache) Put(context.Context, string, string, cache.PutOptions) error {
+	return fmt.Errorf("write failed")
+}
+
+func TestCachingGraderReturnsPersistenceFailure(t *testing.T) {
+	grader := newCachingGrader(&stubGradeBackend{}, NewStore(failingWriteCache{cache.NewInMemoryCache()}))
+	got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{{ProductID: "a", Description: "Broccoli"}})
+	require.ErrorContains(t, err, "cache ingredient grade and embedding")
+	require.ErrorContains(t, err, "write failed")
+	assert.Nil(t, got)
 }

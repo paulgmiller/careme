@@ -78,6 +78,9 @@ func TestBuildIngredientGradePrompt(t *testing.T) {
 
 func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/v1/embeddings" {
+			return testEmbeddingResponse(req, `{"data":[{"index":0,"embedding":[1,0]}]}`), nil
+		}
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), `"model":"`+gpt56Luna+`"`)
@@ -121,6 +124,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	require.Len(t, graded, 1)
 	require.NotNil(t, graded[0].Grade)
 	assert.Equal(t, 8, graded[0].Grade.Score)
+	require.NotNil(t, graded[0].Grade.Embedding)
 }
 
 func TestGradeIngredientsSkipsExtraProductIDs(t *testing.T) {
@@ -131,6 +135,9 @@ func TestGradeIngredientsSkipsExtraProductIDs(t *testing.T) {
 
 	calls := 0
 	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/v1/embeddings" {
+			return testEmbeddingResponse(req, `{"data":[{"index":0,"embedding":[1,0]}]}`), nil
+		}
 		calls++
 		return ingredientGradeHTTPResponse(req, `{"grades":[{"id":"wrong-1","score":8,"reason":"Fresh vegetable."}]}`), nil
 	})})
@@ -155,6 +162,9 @@ func TestGradeIngredientsOmitsMissingProducts(t *testing.T) {
 	body := `{"grades":[{"id":"ingredient-1","score":8,"reason":"Fresh vegetable."}]}`
 	calls := 0
 	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path == "/v1/embeddings" {
+			return testEmbeddingResponse(req, `{"data":[{"index":0,"embedding":[1,0]}]}`), nil
+		}
 		calls++
 		return ingredientGradeHTTPResponse(req, body), nil
 	})})

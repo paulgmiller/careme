@@ -91,3 +91,21 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 Run `careme -campaigns` to generate recipes and images for the advertised stores once. The job creates its own flex AI client and exits with an error if any store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
 
 `deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
+
+### Ingredient embedding lookup
+
+With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
+OpenAI `text-embedding-3-small` embedding of each ingredient description alongside
+its grade. Existing ingredients without embeddings are refreshed on access.
+
+Find the nearest ingredient in a store's current staple catalog:
+
+```sh
+INGREDIENT_GRADING_ENABLE=1 go run ./cmd/ingredients -location 70100023 -ingredient "broccoli"
+```
+
+Add `-limit 10` for more neighbors. Results are JSON with ingredient metadata,
+grade, and cosine similarity, ordered from closest to furthest. The first lookup
+may fetch and grade the store catalog; subsequent lookups reuse cached product
+grades and embeddings. Store provider credentials are the same as for the
+existing ingredients command. Recipe generation context is unchanged.

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -47,14 +46,15 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	}
 
 	lookups, err := parallelism.MapWithErrors(ingredients, func(ingredient ai.InputIngredient) (lookupResult, error) {
-		if ingredient.Grade != nil {
+		if ingredient.Grade != nil && ingredient.Grade.Embedding != nil {
 			return lookupResult{cached: &ingredient}, nil
 		}
 
+		ingredient.Grade = nil
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
 		gradedIngredient, err := c.store.Load(ctx, key)
 		if err == nil {
-			if gradedIngredient.Grade == nil {
+			if gradedIngredient.Grade == nil || gradedIngredient.Grade.Embedding == nil {
 				return lookupResult{missing: &ingredient}, nil
 			}
 			// should probably only cache grade as rest of ingredient may change
@@ -90,26 +90,21 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
 
-	// might get partial results back save those.
-	var wg sync.WaitGroup
-	for _, gradedIngredient := range gradedIngredients {
-		results = append(results, gradedIngredient)
-		if gradedIngredient.Grade == nil {
-			continue
+	// Preserve successful batches even when another grading batch fails.
+	_, saveErr := parallelism.MapWithErrors(gradedIngredients, func(ingredient ai.InputIngredient) (struct{}, error) {
+		if ingredient.Grade == nil {
+			return struct{}{}, nil
 		}
-		wg.Go(func() {
-			ctx := context.WithoutCancel(ctx)
-			// could just save grade rather than whole ingredient
-			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
-			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
-				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
-			}
-		})
-	}
-	wg.Wait()
-	if err != nil {
+		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
+		if err := c.store.Save(ctx, key, &ingredient); err != nil {
+			return struct{}{}, fmt.Errorf("cache ingredient grade and embedding for %q: %w", ingredientLabel(ingredient), err)
+		}
+		return struct{}{}, nil
+	})
+	if err := errors.Join(err, saveErr); err != nil {
 		return nil, err
 	}
+	results = append(results, gradedIngredients...)
 
 	return results, nil
 }
