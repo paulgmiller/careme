@@ -239,20 +239,6 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
 }
 
-type failingWriteCache struct{ cache.ListCache }
-
-func (f failingWriteCache) Put(context.Context, string, string, cache.PutOptions) error {
-	return fmt.Errorf("write failed")
-}
-
-func TestCachingGraderReturnsPersistenceFailure(t *testing.T) {
-	grader := newCachingGrader(&stubGradeBackend{}, NewStore(failingWriteCache{cache.NewInMemoryCache()}))
-	got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{{ProductID: "a", Description: "Broccoli"}})
-	require.ErrorContains(t, err, "cache ingredient grade")
-	require.ErrorContains(t, err, "write failed")
-	assert.Nil(t, got)
-}
-
 type embeddingTransport func(*http.Request) (*http.Response, error)
 
 func (f embeddingTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

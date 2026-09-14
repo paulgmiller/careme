@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -89,21 +90,26 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
 
-	// Preserve successful batches even when another grading batch fails.
-	_, saveErr := parallelism.MapWithErrors(gradedIngredients, func(ingredient ai.InputIngredient) (struct{}, error) {
-		if ingredient.Grade == nil {
-			return struct{}{}, nil
+	// Cache successful results without making persistence failures fail grading.
+	var wg sync.WaitGroup
+	for _, gradedIngredient := range gradedIngredients {
+		results = append(results, gradedIngredient)
+		if gradedIngredient.Grade == nil {
+			continue
 		}
-		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
-		if err := c.store.Save(ctx, key, &ingredient); err != nil {
-			return struct{}{}, fmt.Errorf("cache ingredient grade for %q: %w", ingredientLabel(ingredient), err)
-		}
-		return struct{}{}, nil
-	})
-	if err := errors.Join(err, saveErr); err != nil {
+		wg.Add(1)
+		go func(ingredient ai.InputIngredient) {
+			defer wg.Done()
+			ctx := context.WithoutCancel(ctx)
+			key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
+			if err := c.store.Save(ctx, key, &ingredient); err != nil {
+				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(ingredient), "error", err)
+			}
+		}(gradedIngredient)
+	}
+	wg.Wait()
+	if err != nil {
 		return nil, err
 	}
-	results = append(results, gradedIngredients...)
-
 	return results, nil
 }
