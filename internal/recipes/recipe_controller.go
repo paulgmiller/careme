@@ -24,8 +24,18 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
 	"careme/internal/recipes/status"
+	"careme/internal/routing"
 	utypes "careme/internal/users/types"
 )
+
+func (s *server) registerRecipeRoutes(mux routing.Registrar) {
+	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
+	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
+	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
+	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
+	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
+	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
+}
 
 func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	// This page has user-visible HTMX mutations (wine picks, feedback, Q&A).

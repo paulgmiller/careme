@@ -85,19 +85,10 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 }
 
 func (s *server) Register(mux routing.Registrar) {
-	mux.HandleFunc("GET /recipes", s.handleRecipes)
-	mux.HandleFunc("POST /recipes", s.handleGenerate)
-	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
-	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
-	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
-	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
-	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
-	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
-	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
-	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
-	mux.HandleFunc("POST /recipe/{hash}/feedback", s.handleFeedback)
-	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
-	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
+	s.registerRecipeRoutes(mux)
+	s.registerShoppingListRoutes(mux)
+	//save/dimsiss
+	s.registerSelectionRoutes(mux)
 }
 
 func (s *server) Wait() {

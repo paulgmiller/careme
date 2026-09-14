@@ -21,11 +21,20 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/status"
+	"careme/internal/routing"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
 )
+
+func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
+	mux.HandleFunc("GET /recipes", s.handleRecipes)
+	mux.HandleFunc("POST /recipes", s.handleGenerate)
+	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
+	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
+	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
+}
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

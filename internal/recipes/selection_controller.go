@@ -15,11 +15,17 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpx"
+	"careme/internal/routing"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
 	"github.com/samber/lo"
 )
+
+func (s *server) registerSelectionRoutes(mux routing.Registrar) {
+	mux.HandleFunc("POST /recipe/{hash}/save", s.handleSaveRecipe)
+	mux.HandleFunc("POST /recipe/{hash}/dismiss", s.handleDismissRecipe)
+}
 
 func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
