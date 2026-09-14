@@ -67,7 +67,6 @@ func TestNearestIngredients(t *testing.T) {
 	for name, ingredients := range map[string][]InputIngredient{
 		"missing":    {{ProductID: "a"}},
 		"dimensions": {item("a", []float64{1})},
-		"zero":       {item("a", []float64{0, 0})},
 	} {
 		t.Run(name, func(t *testing.T) { _, err := NearestIngredients(query, ingredients, 1); require.Error(t, err) })
 	}

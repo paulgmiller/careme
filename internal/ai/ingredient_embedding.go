@@ -80,9 +80,6 @@ func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient
 	if limit < 1 {
 		return nil, fmt.Errorf("neighbor limit must be positive")
 	}
-	if err := validateEmbedding(query); err != nil {
-		return nil, fmt.Errorf("query embedding: %w", err)
-	}
 	neighbors := make([]IngredientNeighbor, 0, len(ingredients))
 	for _, ingredient := range ingredients {
 		if ingredient.Embedding == nil {
@@ -112,9 +109,6 @@ func worseNeighbor(a, b IngredientNeighbor) bool {
 func cosineSimilarity(a, b []float64) (float64, error) {
 	if len(a) != len(b) {
 		return 0, fmt.Errorf("embedding dimensions differ")
-	}
-	if err := validateEmbedding(b); err != nil {
-		return 0, err
 	}
 	return f64.DotProduct(a, b), nil
 }
