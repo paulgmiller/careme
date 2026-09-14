@@ -14,7 +14,7 @@ func TestInputIngredientsToTSV_UsesRegularPriceWhenSaleMissing(t *testing.T) {
 		Description:  "Asparagus",
 		Size:         "1 lb",
 		PriceRegular: new(float32(4.99)),
-		Grade:        &IngredientGrade{Score: 9, Reason: "test-grade-reason", Embedding: &IngredientEmbedding{Model: string(IngredientEmbeddingModel), Vector: []float64{0.123456789}}},
+		Grade:        &IngredientGrade{Score: 9, Reason: "test-grade-reason"},
 	}}, &buf)
 	if err != nil {
 		t.Fatalf("InputIngredientsToTSV returned error: %v", err)

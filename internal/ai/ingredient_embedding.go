@@ -52,24 +52,22 @@ type IngredientNeighbor struct {
 }
 
 // NearestIngredients ranks a store's graded catalog by cosine similarity.
-func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient, model string, limit int) ([]IngredientNeighbor, error) {
+func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient, limit int) ([]IngredientNeighbor, error) {
 	if limit < 1 {
 		return nil, fmt.Errorf("neighbor limit must be positive")
 	}
 	neighbors := make([]IngredientNeighbor, 0, len(ingredients))
 	for _, ingredient := range ingredients {
-		if ingredient.Grade == nil || ingredient.Grade.Embeddings[model] == nil {
-			return nil, fmt.Errorf("ingredient %q has no embedding for model %q", ingredient.ProductID, model)
+		if ingredient.Embedding == nil {
+			return nil, fmt.Errorf("ingredient %q has no embedding", ingredient.ProductID)
 		}
-		embedding := ingredient.Grade.Embeddings[model]
+		embedding := ingredient.Embedding
 		similarity, err := cosineSimilarity(query, embedding)
 		if err != nil {
 			return nil, fmt.Errorf("ingredient %q: %w", ingredient.ProductID, err)
 		}
 		// Keep the CLI result readable without copying vectors into its output.
-		grade := *ingredient.Grade
-		grade.Embeddings = nil
-		ingredient.Grade = &grade
+		ingredient.Embedding = nil
 		neighbors = append(neighbors, IngredientNeighbor{Ingredient: ingredient, Similarity: similarity})
 	}
 	//replace with  containers heap

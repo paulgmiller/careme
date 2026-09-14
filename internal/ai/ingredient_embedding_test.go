@@ -27,9 +27,8 @@ func TestEmbedIngredientsAPI(t *testing.T) {
 	})})
 	got, err := g.EmbedIngredients(t.Context(), []string{"broccoli", "asparagus"})
 	require.NoError(t, err)
-	assert.Equal(t, []float64{1, 0}, got[0].Vector)
-	assert.Equal(t, []float64{0, 1}, got[1].Vector)
-	assert.Equal(t, string(IngredientEmbeddingModel), got[0].Model)
+	assert.Equal(t, []float64{1, 0}, got[0])
+	assert.Equal(t, []float64{0, 1}, got[1])
 }
 
 func TestEmbedIngredientsRejectsInvalidResponses(t *testing.T) {
@@ -63,9 +62,9 @@ func TestGradeIngredientsFailsWhenEmbeddingFails(t *testing.T) {
 }
 
 func TestNearestIngredients(t *testing.T) {
-	query := IngredientEmbedding{Model: string(IngredientEmbeddingModel), Vector: []float64{1, 0}}
+	query := IngredientEmbedding([]float64{1, 0})
 	item := func(id string, vector []float64) InputIngredient {
-		return InputIngredient{ProductID: id, Grade: &IngredientGrade{Score: 8, Embedding: &IngredientEmbedding{Model: query.Model, Vector: vector}}}
+		return InputIngredient{ProductID: id, Grade: &IngredientGrade{Score: 8}, Embedding: IngredientEmbedding(vector)}
 	}
 	catalog := []InputIngredient{item("far", []float64{-1, 0}), item("near", []float64{2, 1}), item("exact", []float64{4, 0})}
 	got, err := NearestIngredients(query, catalog, 2)
@@ -75,13 +74,12 @@ func TestNearestIngredients(t *testing.T) {
 	assert.Equal(t, "near", got[1].Ingredient.ProductID)
 	assert.InDelta(t, 1, got[0].Similarity, 1e-10)
 	assert.InDelta(t, 2.0/2.2360679775, got[1].Similarity, 1e-10)
-	assert.Nil(t, got[0].Ingredient.Grade.Embedding)
-	assert.NotNil(t, catalog[2].Grade.Embedding)
+	assert.Nil(t, got[0].Ingredient.Embedding)
+	assert.NotNil(t, catalog[2].Embedding)
 	for name, ingredients := range map[string][]InputIngredient{
 		"missing":    {{ProductID: "a"}},
 		"dimensions": {item("a", []float64{1})},
 		"zero":       {item("a", []float64{0, 0})},
-		"model":      {{Grade: &IngredientGrade{Embedding: &IngredientEmbedding{Model: "other", Vector: []float64{1, 0}}}}},
 	} {
 		t.Run(name, func(t *testing.T) { _, err := NearestIngredients(query, ingredients, 1); require.Error(t, err) })
 	}
@@ -108,10 +106,10 @@ func TestEmbedIngredientsEmptyInputs(t *testing.T) {
 }
 
 func TestNearestIngredientsLimitsAndTies(t *testing.T) {
-	query := IngredientEmbedding{Model: string(IngredientEmbeddingModel), Vector: []float64{1, 0}}
+	query := IngredientEmbedding([]float64{1, 0})
 	catalog := []InputIngredient{
-		{ProductID: "b", Grade: &IngredientGrade{Embedding: &query}},
-		{ProductID: "a", Grade: &IngredientGrade{Embedding: &query}},
+		{ProductID: "b", Embedding: query},
+		{ProductID: "a", Embedding: query},
 	}
 	got, err := NearestIngredients(query, catalog, 10)
 	require.NoError(t, err)

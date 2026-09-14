@@ -35,10 +35,11 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	var out []ai.InputIngredient
 	for _, ingredient := range ingredients {
 		ingredient.Grade = &ai.IngredientGrade{
-			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
-			Score:     10,
-			Reason:    "default",
+			Score:  10,
+			Reason: "default",
 		}
+		ingredient.Embedding = ai.IngredientEmbedding([]float64{1, 0})
+
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
 	}
@@ -80,10 +81,10 @@ func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 		ProductID:   "ingredient-00",
 		Description: "Ingredient 00",
 		Grade: &ai.IngredientGrade{
-			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
-			Score:     9,
-			Reason:    "already graded",
+			Score:  9,
+			Reason: "already graded",
 		},
+		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 	ungraded := ai.InputIngredient{
 		ProductID:   "ingredient-01",
@@ -121,10 +122,11 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		Description: current.Description,
 		Size:        current.Size,
 		Grade: &ai.IngredientGrade{
-			Embedding: &ai.IngredientEmbedding{Model: string(ai.IngredientEmbeddingModel), Vector: []float64{1, 0}},
-			Score:     9,
-			Reason:    "cached grade",
+
+			Score:  9,
+			Reason: "cached grade",
 		},
+		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 	key := cacheKey(testIngredientGradeCacheVersion + "/" + ingredientHash(current))
 	require.NoError(t, cacheStore.Save(t.Context(), key, &cached))
@@ -251,10 +253,10 @@ func TestCachingGraderRefreshesLegacyGrades(t *testing.T) {
 			got, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
 			require.NoError(t, err)
 			require.Len(t, got, 1)
-			require.NotNil(t, got[0].Grade.Embedding)
+			require.NotNil(t, got[0].Embedding)
 			saved, err := store.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(ingredient)))
 			require.NoError(t, err)
-			assert.Equal(t, got[0].Grade.Embedding, saved.Grade.Embedding)
+			assert.Equal(t, got[0].Embedding, saved.Embedding)
 		})
 	}
 }

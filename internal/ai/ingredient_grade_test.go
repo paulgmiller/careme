@@ -124,7 +124,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	require.Len(t, graded, 1)
 	require.NotNil(t, graded[0].Grade)
 	assert.Equal(t, 8, graded[0].Grade.Score)
-	require.NotNil(t, graded[0].Grade.Embedding)
+	require.NotNil(t, graded[0].Embedding)
 }
 
 func TestGradeIngredientsSkipsExtraProductIDs(t *testing.T) {

@@ -73,15 +73,16 @@ Important calibration:
 Return JSON only. Preserve each input id/index exactly. Be concise.`
 
 type InputIngredient struct {
-	ProductID    string           `json:"id,omitempty"`
-	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
-	Brand        string           `json:"brand,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Size         string           `json:"size,omitempty"`
-	PriceRegular *float32         `json:"regularPrice,omitempty"`
-	PriceSale    *float32         `json:"salePrice,omitempty"`
-	Categories   []string         `json:"categories,omitempty"`
-	Grade        *IngredientGrade `json:"grade,omitempty"`
+	ProductID    string              `json:"id,omitempty"`
+	AisleNumber  string              `json:"number,omitempty"` // this is a dumb json name fix it later
+	Brand        string              `json:"brand,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	Size         string              `json:"size,omitempty"`
+	PriceRegular *float32            `json:"regularPrice,omitempty"`
+	PriceSale    *float32            `json:"salePrice,omitempty"`
+	Categories   []string            `json:"categories,omitempty"`
+	Grade        *IngredientGrade    `json:"grade,omitempty"`
+	Embedding    IngredientEmbedding `json:"embeddings,omitempty"`
 }
 
 func (ii InputIngredient) PercentOff() float32 {
@@ -92,9 +93,8 @@ func (ii InputIngredient) PercentOff() float32 {
 }
 
 type IngredientGrade struct {
-	Score      int                            `json:"score"`
-	Reason     string                         `json:"reason"`
-	Embeddings map[string]IngredientEmbedding `json:"embedding,omitempty"`
+	Score  int    `json:"score"`
+	Reason string `json:"reason"`
 }
 
 func (i *IngredientGrade) GetScore() int {
@@ -143,6 +143,7 @@ type ingredientGrader struct {
 func ingredientGradeCacheVersion(model, systemInstruction string) string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, model))
+	lo.Must(io.WriteString(fnv, IngredientEmbeddingModel))
 	lo.Must(io.WriteString(fnv, systemInstruction))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
@@ -225,10 +226,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("embed graded ingredients: %w", err)
 	}
 	for i := range graded {
-		if graded[i].Grade.Embeddings == nil {
-			graded[i].Grade.Embeddings = map[string]IngredientEmbedding{}
-		}
-		graded[i].Grade.Embeddings[IngredientEmbeddingModel] = embeddings[i]
+		graded[i].Embedding = embeddings[i]
 	}
 	return graded, nil
 }
