@@ -677,11 +677,10 @@ func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input sho
 	if input.progress.Fragment {
 		name = "shopping_content"
 	}
-	view, err := newShoppingListPageView(input)
+	view, err := newShoppingListPageView(ctx, input)
 	if err != nil {
 		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	view.Page = templates.NewPage(ctx)
 	renderHTML(w, templates.ShoppingList, name, view)
 }

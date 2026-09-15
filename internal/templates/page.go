@@ -8,7 +8,7 @@ import (
 )
 
 // Page holds shared presentation data for full HTML pages. Embed it in page
-// views and populate it at the rendering boundary, outside content builders.
+// views and populate it when constructing the page.
 type Page struct {
 	ClarityScript   template.HTML
 	GoogleTagScript template.HTML

@@ -575,11 +575,10 @@ func parseFeedbackBool(value string) (bool, error) {
 }
 
 func writeRecipePage(ctx context.Context, w http.ResponseWriter, input recipeViewInput) {
-	view, err := newRecipePageView(input)
+	view, err := newRecipePageView(ctx, input)
 	if err != nil {
 		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	view.Page = templates.NewPage(ctx)
 	renderHTML(w, templates.Recipe, "recipe.html", view)
 }

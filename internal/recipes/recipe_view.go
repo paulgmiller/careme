@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"slices"
@@ -60,7 +61,7 @@ type recipeViewInput struct {
 	wineRecommendation *ai.WineSelection
 }
 
-func newRecipePageView(input recipeViewInput) (recipePageView, error) {
+func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageView, error) {
 	recipe := input.recipe
 	thread := input.thread
 
@@ -85,6 +86,7 @@ func newRecipePageView(input recipeViewInput) (recipePageView, error) {
 		minimumRecipeScore = critique.MinimumRecipeScoreForModel(input.recipeCritique.Model)
 	}
 	data := recipePageView{
+		Page:                    templates.NewPage(ctx),
 		Location:                *input.params.Location,
 		Date:                    input.params.Date.Format("2006-01-02"),
 		Recipe:                  recipe,

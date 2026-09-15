@@ -25,7 +25,7 @@ func TestThreadViewsPreserveInputOrder(t *testing.T) {
 
 	fragment := newRecipeThreadView(thread, true, ai.ResponseRef{ID: "new-response"}, "recipe-hash")
 	params := DefaultParams(&locations.Location{ID: "store"}, older)
-	page, err := newRecipePageView(recipeViewInput{
+	page, err := newRecipePageView(t.Context(), recipeViewInput{
 		params: params,
 		recipe: ai.Recipe{ResponseID: "initial"},
 		thread: thread,

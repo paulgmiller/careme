@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"slices"
@@ -94,7 +95,7 @@ type shoppingListViewInput struct {
 	useTodaysIngredients bool
 }
 
-func newShoppingListPageView(input shoppingListViewInput) (shoppingListPageView, error) {
+func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
 	serverSignedIn := input.currentUser != nil
 	instructions := strings.TrimSpace(input.params.Instructions)
 	if instructions == "" && input.list.Plan != nil {
@@ -114,6 +115,7 @@ func newShoppingListPageView(input shoppingListViewInput) (shoppingListPageView,
 	}
 
 	data := shoppingListPageView{
+		Page:                templates.NewPage(ctx),
 		StatusMessage:       input.progress.StatusMessage,
 		Generating:          input.progress.Generating,
 		Location:            *input.params.Location,
