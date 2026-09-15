@@ -11,6 +11,7 @@ import (
 )
 
 func TestRenderHTMLDiscardsPartialTemplateOutput(t *testing.T) {
+	t.Parallel()
 	tmpl := template.Must(template.New("recipe.html").Funcs(template.FuncMap{
 		"fail": func() (string, error) { return "", errors.New("deliberate template failure") },
 	}).Parse(`partial page{{fail}}{{define "recipe_thread"}}partial thread{{fail}}{{end}}`))
@@ -27,6 +28,7 @@ func TestRenderHTMLDiscardsPartialTemplateOutput(t *testing.T) {
 }
 
 func TestRenderHTMLCommitsCompleteHTML(t *testing.T) {
+	t.Parallel()
 	tmpl := template.Must(template.New("page").Parse(`<p>{{.}}</p>{{define "fragment"}}<span>{{.}}</span>{{end}}`))
 	for _, tc := range []struct{ name, want string }{
 		{"page", "<p>Dinner &amp; dessert</p>"},

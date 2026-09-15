@@ -10,6 +10,7 @@ import (
 )
 
 func TestFormatMail_ValidHTML(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer

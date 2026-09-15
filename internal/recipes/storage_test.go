@@ -11,6 +11,7 @@ import (
 )
 
 func TestRecipeFileNaming(t *testing.T) {
+	t.Parallel()
 	// Verify that recipe files are stored with "recipe/" prefix
 	tmpDir, err := os.MkdirTemp("", "careme-test-naming-*")
 	if err != nil {

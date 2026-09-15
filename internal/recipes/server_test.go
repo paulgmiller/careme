@@ -35,6 +35,7 @@ import (
 )
 
 func TestRedirectToHash(t *testing.T) {
+	t.Parallel()
 	// Create a ResponseRecorder to record the response
 	rr := httptest.NewRecorder()
 	// Create a dummy request
@@ -57,6 +58,7 @@ func TestRedirectToHash(t *testing.T) {
 }
 
 func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
+	t.Parallel()
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=store-1&help=Save+two+dinners", nil)
 
@@ -72,6 +74,7 @@ func TestRedirectToHashWithHelpKeepsHelpAsQueryOnly(t *testing.T) {
 }
 
 func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
+	t.Parallel()
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	statuses := newFakeStatusStore()
 	s := newTestServer(t, withTestGenerator(generator), withTestStatusStore(statuses))
@@ -97,6 +100,7 @@ func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
 }
 
 func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		setup     func(testing.TB, *server, string)
@@ -152,6 +156,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 }
 
 func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
+	t.Parallel()
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t, withTestGenerator(generator))
 	t.Cleanup(s.Wait)
@@ -188,6 +193,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 }
 
 func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
+	t.Parallel()
 	location := &locations.Location{
 		ID:      "70100023",
 		Name:    "Test Store",
@@ -226,6 +232,7 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 }
 
 func TestHandleRecipes_ReadySpinnerPollRedirectsToFullPage(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70100024", Name: "Test Store"}, time.Now())
 	s := newTestServer(t)
 	require.NoError(t, s.SaveParams(t.Context(), p))
@@ -266,6 +273,7 @@ func currentHashToLegacy(hash string, seed string) (string, bool) {
 }
 
 func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
@@ -296,6 +304,7 @@ func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
 }
 
 func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000456", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
@@ -323,6 +332,7 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 }
 
 func TestHandleRecipes_DoesNotGenerateFromGET(t *testing.T) {
+	t.Parallel()
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t, withTestGenerator(generator))
 
@@ -340,6 +350,7 @@ func TestHandleRecipes_DoesNotGenerateFromGET(t *testing.T) {
 }
 
 func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -373,6 +384,7 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 }
 
 func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -406,6 +418,7 @@ func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
 }
 
 func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -482,6 +495,7 @@ func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T
 }
 
 func TestHandleGenerate_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -512,6 +526,7 @@ func TestHandleGenerate_SetsEmptyFavoriteStoreFromGeneratedLocation(t *testing.T
 }
 
 func TestHandleGenerate_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -542,6 +557,7 @@ func TestHandleGenerate_DoesNotOverwriteExistingFavoriteStore(t *testing.T) {
 }
 
 func TestHandleGenerate_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -599,6 +615,7 @@ func TestHandleGenerate_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 }
 
 func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -631,6 +648,7 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing
 }
 
 func TestHandleGenerate_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -661,6 +679,7 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
 }
 
 func TestHandleGenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -687,6 +706,7 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.
 }
 
 func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -726,6 +746,7 @@ func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 }
 
 func TestHandleGenerate_SameRequestDifferentDirectivesProduceDifferentHashes(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	location := &locations.Location{
@@ -794,6 +815,7 @@ func TestHandleGenerate_SameRequestDifferentDirectivesProduceDifferentHashes(t *
 }
 
 func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -849,6 +871,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 }
 
 func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -885,6 +908,7 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 }
 
 func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -940,6 +964,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 }
 
 func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -986,6 +1011,7 @@ func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
 }
 
 func TestHandleSingle_GuestSeesSaveButton(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1038,6 +1064,7 @@ func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {
 func (n noSessionAuth) Register(mux routing.Registrar) {}
 
 func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1058,6 +1085,7 @@ func TestHandleQuestion_RequiresSignedInUser(t *testing.T) {
 }
 
 func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -1079,6 +1107,7 @@ func TestHandleQuestion_RejectsNonHTMXRequest(t *testing.T) {
 }
 
 func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShoppingList(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureQuestionGenerator{}
@@ -1292,6 +1321,7 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 }
 
 func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -1335,6 +1365,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 }
 
 func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
+	t.Parallel()
 	generator := &captureKickgenerationGenerator{err: errors.New("plan exploded")}
 	statuses := newFakeStatusStore()
 	s := newTestServer(t,
@@ -1353,6 +1384,7 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 }
 
 func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	require.NoError(t, storage.Update(&utypes.User{
@@ -1378,6 +1410,7 @@ func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
 }
 
 func TestKickgeneration_FailsWhenCompletedShoppingListCannotBeRecordedForUser(t *testing.T) {
+	t.Parallel()
 	statuses := newFakeStatusStore()
 	s := newTestServer(t,
 		withTestGenerator(&captureKickgenerationGenerator{}),
@@ -1395,6 +1428,7 @@ func TestKickgeneration_FailsWhenCompletedShoppingListCannotBeRecordedForUser(t 
 }
 
 func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
+	t.Parallel()
 	cacheStore := &failShoppingListCache{ListCache: cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))}
 	statuses := newFakeStatusStore()
 	s := newTestServer(t,
@@ -1411,6 +1445,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 }
 
 func TestSpinRendersGenerationProgress(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name string
 		htmx bool
@@ -1543,6 +1578,7 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 }
 
 func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -1601,6 +1637,7 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 }
 
 func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1625,6 +1662,7 @@ func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 }
 
 func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &captureQuestionGenerator{}
 	s := newTestServer(t,
@@ -1657,6 +1695,7 @@ func TestHandleQuestion_PrependsRecipeTitleForModelQuestion(t *testing.T) {
 }
 
 func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	g := &countingImageGenerator{panicOnImage: true}
 	s := newTestServer(t,
@@ -1697,6 +1736,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1768,6 +1808,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_NoSessionReturnsToShoppingList(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1787,6 +1828,7 @@ func TestHandleSaveRecipe_NoSessionReturnsToShoppingList(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_NoSessionFromRecipePageReturnsToShoppingList(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -1804,6 +1846,7 @@ func TestHandleSaveRecipe_NoSessionFromRecipePageReturnsToShoppingList(t *testin
 }
 
 func TestHandleRecipes_ReturnAfterSignInDoesNotSaveRecipe(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1842,6 +1885,7 @@ func TestHandleRecipes_ReturnAfterSignInDoesNotSaveRecipe(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1895,6 +1939,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1947,6 +1992,7 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -1991,6 +2037,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 }
 
 func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	g := &captureQuestionGenerator{
@@ -2049,6 +2096,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 }
 
 func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -2142,6 +2190,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 }
 
 func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -2197,6 +2246,7 @@ func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 }
 
 func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -2214,6 +2264,7 @@ func TestHandleDismissRecipe_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 }
 
 func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -2283,6 +2334,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 }
 
 func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -2360,6 +2412,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 }
 
 func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -2437,6 +2490,7 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 }
 
 func TestHandleRegenerate_PreparationFailureReturnsInternalServerError(t *testing.T) {
+	t.Parallel()
 	s := newTestServer(t, withTestCache(cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))))
 
 	req := httptest.NewRequest(http.MethodPost, "/recipes/missing-hash/regenerate", nil)
@@ -2450,6 +2504,7 @@ func TestHandleRegenerate_PreparationFailureReturnsInternalServerError(t *testin
 }
 
 func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -2472,6 +2527,7 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) 
 }
 
 func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -2500,6 +2556,7 @@ func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieLimitReached(t *testin
 }
 
 func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t,
 		withTestCache(cacheStore),
@@ -2522,6 +2579,7 @@ func TestHandleRegenerate_GuestHTMXRedirectsToSignInWhenCookieLimitReached(t *te
 }
 
 func TestHandleRecipes_ReturnFromSignInPreservesChefNoteWithoutRegenerating(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
@@ -2560,6 +2618,7 @@ func TestHandleRecipes_ReturnFromSignInPreservesChefNoteWithoutRegenerating(t *t
 }
 
 func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGenerator(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -2631,6 +2690,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGene
 }
 
 func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -2687,6 +2747,7 @@ func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T)
 }
 
 func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
 	s := newTestServer(t,
@@ -2760,6 +2821,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 }
 
 func TestParamsForAction_PreservesBaseSavedSelectionAndDropsBaseDismissedWhenSelectionCacheEmpty(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -2795,6 +2857,7 @@ func TestParamsForAction_PreservesBaseSavedSelectionAndDropsBaseDismissedWhenSel
 }
 
 func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -2834,6 +2897,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 }
 
 func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -2871,6 +2935,7 @@ func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 }
 
 func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -2907,6 +2972,7 @@ func TestHandleFeedback_SavesStarsAndComment(t *testing.T) {
 }
 
 func TestHandleFeedback_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
@@ -2930,6 +2996,7 @@ func TestHandleFeedback_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 }
 
 func TestHandleFeedback_InvalidStarsRejected(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -2951,6 +3018,7 @@ func TestHandleFeedback_InvalidStarsRejected(t *testing.T) {
 }
 
 func TestHandleFeedback_RejectsNonHTMXRequest(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
 

@@ -42,6 +42,7 @@ func (s *stubStaplesProvider) FetchWines(_ context.Context, _ string, _ []string
 }
 
 type stubRoutingStaplesProvider struct {
+	mu          sync.Mutex
 	ingredients []ai.InputIngredient
 	err         error
 	calls       int
@@ -69,12 +70,15 @@ func (s *stubWatchdogLocationLookup) GetLocationByID(_ context.Context, location
 }
 
 type stubIngredientGrader struct {
+	mu          sync.Mutex
 	ingredients []ai.InputIngredient
 	fn          func([]ai.InputIngredient) ([]ai.InputIngredient, error)
 	err         error
 }
 
 func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.InputIngredient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -83,6 +87,8 @@ func (s *stubRoutingStaplesProvider) FetchStaples(_ context.Context, _ string) (
 }
 
 func (s *stubRoutingStaplesProvider) FetchWines(_ context.Context, _ string, _ []string) ([]ai.InputIngredient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.calls++
 	if s.err != nil {
 		return nil, s.err
@@ -91,6 +97,8 @@ func (s *stubRoutingStaplesProvider) FetchWines(_ context.Context, _ string, _ [
 }
 
 func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.ingredients = append([]ai.InputIngredient(nil), ingredients...)
 	results := make([]ai.InputIngredient, 0, len(ingredients))
 	if s.err != nil {
@@ -107,6 +115,7 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 }
 
 func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
+	t.Parallel()
 	krogerBackend := &stubStaplesProvider{ids: map[string]bool{"70100023": true}}
 	wholeFoodsProvider := &stubStaplesProvider{ids: map[string]bool{"wholefoods_10216": true}}
 	provider := routingStaplesProvider{
@@ -129,6 +138,7 @@ func TestRoutingStaplesProvider_SelectsProviderByLocationID(t *testing.T) {
 }
 
 func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) {
+	t.Parallel()
 	provider := routingStaplesProvider{
 		backends: []backendStaplesProvider{
 			&stubStaplesProvider{ids: map[string]bool{"70100023": true}},
@@ -146,6 +156,7 @@ func TestRoutingStaplesProvider_RejectsUnsupportedLocationBackend(t *testing.T) 
 }
 
 func TestRoutingStaplesProvider_FetchWines_SelectsProviderByLocationID(t *testing.T) {
+	t.Parallel()
 	krogerBackend := &stubStaplesProvider{
 		ids:         map[string]bool{"70100023": true},
 		ingredients: []ai.InputIngredient{{ProductID: "1", Description: "Pinot Noir"}},
@@ -171,6 +182,7 @@ func TestRoutingStaplesProvider_FetchWines_SelectsProviderByLocationID(t *testin
 }
 
 func TestRoutingStaplesProvider_DoesNotDedupeIngredients(t *testing.T) {
+	t.Parallel()
 	backend := &stubStaplesProvider{
 		ids: map[string]bool{"70100023": true},
 		ingredients: []ai.InputIngredient{
@@ -192,6 +204,7 @@ func TestRoutingStaplesProvider_DoesNotDedupeIngredients(t *testing.T) {
 }
 
 func TestDedupingStaplesProvider_FetchStaplesDedupesProductIDs(t *testing.T) {
+	t.Parallel()
 	provider := dedupingStaplesProvider{
 		provider: &stubRoutingStaplesProvider{
 			ingredients: []ai.InputIngredient{
@@ -215,6 +228,7 @@ func TestDedupingStaplesProvider_FetchStaplesDedupesProductIDs(t *testing.T) {
 }
 
 func TestDedupingStaplesProvider_FetchWinesDedupesProductIDs(t *testing.T) {
+	t.Parallel()
 	provider := dedupingStaplesProvider{
 		provider: &stubRoutingStaplesProvider{
 			ingredients: []ai.InputIngredient{
@@ -238,6 +252,7 @@ func TestDedupingStaplesProvider_FetchWinesDedupesProductIDs(t *testing.T) {
 }
 
 func TestDedupingStaplesProvider_RejectsBlankProductID(t *testing.T) {
+	t.Parallel()
 	provider := dedupingStaplesProvider{
 		provider: &stubRoutingStaplesProvider{
 			ingredients: []ai.InputIngredient{{Description: "Mystery Ingredient"}},
@@ -254,6 +269,7 @@ func TestDedupingStaplesProvider_RejectsBlankProductID(t *testing.T) {
 }
 
 func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
 	provider := &stubStaplesProvider{
 		ids: map[string]bool{"wholefoods_10216": true},
@@ -298,6 +314,7 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 }
 
 func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewInMemoryCache()
 	grader := &stubIngredientGrader{}
 	steak := ai.InputIngredient{ProductID: "steak-1", Description: "Ribeye Steak"}
@@ -354,6 +371,7 @@ func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 }
 
 func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	cacheStore := cache.NewInMemoryCache()
 	provider := &stubRoutingStaplesProvider{
 		ingredients: []ai.InputIngredient{{ProductID: "apple-1", Description: "Apple"}},
