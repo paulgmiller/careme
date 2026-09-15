@@ -1,30 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Recipes for {{.Location.Name}} | Careme</title>
-  <meta name="description" content="{{.MetaDescription}}" />
-
-  {{if .Recipes}}
-  <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
-  <meta property="og:title" content="{{(index .Recipes 0).Title}}" />
-  <meta property="og:description" content="{{(index .Recipes 0).Description}}" />
-  <meta property="og:image" content="{{PublicOrigin}}/favicon.ico" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Careme" />
-
-  <!-- Twitter Card meta tags -->
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="{{(index .Recipes 0).Title}}" />
-  <meta name="twitter:description" content="{{(index .Recipes 0).Description}}" />
-  <meta name="twitter:image" content="{{PublicOrigin}}/favicon.ico" />
-  {{end}}
-
-  {{template "app_head" .Style}}
-
-  {{.ClarityScript}}
-  {{.GoogleTagScript}}
+  {{template "page_head" .Page}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white text-ink-700 antialiased">
   {{GoogleTagNoScript}}
