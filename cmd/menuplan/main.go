@@ -42,8 +42,8 @@ type staplesService interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
-type spiceService interface {
-	FetchSpices(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
+type pantryService interface {
+	FetchPantry(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
 type ingredientEmbedder interface {
@@ -53,7 +53,7 @@ type ingredientEmbedder interface {
 type planService struct {
 	planner  menuPlanner
 	staples  staplesService
-	spices   spiceService
+	pantry   pantryService
 	embedder ingredientEmbedder
 }
 
@@ -155,7 +155,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 		return planService{
 			planner: mockMenuPlanner{},
 			staples: mockStaplesService{},
-			spices:  mockSpicesService{},
+			pantry:  mockPantryService{},
 		}, nil
 	}
 
@@ -168,7 +168,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 	return planService{
 		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
 		staples:  staples,
-		spices:   staples,
+		pantry:   staples,
 		embedder: ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
 	}, nil
 }
@@ -182,9 +182,9 @@ func makeMenuPlans(ctx context.Context, service planService, store locations.Loc
 		return nil, fmt.Errorf("fetch staples: %w", err)
 	}
 	ingredients = filterMenuIngredients(ingredients)
-	spices, err := service.spices.FetchSpices(ctx, params)
+	pantry, err := service.pantry.FetchPantry(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("fetch spices: %w", err)
+		return nil, fmt.Errorf("fetch pantry: %w", err)
 	}
 
 	return parallelism.Flatten(lo.Range(10), func(int) ([]ai.RecipePlan, error) {
@@ -193,19 +193,19 @@ func makeMenuPlans(ctx context.Context, service planService, store locations.Loc
 			return nil, fmt.Errorf("create menu plan: %w", err)
 		}
 		for i := range plan.Plans {
-			if len(spices) == 0 || service.embedder == nil {
+			if len(pantry) == 0 || service.embedder == nil {
 				continue
 			}
 			query := strings.Join(compactStrings(plan.Plans[i].Cuisine, plan.Plans[i].AnchorIngredient, plan.Plans[i].SideVegetable), ", ")
 			vectors, err := service.embedder.EmbedIngredients(ctx, []string{query})
 			if err != nil {
-				return nil, fmt.Errorf("embed spice query %q: %w", query, err)
+				return nil, fmt.Errorf("embed pantry query %q: %w", query, err)
 			}
-			neighbors, err := ai.NearestIngredients(vectors[0], spices, 5)
+			neighbors, err := ai.NearestIngredients(vectors[0], pantry, 5)
 			if err != nil {
-				return nil, fmt.Errorf("find spices for %q: %w", query, err)
+				return nil, fmt.Errorf("find pantry items for %q: %w", query, err)
 			}
-			fmt.Printf("Spices for %s: %s\n", query, formatSpiceNeighbors(neighbors))
+			fmt.Printf("Pantry for %s: %s\n", query, formatPantryNeighbors(neighbors))
 		}
 		return plan.Plans, nil
 	})
@@ -256,13 +256,13 @@ func (mockStaplesService) FetchStaples(context.Context, *recipes.GeneratorParams
 	}, nil
 }
 
-type mockSpicesService struct{}
+type mockPantryService struct{}
 
-func (mockSpicesService) FetchSpices(context.Context, *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
+func (mockPantryService) FetchPantry(context.Context, *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
 	return []ai.InputIngredient{{ProductID: "mock-cumin", Description: "ground cumin", Embedding: ai.IngredientEmbedding{1, 0}}}, nil
 }
 
-func formatSpiceNeighbors(neighbors []ai.IngredientNeighbor) string {
+func formatPantryNeighbors(neighbors []ai.IngredientNeighbor) string {
 	parts := make([]string, 0, len(neighbors))
 	for _, neighbor := range neighbors {
 		parts = append(parts, fmt.Sprintf("%.3f %s", neighbor.Similarity, neighbor.Ingredient.Description))

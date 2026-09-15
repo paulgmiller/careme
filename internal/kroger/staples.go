@@ -73,9 +73,9 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-// FetchSpices returns the separate spice catalog used for meal-plan retrieval.
-func (p StaplesProvider) FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(spiceFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
+// FetchPantry returns the separate pantry catalog used for meal-plan retrieval.
+func (p StaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(pantryFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, false, 0)
 		if err != nil {
 			return nil, err
@@ -239,15 +239,15 @@ func defaultStaples() []staplesFilter {
 			Term:   "pasta",
 			Brands: []string{"*"}, // Should we just put our thumb on the scale
 		},
-		// TODO dairy, international
 	}...)
 }
 
-func spiceFilters() []staplesFilter {
+func pantryFilters() []staplesFilter {
 	return []staplesFilter{
 		{Term: "spices", Brands: []string{"*"}},
-		{Term: "seasoning", Brands: []string{"*"}},
-		{Term: "herbs", Brands: []string{"*"}},
+		{Term: "dairy", Brands: []string{"*"}},
+		{Term: "international", Brands: []string{"*"}},
+		// seasoning? herbs?
 	}
 }
 

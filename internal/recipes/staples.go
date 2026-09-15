@@ -84,16 +84,16 @@ func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID strin
 	return provider.FetchWines(ctx, locationID, styles)
 }
 
-func (p routingStaplesProvider) FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p routingStaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	provider, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	spices, ok := provider.(spicesProvider)
+	pantry, ok := provider.(pantryProvider)
 	if !ok {
 		return nil, nil
 	}
-	return spices.FetchSpices(ctx, locationID)
+	return pantry.FetchPantry(ctx, locationID)
 }
 
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -112,12 +112,12 @@ func (p dedupingStaplesProvider) FetchWines(ctx context.Context, locationID stri
 	return dedupeInputIngredients(ingredients)
 }
 
-func (p dedupingStaplesProvider) FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	spices, ok := p.provider.(spicesProvider)
+func (p dedupingStaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	pantry, ok := p.provider.(pantryProvider)
 	if !ok {
 		return nil, nil
 	}
-	ingredients, err := spices.FetchSpices(ctx, locationID)
+	ingredients, err := pantry.FetchPantry(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -152,8 +152,8 @@ type staplesProvider interface {
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 }
 
-type spicesProvider interface {
-	FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
+type pantryProvider interface {
+	FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 }
 
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
@@ -222,30 +222,30 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	return graded, nil
 }
 
-// FetchSpices loads the independently cached spice catalog for a store.
-func (s *cachedStaplesService) FetchSpices(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
-	key := "spices/" + p.LocationHash()
+// FetchPantry loads the independently cached pantry catalog for a store.
+func (s *cachedStaplesService) FetchPantry(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
+	key := "pantry/" + p.LocationHash()
 	if cached, err := s.cache.IngredientsFromCache(ctx, key); err == nil {
 		return s.grader.GradeIngredients(ctx, cached)
 	} else if !errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("load cached spices: %w", err)
+		return nil, fmt.Errorf("load cached pantry: %w", err)
 	}
-	provider, ok := s.provider.(spicesProvider)
+	provider, ok := s.provider.(pantryProvider)
 	if !ok {
-		return nil, fmt.Errorf("spice provider is unavailable for %s", p.Location.ID)
+		return nil, fmt.Errorf("pantry provider is unavailable for %s", p.Location.ID)
 	}
-	spices, err := provider.FetchSpices(ctx, p.Location.ID)
+	pantry, err := provider.FetchPantry(ctx, p.Location.ID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch spices for %s: %w", p.Location.ID, err)
+		return nil, fmt.Errorf("fetch pantry for %s: %w", p.Location.ID, err)
 	}
-	spices, err = s.grader.GradeIngredients(ctx, spices)
+	pantry, err = s.grader.GradeIngredients(ctx, pantry)
 	if err != nil {
-		return nil, fmt.Errorf("grade spices for %s: %w", p.Location.ID, err)
+		return nil, fmt.Errorf("grade pantry for %s: %w", p.Location.ID, err)
 	}
-	if err := s.cache.SaveIngredients(ctx, key, spices); err != nil {
-		return nil, fmt.Errorf("cache spices for %s: %w", p.Location.ID, err)
+	if err := s.cache.SaveIngredients(ctx, key, pantry); err != nil {
+		return nil, fmt.Errorf("cache pantry for %s: %w", p.Location.ID, err)
 	}
-	return spices, nil
+	return pantry, nil
 }
 
 func wineIngredientsCacheKey(style, location string, date time.Time) string {
