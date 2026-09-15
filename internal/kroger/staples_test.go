@@ -127,6 +127,25 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc"}, terms)
 }
 
+func TestStaplesProvider_FetchSpices_UsesSpiceSearchTerms(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		terms = append(terms, req.URL.Query().Get("filter.term"))
+		mu.Unlock()
+		return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
+	})}
+	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
+	require.NoError(t, err)
+
+	_, err = (StaplesProvider{client: client}).FetchSpices(t.Context(), "70500874")
+	require.NoError(t, err)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.ElementsMatch(t, []string{"spices", "seasoning", "herbs"}, terms)
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {

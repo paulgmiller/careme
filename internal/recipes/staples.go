@@ -84,6 +84,18 @@ func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID strin
 	return provider.FetchWines(ctx, locationID, styles)
 }
 
+func (p routingStaplesProvider) FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	provider, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	spices, ok := provider.(spicesProvider)
+	if !ok {
+		return nil, nil
+	}
+	return spices.FetchSpices(ctx, locationID)
+}
+
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchStaples(ctx, locationID)
 	if err != nil {
@@ -94,6 +106,18 @@ func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID st
 
 func (p dedupingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchWines(ctx, locationID, styles)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
+}
+
+func (p dedupingStaplesProvider) FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	spices, ok := p.provider.(spicesProvider)
+	if !ok {
+		return nil, nil
+	}
+	ingredients, err := spices.FetchSpices(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +150,10 @@ type cachedStaplesService struct {
 type staplesProvider interface {
 	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
+}
+
+type spicesProvider interface {
+	FetchSpices(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 }
 
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
@@ -192,6 +220,32 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded))
 	// "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
+}
+
+// FetchSpices loads the independently cached spice catalog for a store.
+func (s *cachedStaplesService) FetchSpices(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
+	key := "spices/" + p.LocationHash()
+	if cached, err := s.cache.IngredientsFromCache(ctx, key); err == nil {
+		return s.grader.GradeIngredients(ctx, cached)
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return nil, fmt.Errorf("load cached spices: %w", err)
+	}
+	provider, ok := s.provider.(spicesProvider)
+	if !ok {
+		return nil, fmt.Errorf("spice provider is unavailable for %s", p.Location.ID)
+	}
+	spices, err := provider.FetchSpices(ctx, p.Location.ID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch spices for %s: %w", p.Location.ID, err)
+	}
+	spices, err = s.grader.GradeIngredients(ctx, spices)
+	if err != nil {
+		return nil, fmt.Errorf("grade spices for %s: %w", p.Location.ID, err)
+	}
+	if err := s.cache.SaveIngredients(ctx, key, spices); err != nil {
+		return nil, fmt.Errorf("cache spices for %s: %w", p.Location.ID, err)
+	}
+	return spices, nil
 }
 
 func wineIngredientsCacheKey(style, location string, date time.Time) string {

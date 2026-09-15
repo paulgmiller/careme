@@ -42,9 +42,19 @@ type staplesService interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
+type spiceService interface {
+	FetchSpices(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
+}
+
+type ingredientEmbedder interface {
+	EmbedIngredients(context.Context, []string) ([]ai.IngredientEmbedding, error)
+}
+
 type planService struct {
-	planner menuPlanner
-	staples staplesService
+	planner  menuPlanner
+	staples  staplesService
+	spices   spiceService
+	embedder ingredientEmbedder
 }
 
 type storeMenuPlan struct {
@@ -145,18 +155,21 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 		return planService{
 			planner: mockMenuPlanner{},
 			staples: mockStaplesService{},
+			spices:  mockSpicesService{},
 		}, nil
 	}
 
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	grader := ingredientgrading.NewManager(cfg, cacheStore, httpClient)
+	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, httpClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
 	if err != nil {
 		return planService{}, fmt.Errorf("create staples service: %w", err)
 	}
 	return planService{
-		planner: ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
-		staples: staples,
+		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
+		staples:  staples,
+		spices:   staples,
+		embedder: ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
 	}, nil
 }
 
@@ -169,11 +182,30 @@ func makeMenuPlans(ctx context.Context, service planService, store locations.Loc
 		return nil, fmt.Errorf("fetch staples: %w", err)
 	}
 	ingredients = filterMenuIngredients(ingredients)
+	spices, err := service.spices.FetchSpices(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("fetch spices: %w", err)
+	}
 
 	return parallelism.Flatten(lo.Range(10), func(int) ([]ai.RecipePlan, error) {
 		plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
 		if err != nil {
 			return nil, fmt.Errorf("create menu plan: %w", err)
+		}
+		for i := range plan.Plans {
+			if len(spices) == 0 || service.embedder == nil {
+				continue
+			}
+			query := strings.Join(compactStrings(plan.Plans[i].Cuisine, plan.Plans[i].AnchorIngredient, plan.Plans[i].SideVegetable), ", ")
+			vectors, err := service.embedder.EmbedIngredients(ctx, []string{query})
+			if err != nil {
+				return nil, fmt.Errorf("embed spice query %q: %w", query, err)
+			}
+			neighbors, err := ai.NearestIngredients(vectors[0], spices, 5)
+			if err != nil {
+				return nil, fmt.Errorf("find spices for %q: %w", query, err)
+			}
+			fmt.Printf("Spices for %s: %s\n", query, formatSpiceNeighbors(neighbors))
 		}
 		return plan.Plans, nil
 	})
@@ -222,6 +254,20 @@ func (mockStaplesService) FetchStaples(context.Context, *recipes.GeneratorParams
 		{ProductID: "mock-beans", Description: "black beans"},
 		{ProductID: "mock-greens", Description: "seasonal greens"},
 	}, nil
+}
+
+type mockSpicesService struct{}
+
+func (mockSpicesService) FetchSpices(context.Context, *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
+	return []ai.InputIngredient{{ProductID: "mock-cumin", Description: "ground cumin", Embedding: ai.IngredientEmbedding{1, 0}}}, nil
+}
+
+func formatSpiceNeighbors(neighbors []ai.IngredientNeighbor) string {
+	parts := make([]string, 0, len(neighbors))
+	for _, neighbor := range neighbors {
+		parts = append(parts, fmt.Sprintf("%.3f %s", neighbor.Similarity, neighbor.Ingredient.Description))
+	}
+	return strings.Join(parts, "; ")
 }
 
 type mockMenuPlanner struct{}
