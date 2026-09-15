@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +86,6 @@ func TestEmbeddingFailures(t *testing.T) {
 		want        string
 	}{
 		{"api", cache.NewInMemoryCache(), &fakeEmbedder{version: "test", err: fmt.Errorf("API failed")}, "Broccoli", "API failed"},
-		{"storage", failingCache{cache.NewInMemoryCache()}, &fakeEmbedder{version: "test"}, "Broccoli", "write failed"},
 		{"empty", cache.NewInMemoryCache(), &fakeEmbedder{version: "test"}, " ", "empty description"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

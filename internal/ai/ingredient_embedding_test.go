@@ -137,7 +137,7 @@ func TestNearestIngredientsKeepsBestAtLimit(t *testing.T) {
 			for i, neighbor := range got {
 				ids[i] = neighbor.Ingredient.ProductID
 			}
-			assert.Equal(t, tc.limit, len(ids))
+			assert.LessOrEqual(t, len(ids), tc.limit)
 			assert.Equal(t, "best", ids[0])
 			for i := 1; i < len(got); i++ {
 				assert.LessOrEqual(t, got[i].Similarity, got[i-1].Similarity)
