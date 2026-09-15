@@ -12,6 +12,7 @@ import (
 )
 
 func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewInMemoryCache()
 	recorder := cacheRecorder{
 		cache: cacheStore,

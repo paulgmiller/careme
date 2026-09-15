@@ -16,6 +16,7 @@ import (
 )
 
 func TestIDIsStableAndURLSafe(t *testing.T) {
+	t.Parallel()
 	id := ID("old-hash", "response/id+with=padding")
 
 	require.Len(t, id, 22)
@@ -32,17 +33,20 @@ func TestIDIsStableAndURLSafe(t *testing.T) {
 }
 
 func TestPayloadTimeout(t *testing.T) {
+	t.Parallel()
 	p := payload{StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute)}
 	assert.Equal(t, "Recipe generation timed out.", p.failed())
 }
 
 func TestPayloadFailed(t *testing.T) {
+	t.Parallel()
 	p := payload{Error: "Kaboom", StartedAt: time.Now()}
 	assert.Equal(t, "Kaboom", p.failed())
 	assert.Equal(t, payload{StartedAt: time.Now()}.failed(), "")
 }
 
 func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
+	t.Parallel()
 	p := payload{
 		StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute),
 		Error:     "stale failure",
@@ -53,6 +57,7 @@ func TestPayloadCompletedIsNotFailedAfterTimeout(t *testing.T) {
 }
 
 func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	startedAt := time.Date(2026, 8, 25, 12, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
 	statuses.now = func() time.Time { return startedAt }
@@ -83,6 +88,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 }
 
 func TestUpdateKeepsFiveRecentLines(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash, ""))
@@ -101,6 +107,7 @@ func TestUpdateKeepsFiveRecentLines(t *testing.T) {
 }
 
 func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-tail"
 	require.NoError(t, statuses.Start(t.Context(), hash, ""))
@@ -113,6 +120,7 @@ func TestUpdateCapsFirstStatusAtFiveLines(t *testing.T) {
 }
 
 func TestUpdateKeepsConcurrentLines(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	hash := "status-concurrent"
 	require.NoError(t, statuses.Start(t.Context(), hash, ""))
@@ -139,6 +147,7 @@ func TestUpdateKeepsConcurrentLines(t *testing.T) {
 }
 
 func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	require.NoError(t, statuses.Start(t.Context(), "failed", ""))
 
@@ -151,6 +160,7 @@ func TestGenerationStatusFailRecordsTerminalError(t *testing.T) {
 }
 
 func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
+	t.Parallel()
 	t.Run("completed generation cannot fail", func(t *testing.T) {
 		statuses := NewStore(cache.NewInMemoryCache())
 		require.NoError(t, statuses.Start(t.Context(), "completed", ""))
@@ -181,6 +191,7 @@ func TestGenerationStatusTerminalStatesAreExclusive(t *testing.T) {
 }
 
 func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
+	t.Parallel()
 	statuses := NewStore(cache.NewInMemoryCache())
 	require.NoError(t, statuses.Start(t.Context(), "running", ""))
 
@@ -189,6 +200,7 @@ func TestGenerationStatusCompleteRequiresHash(t *testing.T) {
 }
 
 func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
+	t.Parallel()
 	store := NewStore(cache.NewInMemoryCache())
 	const hash = "progress"
 	require.NoError(t, store.Start(t.Context(), hash, ""))
@@ -224,6 +236,7 @@ func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
 }
 
 func TestRecipeProgressTimeoutRetainsReadyRecipes(t *testing.T) {
+	t.Parallel()
 	store := NewStore(cache.NewInMemoryCache())
 	require.NoError(t, store.save(t.Context(), "timeout", payload{
 		StartedAt: time.Now().Add(-11 * time.Minute),

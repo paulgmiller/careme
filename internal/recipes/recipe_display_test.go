@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewCookingMethodDisplay(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		method ai.CookingMethod
 		want   cookingMethodDisplay

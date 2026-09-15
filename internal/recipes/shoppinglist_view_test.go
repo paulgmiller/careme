@@ -15,6 +15,7 @@ import (
 )
 
 func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -73,6 +74,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	p.Instructions = "make it vegetarian"
@@ -87,6 +89,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t
 }
 
 func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousInstructions(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	menuList := list
@@ -101,6 +104,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousIn
 }
 
 func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -113,6 +117,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *
 }
 
 func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
 	lat := 47.61
 	lon := -122.33
@@ -136,6 +141,7 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	withNow(t, time.Date(2026, time.January, 15, 18, 0, 0, 0, time.UTC))
 	lat := 47.61
 	lon := -122.33
@@ -158,6 +164,7 @@ func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	w := httptest.NewRecorder()
@@ -173,6 +180,7 @@ func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) 
 }
 
 func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -201,6 +209,7 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{
 		Title:        "Added Bowl",
@@ -242,6 +251,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{{
 		Title:       "Added Dinner",
@@ -276,9 +286,14 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
+	prev := templates.Clarityproject
+	t.Cleanup(func() {
+		templates.Clarityproject = prev
+	})
 	templates.Clarityproject = "test456"
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -293,6 +308,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
@@ -313,8 +329,13 @@ func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
+	prev := templates.Clarityproject
+	t.Cleanup(func() {
+		templates.Clarityproject = prev
+	})
 	templates.Clarityproject = ""
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -325,6 +346,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 
@@ -350,6 +372,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	prev := templates.GoogleTagManagerID
@@ -366,6 +389,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -382,6 +406,7 @@ func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 }
 
 func TestShoppingCardDetailsIndependentOfReadiness(t *testing.T) {
+	t.Parallel()
 	for _, ready := range []bool{false, true} {
 		for _, content := range []string{"none", "ingredients", "instructions"} {
 			t.Run(content+map[bool]string{false: " draft", true: " ready"}[ready], func(t *testing.T) {
@@ -407,6 +432,7 @@ func TestShoppingCardDetailsIndependentOfReadiness(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multiRecipeList := ai.ShoppingList{
@@ -459,6 +485,7 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 }
 
 func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -495,6 +522,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
@@ -521,6 +549,7 @@ func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn
 }
 
 func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
+	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	p := DefaultParams(&loc, time.Now())
 	multi := ai.ShoppingList{
@@ -588,6 +617,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 }
 
 func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
+	t.Parallel()
 	recipe := list.Recipes[0]
 	hash := recipe.ComputeHash()
 	params := DefaultParams(&locations.Location{ID: "store"}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))

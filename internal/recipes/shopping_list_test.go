@@ -9,6 +9,7 @@ import (
 )
 
 func TestShoppingListForDisplay(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		ingredients []ai.Ingredient
@@ -50,6 +51,7 @@ func TestShoppingListForDisplay(t *testing.T) {
 }
 
 func TestShoppingListForDisplay_SortsByAisleWithMissingAtBottom(t *testing.T) {
+	t.Parallel()
 	ingredients := []ai.Ingredient{
 		{Name: "Pantry Salt", Quantity: "1 tsp"},
 		{Name: "Aisle Ten Rice", Quantity: "1 cup", AisleNumber: "10"},
@@ -94,6 +96,7 @@ func TestShoppingListForDisplay_SortsByAisleWithMissingAtBottom(t *testing.T) {
 }
 
 func TestShoppingListForDisplay_PreservesFirstSeenOrderWithinSameAisleState(t *testing.T) {
+	t.Parallel()
 	ingredients := []ai.Ingredient{
 		{Name: "Salt", Quantity: "1 tsp"},
 		{Name: "Pepper", Quantity: "1 tsp"},
@@ -116,6 +119,7 @@ func TestShoppingListForDisplay_PreservesFirstSeenOrderWithinSameAisleState(t *t
 }
 
 func TestShoppingListForDisplay_KeepsFirstIngredientMetadataWhenCombining(t *testing.T) {
+	t.Parallel()
 	ingredients := []ai.Ingredient{
 		{ProductID: "lemon-1", Name: "Lemon", Quantity: "1", AisleNumber: "Produce", Price: "$2.00"},
 		{ProductID: "lemon-1", Name: "lemon", Quantity: "1 tbsp juice", AisleNumber: "Produce", Price: "$2.00"},
@@ -134,6 +138,7 @@ func TestShoppingListForDisplay_KeepsFirstIngredientMetadataWhenCombining(t *tes
 }
 
 func TestShoppingListForDisplay_GroupsSortedItemsByAisle(t *testing.T) {
+	t.Parallel()
 	got := shoppingListForDisplay([]ai.Ingredient{
 		{Name: "Salt", Quantity: "1 tsp"},
 		{Name: "Rice", Quantity: "1 cup", AisleNumber: "10"},
@@ -179,6 +184,7 @@ func TestShoppingListForDisplay_GroupsSortedItemsByAisle(t *testing.T) {
 }
 
 func TestShoppingListForDisplay_SumsMatchingQuantitiesWithSuffix(t *testing.T) {
+	t.Parallel()
 	groups := shoppingListForDisplay([]ai.Ingredient{
 		{Name: "Garlic", Quantity: "2 cloves, finely grated or minced"},
 		{Name: "Garlic", Quantity: "2 cloves, minced"},
@@ -193,6 +199,7 @@ func TestShoppingListForDisplay_SumsMatchingQuantitiesWithSuffix(t *testing.T) {
 }
 
 func TestShoppingListForDisplay_KeepsDistinctSuffixesSeparate(t *testing.T) {
+	t.Parallel()
 	groups := shoppingListForDisplay([]ai.Ingredient{
 		{Name: "Garlic", Quantity: "2 cloves"},
 		{Name: "Garlic", Quantity: "1 bulb"},
