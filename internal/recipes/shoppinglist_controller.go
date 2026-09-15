@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"careme/internal/seasons"
-
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
@@ -674,15 +672,12 @@ func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *gener
 }
 
 func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input shoppingListViewInput) {
-	input.clarityScript = templates.ClarityScript(ctx)
-	input.googleTagScript = templates.GoogleTagScript()
-	input.style = seasons.GetCurrentStyle()
 	input.useTodaysIngredients = shoppingListIsOlderThanFreshIngredientsWindow(ctx, input.params)
 	name := "shoppinglist.html"
 	if input.progress.Fragment {
 		name = "shopping_content"
 	}
-	view, err := newShoppingListPageView(input)
+	view, err := newShoppingListPageView(ctx, input)
 	if err != nil {
 		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
 		return

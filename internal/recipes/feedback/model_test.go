@@ -8,6 +8,7 @@ import (
 )
 
 func TestMarshalAndDecodeRoundTrip(t *testing.T) {
+	t.Parallel()
 	original := Feedback{
 		Cooked:    true,
 		Stars:     4,
@@ -34,6 +35,7 @@ func TestMarshalAndDecodeRoundTrip(t *testing.T) {
 }
 
 func TestFeedbackByHash(t *testing.T) {
+	t.Parallel()
 	cache := cache.NewInMemoryCache()
 	io := NewIO(cache)
 

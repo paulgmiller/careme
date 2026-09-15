@@ -9,6 +9,7 @@ import (
 )
 
 func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
+	t.Parallel()
 	got := Sales([]ai.InputIngredient{
 		{
 			Description:  "Full Price Chicken",
@@ -38,6 +39,7 @@ func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 }
 
 func TestIngredientsIncludesCountAndSales(t *testing.T) {
+	t.Parallel()
 	got := Ingredients([]ai.InputIngredient{
 		{
 			Description:  "Half Off Spinach",
@@ -50,6 +52,7 @@ func TestIngredientsIncludesCountAndSales(t *testing.T) {
 }
 
 func TestIngredientsListsSalesByGradeThenDiscount(t *testing.T) {
+	t.Parallel()
 	ingredient := func(name string, score int, sale float32) ai.InputIngredient {
 		return ai.InputIngredient{
 			Description:  name,

@@ -13,6 +13,7 @@ import (
 )
 
 func TestThreadViewsPreserveInputOrder(t *testing.T) {
+	t.Parallel()
 	older := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	thread := []RecipeThreadEntry{
 		{Question: "older", ResponseID: "old-response", CreatedAt: older},
@@ -25,7 +26,7 @@ func TestThreadViewsPreserveInputOrder(t *testing.T) {
 
 	fragment := newRecipeThreadView(thread, true, ai.ResponseRef{ID: "new-response"}, "recipe-hash")
 	params := DefaultParams(&locations.Location{ID: "store"}, older)
-	page, err := newRecipePageView(recipeViewInput{
+	page, err := newRecipePageView(t.Context(), recipeViewInput{
 		params: params,
 		recipe: ai.Recipe{ResponseID: "initial"},
 		thread: thread,
@@ -38,6 +39,7 @@ func TestThreadViewsPreserveInputOrder(t *testing.T) {
 }
 
 func TestLatestThreadResponseID(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		thread []RecipeThreadEntry

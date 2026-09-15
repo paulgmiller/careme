@@ -8,6 +8,7 @@ import (
 )
 
 func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
+	t.Parallel()
 	loc := &locations.Location{ID: "loc-123", Name: "Test Loc", Address: "1 Test St", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 1, 2, 3, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 23, 59, 59, 0, time.UTC)
@@ -48,6 +49,7 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 }
 
 func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
+	t.Parallel()
 	loc := &locations.Location{ID: "23456789", Name: "Another", Address: "2 Test Ave", State: "TS"}
 	d1 := time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 12, 0, 0, 0, time.UTC)
@@ -69,6 +71,7 @@ func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 }
 
 func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
+	t.Parallel()
 	krogerParams := DefaultParams(&locations.Location{ID: "10216", Name: "Kroger 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	wholeFoodsParams := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Whole Foods 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
@@ -78,6 +81,7 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 }
 
 func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
 	before := p.Hash()
@@ -90,6 +94,7 @@ func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 }
 
 func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
 	before := p.Hash()
@@ -103,6 +108,7 @@ func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 }
 
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)

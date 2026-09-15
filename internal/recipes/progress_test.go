@@ -21,6 +21,7 @@ import (
 )
 
 func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
+	t.Parallel()
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
@@ -154,6 +155,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 }
 
 func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
+	t.Parallel()
 	s := newTestServer(t)
 	saved := ai.Recipe{Title: "Already added", Instructions: []string{"Cook."}}
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
@@ -174,6 +176,7 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 }
 
 func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
+	t.Parallel()
 	s := newTestServer(t)
 	user := &utypes.User{ID: "progress-user", Email: []string{"progress@example.com"}, ShoppingDay: "Saturday"}
 	require.NoError(t, s.storage.Update(user))
@@ -195,6 +198,7 @@ func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
 }
 
 func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
+	t.Parallel()
 	recipe := ai.Recipe{Title: "Padded hash recipe", Instructions: []string{"Cook."}}
 	hash := recipe.ComputeHash()
 	require.True(t, strings.HasSuffix(hash, "=="), "regression requires a padded hash")
@@ -210,6 +214,7 @@ func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
 }
 
 func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	first := ai.Recipe{Title: "First ready recipe"}
 	last := ai.Recipe{Title: "Last ready recipe"}

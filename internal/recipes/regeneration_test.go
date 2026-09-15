@@ -14,6 +14,7 @@ import (
 )
 
 func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
 	jobID := status.ID("old-hash", "response-id")
@@ -33,6 +34,7 @@ func TestHandleSingleRecipeRegenerationRendersPersistedRunningJob(t *testing.T) 
 }
 
 func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
 
@@ -54,6 +56,7 @@ func TestHandleSingleRecipeRegenerationRendersRetryAfterTimeout(t *testing.T) {
 }
 
 func TestHandleSingleRecipeRegenerationRejectsInvalidJobID(t *testing.T) {
+	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := newTestServer(t, withTestCache(cacheStore))
 	require.NoError(t, s.generationStatuses.Start(t.Context(), "not-an-id", ""))
