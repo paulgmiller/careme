@@ -158,6 +158,11 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
+			// TODO(ingredient-neighbors): Enrich replacement recipe instructions here,
+			// using the same store-scoped lookup as initial generation below: nearest
+			// 20 neighbors for each of plan.AnchorIngredient and plan.SideVegetable.
+			// Merge by ProductID, append ingredient TSV (not vectors), and include
+			// added products in the metadata map used for enrichment and critique.
 			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponse)
 			if err != nil {
 				return nil, err
@@ -239,6 +244,13 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
+		// TODO(ingredient-neighbors): Look up the nearest 20 neighbors for each of
+		// plan.AnchorIngredient and plan.SideVegetable in p.Location.ID's catalog.
+		// Retain the full catalog before the menu-planning grade filter above so
+		// this can add candidates beyond the ingredients already in menuResponse.
+		// Merge by ProductID, append their InputIngredientsToTSV output to these
+		// instructions, and use a per-recipe metadata map for enrichment/critique
+		// below; do not mutate the shared ingMap from these parallel callbacks.
 		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponse)
 		if err != nil {
 			return nil, err

@@ -73,15 +73,16 @@ Important calibration:
 Return JSON only. Preserve each input id/index exactly. Be concise.`
 
 type InputIngredient struct {
-	ProductID    string           `json:"id,omitempty"`
-	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
-	Brand        string           `json:"brand,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Size         string           `json:"size,omitempty"`
-	PriceRegular *float32         `json:"regularPrice,omitempty"`
-	PriceSale    *float32         `json:"salePrice,omitempty"`
-	Categories   []string         `json:"categories,omitempty"`
-	Grade        *IngredientGrade `json:"grade,omitempty"`
+	ProductID    string              `json:"id,omitempty"`
+	AisleNumber  string              `json:"number,omitempty"` // this is a dumb json name fix it later
+	Brand        string              `json:"brand,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	Size         string              `json:"size,omitempty"`
+	PriceRegular *float32            `json:"regularPrice,omitempty"`
+	PriceSale    *float32            `json:"salePrice,omitempty"`
+	Categories   []string            `json:"categories,omitempty"`
+	Grade        *IngredientGrade    `json:"grade,omitempty"`
+	Embedding    IngredientEmbedding `json:"embeddings,omitempty"`
 }
 
 func (ii InputIngredient) PercentOff() float32 {

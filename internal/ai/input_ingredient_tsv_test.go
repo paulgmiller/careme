@@ -14,12 +14,16 @@ func TestInputIngredientsToTSV_UsesRegularPriceWhenSaleMissing(t *testing.T) {
 		Description:  "Asparagus",
 		Size:         "1 lb",
 		PriceRegular: new(float32(4.99)),
+		Grade:        &IngredientGrade{Score: 9, Reason: "test-grade-reason"},
 	}}, &buf)
 	if err != nil {
 		t.Fatalf("InputIngredientsToTSV returned error: %v", err)
 	}
 
 	got := buf.String()
+	if strings.Contains(got, "0.123456789") || strings.Contains(got, "text-embedding") || strings.Contains(got, "test-grade-reason") {
+		t.Fatalf("grading metadata leaked into prompt: %s", got)
+	}
 	if !strings.Contains(got, "ProductId\tBrand\tDescription\tSize\tPriceRegular\tPriceSale") {
 		t.Fatalf("expected TSV header, got %q", got)
 	}

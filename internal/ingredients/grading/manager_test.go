@@ -3,12 +3,16 @@ package grading
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +42,7 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 			Score:  10,
 			Reason: "default",
 		}
+
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
 	}
@@ -232,4 +237,31 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
+}
+
+type embeddingTransport func(*http.Request) (*http.Response, error)
+
+func (f embeddingTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestManagerBackfillsEmbeddingWithoutRegrading(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	calls := 0
+	httpClient := &http.Client{Transport: embeddingTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		require.Equal(t, "/v1/embeddings", r.URL.Path)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"index":0,"embedding":[1,0]}]}`)), Request: r}, nil
+	})}
+	cfg := &config.Config{AI: config.AIConfig{APIKey: "test"}, IngredientGrading: config.IngredientGradingConfig{Enable: true}}
+	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 8, Reason: "already graded"}}
+	got, err := NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, ingredient.Grade, got[0].Grade)
+	// A different grader still resolves the same embedding cache entry.
+	cfg.IngredientGrading.Model = "another-grader"
+	got, err = NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, 1, calls)
 }

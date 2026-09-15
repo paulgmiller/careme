@@ -8,6 +8,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients/embeddings"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -51,6 +52,20 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
 }
 
+// NewEnrichingGrader returns the grade manager with independent embedding
+// resolution enabled. This is kept separate from NewManager until embeddings
+// are ready to participate in production recipe generation.
+func NewEnrichingGrader(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
+	grader := NewManager(cfg, c, httpClient)
+	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
+		return grader
+	}
+	return &enrichingGrader{
+		grader:     grader,
+		embeddings: embeddings.New(c, ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient)),
+	}
+}
+
 func (m *multiGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	if len(ingredients) == 0 {
 		return nil, nil
@@ -76,4 +91,17 @@ func ingredientLabel(ingredient ai.InputIngredient) string {
 		return value
 	}
 	return strings.TrimSpace(ingredient.ProductID)
+}
+
+type enrichingGrader struct {
+	grader     grader
+	embeddings *embeddings.Service
+}
+
+func (g *enrichingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
+	graded, err := g.grader.GradeIngredients(ctx, ingredients)
+	if err != nil {
+		return nil, err
+	}
+	return g.embeddings.EmbedIngredients(ctx, graded)
 }

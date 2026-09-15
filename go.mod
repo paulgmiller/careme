@@ -19,6 +19,7 @@ require (
 	github.com/sendgrid/rest v2.6.9+incompatible
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/stretchr/testify v1.12.1
+	github.com/tphakala/simd v1.10.0
 	github.com/ugjka/go-tz/v2 v2.2.8
 	github.com/yuin/goldmark v1.8.6
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
@@ -46,7 +47,6 @@ require (
 	github.com/buger/jsonparser v1.6.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/getkin/kin-openapi v0.133.0 // indirect
@@ -67,7 +67,6 @@ require (
 	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/speakeasy-api/jsonpath v0.6.0 // indirect
 	github.com/speakeasy-api/openapi-overlay v0.10.2 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect

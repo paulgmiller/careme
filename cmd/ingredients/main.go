@@ -21,10 +21,20 @@ import (
 func main() {
 	var location string
 	var verbose bool
+	var ingredient string
+	var limit int
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
+	flag.StringVar(&ingredient, "ingredient", "", "Find nearest ingredients to this description")
+	flag.IntVar(&limit, "limit", 20, "Number of nearest ingredients to return")
 	flag.Parse()
+	if strings.TrimSpace(location) == "" {
+		log.Fatal("-location is required")
+	}
+	if limit < 1 {
+		log.Fatal("-limit must be positive")
+	}
 	ctx := context.Background()
 
 	cfg, err := config.Load()
@@ -32,6 +42,9 @@ func main() {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
+	if ingredient != "" && (!cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "") {
+		log.Fatal("nearest ingredient lookup requires ingredient grading enabled and an OpenAI API key")
+	}
 	sp, err := recipes.NewStaplesProvider(cfg)
 	if err != nil {
 		log.Fatalf("failed to create recipe generator: %s", err)
@@ -49,10 +62,26 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
-	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
+	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, http.DefaultClient)
 	graded, err := grader.GradeIngredients(ctx, ings)
 	if err != nil {
 		log.Fatalf("failed to grade ingredients: %s", err)
+	}
+	if ingredient != "" {
+		embedder := ai.NewIngredientEmbedder(cfg.AI.APIKey, http.DefaultClient)
+		vectors, err := embedder.EmbedIngredients(ctx, []string{ingredient})
+		if err != nil {
+			log.Fatal(err)
+		}
+		neighbors, err := ai.NearestIngredients(vectors[0], graded, limit)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, n := range neighbors {
+			fmt.Printf("%f %s\n", n.Similarity, n.Ingredient.Description)
+		}
+
+		return
 	}
 	slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
 		if a.Grade.Score != b.Grade.Score {
