@@ -14,6 +14,7 @@ import (
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "careme-test-saveparams-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -56,6 +57,7 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 }
 
 func TestSaveParams_UsesPrefixedKey(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
@@ -74,6 +76,7 @@ func TestSaveParams_UsesPrefixedKey(t *testing.T) {
 }
 
 func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
@@ -99,6 +102,7 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 }
 
 func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
@@ -144,6 +148,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 }
 
 func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
@@ -178,6 +183,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 }
 
 func TestSaveIngredients_PreservesGrade(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)
@@ -210,6 +216,7 @@ func TestSaveIngredients_PreservesGrade(t *testing.T) {
 }
 
 func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
 	rio := IO(cacheStore)

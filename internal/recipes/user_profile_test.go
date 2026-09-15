@@ -11,6 +11,7 @@ import (
 )
 
 func TestSaveRecipesToUserProfile(t *testing.T) {
+	t.Parallel()
 	srv := newTestServer(t)
 	storage := srv.storage
 
@@ -57,6 +58,7 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 }
 
 func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
+	t.Parallel()
 	srv := newTestServer(t)
 	storage := srv.storage
 

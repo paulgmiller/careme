@@ -26,6 +26,7 @@ func (s staticLocationLookup) GetLocationByID(_ context.Context, _ string) (*loc
 }
 
 func TestParseGenerationForm_DefaultDateUsesStoreCoordinates(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	oldNowFn := nowFn
 	nowFn = func() time.Time {
 		return time.Date(2026, 1, 15, 14, 0, 0, 0, time.UTC) // 06:00 in Los Angeles, before the store-day boundary.
@@ -57,6 +58,7 @@ func TestParseGenerationForm_DefaultDateUsesStoreCoordinates(t *testing.T) {
 }
 
 func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T) {
+	t.Parallel()
 	location := &locations.Location{
 		ID:      "loc-123",
 		Name:    "Test Store",

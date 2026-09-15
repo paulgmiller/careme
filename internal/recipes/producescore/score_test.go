@@ -16,6 +16,7 @@ import (
 )
 
 func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	c := &testIngredientCache{ingredients: map[string][]ai.InputIngredient{}}
 	loc := testProduceScoreLocation()
 	today := time.Date(2026, time.January, 15, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
@@ -35,6 +36,7 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 }
 
 func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	c := &testIngredientCache{ingredients: map[string][]ai.InputIngredient{}}
 	loc := testProduceScoreLocation()
 	yesterday := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
@@ -49,6 +51,7 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 }
 
 func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
 	c := &testIngredientCache{ingredients: map[string][]ai.InputIngredient{}}
 	loc := testProduceScoreLocation()
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
@@ -59,6 +62,7 @@ func TestCachedProduceScorerReturnsNilWhenCacheMissing(t *testing.T) {
 }
 
 func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
+	t.Parallel()
 	tests := map[string]error{
 		"canceled":          context.Canceled,
 		"deadline exceeded": context.DeadlineExceeded,
@@ -78,6 +82,7 @@ func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
 }
 
 func TestSumIngredientGradesAboveCutoff(t *testing.T) {
+	t.Parallel()
 	ingredients := append(repeatGradedIngredients(10, 10),
 		gradedIngredient(7),
 		gradedIngredient(6),

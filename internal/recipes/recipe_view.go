@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"slices"
@@ -9,7 +10,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/feedback"
-	"careme/internal/seasons"
+	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -22,10 +23,9 @@ type recipeImageView struct {
 }
 
 type recipePageView struct {
+	templates.Page
 	Location                locations.Location
 	Date                    string
-	ClarityScript           template.HTML
-	GoogleTagScript         template.HTML
 	Recipe                  ai.Recipe
 	InstructionsHTML        []template.HTML
 	Saved                   bool
@@ -39,7 +39,6 @@ type recipePageView struct {
 	Feedback                feedback.Feedback
 	RecipeHash              string
 	RecipeImage             recipeImageView
-	Style                   seasons.Style
 	ServerSignedIn          bool
 	User                    *utypes.User
 	AuthReturnTo            string
@@ -60,12 +59,9 @@ type recipeViewInput struct {
 	thread             []RecipeThreadEntry
 	feedback           feedback.Feedback
 	wineRecommendation *ai.WineSelection
-	clarityScript      template.HTML
-	googleTagScript    template.HTML
-	style              seasons.Style
 }
 
-func newRecipePageView(input recipeViewInput) (recipePageView, error) {
+func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageView, error) {
 	recipe := input.recipe
 	thread := input.thread
 
@@ -90,10 +86,9 @@ func newRecipePageView(input recipeViewInput) (recipePageView, error) {
 		minimumRecipeScore = critique.MinimumRecipeScoreForModel(input.recipeCritique.Model)
 	}
 	data := recipePageView{
+		Page:                    templates.NewPage(ctx),
 		Location:                *input.params.Location,
 		Date:                    input.params.Date.Format("2006-01-02"),
-		ClarityScript:           input.clarityScript,
-		GoogleTagScript:         input.googleTagScript,
 		Recipe:                  recipe,
 		InstructionsHTML:        instructionsHTML,
 		Saved:                   input.saved,
@@ -107,7 +102,6 @@ func newRecipePageView(input recipeViewInput) (recipePageView, error) {
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
 		RecipeImage:             recipeImageData(recipeHash, input.hasRecipeImage, false),
-		Style:                   input.style,
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,

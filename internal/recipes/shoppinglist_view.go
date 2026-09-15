@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"slices"
@@ -10,7 +11,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/recipes/status"
-	"careme/internal/seasons"
+	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 )
 
@@ -58,14 +59,13 @@ type shoppingProgress struct {
 }
 
 type shoppingListPageView struct {
+	templates.Page
 	StatusMessage        string
 	Generating           bool
 	Location             locations.Location
 	Date                 string
 	DateDisplay          string
 	MetaDescription      string
-	ClarityScript        template.HTML
-	GoogleTagScript      template.HTML
 	Instructions         string
 	PendingInstructions  string
 	HelpMessage          string
@@ -74,7 +74,6 @@ type shoppingListPageView struct {
 	ShoppingList         []shoppingListGroup
 	HasSavedRecipes      bool
 	HasMissingImages     bool
-	Style                seasons.Style
 	ServerSignedIn       bool
 	User                 *utypes.User
 	AuthReturnTo         string
@@ -93,13 +92,10 @@ type shoppingListViewInput struct {
 	helpMessage          string
 	pendingInstructions  string
 	progress             shoppingProgress
-	clarityScript        template.HTML
-	googleTagScript      template.HTML
-	style                seasons.Style
 	useTodaysIngredients bool
 }
 
-func newShoppingListPageView(input shoppingListViewInput) (shoppingListPageView, error) {
+func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
 	serverSignedIn := input.currentUser != nil
 	instructions := strings.TrimSpace(input.params.Instructions)
 	if instructions == "" && input.list.Plan != nil {
@@ -119,14 +115,13 @@ func newShoppingListPageView(input shoppingListViewInput) (shoppingListPageView,
 	}
 
 	data := shoppingListPageView{
+		Page:                templates.NewPage(ctx),
 		StatusMessage:       input.progress.StatusMessage,
 		Generating:          input.progress.Generating,
 		Location:            *input.params.Location,
 		Date:                input.params.Date.Format("2006-01-02"),
 		DateDisplay:         input.params.Date.Format("January 2, 2006"),
 		MetaDescription:     shoppingListMetaDescription(input.list.Recipes, input.params.Location.Name, input.params.Date.Format("2006-01-02")),
-		ClarityScript:       input.clarityScript,
-		GoogleTagScript:     input.googleTagScript,
 		Instructions:        instructions,
 		PendingInstructions: input.pendingInstructions,
 		HelpMessage:         strings.TrimSpace(input.helpMessage),
@@ -137,7 +132,6 @@ func newShoppingListPageView(input shoppingListViewInput) (shoppingListPageView,
 		HasMissingImages: slices.ContainsFunc(recipeViews, func(view shoppingRecipeView) bool {
 			return view.Ready && !view.Dismissed && !view.HasImage
 		}),
-		Style:                input.style,
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,
