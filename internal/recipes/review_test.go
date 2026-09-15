@@ -18,6 +18,7 @@ import (
 )
 
 func TestInitialCritiqueFailureLeavesSlotDraft(t *testing.T) {
+	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	c := cache.NewInMemoryCache()
 	progress := status.NewStore(c)
@@ -34,6 +35,7 @@ func TestInitialCritiqueFailureLeavesSlotDraft(t *testing.T) {
 }
 
 func TestDraftCardHasDetailsButNoLinksOrAdd(t *testing.T) {
+	t.Parallel()
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
@@ -82,6 +84,7 @@ func (c *deferredSecondCritique) CritiqueRecipeInBackground(_ context.Context, r
 }
 
 func TestRegeneratedSlotReadyBeforeBackgroundCritiqueCompletes(t *testing.T) {
+	t.Parallel()
 	for _, replacement := range []bool{false, true} {
 		t.Run(map[bool]string{false: "initial", true: "replacement"}[replacement], func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())

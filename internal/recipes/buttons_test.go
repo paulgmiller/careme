@@ -11,6 +11,7 @@ import (
 )
 
 func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
+	t.Parallel()
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -102,6 +103,7 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 }
 
 func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		recipe  ai.Recipe
@@ -128,6 +130,7 @@ func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
+	t.Parallel()
 	listWithSavedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -193,6 +196,7 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
+	t.Parallel()
 	listWithDismissedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -237,6 +241,7 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
+	t.Parallel()
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{

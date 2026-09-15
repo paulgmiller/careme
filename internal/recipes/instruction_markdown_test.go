@@ -9,6 +9,7 @@ import (
 )
 
 func TestRenderRecipeInstructionsPlacesListWithinProse(t *testing.T) {
+	t.Parallel()
 	rendered, err := renderRecipeInstructions([]string{
 		"Mix together:\n\n- 1 tablespoon olive oil\n- 2 garlic cloves, grated\n\nto make the garlic oil.",
 	})
@@ -24,6 +25,7 @@ func TestRenderRecipeInstructionsPlacesListWithinProse(t *testing.T) {
 }
 
 func TestRenderRecipeInstructionsRestrictsMarkdownConstructs(t *testing.T) {
+	t.Parallel()
 	rendered, err := renderRecipeInstructions([]string{
 		"Mix <script>alert('no')</script> **oil** [safely](https://example.test) ![tracking](https://example.test/pixel).",
 	})

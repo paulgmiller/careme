@@ -39,6 +39,7 @@ func (p notifyingProgress) RecipeReady(ctx context.Context, hash string, index i
 }
 
 func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
+	t.Parallel()
 	for _, replacement := range []bool{false, true} {
 		name := "initial"
 		if replacement {
@@ -128,6 +129,7 @@ func (p failingProgress) RecipeReady(context.Context, string, int, string) error
 }
 
 func TestGenerationHandlesProgressWriteFailures(t *testing.T) {
+	t.Parallel()
 	for _, failPlan := range []bool{true, false} {
 		t.Run(map[bool]string{true: "plan", false: "ready recipe"}[failPlan], func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
