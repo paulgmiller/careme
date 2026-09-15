@@ -156,23 +156,18 @@ type pantryProvider interface {
 	FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 }
 
+// we drop extra categories here.
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-	seen := map[string]int{}
+	seen := map[string]bool{}
 	var deduped []ai.InputIngredient
 	for _, ingredient := range ingredients {
 		if ingredient.ProductID == "" {
 			return nil, fmt.Errorf("blank product id for ingredient: %+v", ingredient)
 		}
-		if index, ok := seen[ingredient.ProductID]; ok {
-			for _, category := range ingredient.Categories {
-				if !slices.Contains(deduped[index].Categories, category) {
-					deduped[index].Categories = append(deduped[index].Categories, category)
-				}
-			}
+		if seen[ingredient.ProductID] {
 			continue
 		}
-		seen[ingredient.ProductID] = len(deduped)
-		ingredient.Categories = slices.Clone(ingredient.Categories)
+		seen[ingredient.ProductID] = true
 		deduped = append(deduped, ingredient)
 	}
 	return deduped, nil
