@@ -157,16 +157,22 @@ type pantryProvider interface {
 }
 
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	var deduped []ai.InputIngredient
 	for _, ingredient := range ingredients {
 		if ingredient.ProductID == "" {
 			return nil, fmt.Errorf("blank product id for ingredient: %+v", ingredient)
 		}
-		if seen[ingredient.ProductID] {
+		if index, ok := seen[ingredient.ProductID]; ok {
+			for _, category := range ingredient.Categories {
+				if !slices.Contains(deduped[index].Categories, category) {
+					deduped[index].Categories = append(deduped[index].Categories, category)
+				}
+			}
 			continue
 		}
-		seen[ingredient.ProductID] = true
+		seen[ingredient.ProductID] = len(deduped)
+		ingredient.Categories = slices.Clone(ingredient.Categories)
 		deduped = append(deduped, ingredient)
 	}
 	return deduped, nil
@@ -224,7 +230,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 
 // FetchPantry loads the independently cached pantry catalog for a store.
 func (s *cachedStaplesService) FetchPantry(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
-	key := "pantry/" + p.LocationHash()
+	key := "pantry/query-categories-v1/" + p.LocationHash()
 	if cached, err := s.cache.IngredientsFromCache(ctx, key); err == nil {
 		return s.grader.GradeIngredients(ctx, cached)
 	} else if !errors.Is(err, cache.ErrNotFound) {

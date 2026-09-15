@@ -134,13 +134,17 @@ func TestStaplesProvider_FetchPantry_UsesPantrySearchTerms(t *testing.T) {
 		mu.Lock()
 		terms = append(terms, req.URL.Query().Get("filter.term"))
 		mu.Unlock()
-		return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
+		return jsonResponse(req, http.StatusOK, `{"data":[{"productId":"shared","brand":"Kroger","description":"Seasoning","categories":["Baking"],"items":[{"size":"1 oz","price":{"regular":2}}]}]}`), nil
 	})}
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
 	require.NoError(t, err)
 
-	_, err = (StaplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
+	got, err := (StaplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
 	require.NoError(t, err)
+	require.Len(t, got, 3)
+	for i, term := range PantryCategories() {
+		assert.ElementsMatch(t, []string{"Baking", term}, got[i].Categories)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	assert.ElementsMatch(t, []string{"spices", "dairy", "international"}, terms)

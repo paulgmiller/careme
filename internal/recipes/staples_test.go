@@ -21,6 +21,23 @@ type stubStaplesProvider struct {
 	calls       int
 }
 
+func TestDedupeInputIngredientsMergesCategories(t *testing.T) {
+	inputs := []ai.InputIngredient{
+		{ProductID: "shared", Categories: []string{"Baking", "spices"}},
+		{ProductID: "shared", Categories: []string{"Baking", "international"}},
+	}
+	got, err := dedupeInputIngredients(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !slices.Equal(got[0].Categories, []string{"Baking", "spices", "international"}) {
+		t.Fatalf("unexpected merged ingredients: %+v", got)
+	}
+	if !slices.Equal(inputs[0].Categories, []string{"Baking", "spices"}) {
+		t.Fatal("modified input categories")
+	}
+}
+
 func (s *stubStaplesProvider) IsID(locationID string) bool {
 	return s.ids[locationID]
 }

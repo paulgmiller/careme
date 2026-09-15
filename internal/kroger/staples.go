@@ -80,8 +80,19 @@ func (p StaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]
 		if err != nil {
 			return nil, err
 		}
-		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
+		return lo.Map(ingredients, func(ingredient Ingredient, index int) ai.InputIngredient {
+			input := inputIngredientFromKrogerIngredient(ingredient, index)
+			if !slices.Contains(input.Categories, category.Term) {
+				input.Categories = append(input.Categories, category.Term)
+			}
+			return input
+		}), nil
 	})
+}
+
+// PantryCategories returns the search terms used to source pantry products.
+func PantryCategories() []string {
+	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
 }
 
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
