@@ -71,12 +71,6 @@ func TestCacheChangesWithEmbeddingConfigurationOrDescription(t *testing.T) {
 	require.Len(t, backend.calls, 1)
 }
 
-type failingCache struct{ cache.Cache }
-
-func (f failingCache) Put(context.Context, string, string, cache.PutOptions) error {
-	return fmt.Errorf("write failed")
-}
-
 func TestEmbeddingFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
