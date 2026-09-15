@@ -83,6 +83,8 @@ func (p StaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]
 		return lo.Map(ingredients, func(ingredient Ingredient, index int) ai.InputIngredient {
 			input := inputIngredientFromKrogerIngredient(ingredient, index)
 			if !slices.Contains(input.Categories, category.Term) {
+				// dubious becsuse we don't do this for staples but if do embeddign based rag later its
+				// somwhat usefult to pull from each categotry
 				input.Categories = append(input.Categories, category.Term)
 			}
 			return input
