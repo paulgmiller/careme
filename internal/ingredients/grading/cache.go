@@ -97,15 +97,13 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		if gradedIngredient.Grade == nil {
 			continue
 		}
-		wg.Add(1)
-		go func(ingredient ai.InputIngredient) {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx := context.WithoutCancel(ctx)
-			key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
-			if err := c.store.Save(ctx, key, &ingredient); err != nil {
-				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(ingredient), "error", err)
+			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
+			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
+				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
 			}
-		}(gradedIngredient)
+		})
 	}
 	wg.Wait()
 	if err != nil {

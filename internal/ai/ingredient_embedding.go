@@ -97,12 +97,9 @@ func NearestIngredients(query IngredientEmbedding, ingredients []InputIngredient
 	return collections.Top(neighbors, limit, worseNeighbor), nil
 }
 
-// Lower similarity ranks worse; ties prefer the smaller product ID.
+// Lower similarity ranks worse. Equal similarities are equivalent.
 func worseNeighbor(a, b IngredientNeighbor) bool {
-	if a.Similarity != b.Similarity {
-		return a.Similarity < b.Similarity
-	}
-	return a.Ingredient.ProductID > b.Ingredient.ProductID
+	return a.Similarity < b.Similarity
 }
 
 // OpenAI embeddings are normalized, so cosine similarity is their dot product.

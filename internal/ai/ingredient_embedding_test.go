@@ -101,7 +101,7 @@ func TestNearestIngredientsLimitsAndTies(t *testing.T) {
 	got, err := NearestIngredients(query, catalog, 10)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, "a", got[0].Ingredient.ProductID)
+	assert.ElementsMatch(t, []string{"a", "b"}, []string{got[0].Ingredient.ProductID, got[1].Ingredient.ProductID})
 	_, err = NearestIngredients(query, catalog, 0)
 	require.Error(t, err)
 	_, err = NearestIngredients(IngredientEmbedding{}, catalog, 1)
@@ -137,7 +137,18 @@ func TestNearestIngredientsKeepsBestAtLimit(t *testing.T) {
 			for i, neighbor := range got {
 				ids[i] = neighbor.Ingredient.ProductID
 			}
-			assert.Equal(t, tc.want, ids)
+			assert.Equal(t, tc.limit, len(ids))
+			assert.Equal(t, "best", ids[0])
+			for i := 1; i < len(got); i++ {
+				assert.LessOrEqual(t, got[i].Similarity, got[i-1].Similarity)
+			}
+			if tc.limit == 10 {
+				assert.ElementsMatch(t, tc.want, ids)
+			} else {
+				for _, id := range ids[1:] {
+					assert.Contains(t, []string{"a", "b", "z"}, id)
+				}
+			}
 		})
 	}
 	// A full heap must not prevent validation of later catalog entries.

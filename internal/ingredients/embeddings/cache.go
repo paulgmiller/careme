@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -87,26 +89,33 @@ func (s *Service) EmbedIngredients(ctx context.Context, ingredients []ai.InputIn
 		assign(descriptions[i], lookup.vector)
 	}
 
-	// Match the grading batch size while keeping embedding requests independent.
-	for start := 0; start < len(missing); start += 30 {
-		batch := missing[start:min(start+30, len(missing))]
-		vectors, err := s.embedder.EmbedIngredients(ctx, batch)
-		if err != nil {
-			return nil, fmt.Errorf("embed ingredients: %w", err)
-		}
-		if len(vectors) != len(batch) {
-			return nil, fmt.Errorf("expected %d embeddings, got %d", len(batch), len(vectors))
-		}
-		for i, description := range batch {
-			body, err := json.Marshal(vectors[i])
-			if err != nil {
-				return nil, fmt.Errorf("encode ingredient embedding %q: %w", description, err)
-			}
-			if err := s.cache.Put(ctx, cacheKey(s.embedder.CacheVersion(), description), string(body), cache.Unconditional()); err != nil {
-				return nil, fmt.Errorf("save ingredient embedding %q: %w", description, err)
-			}
-			assign(description, vectors[i])
-		}
+	if len(missing) == 0 {
+		return result, nil
 	}
+	vectors, err := s.embedder.EmbedIngredients(ctx, missing)
+	if err != nil {
+		return nil, fmt.Errorf("embed ingredients: %w", err)
+	}
+	if len(vectors) != len(missing) {
+		return nil, fmt.Errorf("expected %d embeddings, got %d", len(missing), len(vectors))
+	}
+	var wg sync.WaitGroup
+	for i, description := range missing {
+		vector := vectors[i]
+		assign(description, vector)
+		description := description
+		wg.Go(func() {
+			writeCtx := context.WithoutCancel(ctx)
+			body, err := json.Marshal(vector)
+			if err != nil {
+				slog.ErrorContext(writeCtx, "failed to encode ingredient embedding", "description", description, "error", err)
+				return
+			}
+			if err := s.cache.Put(writeCtx, cacheKey(s.embedder.CacheVersion(), description), string(body), cache.Unconditional()); err != nil {
+				slog.ErrorContext(writeCtx, "failed to cache ingredient embedding", "description", description, "error", err)
+			}
+		})
+	}
+	wg.Wait()
 	return result, nil
 }
