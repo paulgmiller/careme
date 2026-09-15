@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"careme/internal/seasons"
 	"careme/internal/templates"
 
 	"careme/internal/ai"
@@ -576,13 +575,11 @@ func parseFeedbackBool(value string) (bool, error) {
 }
 
 func writeRecipePage(ctx context.Context, w http.ResponseWriter, input recipeViewInput) {
-	input.clarityScript = templates.ClarityScript(ctx)
-	input.googleTagScript = templates.GoogleTagScript()
-	input.style = seasons.GetCurrentStyle()
 	view, err := newRecipePageView(input)
 	if err != nil {
 		http.Error(w, "render HTML: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	view.Page = templates.NewPage(ctx)
 	renderHTML(w, templates.Recipe, "recipe.html", view)
 }
