@@ -49,8 +49,19 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 		return rubberstamp{}
 	}
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
+	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
+}
+
+// NewEnrichingGrader returns the grade manager with independent embedding
+// resolution enabled. This is kept separate from NewManager until embeddings
+// are ready to participate in production recipe generation.
+func NewEnrichingGrader(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
+	grader := NewManager(cfg, c, httpClient)
+	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
+		return grader
+	}
 	return &enrichingGrader{
-		grader:     newCachingGrader(&multiGrader{grader: base}, NewStore(c)),
+		grader:     grader,
 		embeddings: embeddings.New(c, ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient)),
 	}
 }

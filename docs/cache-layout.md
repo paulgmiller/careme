@@ -147,7 +147,7 @@ Compatibility implications:
 
 ### Ingredient embeddings
 
-The grading manager also resolves description embeddings through OpenAI's
+The opt-in enriching grader used by the ingredients command resolves description embeddings through OpenAI's
 `text-embedding-3-small` model with 256 dimensions. Vectors are independent fields
 on `ai.InputIngredient` (JSON `embeddings`), and their authoritative cache is
 `ingredient_embeddings/`. Grade records exclude vectors; staple snapshots can

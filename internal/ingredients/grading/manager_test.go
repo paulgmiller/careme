@@ -253,14 +253,14 @@ func TestManagerBackfillsEmbeddingWithoutRegrading(t *testing.T) {
 	})}
 	cfg := &config.Config{AI: config.AIConfig{APIKey: "test"}, IngredientGrading: config.IngredientGradingConfig{Enable: true}}
 	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 8, Reason: "already graded"}}
-	got, err := NewManager(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	got, err := NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.NotEmpty(t, got[0].Embedding)
 	assert.Equal(t, ingredient.Grade, got[0].Grade)
 	// A different grader still resolves the same embedding cache entry.
 	cfg.IngredientGrading.Model = "another-grader"
-	got, err = NewManager(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	got, err = NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
 	require.NotEmpty(t, got[0].Embedding)
 	assert.Equal(t, 1, calls)
