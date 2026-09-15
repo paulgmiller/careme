@@ -3,7 +3,6 @@ package recipes
 import (
 	"context"
 	"encoding/base64"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,7 +11,6 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/httpx"
-	"careme/internal/seasons"
 	"careme/internal/templates"
 )
 
@@ -44,9 +42,7 @@ func redirectToAccountRequired(w http.ResponseWriter, r *http.Request, reason au
 }
 
 type spinnerData struct {
-	ClarityScript   template.HTML
-	GoogleTagScript template.HTML
-	Style           seasons.Style
+	templates.Page
 	RefreshInterval string // seconds
 	StatusMessage   string
 	ServerSignedIn  bool
@@ -57,10 +53,8 @@ type spinnerData struct {
 
 func newSpinnerData(ctx context.Context) spinnerData {
 	return spinnerData{
-		ClarityScript:   templates.ClarityScript(ctx),
-		GoogleTagScript: templates.GoogleTagScript(),
-		Style:           seasons.GetCurrentStyle(),
-		ServerSignedIn:  true, // clerk refresh doesn't need to reload because spin will just do it anyways
+		Page:           templates.NewPage(ctx),
+		ServerSignedIn: true, // clerk refresh doesn't need to reload because spin will just do it anyways
 	}
 }
 

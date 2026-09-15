@@ -621,7 +621,7 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 	recipe := list.Recipes[0]
 	hash := recipe.ComputeHash()
 	params := DefaultParams(&locations.Location{ID: "store"}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
-	page, err := newShoppingListPageView(shoppingListViewInput{
+	page, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
 		params:      params,
 		list:        ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
 		hash:        "list-hash",
