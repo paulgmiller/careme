@@ -73,6 +73,30 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
+// FetchPantry returns the separate pantry catalog used for meal-plan retrieval.
+func (p StaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(pantryFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
+		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, false, 0)
+		if err != nil {
+			return nil, err
+		}
+		return lo.Map(ingredients, func(ingredient Ingredient, index int) ai.InputIngredient {
+			input := inputIngredientFromKrogerIngredient(ingredient, index)
+			if !slices.Contains(input.Categories, category.Term) {
+				// dubious becsuse we don't do this for staples but if do embeddign based rag later its
+				// somwhat usefult to pull from each categotry
+				input.Categories = append(input.Categories, category.Term)
+			}
+			return input
+		}), nil
+	})
+}
+
+// PantryCategories returns the search terms used to source pantry products.
+func PantryCategories() []string {
+	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
+}
+
 func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, style, []string{"*"}, false, 0)
@@ -228,8 +252,16 @@ func defaultStaples() []staplesFilter {
 			Term:   "pasta",
 			Brands: []string{"*"}, // Should we just put our thumb on the scale
 		},
-		// TODO dairy, international
 	}...)
+}
+
+func pantryFilters() []staplesFilter {
+	return []staplesFilter{
+		{Term: "spices", Brands: []string{"*"}},
+		{Term: "dairy", Brands: []string{"*"}},
+		{Term: "international", Brands: []string{"*"}},
+		// seasoning? herbs?
+	}
 }
 
 func ProduceFilters() []staplesFilter {

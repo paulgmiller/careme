@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,67 @@ func (f fakeLocationStore) GetLocationsByCoordinates(context.Context, geo.Coordi
 
 func (f fakeLocationStore) HasInventory(locationID string) bool {
 	return f.inventoryIDs[locationID]
+}
+
+func (f fakeLocationStore) GetLocationByID(_ context.Context, id string) (*locations.Location, error) {
+	for _, loc := range f.locations {
+		if loc.ID == id {
+			return &loc, f.err
+		}
+	}
+	return nil, errors.New("location not found")
+}
+
+func TestRunRejectsInvalidArguments(t *testing.T) {
+	for _, tc := range []struct {
+		args    []string
+		message string
+	}{
+		{nil, "exactly one"},
+		{[]string{"-zip", "98101", "-location", "70500874"}, "exactly one"},
+		{[]string{"-location", "  "}, "exactly one"},
+		{[]string{"-location", "70500874", "-plans", "0"}, "-plans"},
+		{[]string{"-zip", "98101", "-plans", "-1"}, "-plans"},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			require.ErrorContains(t, run(t.Context(), tc.args, &bytes.Buffer{}), tc.message)
+		})
+	}
+}
+
+func TestSelectStores(t *testing.T) {
+	store := fakeLocationStore{locations: []locations.Location{{ID: "70500874"}, {ID: "unsupported"}}, inventoryIDs: map[string]bool{"70500874": true}}
+	got, err := selectStores(t.Context(), store, "70500874", "", 5)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "70500874", got[0].ID)
+	_, err = selectStores(t.Context(), store, "missing", "", 5)
+	require.ErrorContains(t, err, "location not found")
+	_, err = selectStores(t.Context(), store, "unsupported", "", 5)
+	require.ErrorContains(t, err, "no inventory support")
+	got, err = selectStores(t.Context(), store, "", "98101", 1)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	_, err = selectStores(t.Context(), store, "", "invalid", 1)
+	require.ErrorContains(t, err, "coordinates not found")
+}
+
+type countingMenuPlanner struct{ calls atomic.Int32 }
+
+func (p *countingMenuPlanner) CreateMenuPlan(_ context.Context, _ *locations.Location, _ []ai.InputIngredient, _ []string, _ time.Time, _ []string, count int) (*ai.MenuPlan, error) {
+	p.calls.Add(1)
+	return &ai.MenuPlan{Plans: make([]ai.RecipePlan, count)}, nil
+}
+
+func TestMakeMenuPlansCount(t *testing.T) {
+	for _, count := range []int{1, 4} {
+		planner := &countingMenuPlanner{}
+		service := planService{planner: planner, staples: mockStaplesService{}, pantry: mockPantryService{}}
+		plans, err := makeMenuPlans(t.Context(), service, locations.Location{ID: "70500874"}, time.Now(), "", 3, count)
+		require.NoError(t, err)
+		assert.Equal(t, int32(count), planner.calls.Load())
+		assert.Len(t, plans, count*3)
+	}
 }
 
 func TestFirstInventoryStoresFiltersAndLimits(t *testing.T) {
@@ -120,6 +182,25 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 	assert.NotContains(t, rendered, "Steps:")
 }
 
+func TestPantryCategoryNeighbors(t *testing.T) {
+	var pantry []ai.InputIngredient
+	for i := 0; i < 7; i++ {
+		pantry = append(pantry, ai.InputIngredient{Categories: []string{"spices"}, Embedding: ai.IngredientEmbedding{float64(i), 0}})
+	}
+	pantry = append(pantry, ai.InputIngredient{ProductID: "dairy", Categories: []string{"dairy", "international"}, Embedding: ai.IngredientEmbedding{10, 0}})
+	spices, err := pantryCategoryNeighbors(ai.IngredientEmbedding{1, 0}, pantry, "spices")
+	require.NoError(t, err)
+	require.Len(t, spices, 5)
+	assert.Equal(t, 6.0, spices[0].Similarity)
+	assert.Equal(t, 2.0, spices[4].Similarity)
+	for _, category := range []string{"dairy", "international"} {
+		got, err := pantryCategoryNeighbors(ai.IngredientEmbedding{1, 0}, pantry, category)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "dairy", got[0].Ingredient.ProductID)
+	}
+}
+
 func TestFilterMenuIngredientsDropsLowGrades(t *testing.T) {
 	ingredients := []ai.InputIngredient{
 		{ProductID: "ungraded"},
@@ -132,4 +213,28 @@ func TestFilterMenuIngredientsDropsLowGrades(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "ungraded", got[0].ProductID)
 	assert.Equal(t, "good", got[1].ProductID)
+}
+
+func TestPantryQueryStripsCatalogBrands(t *testing.T) {
+	catalog := []ai.InputIngredient{
+		{Brand: "Kroger"},
+		{Brand: "Simple Truth"},
+		{Brand: "Simple Truth Organic"},
+		{Brand: "Thai"},
+		{Brand: ""},
+		{Brand: "365+"},
+	}
+	for _, tc := range []struct{ anchor, side, want string }{
+		{"Kroger® Ground Pork", "Fresh Red Hothouse Bell Pepper", "Thai, Ground Pork, Fresh Red Hothouse Bell Pepper"},
+		{"simple truth organic™ Chicken", "KROGER Broccoli", "Thai, Chicken, Broccoli"},
+		{"pork", "365+™ Spinach", "Thai, pork, Spinach"},
+		{"Krogerish Pork", "Thai Basil", "Thai, Krogerish Pork, Basil"},
+		{"Ground Pork", "", "Thai, Ground Pork"},
+	} {
+		t.Run(tc.anchor, func(t *testing.T) {
+			plan := ai.RecipePlan{Cuisine: "Thai", AnchorIngredient: tc.anchor, SideVegetable: tc.side}
+			assert.Equal(t, tc.want, pantryQuery(plan, catalog))
+			assert.Equal(t, tc.anchor, plan.AnchorIngredient)
+		})
+	}
 }

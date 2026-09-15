@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
+	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/locations/geo"
 	"careme/internal/parallelism"
@@ -31,6 +33,7 @@ import (
 
 type locationStore interface {
 	GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locations.Location, error)
+	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
 	HasInventory(locationID string) bool
 }
 
@@ -42,9 +45,19 @@ type staplesService interface {
 	FetchStaples(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
 }
 
+type pantryService interface {
+	FetchPantry(ctx context.Context, p *recipes.GeneratorParams) ([]ai.InputIngredient, error)
+}
+
+type ingredientEmbedder interface {
+	EmbedIngredients(context.Context, []string) ([]ai.IngredientEmbedding, error)
+}
+
 type planService struct {
-	planner menuPlanner
-	staples staplesService
+	planner  menuPlanner
+	staples  staplesService
+	pantry   pantryService
+	embedder ingredientEmbedder
 }
 
 type storeMenuPlan struct {
@@ -62,19 +75,27 @@ func main() {
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	var zip string
+	var location string
+	var plans int
 	var limit int
 	var instructions string
 
 	fs := flag.NewFlagSet("menuplan", flag.ContinueOnError)
 	fs.SetOutput(out)
 	fs.StringVar(&zip, "zip", "", "ZIP code to plan from")
+	fs.StringVar(&location, "location", "", "store location ID (mutually exclusive with -zip)")
+	fs.IntVar(&plans, "plans", 10, "number of menus per location, each containing 3 recipe ideas")
 	fs.IntVar(&limit, "stores", 5, "number of grocery stores to plan for")
 	fs.StringVar(&instructions, "instructions", "", "extra cooking notes, like make it vegetarian")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if zip = strings.TrimSpace(zip); zip == "" {
-		return errors.New("must provide -zip")
+	zip, location = strings.TrimSpace(zip), strings.TrimSpace(location)
+	if (zip == "") == (location == "") {
+		return errors.New("provide exactly one of -location or -zip")
+	}
+	if plans < 1 {
+		return errors.New("-plans must be greater than zero")
 	}
 	if limit < 1 {
 		return errors.New("-stores must be greater than zero")
@@ -89,10 +110,6 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	centroids := locations.LoadCentroids()
-	coordinates, ok := centroids.ZipCentroidByZIP(zip)
-	if !ok {
-		return fmt.Errorf("coordinates not found for ZIP code %q", zip)
-	}
 	locationStore, err := locations.New(cfg, cacheStore, centroids)
 	if err != nil {
 		return fmt.Errorf("create location store: %w", err)
@@ -102,12 +119,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 
-	stores, err := firstInventoryStores(ctx, locationStore, coordinates, limit)
+	stores, err := selectStores(ctx, locationStore, location, zip, limit)
 	if err != nil {
-		return fmt.Errorf("%w for zip %s", err, zip)
+		return err
 	}
 
-	results := makeStoreMenuPlans(ctx, service, stores, instructions, time.Now())
+	results := makeStoreMenuPlans(ctx, service, stores, instructions, time.Now(), plans)
 	printHistogram(results, func(r ai.RecipePlan, _ int) string {
 		return r.SideVegetable
 	})
@@ -145,22 +162,25 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 		return planService{
 			planner: mockMenuPlanner{},
 			staples: mockStaplesService{},
+			pantry:  mockPantryService{},
 		}, nil
 	}
 
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	grader := ingredientgrading.NewManager(cfg, cacheStore, httpClient)
+	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, httpClient)
 	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
 	if err != nil {
 		return planService{}, fmt.Errorf("create staples service: %w", err)
 	}
 	return planService{
-		planner: ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
-		staples: staples,
+		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
+		staples:  staples,
+		pantry:   staples,
+		embedder: ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
 	}, nil
 }
 
-func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count int) ([]ai.RecipePlan, error) {
+func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count, plans int) ([]ai.RecipePlan, error) {
 	params := recipes.DefaultParams(&store, date)
 	params.Instructions = instructions
 
@@ -169,17 +189,72 @@ func makeMenuPlans(ctx context.Context, service planService, store locations.Loc
 		return nil, fmt.Errorf("fetch staples: %w", err)
 	}
 	ingredients = filterMenuIngredients(ingredients)
+	pantry, err := service.pantry.FetchPantry(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("fetch pantry: %w", err)
+	}
+	pantry = lo.Filter(pantry, func(ingredient ai.InputIngredient, _ int) bool {
+		return ingredient.Grade == nil || ingredient.Grade.Score >= 5
+	})
 
-	return parallelism.Flatten(lo.Range(10), func(int) ([]ai.RecipePlan, error) {
+	return parallelism.Flatten(lo.Range(plans), func(int) ([]ai.RecipePlan, error) {
 		plan, err := service.planner.CreateMenuPlan(ctx, &store, ingredients, compactStrings(params.Instructions), date, nil, count)
 		if err != nil {
 			return nil, fmt.Errorf("create menu plan: %w", err)
+		}
+		for i := range plan.Plans {
+			if len(pantry) == 0 || service.embedder == nil {
+				continue
+			}
+			query := pantryQuery(plan.Plans[i], ingredients)
+			vectors, err := service.embedder.EmbedIngredients(ctx, []string{query})
+			if err != nil {
+				return nil, fmt.Errorf("embed pantry query %q: %w", query, err)
+			}
+			var output strings.Builder
+			fmt.Fprintf(&output, "Pantry for %s\n", query)
+			for _, category := range kroger.PantryCategories() {
+				neighbors, err := pantryCategoryNeighbors(vectors[0], pantry, category)
+				if err != nil {
+					return nil, fmt.Errorf("find %s pantry items for %q: %w", category, query, err)
+				}
+				fmt.Fprintf(&output, "  %s\n %s\n", category, formatPantryNeighbors(neighbors))
+			}
+			fmt.Print(output.String())
 		}
 		return plan.Plans, nil
 	})
 }
 
-func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time) []ai.RecipePlan {
+func pantryCategoryNeighbors(query ai.IngredientEmbedding, pantry []ai.InputIngredient, category string) ([]ai.IngredientNeighbor, error) {
+	candidates := lo.Filter(pantry, func(ingredient ai.InputIngredient, _ int) bool {
+		return slices.Contains(ingredient.Categories, category)
+	})
+	return ai.NearestIngredients(query, candidates, 5)
+}
+
+func pantryQuery(plan ai.RecipePlan, ingredients []ai.InputIngredient) string {
+	brands := make([]string, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		brand := strings.TrimSpace(strings.NewReplacer("®", "", "™", "", "℠", "").Replace(ingredient.Brand))
+		if brand != "" {
+			brands = append(brands, brand)
+		}
+	}
+	// Remove longer names first, e.g. Simple Truth Organic before Simple Truth.
+	slices.SortFunc(brands, func(a, b string) int { return len(b) - len(a) })
+	clean := func(name string) string {
+		name = strings.NewReplacer("®", "", "™", "", "℠", "").Replace(name)
+		for _, brand := range brands {
+			pattern := regexp.MustCompile(`(?i)(^|[^\p{L}\p{N}])` + regexp.QuoteMeta(brand) + `($|[^\p{L}\p{N}])`)
+			name = pattern.ReplaceAllString(name, "${1}${2}")
+		}
+		return strings.Join(strings.Fields(name), " ")
+	}
+	return strings.Join(compactStrings(plan.Cuisine, clean(plan.AnchorIngredient), clean(plan.SideVegetable)), ", ")
+}
+
+func makeStoreMenuPlans(ctx context.Context, service planService, stores []locations.Location, instructions string, now time.Time, plans int) []ai.RecipePlan {
 	results := make([][]ai.RecipePlan, len(stores))
 	var wg sync.WaitGroup
 	wg.Add(len(stores))
@@ -192,7 +267,7 @@ func makeStoreMenuPlans(ctx context.Context, service planService, stores []locat
 				return
 			}
 
-			cuisines, err := makeMenuPlans(ctx, service, store, date, instructions, 3)
+			cuisines, err := makeMenuPlans(ctx, service, store, date, instructions, 3, plans)
 			if err != nil {
 				slog.Warn("go error %s", "error", err)
 			}
@@ -224,6 +299,20 @@ func (mockStaplesService) FetchStaples(context.Context, *recipes.GeneratorParams
 	}, nil
 }
 
+type mockPantryService struct{}
+
+func (mockPantryService) FetchPantry(context.Context, *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
+	return []ai.InputIngredient{{ProductID: "mock-cumin", Description: "ground cumin", Embedding: ai.IngredientEmbedding{1, 0}}}, nil
+}
+
+func formatPantryNeighbors(neighbors []ai.IngredientNeighbor) string {
+	parts := make([]string, 0, len(neighbors))
+	for _, neighbor := range neighbors {
+		parts = append(parts, fmt.Sprintf("\t%.3f %s", neighbor.Similarity, neighbor.Ingredient.Description))
+	}
+	return strings.Join(parts, "\n")
+}
+
 type mockMenuPlanner struct{}
 
 func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai.InputIngredient, []string, time.Time, []string, int) (*ai.MenuPlan, error) {
@@ -232,6 +321,24 @@ func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai
 		{Cuisine: "Mexican", AnchorIngredient: "black beans", DishFormat: "quick simmer", SideVegetable: "zucchini"},
 		{Cuisine: "Mediterranean", AnchorIngredient: "seasonal greens", DishFormat: "grain bowl", SideVegetable: "eggplant", Fancy: true},
 	}}, nil
+}
+
+func selectStores(ctx context.Context, store locationStore, location, zip string, limit int) ([]locations.Location, error) {
+	if location != "" {
+		loc, err := store.GetLocationByID(ctx, location)
+		if err != nil {
+			return nil, fmt.Errorf("find location %q: %w", location, err)
+		}
+		if !store.HasInventory(loc.ID) {
+			return nil, fmt.Errorf("location %q has no inventory support", location)
+		}
+		return []locations.Location{*loc}, nil
+	}
+	coordinates, ok := locations.LoadCentroids().ZipCentroidByZIP(zip)
+	if !ok {
+		return nil, fmt.Errorf("coordinates not found for ZIP code %q", zip)
+	}
+	return firstInventoryStores(ctx, store, coordinates, limit)
 }
 
 func firstInventoryStores(ctx context.Context, store locationStore, coordinates geo.Coordinate, limit int) ([]locations.Location, error) {

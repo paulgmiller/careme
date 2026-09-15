@@ -84,6 +84,18 @@ func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID strin
 	return provider.FetchWines(ctx, locationID, styles)
 }
 
+func (p routingStaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	provider, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	pantry, ok := provider.(pantryProvider)
+	if !ok {
+		return nil, nil
+	}
+	return pantry.FetchPantry(ctx, locationID)
+}
+
 func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchStaples(ctx, locationID)
 	if err != nil {
@@ -94,6 +106,18 @@ func (p dedupingStaplesProvider) FetchStaples(ctx context.Context, locationID st
 
 func (p dedupingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	ingredients, err := p.provider.FetchWines(ctx, locationID, styles)
+	if err != nil {
+		return nil, err
+	}
+	return dedupeInputIngredients(ingredients)
+}
+
+func (p dedupingStaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	pantry, ok := p.provider.(pantryProvider)
+	if !ok {
+		return nil, nil
+	}
+	ingredients, err := pantry.FetchPantry(ctx, locationID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +152,11 @@ type staplesProvider interface {
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 }
 
+type pantryProvider interface {
+	FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
+}
+
+// we drop extra categories here.
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	seen := map[string]bool{}
 	var deduped []ai.InputIngredient
@@ -192,6 +221,32 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	slog.InfoContext(ctx, "cached ingredients", "location", p.Location.ID, "date", p.Date.Format("2006-01-02"), "hash", lochash, "count", len(graded))
 	// "produce_score", sumIngredientGradesAboveCutoff(graded))
 	return graded, nil
+}
+
+// FetchPantry loads the independently cached pantry catalog for a store.
+func (s *cachedStaplesService) FetchPantry(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
+	key := "pantry/query-categories-v1/" + p.LocationHash()
+	if cached, err := s.cache.IngredientsFromCache(ctx, key); err == nil {
+		return s.grader.GradeIngredients(ctx, cached)
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return nil, fmt.Errorf("load cached pantry: %w", err)
+	}
+	provider, ok := s.provider.(pantryProvider)
+	if !ok {
+		return nil, fmt.Errorf("pantry provider is unavailable for %s", p.Location.ID)
+	}
+	pantry, err := provider.FetchPantry(ctx, p.Location.ID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch pantry for %s: %w", p.Location.ID, err)
+	}
+	pantry, err = s.grader.GradeIngredients(ctx, pantry)
+	if err != nil {
+		return nil, fmt.Errorf("grade pantry for %s: %w", p.Location.ID, err)
+	}
+	if err := s.cache.SaveIngredients(ctx, key, pantry); err != nil {
+		return nil, fmt.Errorf("cache pantry for %s: %w", p.Location.ID, err)
+	}
+	return pantry, nil
 }
 
 func wineIngredientsCacheKey(style, location string, date time.Time) string {
