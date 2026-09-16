@@ -110,7 +110,7 @@
 </article>
 {{else}}
 <article id="{{.DOMID}}" class="shopping-recipe-card space-y-5 rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-  <div class="space-y-5 sm:grid {{if .HasImage}}sm:grid-cols-[minmax(0,1fr)_25%]{{else}}sm:grid-cols-1{{end}} sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
+  <div class="space-y-5 sm:grid sm:grid-cols-1 sm:has-[img]:grid-cols-[minmax(0,1fr)_25%] sm:items-start sm:gap-x-6 sm:gap-y-5 sm:space-y-0">
     <header class="space-y-4 sm:contents">
       <div class="flex items-start gap-4 sm:contents">
         <div class="min-w-0 flex-1 sm:col-start-1 sm:row-start-1">
@@ -123,12 +123,9 @@
           {{end}}
           <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
         </div>
-        {{if .HasImage}}
-        <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
-          <img src="{{ShoppingRecipeImageURL .Hash}}"
-               alt="{{.Title}}"
-               class="h-auto w-full object-cover"
-               loading="lazy" />
+        {{if .Ready}}
+        <a href="/recipe/{{.Hash}}" class="hidden has-[img]:block w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
+          {{template "recipe_image" .Image}}
         </a>
         {{end}}
       </div>
@@ -289,8 +286,7 @@
 {{end}}
 
 {{define "shopping_ready"}}
-        <div id="shopping-content" class="p-8"
-             {{if .HasMissingImages}}hx-get="" hx-trigger="every 5s" hx-target="this" hx-swap="outerHTML"{{end}}>
+        <div id="shopping-content" class="p-8">
           {{if .HelpMessage}}
           <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
           <aside id="shopping-list-help"

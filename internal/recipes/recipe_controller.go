@@ -30,6 +30,7 @@ import (
 func (s *server) registerRecipeRoutes(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
+	mux.HandleFunc("GET /recipe/{hash}/image-panel", s.handleRecipeImagePanel)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
 	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
@@ -173,6 +174,23 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		thread:             thread,
 		feedback:           feedback,
 		wineRecommendation: wineRecommendation,
+	})
+}
+
+// A 204 leaves the polling placeholder intact; the ready image replaces it.
+func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
+	hash := r.PathValue("hash")
+	exists, err := s.images.Exists(r.Context(), hash)
+	if err != nil {
+		http.Error(w, "check recipe image: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	renderHTML(w, templates.Recipe, "recipe_image", recipeImageView{
+		Hash: hash, HasImage: true, Thumbnail: r.URL.Query().Get("view") == "shopping",
 	})
 }
 
