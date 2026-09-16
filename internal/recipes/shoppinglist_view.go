@@ -68,7 +68,6 @@ type shoppingListPageView struct {
 	Location             locations.Location
 	Date                 string
 	DateDisplay          string
-	MetaDescription      string
 	Instructions         string
 	PendingInstructions  string
 	HelpMessage          string
@@ -123,7 +122,6 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Location:             *input.params.Location,
 		Date:                 input.params.Date.Format("2006-01-02"),
 		DateDisplay:          input.params.Date.Format("January 2, 2006"),
-		MetaDescription:      shoppingListMetaDescription(input.list.Recipes, input.params.Location.Name, input.params.Date.Format("2006-01-02")),
 		Instructions:         instructions,
 		PendingInstructions:  input.pendingInstructions,
 		HelpMessage:          strings.TrimSpace(input.helpMessage),
@@ -136,6 +134,22 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
+	}
+
+	data.Title = "Recipes for " + data.Location.Name
+	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
+	if len(recipeViews) > 0 {
+		data.Social = &templates.SocialPreview{
+			Title:       recipeViews[0].Title,
+			Description: recipeViews[0].Description,
+			ImagePath:   "/favicon.ico",
+		}
+		for _, recipe := range recipeViews {
+			if recipe.HasImage {
+				data.Social.ImagePath = "/recipe/" + recipe.Hash + "/image"
+				break
+			}
+		}
 	}
 
 	return data, nil
