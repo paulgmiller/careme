@@ -92,6 +92,14 @@ Run `careme -campaigns` to generate recipes and images for the advertised stores
 
 `deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
 
+Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run all advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
+
+```sh
+kubectl create job -n caremetest --from=cronjob/careme-advertised-recipes "careme-advertised-recipes-manual-$(date +%s)"
+```
+
+Manual Jobs do not change the suspension and are not protected by the CronJob's overlap prevention, so wait for an existing run to finish before starting another. To restore automatic test runs on the 1st and 15th of each month, set `advertised_recipes_suspend="false"` in the `caremetest` block of `deploy/deploy.sh` and deploy.
+
 ### Ingredient embedding lookup
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
