@@ -3,6 +3,8 @@ package recipes
 import (
 	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,6 +58,13 @@ func renderTestUser(signedIn bool) *utypes.User {
 }
 
 func TestMain(m *testing.M) {
+	// Keep application logs quiet during the suite. To inspect one test's logs,
+	// run: go test ./internal/recipes -run '^TestName$' -v.
+	logOutput := io.Discard
+	if testing.Verbose() {
+		logOutput = os.Stderr
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(logOutput, nil)))
 	if err := templates.Init(&config.Config{}); err != nil {
 		panic(err)
 	}
