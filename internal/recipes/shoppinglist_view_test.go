@@ -670,3 +670,34 @@ func TestShoppingImagesPollIndependently(t *testing.T) {
 		})
 	}
 }
+
+func TestShoppingDetailsPreservationFollowsRecipeContent(t *testing.T) {
+	original := ai.Recipe{Title: "Beans", Ingredients: []ai.Ingredient{{Name: "Beans", Quantity: "1 cup"}}, Instructions: []string{"Simmer."}}
+	originalID := "shopping-recipe-" + strings.TrimRight(original.ComputeHash(), "=") + "-details"
+	for _, tc := range []struct {
+		name   string
+		change func(*ai.Recipe)
+		sameID bool
+	}{
+		{"unchanged", func(*ai.Recipe) {}, true},
+		{"reviewed", func(r *ai.Recipe) { r.ResponseID = "reviewed" }, true},
+		{"ingredients revised", func(r *ai.Recipe) { r.Ingredients = []ai.Ingredient{{Name: "Lentils", Quantity: "2 cups"}} }, false},
+		{"instructions revised", func(r *ai.Recipe) { r.Instructions = []string{"Bake for 30 minutes."} }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recipe := original
+			tc.change(&recipe)
+			var body bytes.Buffer
+			assert.NoError(t, writeShoppingRecipeCard(&body, recipe, shoppingRecipeInput{Ready: true}))
+			id := "shopping-recipe-" + strings.TrimRight(recipe.ComputeHash(), "=") + "-details"
+			assert.Contains(t, body.String(), `<details id="`+id+`" hx-preserve`)
+			assert.Equal(t, tc.sameID, id == originalID)
+			for _, ingredient := range recipe.Ingredients {
+				assert.Contains(t, body.String(), ingredient.Name)
+			}
+			for _, instruction := range recipe.Instructions {
+				assert.Contains(t, body.String(), instruction)
+			}
+		})
+	}
+}
