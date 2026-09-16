@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -45,6 +44,10 @@ func (v shoppingRecipeView) DOMID() string {
 	return "shopping-recipe-" + strings.TrimRight(v.Hash, "=")
 }
 
+func (v shoppingRecipeView) Image() recipeImageView {
+	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true}
+}
+
 type shoppingProgress struct {
 	StatusMessage string
 	Slots         []status.Slot        // meal-plan order, with hashes for finished recipes
@@ -73,7 +76,6 @@ type shoppingListPageView struct {
 	Recipes              []shoppingRecipeView
 	ShoppingList         []shoppingListGroup
 	HasSavedRecipes      bool
-	HasMissingImages     bool
 	ServerSignedIn       bool
 	User                 *utypes.User
 	AuthReturnTo         string
@@ -115,23 +117,20 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	}
 
 	data := shoppingListPageView{
-		Page:                templates.NewPage(ctx),
-		StatusMessage:       input.progress.StatusMessage,
-		Generating:          input.progress.Generating,
-		Location:            *input.params.Location,
-		Date:                input.params.Date.Format("2006-01-02"),
-		DateDisplay:         input.params.Date.Format("January 2, 2006"),
-		MetaDescription:     shoppingListMetaDescription(input.list.Recipes, input.params.Location.Name, input.params.Date.Format("2006-01-02")),
-		Instructions:        instructions,
-		PendingInstructions: input.pendingInstructions,
-		HelpMessage:         strings.TrimSpace(input.helpMessage),
-		Hash:                input.hash,
-		Recipes:             recipeViews,
-		ShoppingList:        shoppingListForDisplay(combinedIngredients),
-		HasSavedRecipes:     hasSavedRecipes,
-		HasMissingImages: slices.ContainsFunc(recipeViews, func(view shoppingRecipeView) bool {
-			return view.Ready && !view.Dismissed && !view.HasImage
-		}),
+		Page:                 templates.NewPage(ctx),
+		StatusMessage:        input.progress.StatusMessage,
+		Generating:           input.progress.Generating,
+		Location:             *input.params.Location,
+		Date:                 input.params.Date.Format("2006-01-02"),
+		DateDisplay:          input.params.Date.Format("January 2, 2006"),
+		MetaDescription:      shoppingListMetaDescription(input.list.Recipes, input.params.Location.Name, input.params.Date.Format("2006-01-02")),
+		Instructions:         instructions,
+		PendingInstructions:  input.pendingInstructions,
+		HelpMessage:          strings.TrimSpace(input.helpMessage),
+		Hash:                 input.hash,
+		Recipes:              recipeViews,
+		ShoppingList:         shoppingListForDisplay(combinedIngredients),
+		HasSavedRecipes:      hasSavedRecipes,
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,
