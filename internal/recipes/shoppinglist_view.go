@@ -82,6 +82,7 @@ type shoppingListPageView struct {
 }
 
 type shoppingListViewInput struct {
+	imagesOnly           bool
 	params               *generatorParams
 	list                 ai.ShoppingList
 	wineRecommendations  map[string]*ai.WineSelection

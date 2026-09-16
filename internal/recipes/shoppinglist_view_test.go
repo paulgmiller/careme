@@ -3,6 +3,7 @@ package recipes
 import (
 	"bytes"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -543,7 +544,7 @@ func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn
 	html := assertHTTPSuccess(t, w)
 
 	assert.Contains(t, html, `src="/recipe/`+recipeHash+`/image"`)
-	assert.Contains(t, html, `sm:grid-cols-[minmax(0,1fr)_25%]`)
+	assert.Contains(t, html, `sm:has-[img]:grid-cols-[minmax(0,1fr)_25%]`)
 	assert.Contains(t, html, `w-1/4 shrink-0`)
 	assert.Contains(t, html, `sm:row-span-3`)
 }
@@ -643,4 +644,35 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 	assert.Contains(t, full.String(), card.String())
 	assert.Contains(t, fragment.String(), card.String())
 	assert.Equal(t, hash, page.Recipes[0].Hash)
+}
+
+func TestShoppingImagePollOnlyUpdatesImages(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		t.Run(strconv.FormatBool(ready), func(t *testing.T) {
+			recipe := list.Recipes[0]
+			hash := recipe.ComputeHash()
+			w := httptest.NewRecorder()
+			writeShoppingListPage(t.Context(), w, shoppingListViewInput{
+				params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
+				list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
+				hash:         "list-hash",
+				recipeImages: map[string]bool{hash: ready},
+				imagesOnly:   true,
+			})
+			body := assertHTTPSuccess(t, w)
+			assert.NotContains(t, body, "<article")
+			assert.NotContains(t, body, "<details")
+			assert.NotContains(t, body, "regenerateForm")
+			assert.NotContains(t, body, "shopping-finalize-controls")
+			if ready {
+				assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
+				assert.Contains(t, body, `hx-swap-oob="innerHTML"`)
+				assert.NotContains(t, body, `hx-trigger=`)
+			} else {
+				assert.Contains(t, body, `hx-trigger="every 5s"`)
+				assert.Contains(t, body, `hx-get="/recipes?h=list-hash&amp;view=images"`)
+				assert.NotContains(t, body, "<img")
+			}
+		})
+	}
 }
