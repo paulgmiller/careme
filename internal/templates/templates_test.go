@@ -164,6 +164,13 @@ func TestBrowserPageTemplatesIncludeAppHead(t *testing.T) {
 				t.Fatalf("read %s: %v", name, err)
 			}
 			rendered := string(body)
+			if strings.Contains(rendered, `{{template "page_head" .Page}}`) {
+				head, err := htmlFiles.ReadFile("page_head.html")
+				if err != nil {
+					t.Fatal(err)
+				}
+				rendered += string(head)
+			}
 			if !strings.Contains(rendered, "<head") || nonAppPages[name] {
 				return
 			}
@@ -193,6 +200,13 @@ func TestBrowserPageTemplatesDisablePinchZoom(t *testing.T) {
 				t.Fatalf("read %s: %v", name, err)
 			}
 			rendered := string(body)
+			if strings.Contains(rendered, `{{template "page_head" .Page}}`) {
+				head, err := htmlFiles.ReadFile("page_head.html")
+				if err != nil {
+					t.Fatal(err)
+				}
+				rendered += string(head)
+			}
 			if !strings.Contains(rendered, "<head") {
 				return
 			}
@@ -225,7 +239,8 @@ func firstElementClasses(node *html.Node, element string) (map[string]bool, bool
 	return nil, false
 }
 
-func TestTemplatePageTitlesAreUnique(t *testing.T) {
+// Content-derived page titles are covered by the recipe page rendering tests.
+func TestStaticTemplatePageTitlesAreUnique(t *testing.T) {
 	titles := make(map[string]string)
 	for _, name := range []string{
 		"about.html",
@@ -236,8 +251,6 @@ func TestTemplatePageTitlesAreUnique(t *testing.T) {
 		"locations.html",
 		"mail.html",
 		"privacy.html",
-		"recipe.html",
-		"shoppinglist.html",
 		"spinner.html",
 		"user.html",
 	} {
