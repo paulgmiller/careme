@@ -37,7 +37,6 @@
   </main>
   <script src="/static/htmx@2.0.10.js"></script>
   <script src="{{AssetPath}}share.js"></script>
-  <script src="{{AssetPath}}shoppinglist.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
 </html>
@@ -131,7 +130,8 @@
   </div>
 
   {{if or .Ingredients .Instructions}}
-  <details class="space-y-4">
+  <!-- Preserve expansion for unchanged recipes; content edits change DOMID. -->
+  <details id="{{.DOMID}}-details" hx-preserve class="space-y-4">
     <summary class="hidden">Details</summary>
     <section class="space-y-6">
     <div class="grid gap-6 md:grid-cols-2">

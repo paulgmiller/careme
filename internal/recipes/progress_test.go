@@ -79,7 +79,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.Contains(t, body, `href="/recipe/`+ready.ComputeHash()+`"`)
 	assert.NotContains(t, body, `href="/recipe/pending-0"`)
 	assert.NotContains(t, body, `href="/recipe/`+draft.ComputeHash()+`"`)
-	assert.NotContains(t, body, "hx-preserve")
+	assert.Contains(t, body, `id="shopping-recipe-`+strings.TrimRight(ready.ComputeHash(), "=")+`-details" hx-preserve`)
 	assert.NotContains(t, body, "hx-sync")
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/save`)
 	assert.Contains(t, body, `/recipe/`+ready.ComputeHash()+`/dismiss`)

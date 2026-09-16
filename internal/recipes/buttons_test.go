@@ -122,7 +122,7 @@ func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
 			if got := strings.Contains(html, `onclick="var d=this.closest('article').querySelector('details');`); got != tt.details {
 				t.Errorf("Details button present = %t, want %t", got, tt.details)
 			}
-			if got := strings.Contains(html, `<details class="space-y-4">`); got != tt.details {
+			if got := strings.Contains(html, `<details id="shopping-recipe-`); got != tt.details {
 				t.Errorf("Details panel present = %t, want %t", got, tt.details)
 			}
 		})
