@@ -123,11 +123,11 @@
           {{end}}
           <p class="mt-1 text-sm text-ink-500">{{.Description}}</p>
         </div>
-        <!-- Keep this empty target before the image exists. Image polls fill only its
-             contents, preserving the card's open Details and the chef-note input. -->
-        <div id="{{.DOMID}}-image" class="contents">
-          {{template "shopping_recipe_image" .}}
-        </div>
+        {{if .Ready}}
+        <a href="/recipe/{{.Hash}}" class="hidden has-[img]:block w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
+          {{template "recipe_image" .Image}}
+        </a>
+        {{end}}
       </div>
       <div class="flex flex-wrap items-center gap-3 sm:col-start-1 sm:row-start-2">
         {{template "shopping_recipe_actions" .}}
@@ -287,7 +287,6 @@
 
 {{define "shopping_ready"}}
         <div id="shopping-content" class="p-8">
-          {{template "shopping_image_poll" .}}
           {{if .HelpMessage}}
           <input id="shopping-list-help-dismiss" type="checkbox" class="peer/help sr-only" />
           <aside id="shopping-list-help"
@@ -389,38 +388,4 @@
             {{end}}
           </div>
         </div>
-{{end}}
-
-{{define "shopping_recipe_image"}}
-        {{if .HasImage}}
-        <a href="/recipe/{{.Hash}}" class="w-1/4 shrink-0 overflow-hidden rounded-xl border border-brand-100 bg-brand-50 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 sm:col-start-2 sm:row-span-3 sm:row-start-1 sm:w-full">
-          <img src="{{ShoppingRecipeImageURL .Hash}}"
-               alt="{{.Title}}"
-               class="h-auto w-full object-cover"
-               loading="lazy" />
-        </a>
-        {{end}}
-{{end}}
-
-{{define "shopping_image_poll"}}
-<!-- This hidden element polls for the shopping_images fragment, not the whole page.
-     Each response replaces this poller; once no images are missing, the replacement
-     has no hx-trigger, so polling stops. -->
-<div id="shopping-image-poll" hidden
-     {{if .HasMissingImages}}hx-get="/recipes?h={{.Hash}}&amp;view=images" hx-trigger="every 5s" hx-target="this" hx-swap="outerHTML"{{end}}></div>
-{{end}}
-
-{{define "shopping_images"}}
-<!-- The poller above is the normal swap target. HTMX also processes these
-     out-of-band (hx-swap-oob) updates by matching each image wrapper's ID.
-     innerHTML keeps the existing wrapper and its layout classes. The card grid's
-     has-[img] rule makes room for the image without replacing the card itself. -->
-{{template "shopping_image_poll" .}}
-{{range .Recipes}}
-{{if and .HasImage (not .Dismissed)}}
-<div id="{{.DOMID}}-image" hx-swap-oob="innerHTML">
-  {{template "shopping_recipe_image" .}}
-</div>
-{{end}}
-{{end}}
 {{end}}

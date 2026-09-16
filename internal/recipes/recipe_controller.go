@@ -177,7 +177,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRecipeImagePanel refreshes only the image while save-time generation runs.
+// A 204 leaves the polling placeholder intact; the ready image replaces it.
 func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
 	exists, err := s.images.Exists(r.Context(), hash)
@@ -185,8 +185,12 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "check recipe image: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	renderHTML(w, templates.Recipe, "recipe_image_panel", recipePageView{
-		RecipeImage: recipeImageData(hash, exists, false, true),
+	if !exists {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	renderHTML(w, templates.Recipe, "recipe_image", recipeImageView{
+		Hash: hash, HasImage: true, Thumbnail: r.URL.Query().Get("view") == "shopping",
 	})
 }
 

@@ -447,7 +447,6 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		hash:                hashParam,
 		selection:           selection,
 		helpMessage:         help,
-		imagesOnly:          r.URL.Query().Get("view") == "images",
 		pendingInstructions: instructions,
 		progress:            progress,
 	})
@@ -677,9 +676,6 @@ func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input sho
 	name := "shoppinglist.html"
 	if input.progress.Fragment {
 		name = "shopping_content"
-	}
-	if input.imagesOnly {
-		name = "shopping_images"
 	}
 	view, err := newShoppingListPageView(ctx, input)
 	if err != nil {

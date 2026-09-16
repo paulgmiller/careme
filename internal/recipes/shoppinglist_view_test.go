@@ -646,7 +646,7 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 	assert.Equal(t, hash, page.Recipes[0].Hash)
 }
 
-func TestShoppingImagePollOnlyUpdatesImages(t *testing.T) {
+func TestShoppingImagesPollIndependently(t *testing.T) {
 	for _, ready := range []bool{false, true} {
 		t.Run(strconv.FormatBool(ready), func(t *testing.T) {
 			recipe := list.Recipes[0]
@@ -657,21 +657,15 @@ func TestShoppingImagePollOnlyUpdatesImages(t *testing.T) {
 				list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
 				hash:         "list-hash",
 				recipeImages: map[string]bool{hash: ready},
-				imagesOnly:   true,
 			})
 			body := assertHTTPSuccess(t, w)
-			assert.NotContains(t, body, "<article")
-			assert.NotContains(t, body, "<details")
-			assert.NotContains(t, body, "regenerateForm")
-			assert.NotContains(t, body, "shopping-finalize-controls")
 			if ready {
 				assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
-				assert.Contains(t, body, `hx-swap-oob="innerHTML"`)
 				assert.NotContains(t, body, `hx-trigger=`)
 			} else {
 				assert.Contains(t, body, `hx-trigger="every 5s"`)
-				assert.Contains(t, body, `hx-get="/recipes?h=list-hash&amp;view=images"`)
-				assert.NotContains(t, body, "<img")
+				assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
+				assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
 			}
 		})
 	}

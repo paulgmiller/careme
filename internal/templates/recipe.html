@@ -90,7 +90,11 @@
             {{end}}
             </div>
 
-            <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
+            <div class="print-hidden">
+              <div id="recipe-image-panel" class="hidden has-[img]:block overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+                {{template "recipe_image" .RecipeImage}}
+              </div>
+            </div>
 
             {{template "recipe_properties" .PropertyDisplay}}
 
@@ -393,20 +397,4 @@
   {{end}}
 </div>
 {{end}}
-{{end}}
-
-{{define "recipe_image_panel"}}
-<!-- Save replaces its button and sends this panel as an out-of-band update:
-     HTMX matches recipe-image-panel by ID and replaces only that panel.
-     While generation is pending, the hidden panel polls the image-panel endpoint.
-     Its response uses this same template as a normal outerHTML swap. Once ready,
-     the panel shows the image and omits polling attributes; other page state stays put. -->
-<div id="recipe-image-panel" {{if .RecipeImage.Poll}}hx-get="/recipe/{{.RecipeImage.Hash}}/image-panel" hx-trigger="every 5s" hx-target="this" hx-swap="outerHTML" {{end}}{{if .RecipeImage.OutOfBand}}hx-swap-oob="outerHTML" {{end}}class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
-  {{if .RecipeImage.HasImage}}
-  <img src="/recipe/{{.RecipeImage.Hash}}/image"
-       alt="Generated image of the dish"
-       class="h-auto w-full object-cover"
-       loading="lazy" />
-  {{end}}
-</div>
 {{end}}
