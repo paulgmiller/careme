@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="description" content="Careme helps you find nearby stores and cook fresh, seasonal recipes with ingredients that are close to home." />
-  <title>Careme</title>
+  <meta name="description" content="{{if .Campaign}}{{.Campaign.Blurb}}{{else}}Careme helps you find nearby stores and cook fresh, seasonal recipes with ingredients that are close to home.{{end}}" />
+  <title>{{if .Campaign}}{{.Campaign.Title}} | {{end}}Careme</title>
 
   {{template "app_head" .Style}}
 
@@ -25,7 +25,7 @@
             <div>
               <h1 class="font-display text-3xl font-extrabold sm:text-4xl tracking-tight text-brand-700">Careme</h1>
               <p class="mt-2 text-ink-600">
-                Your personal chef and sommelier.
+                {{if .Campaign}}{{.Campaign.Title}}{{else}}Your personal chef and sommelier.{{end}}
               </p>
             </div>
             {{if .User}}{{template "account_widget" .}}{{end}}
@@ -34,7 +34,7 @@
 
         <!-- Content -->
         <div class="p-4 sm:p-6">
-          {{if .User}}
+          {{if and .User (not .Campaign)}}
           <div class="space-y-4">
             {{if .User.FavoriteStore}}
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
@@ -116,6 +116,9 @@
           {{else}}
           <div class="mx-auto max-w-xl space-y-6">
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
+              {{if .Campaign}}
+              <p class="text-ink-700">{{.Campaign.Blurb}}</p>
+              {{else}}
               <h2 class="text-lg font-semibold text-brand-700">Careme will:</h2>
               <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-700">
                 <li>Check your local store's inventory for fresh meat and seasonal produce.</li>
@@ -125,12 +128,14 @@
                  class="mt-4 inline-flex w-full items-center justify-center rounded-lg border-2 border-brand-300 bg-white/90 px-4 py-2.5 font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                 About Careme
               </a>
+              {{end}}
             </div>
 
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
               <form method="GET" action="/locations" class="mt-3 space-y-2">
-                <label for="zip" class="block text-sm font-medium text-ink-700">
+                {{if .Campaign}}<input type="hidden" name="instructions" value="{{.Campaign.Instructions}}" />{{end}}
+                <label for="zip" class="{{if .Campaign}}sr-only{{else}}block text-sm font-medium text-ink-700{{end}}">
                   Enter ZIP code:
                 </label>
                 <div class="flex flex-col gap-3">
@@ -150,6 +155,7 @@
               </form>
             </div>
 
+            {{if not .Campaign}}
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <p class="mb-3 block text-sm font-medium text-ink-700">Build two recipe lists free, then sign in to keep cooking and save recipes.</p>
               <div class="flex flex-col gap-3">
@@ -163,6 +169,7 @@
                 </a>
               </div>
             </div>
+            {{end}}
           </div>
           {{end}}
         </div>
@@ -194,9 +201,11 @@
         showMessage("Finding nearby stores...");
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            const lat = encodeURIComponent(position.coords.latitude.toString());
-            const lon = encodeURIComponent(position.coords.longitude.toString());
-            window.location.assign(`/locations?lat=${lat}&lon=${lon}`);
+            const params = new URLSearchParams(new FormData(button.form));
+            params.delete("zip");
+            params.set("lat", position.coords.latitude.toString());
+            params.set("lon", position.coords.longitude.toString());
+            window.location.assign(`/locations?${params}`);
           },
           () => {
             showMessage("Sorry, chef. Have to allow location access.");

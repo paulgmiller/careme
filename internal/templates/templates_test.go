@@ -687,6 +687,7 @@ func TestHomeTemplateRendersFavoriteStoreChefNotes(t *testing.T) {
 	}
 
 	data := struct {
+		Campaign          any
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
 		User              *utypes.User
@@ -745,6 +746,7 @@ func TestHomeTemplateOmitsFavoriteStoreChefNotesWithoutFavoriteStore(t *testing.
 	}
 
 	data := struct {
+		Campaign          any
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
 		User              *utypes.User
@@ -786,6 +788,7 @@ func TestHomeTemplateIncludesPWAMetadata(t *testing.T) {
 
 	style := seasons.GetCurrentStyle()
 	data := struct {
+		Campaign        any
 		ClarityScript   template.HTML
 		GoogleTagScript template.HTML
 		Style           seasons.Style
