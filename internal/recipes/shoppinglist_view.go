@@ -144,6 +144,12 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 			Description: recipeViews[0].Description,
 			ImagePath:   "/favicon.ico",
 		}
+		for _, recipe := range recipeViews {
+			if recipe.HasImage {
+				data.Social.ImagePath = "/recipe/" + recipe.Hash + "/image"
+				break
+			}
+		}
 	}
 
 	return data, nil
