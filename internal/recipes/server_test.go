@@ -2028,6 +2028,8 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
 	require.Contains(t, rr.Body.String(), `Dismiss`)
+	require.Contains(t, rr.Body.String(), `id="recipe-image-panel"`)
+	require.Contains(t, rr.Body.String(), `hx-swap-oob="outerHTML"`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
@@ -3034,5 +3036,50 @@ func TestHandleFeedback_RejectsNonHTMXRequest(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+type failingImageExistsStore struct {
+	ImageStore
+}
+
+func (failingImageExistsStore) Exists(context.Context, string) (bool, error) {
+	return false, errors.New("image cache unavailable")
+}
+
+func TestHandleRecipeImagePanel(t *testing.T) {
+	for _, state := range []string{"pending", "ready", "error"} {
+		t.Run(state, func(t *testing.T) {
+			s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
+			if state == "ready" {
+				require.NoError(t, s.images.Save(t.Context(), "recipe-hash", &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
+			}
+			if state == "error" {
+				s.images = failingImageExistsStore{ImageStore: s.images}
+			}
+			req := httptest.NewRequest(http.MethodGet, "/recipe/recipe-hash/image-panel", nil)
+			req.SetPathValue("hash", "recipe-hash")
+			rr := httptest.NewRecorder()
+			s.handleRecipeImagePanel(rr, req)
+			if state == "error" {
+				require.Equal(t, http.StatusInternalServerError, rr.Code)
+				require.NotContains(t, rr.Body.String(), "recipe-image-panel")
+				return
+			}
+			require.Equal(t, http.StatusOK, rr.Code)
+			body := rr.Body.String()
+			require.Contains(t, body, `id="recipe-image-panel"`)
+			require.NotContains(t, body, "hx-swap-oob=")
+			require.NotContains(t, body, "<form")
+			require.NotContains(t, body, "<details")
+			if state == "pending" {
+				require.Contains(t, body, `hx-get="/recipe/recipe-hash/image-panel"`)
+				require.Contains(t, body, `hx-trigger="every 5s"`)
+				require.NotContains(t, body, "<img")
+			} else {
+				require.Contains(t, body, `src="/recipe/recipe-hash/image"`)
+				require.NotContains(t, body, "hx-trigger=")
+			}
+		})
 	}
 }

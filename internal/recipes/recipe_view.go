@@ -16,9 +16,10 @@ import (
 
 type recipeImageView struct {
 	HasImage bool
+	Poll     bool
 	Hash     string
 	// OutOfBand lets the shared panel template opt into the HTMX outerHTML swap
-	// used by the image-generation response without duplicating the panel markup.
+	// used by the save response without duplicating the panel markup.
 	OutOfBand bool
 }
 
@@ -101,7 +102,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Thread:                  thread,
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
-		RecipeImage:             recipeImageData(recipeHash, input.hasRecipeImage, false),
+		RecipeImage:             recipeImageData(recipeHash, input.hasRecipeImage, false, input.saved),
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,
@@ -115,9 +116,10 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 	return data, nil
 }
 
-func recipeImageData(recipeHash string, hasImage bool, outOfBand bool) recipeImageView {
+func recipeImageData(recipeHash string, hasImage bool, outOfBand, poll bool) recipeImageView {
 	return recipeImageView{
 		HasImage:  hasImage,
+		Poll:      poll && !hasImage,
 		Hash:      recipeHash,
 		OutOfBand: outOfBand,
 	}

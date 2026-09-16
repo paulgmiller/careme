@@ -179,6 +179,12 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 		if err := templates.Recipe.ExecuteTemplate(&response, "recipe_save_action", newRecipeSaveActionView(recipe, shoppingListHash, saved)); err != nil {
 			return fmt.Errorf("render recipe save action: %w", err)
 		}
+		if saved {
+			view := recipePageView{RecipeImage: recipeImageData(recipeHash, s.recipeImageExistsForCard(ctx, recipeHash), true, true)}
+			if err := templates.Recipe.ExecuteTemplate(&response, "recipe_image_panel", view); err != nil {
+				return fmt.Errorf("render saved recipe image panel: %w", err)
+			}
+		}
 	} else {
 		if err := writeShoppingRecipeCard(&response, recipe, shoppingRecipeInput{
 			Saved:              saved,
