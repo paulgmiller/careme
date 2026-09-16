@@ -137,10 +137,10 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AdminURL:             "/admin/mealplan/" + input.hash,
 	}
 
-	data.Page.Title = "Recipes for " + data.Location.Name
-	data.Page.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
+	data.Title = "Recipes for " + data.Location.Name
+	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
 	if len(recipeViews) > 0 {
-		data.Page.Social = &templates.SocialPreview{
+		data.Social = &templates.SocialPreview{
 			Title:       recipeViews[0].Title,
 			Description: recipeViews[0].Description,
 			ImagePath:   "/favicon.ico",
