@@ -68,7 +68,7 @@ func RegisterLanding(routes routing.Registrar, users landingUserLookup, authClie
 			Style:           seasons.GetCurrentStyle(),
 			ServerSignedIn:  user != nil,
 		}
-		if err := templates.Home.Execute(w, data); err != nil {
+		if err := templates.CampaignLanding.Execute(w, data); err != nil {
 			slog.ErrorContext(ctx, "campaign template execute error", "error", err)
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}

@@ -54,7 +54,6 @@ func (h home) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data := struct {
-		Campaign          any
 		ClarityScript     template.HTML
 		GoogleTagScript   template.HTML
 		User              *utypes.User

@@ -38,6 +38,7 @@ const (
 var htmlFiles embed.FS
 
 var Home,
+	CampaignLanding,
 	Spin,
 	AuthEstablish,
 	AccountRequired,
@@ -81,6 +82,7 @@ func Init(config *config.Config) error {
 		return err
 	}
 	Home = ensure(tmpls, "home.html")
+	CampaignLanding = ensure(tmpls, "campaign_landing.html")
 	Spin = ensure(tmpls, "spinner.html")
 	AuthEstablish = ensure(tmpls, "auth_establish.html")
 	AccountRequired = ensure(tmpls, "account_required.html")
