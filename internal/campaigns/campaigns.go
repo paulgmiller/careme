@@ -1,6 +1,7 @@
 package campaigns
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -21,6 +22,14 @@ func Register(mux routing.Registrar, users landingUserLookup, authClient auth.Au
 	for name, campaign := range AdvertisedRecipeLocations() {
 		mux.HandleFunc("GET /c/"+name, redirectToLocation(campaign.Location.ID, campaign.HelpMessage))
 	}
+}
+
+func SitemapUrls(_ context.Context) []string {
+	var urls []string
+	for key := range dinnerCampaigns {
+		urls = append(urls, "/c/"+key)
+	}
+	return urls
 }
 
 func redirectToLocation(location string, helpMessage string) http.HandlerFunc {

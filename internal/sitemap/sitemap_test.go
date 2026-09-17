@@ -67,7 +67,7 @@ func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedCount := len(hashes) + 1 // recipe URLs + static about page; advertised pages need cached params
+	expectedCount := len(hashes) + 3 // recipe URLs + static about page; advertised pages need cached params
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
 	}
@@ -103,7 +103,9 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedURLs := append([]string{testPublicOrigin + "/about"}, expectedAdvertisedURLs...)
+	expectedURLs := []string{testPublicOrigin + "/about", testPublicOrigin + "/c/fancy", testPublicOrigin + "/c/budget"}
+	expectedURLs = append(expectedURLs, expectedAdvertisedURLs...)
+
 	if len(parsed.URLs) != len(expectedURLs) {
 		t.Fatalf("expected %d sitemap urls, got %d: %s", len(expectedURLs), len(parsed.URLs), rr.Body.String())
 	}
@@ -185,7 +187,7 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedCount := 2
+	expectedCount := 4
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d URLs (about + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
@@ -219,7 +221,7 @@ func TestHandleSitemapIncludesFeedbackWithoutCachedRecipe(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	expectedCount := 2
+	expectedCount := 4
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d URLs (about + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
@@ -255,7 +257,7 @@ func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	expectedCount := 1
+	expectedCount := 3
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d URLs (about) with no feedback or advertised params, got %d", expectedCount, len(parsed.URLs))
 	}
