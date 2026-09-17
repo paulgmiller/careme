@@ -20,9 +20,12 @@ type landingCampaign struct {
 // Add dinner campaigns here; each uses the same landing page.
 var dinnerCampaigns = map[string]landingCampaign{
 	"budget": {
-		Title:        "Good dinners. Smaller grocery bills.",
-		Blurb:        "Make your grocery budget go further. Find your local store, then let Careme help you cook satisfying dinners with affordable ingredients, smart swaps, and less food waste.",
-		Instructions: "Plan budget-conscious dinners with keeping the total grocery bill low as the top priority. Favor affordable staples, economical proteins, and seasonal produce. Unless dietary preferences require otherwise, include meat, poultry, or fish as a main protein in more than half of the dinners. Choose economical cuts and sensible portions, stretching them with beans, grains, and vegetables rather than making most dinners vegetarian. Reuse ingredients across dinners, make good use of leftovers, and avoid expensive specialty ingredients or one-off purchases. Suggest lower-cost substitutions while keeping meals satisfying and varied. Use available price information to guide choices; do not invent prices or promise specific savings.",
+		Title: "Good dinners. Smaller grocery bills.",
+		Blurb: "Make your grocery budget go further. Find your local store, then let Careme help you cook satisfying dinners with affordable ingredients, smart swaps, and less food waste.",
+		// This had a problem with doubling down on lentils as a non protein was used in anchor ingredient
+		// Could modify menuplan https://github.com/paulgmiller/careme/pull/938
+		// Also could benefit from size info https://github.com/paulgmiller/careme/pull/807
+		Instructions: "Plan budget-conscious dinners with keeping the total grocery bill low as the top priority. Favor affordable staples, economical proteins, and seasonal produce. Unless dietary preferences require otherwise, include meat, poultry, or fish as a main protein in more than half of the dinners. Choose economical cuts and sensible portions, stretching them with beans, grains, and vegetables rather than making most dinners vegetarian. Reuse ingredients across dinners, make good use of leftovers, and avoid expensive specialty ingredients or one-off purchases. Suggest lower-cost substitutions while keeping meals satisfying and varied. Okay to spread a good deal value pack across two meals as long as other things differ. Use available price information to guide choices; do not invent prices or promise specific savings.",
 	},
 	"fancy": {
 		Title:        "Make dinner an occasion.",
