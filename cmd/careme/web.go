@@ -65,7 +65,6 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
-	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
 	appredirect.Register(infraRoutes)
 
@@ -177,7 +176,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
-	campaigns.RegisterLanding(appRoutes, userStorage, authClient)
+	campaigns.Register(appRoutes, userStorage, authClient)
 	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.

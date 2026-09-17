@@ -32,24 +32,25 @@ func TestLandingRoutes(t *testing.T) {
 		userErr error
 		status  int
 	}{
-		{"budget landing", http.MethodGet, "/c/budget-dinners", auth.ErrNoSession, http.StatusOK},
-		{"guest landing", http.MethodGet, "/c/fancy-dinners", auth.ErrNoSession, http.StatusOK},
+		{"budget landing", http.MethodGet, "/c/budget", auth.ErrNoSession, http.StatusOK},
+		{"guest landing", http.MethodGet, "/c/fancy", auth.ErrNoSession, http.StatusOK},
+		{"landing subpath", http.MethodGet, "/c/fancy/extra", auth.ErrNoSession, http.StatusNotFound},
 		{"unknown campaign", http.MethodGet, "/c/missing", auth.ErrNoSession, http.StatusNotFound},
-		{"old URL", http.MethodGet, "/campaigns/fancy-dinners", auth.ErrNoSession, http.StatusNotFound},
-		{"POST rejected", http.MethodPost, "/c/fancy-dinners", auth.ErrNoSession, http.StatusMethodNotAllowed},
-		{"account failure", http.MethodGet, "/c/fancy-dinners", errors.New("account unavailable"), http.StatusInternalServerError},
+		{"old URL", http.MethodGet, "/campaigns/fancy", auth.ErrNoSession, http.StatusNotFound},
+		{"POST rejected", http.MethodPost, "/c/fancy", auth.ErrNoSession, http.StatusMethodNotAllowed},
+		{"account failure", http.MethodGet, "/c/fancy", errors.New("account unavailable"), http.StatusInternalServerError},
 		{"existing redirect", http.MethodGet, "/c/issaquah", auth.ErrNoSession, http.StatusFound},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			Register(mux)
-			RegisterLanding(mux, landingUserStub{err: tt.userErr}, auth.DefaultMock())
+			Register(mux, landingUserStub{err: tt.userErr}, auth.DefaultMock())
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, httptest.NewRequest(tt.method, tt.path, nil))
 			require.Equal(t, tt.status, response.Code)
 			if tt.status == http.StatusOK {
 				c := dinnerCampaigns[strings.TrimPrefix(tt.path, "/c/")]
-				assert.Contains(t, response.Body.String(), c.Title)
+				assert.Contains(t, response.Body.String(), "<title>"+c.Title+" | Careme</title>")
+				assert.Contains(t, response.Body.String(), `<meta name="description" content="`+c.Blurb+`" />`)
 				assert.Contains(t, response.Body.String(), c.Blurb)
 				assert.Contains(t, response.Body.String(), c.Instructions)
 				assert.Contains(t, response.Body.String(), "Use your location")

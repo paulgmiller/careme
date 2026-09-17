@@ -16,8 +16,8 @@ func TestCampaignLandingAndInstructions(t *testing.T) {
 	defer srv.Close()
 	client := newTestClient(t)
 	for _, campaign := range []struct{ slug, title string }{
-		{"fancy-dinners", "Make dinner an occasion."},
-		{"budget-dinners", "Good dinners. Smaller grocery bills."},
+		{"fancy", "Make dinner an occasion."},
+		{"budget", "Good dinners. Smaller grocery bills."},
 	} {
 		t.Run(campaign.slug, func(t *testing.T) {
 			body := mustGetBody(t, client, srv.URL+"/c/"+campaign.slug)

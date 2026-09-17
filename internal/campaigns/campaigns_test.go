@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"testing"
 
+	"careme/internal/auth"
 	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func TestIssaquahRedirect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			Register(mux)
+			Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
 
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, tt.request, nil)
@@ -74,7 +75,7 @@ func TestIssaquahRedirect(t *testing.T) {
 
 func TestBellevueRedirectSetsCampaignHelp(t *testing.T) {
 	mux := http.NewServeMux()
-	Register(mux)
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/c/bellevue", nil)
@@ -90,7 +91,7 @@ func TestBellevueRedirectSetsCampaignHelp(t *testing.T) {
 
 func TestCampaignRoutesOnlyAcceptGET(t *testing.T) {
 	mux := http.NewServeMux()
-	Register(mux)
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
 
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/c/issaquah", nil)

@@ -4,12 +4,20 @@ import (
 	"net/http"
 	"net/url"
 
+	"careme/internal/auth"
 	"careme/internal/recipes"
 	"careme/internal/routing"
 )
 
-// Register adds campaign redirect routes to mux.
-func Register(mux routing.Registrar) {
+// Register adds campaign landing pages and store redirect routes to mux.
+func Register(mux routing.Registrar, users landingUserLookup, authClient auth.AuthClient) {
+	for name, campaign := range dinnerCampaigns {
+		mux.Handle("GET /c/"+name, landingHandler{
+			campaign:   campaign,
+			users:      users,
+			authClient: authClient,
+		})
+	}
 	for name, campaign := range AdvertisedRecipeLocations() {
 		mux.HandleFunc("GET /c/"+name, redirectToLocation(campaign.Location.ID, campaign.HelpMessage))
 	}
