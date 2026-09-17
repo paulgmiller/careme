@@ -194,9 +194,11 @@
         showMessage("Finding nearby stores...");
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            const lat = encodeURIComponent(position.coords.latitude.toString());
-            const lon = encodeURIComponent(position.coords.longitude.toString());
-            window.location.assign(`/locations?lat=${lat}&lon=${lon}`);
+            const params = new URLSearchParams(new FormData(button.form));
+            params.delete("zip");
+            params.set("lat", position.coords.latitude.toString());
+            params.set("lon", position.coords.longitude.toString());
+            window.location.assign(`/locations?${params}`);
           },
           () => {
             showMessage("Sorry, chef. Have to allow location access.");

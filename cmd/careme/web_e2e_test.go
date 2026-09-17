@@ -15,6 +15,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
@@ -225,6 +226,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
+	campaigns.Register(appRoutes, userStorage, mockAuth)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
