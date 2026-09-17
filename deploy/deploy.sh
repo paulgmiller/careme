@@ -40,6 +40,7 @@ fi
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
 advertised_recipes_schedule="0 9 * * *"
+advertised_recipes_suspend="false"
 aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
 albertsons_reese84_schedule="0 */6 * * *"
@@ -54,6 +55,8 @@ if [[ "${namespace}" == "caremetest" ]]; then
             - name: WEGMANS_ENABLE
               value: "false"'
   advertised_recipes_schedule="0 9 1,15 * *"
+  # Keep the job available for manual runs while automatic test runs are paused.
+  advertised_recipes_suspend="true"
   aldi_scrape_schedule="45 6 1,15 * *"
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
@@ -152,7 +155,13 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
+    if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
+      kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
+    else
+      cat
+    fi
+  } | kubectl apply -f - -n "${namespace}"
 done
 
 echo "Waiting for rollout of deployment/careme"
