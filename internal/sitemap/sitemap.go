@@ -73,7 +73,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		entries = append(entries, urlEntry{Loc: s.publicOrigin + url})
 	}
 
-	//todo move advertisedRecipeURLs to campaigns
+	// todo move advertisedRecipeURLs to campaigns
 	advertisedURLs := s.advertisedRecipeURLs(ctx)
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
 	for _, advertisedURL := range advertisedURLs {
