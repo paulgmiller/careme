@@ -23,26 +23,34 @@ type landingCampaign struct {
 // Add dinner campaigns here; each uses the same landing page.
 var dinnerCampaigns = map[string]landingCampaign{
 	"vegetarian": {
-		Label: "Vegetarian dinners",
-		Title: "Vegetarian dinners worth gathering for.",
-		Blurb: "Plan satisfying, vegetable-forward dinners with ingredients from your local store.",
+		Label:    "Vegetarian dinners",
+		Title:    "Vegetarian dinners worth gathering for.",
+		ImageURL: "https://test.careme.cooking/recipe/ypaq_eTdA-kcqsFBMzhu8g==/image",
+		// alternate? try both or rotate?
+		// https://test.careme.cooking/recipe/zI5K_3qSEW68oYS-gsggPQ==
+		ImageAlt: "Quinoa-Stuffed Acorn Squash with Sage-Walnut Butter",
+		Blurb:    "Plan satisfying, vegetable-forward dinners with ingredients from your local store.",
 		Instructions: `Plan dinners that are vegetarian and plant-forward. Exclude meat, poultry, fish, seafood, and ingredients made from them, such as meat stocks and fish sauce. Eggs and dairy are welcome; meals do not need to be vegan.
 Build satisfying meals around vegetables, beans, lentils, whole grains, mushrooms, tofu, eggs, dairy, nuts, and seeds rather than trying to imitate meat in every dish. Prioritize substantial mains with enough protein and variety to feel like complete dinners.
 Favor naturally vegetarian dishes from cuisines where vegetables and legumes already play a central role.
 `,
 	},
 	"mediterranean": {
-		Label: "Mediterranean dinners",
-		Title: "Bring Mediterranean flavor to your weeknight.",
-		Blurb: "Plan bright, flavorful dinners with colorful vegetables, fresh herbs, and ingredients from your local store.",
+		Label:    "Mediterranean dinners",
+		Title:    "Bring Mediterranean flavor to your weeknight.",
+		ImageURL: "https://test.careme.cooking/recipe/ow5OI8HH1fVzMmOlSwdaxQ==/image",
+		ImageAlt: "Sicilian Coho with Lemon-Oregano Sauce",
+		Blurb:    "Plan bright, flavorful dinners with colorful vegetables, fresh herbs, and ingredients from your local store.",
 		Instructions: `Plan dinners inspired by a Mediterranean eating pattern. Favor vegetables, legumes, whole grains, fish, poultry, olive oil, nuts, herbs, yogurt, and modest amounts of cheese. Use red meat and highly processed foods sparingly.
 Prefer simple, flavorful dishes inspired by Mediterranean cuisines rather than generic healthy food. Keep meals practical enough for normal weeknight cooking.
 `,
 	},
 	"low-carb": {
-		Label: "Lower-carb dinners",
-		Title: "Less starch. Plenty to love at dinner.",
-		Blurb: "Plan satisfying dinners with plenty of protein, vegetables, and flavor, using ingredients from your local store.",
+		Label:    "Lower-carb dinners",
+		Title:    "Less starch. Plenty to love at dinner.",
+		ImageURL: "https://test.careme.cooking/recipe/8cP4ytgJI2IjqPzsFy_eNw==/image",
+		ImageAlt: "Chilean-Inspired Steak with Pebre & Peppers",
+		Blurb:    "Plan satisfying dinners with plenty of protein, vegetables, and flavor, using ingredients from your local store.",
 		Instructions: `Plan satisfying lower-carbohydrate dinners by emphasizing protein, vegetables, healthy fats, and flavorful sauces while reducing reliance on bread, pasta, rice, potatoes, and other starch-heavy sides.
 Prefer dishes that are naturally low in carbohydrates rather than awkward substitutions. Do not assume strict ketogenic macros or eliminate carbohydrates entirely.
 `,
@@ -51,6 +59,9 @@ Prefer dishes that are naturally low in carbohydrates rather than awkward substi
 		Label: "Budget-friendly dinners",
 		Title: "Good dinners. Smaller grocery bills.",
 		Blurb: "Plan satisfying dinners around affordable ingredients at your local store.",
+		// too adventurous for budget shoppers?
+		ImageURL: "https://test.careme.cooking/recipe/KOkQwF_Ayu5grbyo7EWM2Q==/image",
+		ImageAlt: "Persian-Inspired Beef & Lentil-Stuffed Squash",
 		// This had a problem with doubling down on lentils as a non protein was used in anchor ingredient
 		// Could modify menuplan https://github.com/paulgmiller/careme/pull/938
 		// Also could benefit from size info https://github.com/paulgmiller/careme/pull/807
