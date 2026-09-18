@@ -10,9 +10,9 @@ This project stores cache entries in:
 - Local filesystem under `publix/` (Publix cache)
 - Local filesystem under `wholefoods/` (Whole Foods cache)
 - Local filesystem under `farmersmarket/` (Farmers Market cache)
-- Local filesystem under `recipe-images/` (recipe image cache)
+- Local filesystem under `images/` (recipe image cache)
 - Azure Blob container `recipes` (default app cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
-- Azure Blob container `recipe-images` (recipe image cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
+- Azure Blob container `images` (recipe image cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `aldi` (ALDI cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `albertsons` (Albertsons-family cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
 - Azure Blob container `publix` (Publix cache when `AZURE_STORAGE_ACCOUNT_NAME` is set)
@@ -35,8 +35,8 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `generation_status/` | JSON generation attempt (`started_at`, optional rolling `message`, optional reported `error`, optional result `redirect`, ordered `slots` containing meal-plan metadata and a final `recipe_hash` once each recipe finishes generation and revision) keyed by shopping hash for a full plan or by the URL-safe regeneration ID for a single-recipe update; older JSON records without slots show the planning stage | `internal/recipes/status/generation_status.go` via full-plan and single-recipe generation handlers, with progress updates from `internal/recipes/generator.go` | `internal/recipes/status/generation_status.go` via progressive shopping-list polling, single-recipe spinner, result redirect, and retry handling |
 | `recipe_prompts/` | JSON `ai.PromptRecord` (`created_at`, `response_id`, `model`, optional `instructions`, optional `previous_response_id`, OpenAI `input`) keyed by `<response_id>.json` for recipe generation evals | `internal/recipes/prompts/recorder.go` via `internal/ai/client.go` for successful initial generation and regeneration responses | Admin prompt endpoints in `internal/recipes/prompts/admin.go` and eval-building workflows that find the response ID on `shoppinglist/` records, then join prompt fields with `recipe_critiques/` |
 | `recipe/` | JSON `ai.Recipe` (one recipe per hash) | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`SingleFromCache`) |
-| `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
-| `wine_recommendations/` | Plain text wine recommendation keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
+| `recipes/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `images` cache backend | `internal/recipes/image.go` (`imageStore.Save`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`imageStore.FromCache`, `imageStore.Exists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
+| `wine_recommendations/` | JSON `ai.WineSelection` (wine ingredients and commentary) keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
@@ -100,7 +100,7 @@ The suffix is enabled by comparing the complete `RecipeProperties` value with it
 Recipe hashes are used by or stored in:
 
 - `recipe/<hash>` recipe records and `/recipe/{hash}` routes.
-- `recipes/<hash>` in the dedicated `recipe-images` backend.
+- `recipes/<hash>` in the dedicated `images` backend.
 - `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
 - recipe-regeneration job identity.
 - `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
@@ -126,12 +126,12 @@ Compatibility implications:
 - HEB `reese84` cookie refresh also uses `cache.EnsureCache("heb")`; the latest record is overwritten while timestamped history remains append-only.
 - Publix uses a separate cache created via `cache.EnsureCache("publix")`; it does not share the `recipes` container/directory.
 - Publix `_abck` cookie refresh also uses `cache.EnsureCache("publix")`; the latest record is overwritten while timestamped history remains append-only.
-- Recipe images use a separate cache created via `cache.EnsureCache("recipe-images")`; they do not share the main `recipes` container/directory.
+- Recipe images use a separate cache created via `cache.EnsureCache("images")`; they do not share the main `recipes` container/directory.
 - Whole Foods uses a separate cache created via `cache.EnsureCache("wholefoods")`; it does not share the `recipes` container/directory.
 - Farmers Market uses a separate cache created via `cache.EnsureCache("farmersmarket")`; it does not share the `recipes` container/directory.
 - Local cache paths when filesystem backend is used. are
   - `recipes/` for most app data,
-  - `recipe-images/` for recipe images,
+  - `images/` for recipe images,
   - `aldi/` for ALDI data,
   - `albertsons/` for Albertsons-family data,
   - `heb/` for HEB data,

@@ -72,6 +72,28 @@ go run ./cmd/ingredientreview
 Then open `http://127.0.0.1:8090/grader`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
 
 
+## Migrate a recipe from test to production
+
+Preview the recipe, image, and wine pairing copy, then apply it:
+
+```sh
+go run ./cmd/migraterecipe -hash '<recipe-hash>'
+go run ./cmd/migraterecipe -hash '<recipe-hash>' -apply
+```
+
+Credentials are read independently from `.envtest` and `.envprod`, each containing
+`AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY`. Override
+paths with `-source-env` and `-destination-env`. Shell environment credentials are
+not used. Both accounts and their `recipes` and `images` containers must already exist.
+
+All three source records are required. The tool copies their exact bytes and keys,
+verifies each write, and leaves the source intact. Identical destination records
+are accepted; conflicting records are rejected without overwriting. It checks all
+records before writing and copies the recipe last. Azure does not provide a
+transaction across these blobs: a failed run can leave earlier copies in place;
+rerun the command to resume. User state, shopping lists, and generation history
+are not included, so links to the recipe's original shopping list may be unavailable.
+
 ## Cache Key Layout
 See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key/prefix layout and backend notes.
 

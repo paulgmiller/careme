@@ -34,6 +34,14 @@ func NewBlobCache(container string, transport http.RoundTripper) (*BlobCache, er
 		return nil, fmt.Errorf("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY could not be found")
 	}
 
+	return NewBlobCacheForAccount(container, accountName, accountKey, transport)
+}
+
+// NewBlobCacheForAccount connects to an explicit account without changing process environment.
+func NewBlobCacheForAccount(container, accountName, accountKey string, transport http.RoundTripper) (*BlobCache, error) {
+	if accountName == "" || accountKey == "" {
+		return nil, fmt.Errorf("storage account name and key are required")
+	}
 	cred, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shared key credential: %w", err)
