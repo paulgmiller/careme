@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -56,7 +57,16 @@ func TestLandingRoutes(t *testing.T) {
 				assert.Contains(t, response.Body.String(), `<meta name="description" content="`+c.Blurb+`" />`)
 				assert.Contains(t, response.Body.String(), c.Blurb)
 				assert.Contains(t, response.Body.String(), c.Instructions)
-				assert.Contains(t, response.Body.String(), "Use your location")
+				assert.Contains(t, response.Body.String(), "Use my location")
+				assert.Contains(t, response.Body.String(), `autocomplete="postal-code"`)
+				assert.Contains(t, response.Body.String(), "Find nearby stores")
+				if c.ImageURL != "" {
+					assert.Contains(t, response.Body.String(), c.ImageURL)
+					assert.Contains(t, response.Body.String(), `alt="`+html.EscapeString(c.ImageAlt)+`"`)
+					assert.NotContains(t, response.Body.String(), "Dinner photo coming soon")
+				} else {
+					assert.Contains(t, response.Body.String(), "Dinner photo coming soon")
+				}
 				assert.NotContains(t, response.Body.String(), "Your kitchen")
 			}
 		})

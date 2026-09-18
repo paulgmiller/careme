@@ -9,56 +9,60 @@
   {{template "seasonal_background" .}}
 
   <main class="relative z-10 px-4 py-4 sm:py-8">
-    <section class="mx-auto w-full max-w-3xl">
-      <div class="friendly-card border border-brand-100 bg-white/88 shadow-2xl backdrop-blur-[2px]">
-        <!-- Header -->
-        <div class="border-b border-brand-100 p-4 sm:p-6">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h1 class="font-display text-3xl font-extrabold sm:text-4xl tracking-tight text-brand-700">Careme</h1>
-              <p class="mt-2 text-ink-600">
-                {{.Campaign.Title}}
-              </p>
-            </div>
-            {{if .User}}{{template "account_widget" .}}{{end}}
-          </div>
-        </div>
+    <section class="mx-auto w-full max-w-6xl" aria-labelledby="campaign-title">
+      <header class="mb-4 flex items-center justify-between px-2 sm:mb-6">
+        <a href="/" class="font-display text-2xl font-extrabold tracking-tight text-brand-700">Careme</a>
+        {{if .User}}{{template "account_widget" .}}{{end}}
+      </header>
 
-        <!-- Content -->
-        <div class="p-4 sm:p-6">
-          <div class="mx-auto max-w-xl space-y-6">
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
-              <p class="text-ink-700">{{.Campaign.Blurb}}</p>
-            </div>
+      <div class="friendly-card overflow-hidden border border-brand-100 bg-white/95 shadow-xl">
+        <div class="grid lg:grid-cols-2">
+          <div class="p-6 sm:p-10 lg:p-12">
+            <p class="text-xs font-semibold uppercase tracking-widest text-brand-700">{{.Campaign.Label}}</p>
+            <h1 id="campaign-title" class="mt-3 font-display text-4xl font-extrabold leading-tight tracking-tight text-brand-800 sm:text-5xl">{{.Campaign.Title}}</h1>
+            <p class="mt-4 text-base leading-relaxed text-ink-600 sm:text-lg">{{.Campaign.Blurb}}</p>
 
-            <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
-              <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
-              <form method="GET" action="/locations" class="mt-3 space-y-2">
-                <input type="hidden" name="instructions" value="{{.Campaign.Instructions}}" />
-                <label for="zip" class="sr-only">
-                  Enter ZIP code:
-                </label>
-                <div class="flex flex-col gap-3">
-                  <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
-                        placeholder="Enter zip code e.g. 90210"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
-                  <button type="submit"
-                          class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Find stores
+            <form method="GET" action="/locations" class="mt-6 sm:mt-8">
+              <input type="hidden" name="instructions" value="{{.Campaign.Instructions}}" />
+              <label for="zip" class="block text-sm font-semibold text-ink-900">ZIP code</label>
+              <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+                <div class="relative min-w-0 w-full sm:flex-1">
+                  <input id="zip" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" pattern="\d{5}" maxlength="5" required
+                         placeholder="e.g. 98101" aria-describedby="location-help"
+                         class="w-full rounded-xl border border-brand-300 bg-white py-3 pl-4 pr-14 text-base text-ink-900 placeholder-ink-500 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                  <button type="button" id="use-location-btn" aria-label="Use my location" title="Use my location"
+                          class="absolute inset-y-0 right-1 my-auto inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50 hover:text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-60">
+                    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
                   </button>
-                  <button type="button" id="use-location-btn"
-                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Use your location
-                  </button>
-                  <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>
-              </form>
-            </div>
-
+                <button type="submit"
+                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-brand-700 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+                  Find nearby stores <span aria-hidden="true">→</span>
+                </button>
+              </div>
+              <p id="location-help" class="mt-3 text-sm leading-relaxed text-ink-600">Choose your store, then build your dinner plan.</p>
+              <p id="use-location-message" class="hidden mt-2 text-sm text-ink-600" aria-live="polite"></p>
+            </form>
           </div>
+
+          <figure class="relative min-h-64 bg-brand-50 lg:min-h-full">
+            {{if .Campaign.ImageURL}}
+            <img src="{{.Campaign.ImageURL}}" alt="{{.Campaign.ImageAlt}}" width="1024" height="1024" fetchpriority="high"
+                 class="h-72 w-full object-cover sm:h-96 lg:absolute lg:inset-0 lg:h-full" />
+            <figcaption class="absolute bottom-4 left-4 rounded-full bg-white/95 px-4 py-2 text-xs font-medium text-brand-800">A little dinner inspiration</figcaption>
+            {{else}}
+            <div class="flex h-72 flex-col items-center justify-center gap-4 p-8 text-center text-brand-700 sm:h-96 lg:h-full">
+              <svg aria-hidden="true" width="112" height="112" viewBox="0 0 112 112" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="56" cy="56" r="34"/><circle cx="56" cy="56" r="25"/>
+                <path d="M10 24v22c0 6 10 6 10 0V24M15 24v66M99 24c-8 10-8 28 0 30v36M99 24v30"/>
+              </svg>
+              <div><p class="font-display text-2xl font-bold">{{.Campaign.Label}}</p><p class="mt-2 text-sm">Dinner photo coming soon</p></div>
+            </div>
+            {{end}}
+          </figure>
         </div>
       </div>
-
+      <p class="mt-5 text-center text-sm text-brand-800">Your store. Your ingredients. Something delicious for dinner.</p>
     </section>
   </main>
   {{template "clerk_refresh.html" .}}
@@ -78,10 +82,12 @@
 
       button.addEventListener("click", () => {
         if (!navigator.geolocation) {
-          showMessage("Sorry, chef. Location is not available in this browser.");
+          showMessage("Location is not available in this browser. Enter your ZIP code instead.");
+          document.getElementById("zip").focus();
           return;
         }
 
+        button.disabled = true;
         showMessage("Finding nearby stores...");
         navigator.geolocation.getCurrentPosition(
           (position) => {
@@ -92,7 +98,9 @@
             window.location.assign(`/locations?${params}`);
           },
           () => {
-            showMessage("Sorry, chef. Have to allow location access.");
+            button.disabled = false;
+            showMessage("We couldn’t get your location. Enter your ZIP code instead.");
+            document.getElementById("zip").focus();
           },
           { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
         );
