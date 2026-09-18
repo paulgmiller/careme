@@ -61,15 +61,20 @@ type urlEntry struct {
 }
 
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
-	feedbackHashes, err := s.cache.List(r.Context(), feedback.RecipeFeedbackPrefix(), "")
+	ctx := r.Context()
+	feedbackHashes, err := s.cache.List(ctx, feedback.RecipeFeedbackPrefix(), "")
 	if err != nil {
 		http.Error(w, "failed to load sitemap", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "failed to read feedback urls", "error", err)
+		slog.ErrorContext(ctx, "failed to read feedback urls", "error", err)
 		return
 	}
+	entries := make([]urlEntry, 0, len(feedbackHashes)+10)
+	for _, url := range campaigns.SitemapUrls(ctx) {
+		entries = append(entries, urlEntry{Loc: s.publicOrigin + url})
+	}
 
-	advertisedURLs := s.advertisedRecipeURLs(r.Context())
-	entries := make([]urlEntry, 0, len(feedbackHashes)+1+len(advertisedURLs))
+	// todo move advertisedRecipeURLs to campaigns
+	advertisedURLs := s.advertisedRecipeURLs(ctx)
 	entries = append(entries, urlEntry{Loc: s.publicOrigin + "/about"})
 	for _, advertisedURL := range advertisedURLs {
 		entries = append(entries, urlEntry{Loc: advertisedURL})
@@ -78,14 +83,14 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	// this is going to get too  big.  at some point we need a real db to find latest
 	for _, hash := range feedbackHashes {
 		// would be really strange if recipe had feedback but didn't exist.
-		// exists, err := s.cache.Exists(r.Context(), recipes.SingleRecipeCacheKey(hash))
+		// exists, err := s.cache.Exists(ctx, recipes.SingleRecipeCacheKey(hash))
 		entries = append(entries, urlEntry{Loc: s.publicOrigin + "/recipe/" + hash})
 	}
-	slog.InfoContext(r.Context(), "serving sitemap with recipe urls", "count", len(entries), "feedback_count", len(feedbackHashes))
+	slog.InfoContext(ctx, "serving sitemap with recipe urls", "count", len(entries), "feedback_count", len(feedbackHashes))
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	if _, err := w.Write([]byte(xml.Header)); err != nil {
-		slog.ErrorContext(r.Context(), "failed to write sitemap header", "error", err)
+		slog.ErrorContext(ctx, "failed to write sitemap header", "error", err)
 		return
 	}
 	if err := xml.NewEncoder(w).Encode(urlSet{
