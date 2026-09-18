@@ -19,6 +19,28 @@ type landingCampaign struct {
 
 // Add dinner campaigns here; each uses the same landing page.
 var dinnerCampaigns = map[string]landingCampaign{
+	"vegetarian": {
+		Title: "Vegetarian dinners worth gathering for.",
+		Blurb: "Put vegetables at the center of dinner. Find your local store, then let Careme help you cook satisfying vegetarian meals with beans, lentils, whole grains, and plenty of variety.",
+		Instructions: `Plan dinners that are vegetarian and plant-forward. Exclude meat, poultry, fish, seafood, and ingredients made from them, such as meat stocks and fish sauce. Eggs and dairy are welcome; meals do not need to be vegan.
+Build satisfying meals around vegetables, beans, lentils, whole grains, mushrooms, tofu, eggs, dairy, nuts, and seeds rather than trying to imitate meat in every dish. Prioritize substantial mains with enough protein and variety to feel like complete dinners.
+Favor naturally vegetarian dishes from cuisines where vegetables and legumes already play a central role.
+`,
+	},
+	"mediterranean": {
+		Title: "Bring Mediterranean flavor to your weeknight.",
+		Blurb: "Make room for bright herbs, colorful vegetables, and simple, flavorful dinners. Find your local store, then let Careme help you plan meals inspired by Mediterranean cooking.",
+		Instructions: `Plan dinners inspired by a Mediterranean eating pattern. Favor vegetables, legumes, whole grains, fish, poultry, olive oil, nuts, herbs, yogurt, and modest amounts of cheese. Use red meat and highly processed foods sparingly.
+Prefer simple, flavorful dishes inspired by Mediterranean cuisines rather than generic healthy food. Keep meals practical enough for normal weeknight cooking.
+`,
+	},
+	"low-carb": {
+		Title: "Less starch. Plenty to love at dinner.",
+		Blurb: "Keep dinner satisfying with protein, vegetables, and flavorful sauces. Find your local store, then let Careme help you plan lower-carb meals that go easy on starch-heavy sides.",
+		Instructions: `Plan satisfying lower-carbohydrate dinners by emphasizing protein, vegetables, healthy fats, and flavorful sauces while reducing reliance on bread, pasta, rice, potatoes, and other starch-heavy sides.
+Prefer dishes that are naturally low in carbohydrates rather than awkward substitutions. Do not assume strict ketogenic macros or eliminate carbohydrates entirely.
+`,
+	},
 	"budget": {
 		Title: "Good dinners. Smaller grocery bills.",
 		Blurb: "Make your grocery budget go further. Find your local store, then let Careme help you cook satisfying dinners with affordable ingredients, smart swaps, and less food waste.",

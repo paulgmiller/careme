@@ -33,6 +33,9 @@ func TestLandingRoutes(t *testing.T) {
 		status  int
 	}{
 		{"budget landing", http.MethodGet, "/c/budget", auth.ErrNoSession, http.StatusOK},
+		{"vegetarian landing", http.MethodGet, "/c/vegetarian", auth.ErrNoSession, http.StatusOK},
+		{"mediterranean landing", http.MethodGet, "/c/mediterranean", auth.ErrNoSession, http.StatusOK},
+		{"low-carb landing", http.MethodGet, "/c/low-carb", auth.ErrNoSession, http.StatusOK},
 		{"guest landing", http.MethodGet, "/c/fancy", auth.ErrNoSession, http.StatusOK},
 		{"landing subpath", http.MethodGet, "/c/fancy/extra", auth.ErrNoSession, http.StatusNotFound},
 		{"unknown campaign", http.MethodGet, "/c/missing", auth.ErrNoSession, http.StatusNotFound},
