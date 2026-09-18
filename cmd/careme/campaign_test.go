@@ -18,6 +18,9 @@ func TestCampaignLandingAndInstructions(t *testing.T) {
 	for _, campaign := range []struct{ slug, title string }{
 		{"fancy", "Make dinner an occasion."},
 		{"budget", "Good dinners. Smaller grocery bills."},
+		{"vegetarian", "Vegetarian dinners worth gathering for."},
+		{"mediterranean", "Bring Mediterranean flavor to your weeknight."},
+		{"low-carb", "Less starch. Plenty to love at dinner."},
 	} {
 		t.Run(campaign.slug, func(t *testing.T) {
 			body := mustGetBody(t, client, srv.URL+"/c/"+campaign.slug)
