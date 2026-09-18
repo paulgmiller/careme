@@ -75,17 +75,20 @@
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
               <form method="GET" action="/locations" class="mt-3 space-y-2">
+                <label for="zip" class="block text-sm font-semibold text-ink-900">ZIP code</label>
                 <div class="flex flex-col gap-3">
-                  <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
-                        placeholder="Enter zip code e.g. 90210"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                  <div class="relative min-w-0 w-full sm:flex-1">
+                    <input id="zip" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" pattern="\d{5}" maxlength="5" required
+                           placeholder="e.g. 98101"
+                           class="w-full rounded-xl border border-brand-300 bg-white py-3 pl-4 pr-14 text-base text-ink-900 placeholder-ink-500 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                    <button type="button" id="use-location-btn" aria-label="Use my location" title="Use my location"
+                            class="absolute inset-y-0 right-1 my-auto inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50 hover:text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-60">
+                      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                    </button>
+                  </div>
                   <button type="submit"
                           class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Find stores
-                  </button>
-                  <button type="button" id="use-location-btn"
-                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Use your location
                   </button>
                   <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>
@@ -130,20 +133,20 @@
             <div class="friendly-card-soft border border-brand-100 bg-brand-50/40 p-4">
               <h2 class="text-lg font-semibold text-brand-700">Find a store</h2>
               <form method="GET" action="/locations" class="mt-3 space-y-2">
-                <label for="zip" class="block text-sm font-medium text-ink-700">
-                  Enter ZIP code:
-                </label>
+                <label for="zip" class="block text-sm font-semibold text-ink-900">ZIP code</label>
                 <div class="flex flex-col gap-3">
-                  <input id="zip" name="zip" type="text" inputmode="numeric" pattern="\d{5}" required
-                        placeholder="Enter zip code e.g. 90210"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-ink-900 placeholder-gray-400 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                  <div class="relative min-w-0 w-full sm:flex-1">
+                    <input id="zip" name="zip" type="text" inputmode="numeric" autocomplete="postal-code" pattern="\d{5}" maxlength="5" required
+                           placeholder="e.g. 98101"
+                           class="w-full rounded-xl border border-brand-300 bg-white py-3 pl-4 pr-14 text-base text-ink-900 placeholder-ink-500 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                    <button type="button" id="use-location-btn" aria-label="Use my location" title="Use my location"
+                            class="absolute inset-y-0 right-1 my-auto inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50 hover:text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-60">
+                      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+                    </button>
+                  </div>
                   <button type="submit"
                           class="inline-flex w-full items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                     Find stores
-                  </button>
-                  <button type="button" id="use-location-btn"
-                          class="inline-flex w-full items-center justify-center rounded-lg border border-brand-300 bg-white px-3 py-2 text-sm font-medium text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                    Use your location
                   </button>
                   <p id="use-location-message" class="hidden text-xs text-ink-600" aria-live="polite"></p>
                 </div>

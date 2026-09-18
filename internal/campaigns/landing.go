@@ -12,6 +12,9 @@ import (
 )
 
 type landingCampaign struct {
+	Label        string
+	ImageURL     string
+	ImageAlt     string
 	Title        string
 	Blurb        string
 	Instructions string
@@ -20,30 +23,34 @@ type landingCampaign struct {
 // Add dinner campaigns here; each uses the same landing page.
 var dinnerCampaigns = map[string]landingCampaign{
 	"vegetarian": {
+		Label: "Vegetarian dinners",
 		Title: "Vegetarian dinners worth gathering for.",
-		Blurb: "Put vegetables at the center of dinner. Find your local store, then let Careme help you cook satisfying vegetarian meals with beans, lentils, whole grains, and plenty of variety.",
+		Blurb: "Plan satisfying, vegetable-forward dinners with ingredients from your local store.",
 		Instructions: `Plan dinners that are vegetarian and plant-forward. Exclude meat, poultry, fish, seafood, and ingredients made from them, such as meat stocks and fish sauce. Eggs and dairy are welcome; meals do not need to be vegan.
 Build satisfying meals around vegetables, beans, lentils, whole grains, mushrooms, tofu, eggs, dairy, nuts, and seeds rather than trying to imitate meat in every dish. Prioritize substantial mains with enough protein and variety to feel like complete dinners.
 Favor naturally vegetarian dishes from cuisines where vegetables and legumes already play a central role.
 `,
 	},
 	"mediterranean": {
+		Label: "Mediterranean dinners",
 		Title: "Bring Mediterranean flavor to your weeknight.",
-		Blurb: "Make room for bright herbs, colorful vegetables, and simple, flavorful dinners. Find your local store, then let Careme help you plan meals inspired by Mediterranean cooking.",
+		Blurb: "Plan bright, flavorful dinners with colorful vegetables, fresh herbs, and ingredients from your local store.",
 		Instructions: `Plan dinners inspired by a Mediterranean eating pattern. Favor vegetables, legumes, whole grains, fish, poultry, olive oil, nuts, herbs, yogurt, and modest amounts of cheese. Use red meat and highly processed foods sparingly.
 Prefer simple, flavorful dishes inspired by Mediterranean cuisines rather than generic healthy food. Keep meals practical enough for normal weeknight cooking.
 `,
 	},
 	"low-carb": {
+		Label: "Lower-carb dinners",
 		Title: "Less starch. Plenty to love at dinner.",
-		Blurb: "Keep dinner satisfying with protein, vegetables, and flavorful sauces. Find your local store, then let Careme help you plan lower-carb meals that go easy on starch-heavy sides.",
+		Blurb: "Plan satisfying dinners with plenty of protein, vegetables, and flavor, using ingredients from your local store.",
 		Instructions: `Plan satisfying lower-carbohydrate dinners by emphasizing protein, vegetables, healthy fats, and flavorful sauces while reducing reliance on bread, pasta, rice, potatoes, and other starch-heavy sides.
 Prefer dishes that are naturally low in carbohydrates rather than awkward substitutions. Do not assume strict ketogenic macros or eliminate carbohydrates entirely.
 `,
 	},
 	"budget": {
+		Label: "Budget-friendly dinners",
 		Title: "Good dinners. Smaller grocery bills.",
-		Blurb: "Make your grocery budget go further. Find your local store, then let Careme help you cook satisfying dinners with affordable ingredients, smart swaps, and less food waste.",
+		Blurb: "Plan satisfying dinners around affordable ingredients at your local store.",
 		// This had a problem with doubling down on lentils as a non protein was used in anchor ingredient
 		// Could modify menuplan https://github.com/paulgmiller/careme/pull/938
 		// Also could benefit from size info https://github.com/paulgmiller/careme/pull/807
@@ -54,8 +61,11 @@ When multiple plans work, prefer the one with the lower total grocery spend, eve
 `,
 	},
 	"fancy": {
-		Title: "Make dinner an occasion.",
-		Blurb: "Date night or a dinner party? Cook something worth gathering for. Find your local store, then let Careme help you stretch your skills and serve a dinner that impresses.",
+		Label:    "A little more special",
+		ImageURL: "https://test.careme.cooking/recipe/unvnQMT4FdW5tkJR3JACOQ==/image",
+		ImageAlt: "Seared chops with roasted squash and a rich pan sauce.",
+		Title:    "Make dinner an occasion.",
+		Blurb:    "Plan a memorable date night or dinner party with ingredients from your local store.",
 		Instructions: `Plan elevated dinners for date nights or dinner parties. Favor dishes that feel special, look impressive, and introduce approachable techniques that build cooking skills without becoming overly difficult.
 Allow somewhat higher-cost ingredients, premium cuts, richer sauces, and more elaborate sides when they meaningfully improve the meal. Prefer thoughtful presentation and restaurant-style touches over expense for its own sake.
 When multiple plans work, prefer the one that feels more distinctive and occasion-worthy, even if it costs somewhat more or takes a little longer.
