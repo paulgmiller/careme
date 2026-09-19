@@ -300,6 +300,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
 			return r.Title, cooked[r.Hash].Cooked
 		})
+		p.Directive = user.Directive
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)

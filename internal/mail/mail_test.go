@@ -24,6 +24,8 @@ import (
 
 	"github.com/sendgrid/rest"
 	sgmail "github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -143,8 +145,9 @@ func (f *fakeMailClient) SendWithContext(ctx context.Context, msg *sgmail.SGMail
 }
 
 type capturingMailGenerator struct {
-	ctx context.Context
-	err error
+	ctx    context.Context
+	params *recipes.GeneratorParams
+	err    error
 }
 
 type fakeGenerationStatusStore struct {
@@ -178,8 +181,9 @@ func configureFakeMailImages(m *mailer) {
 	m.imageStore = recipes.NewImageStore(cache.NewInMemoryCache())
 }
 
-func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, _ *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 	g.ctx = ctx
+	g.params = p
 	if g.err != nil {
 		return nil, g.err
 	}
@@ -629,4 +633,44 @@ func TestRecipeEmailSubjectIsDynamicAndShort(t *testing.T) {
 	if !strings.HasSuffix(got, "… +1") {
 		t.Fatalf("expected truncated subject to preserve remaining count, got %q", got)
 	}
+}
+
+func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
+	fc := newFakeMailCache(t)
+	fc.missShoppingList = true
+
+	location := testMailLocation()
+
+	g := &capturingMailGenerator{}
+	generationStatuses := &fakeGenerationStatusStore{}
+	client := &fakeMailClient{
+		response: &rest.Response{StatusCode: 202, Body: "accepted"},
+	}
+	m := &mailer{
+		cache:              fc,
+		generationStatuses: generationStatuses,
+		generator:          g,
+
+		client:             client,
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+	configureFakeMailImages(m)
+
+	err := m.deliverEmail(context.Background(), utypes.User{
+		ID:        "user-1",
+		Directive: "Always meat",
+		Email:     []string{"u1@example.com"},
+		LastRecipes: []utypes.Recipe{
+			{
+				Title: "fish",
+			},
+			{
+				Title: "salad",
+			},
+		},
+	}, recipes.DefaultParams(location, time.Now()))
+	require.NoError(t, err)
+	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
+	assert.Contains(t, g.params.Directive, "Always meat")
 }
