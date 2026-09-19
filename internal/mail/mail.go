@@ -269,10 +269,23 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
+	rio := recipes.IO(m.cache)
 	// p.UserID = user.ID
+	// TODO refactor with recipes/server.go
+	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
+	})
+	hashes := make([]string, 0, len(recent))
+	for _, recipe := range recent {
+		hashes = append(hashes, recipe.Hash)
+	}
+	cooked := rio.FeedbackByHash(ctx, hashes)
+	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked
+	})
+	p.Directive = user.Directive
 
 	paramsHash := p.Hash()
-	rio := recipes.IO(m.cache)
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -288,19 +301,6 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
 		}
 
-		// TODO refactor with recipes/server.go
-		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-		})
-		hashes := make([]string, 0, len(recent))
-		for _, recipe := range recent {
-			hashes = append(hashes, recipe.Hash)
-		}
-		cooked := rio.FeedbackByHash(ctx, hashes)
-		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash].Cooked
-		})
-		p.Directive = user.Directive
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
