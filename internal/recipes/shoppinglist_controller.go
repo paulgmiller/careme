@@ -580,7 +580,6 @@ func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User,
 }
 
 func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) {
-
 	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
 		// magic number of days. Also should we include non feedback ones in shorter window
 		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
@@ -593,7 +592,7 @@ func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.F
 	// just checking exist enough?
 	cooked := fio.FeedbackByHash(ctx, hashes)
 
-	//doens't change hash
+	// doens't change hash
 	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
 		return r.Title, cooked[r.Hash].Cooked
 	})
