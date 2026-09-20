@@ -33,7 +33,6 @@ import (
 
 	utypes "careme/internal/users/types"
 
-	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -270,20 +269,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	rio := recipes.IO(m.cache)
-	// p.UserID = user.ID
-	// TODO refactor with recipes/server.go
-	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-	})
-	hashes := make([]string, 0, len(recent))
-	for _, recipe := range recent {
-		hashes = append(hashes, recipe.Hash)
-	}
-	cooked := rio.FeedbackByHash(ctx, hashes)
-	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-		return r.Title, cooked[r.Hash].Cooked
-	})
-	p.Directive = user.Directive
+	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
 	paramsHash := p.Hash()
 	shoppingList, err := rio.FromCache(ctx, paramsHash)

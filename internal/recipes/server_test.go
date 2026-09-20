@@ -1348,7 +1348,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
-	params.LastRecipes = s.recentCookedTitles(t.Context(), []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked})
+	AugmentParamsFromUser(t.Context(), utypes.User{LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked}}, s.FeedbackIO, params)
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 
 	select {
