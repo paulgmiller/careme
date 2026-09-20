@@ -18,6 +18,7 @@ import (
 	"careme/internal/httpx"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
+	"careme/internal/recipes/feedback"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/templates"
@@ -91,7 +92,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	if err := s.kickgeneration(ctx, p, currentUser.ID); err != nil {
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
@@ -344,9 +345,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if currentUser != nil {
-			p.Directive = currentUser.Directive
-		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
@@ -494,8 +492,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	s.setFavoriteStore(ctx, currentUser, p.Location)
 
-	p.Directive = currentUser.Directive
-	p.LastRecipes = s.recentCookedTitles(ctx, currentUser.LastRecipes)
+	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			// Another request with these content-addressed params owns the generation.
@@ -582,8 +579,9 @@ func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User,
 	slog.InfoContext(ctx, "set favorite store from recipe generation", "user_id", currentUser.ID, "location_id", currentUser.FavoriteStore)
 }
 
-func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Recipe) []string {
-	recent := lo.Filter(lastRecipes, func(r utypes.Recipe, _ int) bool {
+func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) {
+
+	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
 		// magic number of days. Also should we include non feedback ones in shorter window
 		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
 	})
@@ -593,11 +591,14 @@ func (s *server) recentCookedTitles(ctx context.Context, lastRecipes []utypes.Re
 	}
 
 	// just checking exist enough?
-	cooked := s.FeedbackByHash(ctx, hashes)
+	cooked := fio.FeedbackByHash(ctx, hashes)
 
-	return lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
+	//doens't change hash
+	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
 		return r.Title, cooked[r.Hash].Cooked
 	})
+
+	p.Directive = user.Directive
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID string) error {
