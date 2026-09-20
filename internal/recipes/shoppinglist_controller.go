@@ -344,7 +344,10 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 			return
 		}
-
+		if currentUser != nil {
+			// need directive to get to right hash
+			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
