@@ -45,9 +45,15 @@ func (m *multiGrader) CacheVersion() string {
 }
 
 func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
-	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
+	if cfg == nil || !cfg.IngredientGrading.Enable {
 		return rubberstamp{}
 	}
+
+	if cfg.IngredientGrading.Model == "jev" {
+		jev := lo.Must(ai.NewJev())
+		return newCachingGrader(jev, NewStore(c))
+	}
+
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
 	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
 }

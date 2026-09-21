@@ -57,6 +57,10 @@ var ingredientGradeQuestion = typesafe.Score(
 	ingredientGradeCriteria,
 )
 
+func (g *jevGrader) CacheVersion() string {
+	return "0.1"
+}
+
 func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) ([]InputIngredient, error) {
 	if len(ingredients) == 0 {
 		return nil, nil
