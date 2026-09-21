@@ -2,11 +2,15 @@ package ai
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log"
 	"log/slog"
 
 	"github.com/jmelahman/typesafe-sdk-go"
+	"github.com/samber/lo"
 )
 
 type jevGrader struct {
@@ -28,10 +32,8 @@ type ingredientGradeState struct {
 }
 
 var ingredientGradeCriteria = typesafe.ScoreCriteria{
-	// 0
-	"Not meaningfully useful as a cooking ingredient; essentially a finished food, snack, dip, condiment, or meal.",
 	// 1
-	"Almost entirely ready-to-eat with negligible usefulness in home cooking.",
+	"Not meaningfully useful as a cooking ingredient; essentially a finished food, snack, dip, condiment, or meal.",
 	// 2
 	"Very limited cooking usefulness; heavily prepared, sauced, seasoned, breaded, or snack-oriented.",
 	// 3
@@ -58,7 +60,12 @@ var ingredientGradeQuestion = typesafe.Score(
 )
 
 func (g *jevGrader) CacheVersion() string {
-	return "0.1"
+	fnv := fnv.New128a()
+	lo.Must(io.WriteString(fnv, ingredientGradeSystemInstruction))
+	for _, crit := range ingredientGradeCriteria {
+		lo.Must(io.WriteString(fnv, crit.(string)))
+	}
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIngredient) ([]InputIngredient, error) {
@@ -87,12 +94,15 @@ func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIng
 		requests = append(requests, req)
 	}
 
+	slog.InfoContext(ctx, "got to call")
+
 	results := g.c.SystemOneBatch(ctx, requests, 16)
 
 	graded := make([]InputIngredient, 0, len(items))
 	var inputTokens, outputTokens int
 	for i, result := range results {
 		if result.Err != nil {
+			slog.ErrorContext(ctx, "oh no", "fail", result.Err.Error())
 			return nil, fmt.Errorf(
 				"grade ingredient %s: %w",
 				items[i].ProductID,
@@ -111,15 +121,16 @@ func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIng
 				err,
 			)
 		}
-
+		//human grade low confidence?
 		item := items[i]
 		item.Grade = &IngredientGrade{
-			Score: answer.Level(),
+			Score:  answer.Level() + 1, //jev is 0-9 instead of 1-10
+			Reason: fmt.Sprintf("confidence:%f, score:%f, level:%d", answer.Confidence, answer.Score, answer.Level()),
 		}
 
 		graded = append(graded, item)
 	}
-	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", "jev")
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", "jev", "input", inputTokens)
 
 	return graded, nil
 

@@ -52,6 +52,7 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 	if cfg.IngredientGrading.Model == "jev" {
 		jev := lo.Must(ai.NewJev())
 		return newCachingGrader(jev, NewStore(c))
+
 	}
 
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
