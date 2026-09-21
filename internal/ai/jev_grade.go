@@ -18,7 +18,7 @@ type jevGrader struct {
 }
 
 func NewJev() (*jevGrader, error) {
-	client, err := typesafe.New() //WithAPIKey param
+	client, err := typesafe.New() // WithAPIKey param
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,10 +121,10 @@ func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIng
 				err,
 			)
 		}
-		//human grade low confidence?
+		// human grade low confidence?
 		item := items[i]
 		item.Grade = &IngredientGrade{
-			Score:  answer.Level() + 1, //jev is 0-9 instead of 1-10
+			Score:  answer.Level() + 1, // jev is 0-9 instead of 1-10
 			Reason: fmt.Sprintf("confidence:%f, score:%f, level:%d", answer.Confidence, answer.Score, answer.Level()),
 		}
 
@@ -133,5 +133,4 @@ func (g *jevGrader) GradeIngredients(ctx context.Context, ingredients []InputIng
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", "jev", "input", inputTokens)
 
 	return graded, nil
-
 }
