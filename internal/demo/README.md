@@ -16,7 +16,9 @@ or scraping is needed for this provider. Recipe generation still uses the app's
 normal services.
 
 The list combines all six share types, with duplicate produce consolidated and
-share membership retained in categories. Blueberries retain their fruit substitution
+share membership retained in categories. Every produce description starts with
+`mnfood.club ` so its source remains visible alongside pantry ingredients. Product
+IDs stay stable when display labels change. Blueberries retain their fruit substitution
 label. Recommended add-ons are pork tenderloin, bratwurst or Italian sausage (two
 choices), Ranger chicken thighs, sour cream, and Oddbird GSM NA dealcoholized red
 wine. Add-ons are catalog options, not assertions that they come in the produce box.
