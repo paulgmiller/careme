@@ -25,6 +25,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
+	"careme/internal/tcfarm"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
@@ -409,6 +410,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	}
 
 	return []backendStaplesProvider{
+		tcfarm.Provider{},
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,

@@ -14,6 +14,7 @@ import (
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/publix"
+	"careme/internal/tcfarm"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
 
@@ -56,6 +57,7 @@ func StaplesSignature(locationID string) string {
 
 func defaultIdentityProviders() []identityProvider {
 	return []identityProvider{
+		tcfarm.Provider{},
 		kroger.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
 		heb.NewIdentityProvider(),

@@ -22,6 +22,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
+	"careme/internal/tcfarm"
 	"careme/internal/walmart"
 	"careme/internal/wegmans"
 	"careme/internal/wholefoods"
@@ -83,6 +84,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 	ctx := context.Background()
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	backendfactories := []locationBackendFactory{
+		func(context.Context) (locationBackend, error) { return tcfarm.Provider{}, nil },
 		func(context.Context) (locationBackend, error) {
 			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
 		},
