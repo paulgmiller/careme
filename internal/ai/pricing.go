@@ -96,6 +96,9 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	// Standard short-context USD per 1M tokens, verified 2026-08-04:
 	// https://developers.openai.com/api/docs/pricing
 	switch normalizeModelName(model) {
+	case "gpt-6-sol":
+		// Verified 2026-09-22: https://developers.openai.com/api/docs/models/gpt-6-sol
+		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 10}, true
 	case "gpt-6-astra":
 		// Verified 2026-09-08: https://developers.openai.com/api/docs/models/gpt-6-astra
 		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true

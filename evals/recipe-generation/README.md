@@ -2,12 +2,12 @@
 
 Latest prompt comparison: [new vs. old at medium reasoning, 2026-09-10](prompt-comparison-medium-2026-09-10.md). The recipe suite defaults to concurrency eight; override with `--max-concurrency`.
 
-Latest results: [Astra vs. Sol at explicit medium reasoning, 2026-09-09](model-comparison-medium-2026-09-09.md), including quality, latency, reasoning tokens, and generation cost.
+Latest results: [GPT-6 Sol rollout and comparison with the recorded Astra baseline, 2026-09-22](gpt6-sol-rollout-2026-09-22.md), including the menu-plan result. The [September 9 explicit-medium comparison](model-comparison-medium-2026-09-09.md) retains the prior GPT-5.6 Sol and Astra results, reasoning tokens, and costs.
 
 Run with an explicit recipe model and reasoning effort:
 
 ```sh
-./task.sh evals EVAL=recipe-generation MODEL=gpt-6-astra REASONING_EFFORT=high -- --no-cache --output /tmp/recipe-eval-astra-high.json
+./task.sh evals EVAL=recipe-generation MODEL=gpt-6-sol REASONING_EFFORT=high -- --no-cache --output /tmp/recipe-eval-sol-high.json
 ```
 
 Omit `REASONING_EFFORT` to use the production default of `medium`. For direct Promptfoo runs, use `RECIPE_EVAL_REASONING_EFFORT` or provider `config.reasoning_effort` (which takes precedence). The requested effort is recorded in metadata and the provider label; unsupported model/effort combinations fail at the API.

@@ -26,7 +26,7 @@ func TestNewClientTrimsModels(t *testing.T) {
 func TestNewClientUsesModelsByRole(t *testing.T) {
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, &capturePromptRecorder{})
 
-	assert.Equal(t, "gpt-6-astra", client.model)
+	assert.Equal(t, "gpt-6-sol", client.model)
 	if client.model != config.DefaultRecipeModel {
 		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)
 	}
