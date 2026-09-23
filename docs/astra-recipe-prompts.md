@@ -31,10 +31,10 @@ improvement hypotheses, not measured quality gains.
 
 These are workload-specific recommendations, not OpenAI benchmarks. Compare `low`
 and `medium` first; test `high` only if repeated failures on complicated recipes
-justify the latency and cost. Astra supports `low`, `medium`, `high`, `xhigh`, and
-`max`, but not `none`. See the [Astra model reference](https://developers.openai.com/api/docs/models/gpt-6-astra).
+justify the latency and cost. GPT-6 Sol supports `none`, `low`, `medium`, `high`,
+`xhigh`, and `max`. See the [Sol model reference](https://developers.openai.com/api/docs/models/gpt-6-sol).
 
-The production recipe model is now `gpt-6-astra`. Menu creation, regeneration,
+The production recipe and menu model is now `gpt-6-sol`. Menu creation, regeneration,
 menu ingredient repair, recipe generation/revision, and recipe questions explicitly
 use `medium` effort. This keeps effort consistent across stored continuations.
 The lower-effort recommendations above remain future evaluation candidates.
@@ -52,10 +52,10 @@ matches, dietary compliance, per-plan assignments, ingredient quantities, and
 realistic timing in addition to the recipe critique score.
 
 The menu eval includes a long-description vegetarian regression case. The recipe
-eval can select Astra with:
+eval can select the production model explicitly with:
 
 ```sh
-./task.sh evals EVAL=recipe-generation MODEL=gpt-6-astra -- --no-cache --repeat 3 --output /tmp/astra-recipe-eval.json
+./task.sh evals EVAL=recipe-generation MODEL=gpt-6-sol -- --no-cache --repeat 3 --output /tmp/sol-recipe-eval.json
 ```
 
 See [eval setup and credential requirements](../evals/README.md). Live evals make

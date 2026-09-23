@@ -1,0 +1,11 @@
+model,case,quality,generation_ms,generation_cost_usd,passed,failed_metrics,eval_id
+gpt-6-sol,Yucatecan chicken,8,25670,0.0703055,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Korean tri-tip,9,25772,0.072562,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Moroccan lamb,7,35066,0.0350448,false,critique-quality,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Sichuan chicken,9,26805,0.074361,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Lemon-Parmesan coho,9,37004,0.0785135,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Jicama cucumber side,10,18113,0.059223,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Chilean tri-tip,7,26753,0.0282396,false,critique-quality,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Sumac-pistachio coho,8,20201,0.0656325,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Pantry garlic regression,8,30286,0.0295118,true,,eval-yjR-2026-09-23T02:36:52
+gpt-6-sol,Pantry water regression,10,29806,0.0305898,true,,eval-yjR-2026-09-23T02:36:52
