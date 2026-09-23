@@ -1,5 +1,5 @@
-// Package tcfarm provides the frozen September 21–26 partner demo catalog.
-package tcfarm
+// Package demo provides the frozen September 21–26 partner demo catalog.
+package demo
 
 import (
 	"context"
@@ -11,21 +11,21 @@ import (
 	locationtypes "careme/internal/locations/types"
 )
 
-const LocationID = "tcfarm_september21"
+const LocationID = "demo_september21"
 
 // Provider serves the same inventory regardless of the requested recipe date.
 type Provider struct{}
 
 func (Provider) IsID(id string) bool           { return id == LocationID }
-func (Provider) Signature() string             { return "tcfarm-september21-26-v1" }
+func (Provider) Signature() string             { return "demo-september21-26-v2" }
 func (p Provider) HasInventory(id string) bool { return p.IsID(id) }
 
 func (p Provider) GetLocationByID(_ context.Context, id string) (*locationtypes.Location, error) {
 	if !p.IsID(id) {
-		return nil, fmt.Errorf("unknown TC Farm demo location %q", id)
+		return nil, fmt.Errorf("unknown demo location %q", id)
 	}
 	return &locationtypes.Location{
-		ID: LocationID, Name: "TC Farm · September 21–26", Chain: "TC Farm",
+		ID: LocationID, Name: "mnfood.club · September 21–26", Chain: "mnfood.club",
 		State: "MN", ZipCode: "55401",
 		// Downtown Minneapolis ZIP centroid represents the Twin Cities metro.
 		// This is a demo location, not a retail storefront or pickup address.
@@ -40,14 +40,14 @@ func (Provider) GetLocationsByCoordinates(context.Context, geo.Coordinate) ([]lo
 
 func (p Provider) FetchStaples(_ context.Context, id string) ([]ai.InputIngredient, error) {
 	if !p.IsID(id) {
-		return nil, fmt.Errorf("unknown TC Farm demo location %q", id)
+		return nil, fmt.Errorf("unknown demo location %q", id)
 	}
 	return catalog(), nil
 }
 
 func (p Provider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(id) {
-		return nil, fmt.Errorf("unknown TC Farm demo location %q", id)
+		return nil, fmt.Errorf("unknown demo location %q", id)
 	}
 	return []ai.InputIngredient{recommendedWine()}, nil
 }
@@ -77,23 +77,23 @@ func catalog() []ai.InputIngredient {
 				continue
 			}
 			indexes[name] = len(ingredients)
-			ingredients = append(ingredients, ingredient(name, "Produce", share.name))
+			ingredients = append(ingredients, ingredient(name, "mnfood.club", "Produce", share.name))
 		}
 	}
 	for _, name := range []string{"TC Farm Pork Tenderloin", "TC Farm Bratwurst", "TC Farm Italian Sausage", "TC Farm Chicken Thighs – Ranger"} {
-		ingredients = append(ingredients, ingredient(name, "Meat", "Recommended add-on"))
+		ingredients = append(ingredients, ingredient(name, "TC Farm", "Meat", "Recommended add-on"))
 	}
-	ingredients = append(ingredients, ingredient("Sour Cream", "Dairy", "Recommended add-on"), recommendedWine())
+	ingredients = append(ingredients, ingredient("Sour Cream", "", "Dairy", "Recommended add-on"), recommendedWine())
 	return ingredients
 }
 
 func recommendedWine() ai.InputIngredient {
-	return ingredient("Oddbird GSM NA Red Wine (dealcoholized)", "Nonalcoholic wine", "Recommended add-on")
+	return ingredient("Oddbird GSM NA Red Wine (dealcoholized)", "Oddbird", "Nonalcoholic wine", "Recommended add-on")
 }
 
-func ingredient(name string, categories ...string) ai.InputIngredient {
+func ingredient(name, brand string, categories ...string) ai.InputIngredient {
 	return ai.InputIngredient{
 		ProductID:   LocationID + "_" + strings.ToLower(strings.ReplaceAll(name, " ", "-")),
-		Description: name, Categories: categories,
+		Description: name, Brand: brand, Categories: categories,
 	}
 }

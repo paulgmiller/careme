@@ -1,6 +1,7 @@
-package tcfarm
+package demo
 
 import (
+	"slices"
 	"testing"
 
 	"careme/internal/locations/geo"
@@ -20,6 +21,14 @@ func TestFrozenCatalog(t *testing.T) {
 		require.False(t, ids[item.ProductID], "duplicate product %s", item.ProductID)
 		ids[item.ProductID] = true
 		names[item.Description] = item.Categories
+		switch {
+		case slices.Contains(item.Categories, "Produce"):
+			assert.Equal(t, "mnfood.club", item.Brand)
+		case slices.Contains(item.Categories, "Meat"):
+			assert.Equal(t, "TC Farm", item.Brand)
+		default:
+			assert.NotEqual(t, "TC Farm", item.Brand)
+		}
 		assert.Nil(t, item.PriceRegular)
 		assert.Nil(t, item.PriceSale)
 	}
@@ -50,7 +59,7 @@ func TestDemoLocation(t *testing.T) {
 	loc, err := p.GetLocationByID(t.Context(), LocationID)
 	require.NoError(t, err)
 	assert.Equal(t, LocationID, loc.ID)
-	assert.Equal(t, "TC Farm · September 21–26", loc.Name)
+	assert.Equal(t, "mnfood.club · September 21–26", loc.Name)
 	assert.NoError(t, loc.Coordinate().Valid())
 	assert.Equal(t, "55401", loc.ZipCode)
 	assert.Equal(t, geo.Coordinate{Lat: 44.985367, Lon: -93.270208}, loc.Coordinate())
@@ -58,7 +67,7 @@ func TestDemoLocation(t *testing.T) {
 	nearby, err := p.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 45, Lon: -94})
 	require.NoError(t, err)
 	assert.Empty(t, nearby)
-	for _, id := range []string{"", "tcfarm_other", LocationID + "_other"} {
+	for _, id := range []string{"", "demo_other", LocationID + "_other"} {
 		assert.False(t, p.IsID(id))
 		assert.False(t, p.HasInventory(id))
 		_, err = p.GetLocationByID(t.Context(), id)

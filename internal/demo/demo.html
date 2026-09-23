@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TC Farm · September 21–26 | Careme</title>
+<title>mnfood.club · September 21–26 | Careme</title>
 <style>
 :root { color-scheme: light; font-family: system-ui, sans-serif; color: #253b28; background: #f7f7ef; }
 body { margin: 0; }
@@ -26,7 +26,7 @@ li { padding: 5px 0; line-height: 1.5; }
 <body>
 <main>
 <header>
-<p class="eyebrow">Careme × TC Farm</p>
+<p class="eyebrow">Careme × mnfood.club</p>
 <h1>September 21–26</h1>
 <p>A week of fall produce, ready for your kitchen. Find meal ideas using this week's produce shares and recommended extras.</p>
 <form method="POST" action="/recipes">
@@ -34,13 +34,13 @@ li { padding: 5px 0; line-height: 1.5; }
 <button type="submit">Find recipes for this week</button>
 </form>
 </header>
-<p class="note">Produce from all six share types is shown below. Your box may not include every item and may include a substitution. Recommended extras are optional additions to your order.</p>
+<p class="note">mnfood.club produce from all six share types is shown below. Your box may not include every item and may include a substitution. Recommended extras are optional additions to your order. Meats are from TC Farm.</p>
 <div class="sections">
 {{range .Sections}}
 <section><h2>{{.Name}}</h2><ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul></section>
 {{end}}
 </div>
-<p class="note">From TC Farm's September 21–26 weekly feature. This demo keeps that week's list fixed.</p>
+<p class="note">mnfood.club produce and TC Farm meats for September 21–26. This demo keeps that week's list fixed.</p>
 </main>
 </body>
 </html>

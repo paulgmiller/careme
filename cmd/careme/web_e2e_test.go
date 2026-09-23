@@ -17,13 +17,13 @@ import (
 	"careme/internal/cache"
 	"careme/internal/campaigns"
 	"careme/internal/config"
+	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
-	"careme/internal/tcfarm"
 	"careme/internal/templates"
 	"careme/internal/users"
 
@@ -228,7 +228,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
 	campaigns.Register(appRoutes, userStorage, mockAuth)
-	tcfarm.Register(appRoutes)
+	demo.Register(appRoutes)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}

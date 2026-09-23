@@ -7,10 +7,10 @@ import (
 	"net/http"
 
 	"careme/internal/auth"
+	"careme/internal/demo"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
-	"careme/internal/tcfarm"
 	"careme/internal/templates"
 
 	"github.com/samber/lo"
@@ -40,8 +40,8 @@ var fakes = map[string]Location{
 }
 
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
-	if (tcfarm.Provider{}).IsID(locationID) {
-		return (tcfarm.Provider{}).GetLocationByID(ctx, locationID)
+	if (demo.Provider{}).IsID(locationID) {
+		return (demo.Provider{}).GetLocationByID(ctx, locationID)
 	}
 	l, ok := fakes[locationID]
 	if !ok {

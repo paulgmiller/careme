@@ -17,6 +17,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/campaigns"
 	"careme/internal/config"
+	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
@@ -30,7 +31,6 @@ import (
 	"careme/internal/seasons"
 	"careme/internal/sitemap"
 	"careme/internal/static"
-	"careme/internal/tcfarm"
 	"careme/internal/templates"
 	"careme/internal/users"
 	"careme/internal/watchdog"
@@ -136,7 +136,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
-	tcfarm.Register(appRoutes)
+	demo.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)

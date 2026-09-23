@@ -1,4 +1,4 @@
-package tcfarm
+package demo
 
 import (
 	_ "embed"
@@ -13,7 +13,7 @@ import (
 
 //go:embed demo.html
 var demoHTML string
-var demoTemplate = template.Must(template.New("tcfarm").Parse(demoHTML))
+var demoTemplate = template.Must(template.New("demo").Parse(demoHTML))
 
 type section struct {
 	Name  string
@@ -22,7 +22,7 @@ type section struct {
 
 // Register serves the frozen source inventory without grading or external calls.
 func Register(mux routing.Registrar) {
-	mux.HandleFunc("GET /demo/tcfarm", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /demo/mnfood", func(w http.ResponseWriter, r *http.Request) {
 		guest.EnsureShoppingListCount(w, r)
 		var sections []section
 		for _, name := range []string{"Seasonal", "Small Seasonal", "Low Carb", "Staple", "Fruit", "Small Fruit", "Fruit substitution", "Recommended add-on"} {
@@ -40,7 +40,7 @@ func Register(mux routing.Registrar) {
 			Sections   []section
 		}{LocationID: LocationID, Sections: sections})
 	})
-	mux.HandleFunc("GET /demo/tcfarm/ingredients", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /demo/mnfood/ingredients", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(catalog())
 	})
