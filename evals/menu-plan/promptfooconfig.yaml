@@ -152,3 +152,55 @@ tests:
             recipe.recipe_instructions.some((instruction) =>
               /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
         metric: servings-preserved-in-every-recipe
+
+  - description: Budget dinners keep varied main proteins visible instead of hiding repeated lentils behind rice
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-17'
+      count: 3
+      instructions: Plan three budget-conscious dinners for two, each under an hour. Keep the total grocery bill low and reuse supporting ingredients to reduce waste. Include meat, poultry, or fish in more than half of the dinners, using economical cuts and portions.
+      ingredients:
+        - id: lentils
+          description: Dry Lentils
+          size: 1 lb
+        - id: pork
+          description: Boneless Pork Loin
+          size: 1 lb
+        - id: chicken
+          description: Chicken Thighs
+          size: 1 lb
+        - id: rice
+          description: Long Grain White Rice
+          size: 1 lb
+        - id: pasta
+          description: Penne Pasta
+          size: 1 lb
+        - id: cabbage
+          description: Green Cabbage
+          size: 1 lb
+        - id: peppers
+          description: Green Bell Pepper
+          size: each
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+        - id: tomatoes
+          description: Roma Tomatoes
+          size: 1 lb
+        - id: onions
+          description: Yellow Onions
+          size: 1 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipes = JSON.parse(output).plans;
+          const anchors = recipes.map((recipe) => recipe.anchor_ingredient);
+          const proteins = new Set(['Dry Lentils', 'Boneless Pork Loin', 'Chicken Thighs']);
+          const meats = new Set(['Boneless Pork Loin', 'Chicken Thighs']);
+          return anchors.every((anchor) => proteins.has(anchor))
+            && new Set(anchors).size === 3
+            && anchors.filter((anchor) => meats.has(anchor)).length >= 2;
+        metric: budget-main-protein-variety
