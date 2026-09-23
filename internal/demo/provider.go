@@ -17,7 +17,7 @@ const LocationID = "demo_september21"
 type Provider struct{}
 
 func (Provider) IsID(id string) bool           { return id == LocationID }
-func (Provider) Signature() string             { return "demo-september21-26-v3" }
+func (Provider) Signature() string             { return "demo-september21-26-v4" }
 func (p Provider) HasInventory(id string) bool { return p.IsID(id) }
 
 func (p Provider) GetLocationByID(_ context.Context, id string) (*locationtypes.Location, error) {

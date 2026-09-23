@@ -58,6 +58,6 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 }
 
 func TestDemoSignature(t *testing.T) {
-	assert.Equal(t, "demo-september21-26-v3", StaplesSignature("demo_september21"))
+	assert.Equal(t, "demo-september21-26-v4", StaplesSignature("demo_september21"))
 	assert.NotPanics(t, func() { _ = ForStore("demo_september21", time.Now()) })
 }
