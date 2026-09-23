@@ -56,3 +56,8 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 		})
 	}
 }
+
+func TestDemoSignature(t *testing.T) {
+	assert.Equal(t, "demo-september21-26-v2", StaplesSignature("demo_september21"))
+	assert.NotPanics(t, func() { _ = ForStore("demo_september21", time.Now()) })
+}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"careme/internal/auth"
+	"careme/internal/demo"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
 	"careme/internal/seasons"
@@ -39,6 +40,9 @@ var fakes = map[string]Location{
 }
 
 func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
+	if (demo.Provider{}).IsID(locationID) {
+		return (demo.Provider{}).GetLocationByID(ctx, locationID)
+	}
 	l, ok := fakes[locationID]
 	if !ok {
 		return nil, fmt.Errorf("no location %s", locationID)

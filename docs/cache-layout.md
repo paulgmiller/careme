@@ -141,6 +141,7 @@ Compatibility implications:
   - `farmersmarket/` for Farmers Market data
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - `internal/ingredients/cachekey.ForStore` owns the staple ingredient hash suffix, shared by recipe params and cached produce scoring. It uses raw URL-safe Base64 of FNV-64a over location ID, the supplied store date (`YYYY-MM-DD`), and backend staple signature, in that order. The `ingredients/` prefix and existing hashes are unchanged.
+- The frozen mnfood.club demo (`demo_september21`) uses backend signature `demo-september21-26-v2` in the existing store-day ingredient and recipe hashes. Its source inventory is compiled into the app and needs no new cache container or prefix.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.
 - Recipe records store `instructions` as a string array. Each string may contain the constrained Markdown supported by the instruction renderer: plain paragraphs and `- ` bullet lists.

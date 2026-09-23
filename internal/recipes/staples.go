@@ -19,6 +19,7 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
@@ -409,6 +410,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	}
 
 	return []backendStaplesProvider{
+		demo.Provider{},
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,
