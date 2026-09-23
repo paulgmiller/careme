@@ -17,7 +17,7 @@ const LocationID = "demo_september21"
 type Provider struct{}
 
 func (Provider) IsID(id string) bool           { return id == LocationID }
-func (Provider) Signature() string             { return "demo-september21-26-v2" }
+func (Provider) Signature() string             { return "demo-september21-26-v3" }
 func (p Provider) HasInventory(id string) bool { return p.IsID(id) }
 
 func (p Provider) GetLocationByID(_ context.Context, id string) (*locationtypes.Location, error) {
@@ -77,7 +77,9 @@ func catalog() []ai.InputIngredient {
 				continue
 			}
 			indexes[name] = len(ingredients)
-			ingredients = append(ingredients, ingredient(name, "mnfood.club", "Produce", share.name))
+			produce := ingredient(name, "mnfood.club", "Produce", share.name)
+			produce.Description = "mnfood.club " + name
+			ingredients = append(ingredients, produce)
 		}
 	}
 	for _, name := range []string{"TC Farm Pork Tenderloin", "TC Farm Bratwurst", "TC Farm Italian Sausage", "TC Farm Chicken Thighs – Ranger"} {

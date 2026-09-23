@@ -2,6 +2,7 @@ package demo
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"careme/internal/locations/geo"
@@ -24,17 +25,20 @@ func TestFrozenCatalog(t *testing.T) {
 		switch {
 		case slices.Contains(item.Categories, "Produce"):
 			assert.Equal(t, "mnfood.club", item.Brand)
+			assert.True(t, strings.HasPrefix(item.Description, "mnfood.club "), item.Description)
 		case slices.Contains(item.Categories, "Meat"):
+			assert.False(t, strings.HasPrefix(item.Description, "mnfood.club "), item.Description)
 			assert.Equal(t, "TC Farm", item.Brand)
 		default:
+			assert.False(t, strings.HasPrefix(item.Description, "mnfood.club "), item.Description)
 			assert.NotEqual(t, "TC Farm", item.Brand)
 		}
 		assert.Nil(t, item.PriceRegular)
 		assert.Nil(t, item.PriceSale)
 	}
-	assert.ElementsMatch(t, []string{"Produce", "Seasonal", "Small Seasonal", "Low Carb"}, names["Cucumbers"])
-	assert.ElementsMatch(t, []string{"Produce", "Fruit", "Small Fruit"}, names["Red Bartlett Pears"])
-	assert.Contains(t, names["Blueberries"], "Fruit substitution")
+	assert.ElementsMatch(t, []string{"Produce", "Seasonal", "Small Seasonal", "Low Carb"}, names["mnfood.club Cucumbers"])
+	assert.ElementsMatch(t, []string{"Produce", "Fruit", "Small Fruit"}, names["mnfood.club Red Bartlett Pears"])
+	assert.Contains(t, names["mnfood.club Blueberries"], "Fruit substitution")
 	for _, name := range []string{"TC Farm Pork Tenderloin", "TC Farm Bratwurst", "TC Farm Italian Sausage", "TC Farm Chicken Thighs – Ranger", "Sour Cream", "Oddbird GSM NA Red Wine (dealcoholized)"} {
 		assert.Contains(t, names[name], "Recommended add-on")
 	}
@@ -46,8 +50,9 @@ func TestFrozenCatalog(t *testing.T) {
 	items[0].Categories[0] = "changed"
 	fresh, err := p.FetchStaples(t.Context(), LocationID)
 	require.NoError(t, err)
-	assert.Equal(t, "Butternut Squash", fresh[0].Description)
+	assert.Equal(t, "mnfood.club Butternut Squash", fresh[0].Description)
 	assert.Equal(t, "Produce", fresh[0].Categories[0])
+	assert.Equal(t, LocationID+"_butternut-squash", fresh[0].ProductID)
 	wines, err := p.FetchWines(t.Context(), LocationID, []string{"red"})
 	require.NoError(t, err)
 	require.Len(t, wines, 1)

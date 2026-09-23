@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/url"
+	"slices"
 	"testing"
 
 	"careme/internal/ai"
@@ -26,7 +27,13 @@ func TestDemoDemo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, expected, ingredients)
 	body = mustGetBody(t, client, srv.URL+"/demo/mnfood")
-	assert.Contains(t, body, "mnfood.club")
+	for _, item := range ingredients {
+		if slices.Contains(item.Categories, "Produce") {
+			assert.Contains(t, body, "<li>"+item.Description+"</li>")
+		}
+	}
+	assert.Contains(t, body, "mnfood.club Butternut Squash")
+	assert.Contains(t, body, "mnfood.club Blueberries")
 	assert.Contains(t, body, `method="POST" action="/recipes"`)
 	assert.Contains(t, body, `value="`+demo.LocationID+`"`)
 	assert.Contains(t, body, "Recommended add-on")
