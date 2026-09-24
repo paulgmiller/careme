@@ -68,7 +68,12 @@
             </div>
 
             <div class="print-hidden">
-              <div id="recipe-image-panel" class="hidden has-[img]:block overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+              <nav aria-label="Dish image style" class="mb-2 flex items-center gap-2 text-sm">
+                <span class="text-gray-600">Dish image:</span>
+                <a href="/recipe/{{.RecipeHash}}" {{if ne .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="rounded-lg px-3 py-1 font-medium text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if ne .RecipeImage.Style "photo"}}bg-brand-100{{end}}">Chef's sketch</a>
+                <a href="/recipe/{{.RecipeHash}}?style=photo" {{if eq .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="rounded-lg px-3 py-1 font-medium text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if eq .RecipeImage.Style "photo"}}bg-brand-100{{end}}">Photo</a>
+              </nav>
+              <div id="recipe-image-panel" class="{{if or .RecipeImage.HasImage .Saved}}block{{else}}hidden has-[img]:block{{end}} overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
                 {{template "recipe_image" .RecipeImage}}
               </div>
             </div>

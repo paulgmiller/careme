@@ -51,7 +51,7 @@ type campaignImageStub struct {
 	err   error
 }
 
-func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
+func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.calls++
@@ -90,7 +90,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, list.Recipes, 1)
 		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
-		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
+		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash(), ai.RecipeImageSketch)
 		require.NoError(t, err)
 		data, err := io.ReadAll(body)
 		require.NoError(t, err)

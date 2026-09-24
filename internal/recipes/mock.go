@@ -480,9 +480,10 @@ func (m mock) AskQuestion(ctx context.Context, question string, previous ai.Resp
 	}, nil
 }
 
-func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	_ = ctx
 	_ = recipe
+	_ = style
 	return &ai.GeneratedImage{
 		Body: bytes.NewReader(mockRecipeImage),
 	}, nil

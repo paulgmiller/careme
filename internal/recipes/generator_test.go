@@ -148,7 +148,7 @@ func (c *captureWineQuestionAIClient) AskQuestion(ctx context.Context, question 
 	return &ai.QuestionResponse{Answer: c.answer, ResponseID: "resp-question"}, nil
 }
 
-func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *captureWineQuestionAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
 }
 
@@ -228,7 +228,7 @@ func (c *captureRegenerateAIClient) AskQuestion(ctx context.Context, question st
 	panic("unexpected call to AskQuestion")
 }
 
-func (c *captureRegenerateAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *captureRegenerateAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
 }
 
@@ -285,7 +285,7 @@ func (c *captureGenerateAIClient) AskQuestion(ctx context.Context, question stri
 	panic("unexpected call to AskQuestion")
 }
 
-func (c *captureGenerateAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *captureGenerateAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
 }
 
@@ -410,7 +410,7 @@ func (c *sequenceAIClient) AskQuestion(ctx context.Context, question string, pre
 	panic("unexpected call to AskQuestion")
 }
 
-func (c *sequenceAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *sequenceAIClient) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
 }
 

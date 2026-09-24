@@ -169,18 +169,18 @@ func (s *Service) prepareImage(ctx context.Context, list *ai.ShoppingList) error
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 		defer cancel()
 		hash := recipe.ComputeHash()
-		exists, err := s.images.Exists(ctx, hash)
+		exists, err := s.images.Exists(ctx, hash, ai.RecipeImageSketch)
 		if err != nil {
 			return fmt.Errorf("check image cache: %w", err)
 		}
 		if exists {
 			return nil
 		}
-		image, err := s.imageGenerator.GenerateRecipeImage(ctx, recipe)
+		image, err := s.imageGenerator.GenerateRecipeImage(ctx, recipe, ai.RecipeImageSketch)
 		if err != nil {
 			return fmt.Errorf("generate image: %w", err)
 		}
-		if err := s.images.Save(ctx, hash, image); err != nil {
+		if err := s.images.Save(ctx, hash, ai.RecipeImageSketch, image); err != nil {
 			return fmt.Errorf("save image: %w", err)
 		}
 		return nil

@@ -1,10 +1,11 @@
 {{define "recipe_image"}}
 {{if .HasImage}}
-<img src="{{if .Thumbnail}}{{ShoppingRecipeImageURL .Hash}}{{else}}/recipe/{{.Hash}}/image{{end}}"
-     alt="Generated image of the dish" class="h-auto w-full object-cover" loading="lazy" />
+<img src="{{if .Thumbnail}}{{ShoppingRecipeImageURL .Hash}}{{else}}/recipe/{{.Hash}}/image{{if eq .Style "photo"}}?style=photo{{end}}{{end}}"
+     alt="{{if eq .Style "photo"}}Generated photo of the dish{{else}}Chef's sketch of the dish{{end}}" class="h-auto w-full object-cover" loading="lazy" />
 {{else}}
 <!-- 204 keeps polling; a ready image replaces this placeholder and stops polling. -->
-<span hidden hx-get="/recipe/{{.Hash}}/image-panel{{if .Thumbnail}}?view=shopping{{end}}"
-      hx-trigger="every 5s" hx-swap="outerHTML"></span>
+<div {{if .Thumbnail}}hidden{{else}}class="p-6 text-sm text-gray-600"{{end}}
+     hx-get="/recipe/{{.Hash}}/image-panel{{if .Thumbnail}}?view=shopping{{else if eq .Style "photo"}}?style=photo{{end}}"
+     hx-trigger="every 5s" hx-swap="outerHTML">{{if not .Thumbnail}}{{if eq .Style "photo"}}Making a photo of your dish…{{else}}Sketching your dish…{{end}}{{end}}</div>
 {{end}}
 {{end}}

@@ -32,13 +32,13 @@ type ExtGenerator = generator
 
 // should probably be in ai package?
 type ImageGen interface {
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error)
 }
 
 type ImageStore interface {
-	Exists(ctx context.Context, hash string) (bool, error)
-	FromCache(ctx context.Context, hash string) (io.ReadCloser, error)
-	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
+	Exists(ctx context.Context, hash string, style ai.RecipeImageStyle) (bool, error)
+	FromCache(ctx context.Context, hash string, style ai.RecipeImageStyle) (io.ReadCloser, error)
+	Save(ctx context.Context, hash string, style ai.RecipeImageStyle, image *ai.GeneratedImage) error
 }
 
 type statusStore interface {
@@ -59,6 +59,7 @@ type server struct {
 	generator          generator
 	locServer          locServer
 	wg                 sync.WaitGroup
+	imageJobs          sync.Map
 	clerk              auth.AuthClient
 	critiques          critiqueStore
 }

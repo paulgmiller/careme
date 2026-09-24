@@ -169,7 +169,7 @@ type fakeMailImageGenerator struct {
 	err error
 }
 
-func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
+func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe, _ ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

@@ -18,6 +18,7 @@ type recipeImageView struct {
 	Hash      string
 	HasImage  bool
 	Thumbnail bool
+	Style     ai.RecipeImageStyle
 }
 
 type recipePageView struct {
@@ -54,6 +55,7 @@ type recipeViewInput struct {
 	currentUser        *utypes.User
 	recipeCritique     *ai.RecipeCritique
 	hasRecipeImage     bool
+	imageStyle         ai.RecipeImageStyle
 	thread             []RecipeThreadEntry
 	feedback           feedback.Feedback
 	wineRecommendation *ai.WineSelection
@@ -99,7 +101,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Thread:                  thread,
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
-		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage},
+		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage, Style: input.imageStyle},
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,

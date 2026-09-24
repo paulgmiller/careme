@@ -221,7 +221,7 @@ func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash strin
 }
 
 func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string) bool {
-	exists, err := s.images.Exists(ctx, recipeHash)
+	exists, err := s.images.Exists(ctx, recipeHash, ai.RecipeImageSketch)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image for recipe card render", "recipe_hash", recipeHash, "error", err)
 		return false
@@ -235,9 +235,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 		defer cancel()
 		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
 	})
-	s.wg.Go(func() {
-		s.ensureRecipeImage(ctx, recipeHash, recipe)
-	})
+	s.startRecipeImageGeneration(ctx, recipeHash, recipe, ai.RecipeImageSketch)
 }
 
 func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
@@ -260,12 +258,23 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 	}
 }
 
-func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
+func (s *server) startRecipeImageGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, style ai.RecipeImageStyle) {
+	jobKey := string(style) + "/" + recipeHash
+	if _, loaded := s.imageJobs.LoadOrStore(jobKey, struct{}{}); loaded {
+		return
+	}
+	s.wg.Go(func() {
+		defer s.imageJobs.Delete(jobKey)
+		s.ensureRecipeImage(ctx, recipeHash, recipe, style)
+	})
+}
+
+func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe, style ai.RecipeImageStyle) {
 	// 4 minutes is a magical number here. neeed to look at data.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
 	defer cancel()
 
-	exists, err := s.images.Exists(ctx, recipeHash)
+	exists, err := s.images.Exists(ctx, recipeHash, style)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
 		return
@@ -273,13 +282,13 @@ func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recip
 	if exists {
 		return
 	}
-	slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
-	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
+	slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash, "style", style)
+	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe, style)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
 		return
 	}
-	if err := s.images.Save(ctx, recipeHash, image); err != nil {
+	if err := s.images.Save(ctx, recipeHash, style, image); err != nil {
 		slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
 	}
 }

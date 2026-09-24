@@ -1294,7 +1294,7 @@ func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, questi
 	panic("unexpected call to AskQuestion")
 }
 
-func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
 }
 
@@ -1535,7 +1535,7 @@ type countingImageGenerator struct {
 	imageBody    []byte
 }
 
-func (c *countingImageGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+func (c *countingImageGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	if c.panicOnImage {
 		panic("unexpected call to GenerateRecipeImage")
 	}
@@ -1711,7 +1711,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
-	if err := s.images.Save(t.Context(), recipeHash, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
+	if err := s.images.Save(t.Context(), recipeHash, ai.RecipeImageSketch, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
 
@@ -2089,7 +2089,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
-	imageBody, err := s.images.FromCache(t.Context(), recipeHash)
+	imageBody, err := s.images.FromCache(t.Context(), recipeHash, ai.RecipeImageSketch)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, imageBody.Close()) }()
 	gotImage, err := io.ReadAll(imageBody)
@@ -3043,7 +3043,7 @@ type failingImageExistsStore struct {
 	ImageStore
 }
 
-func (failingImageExistsStore) Exists(context.Context, string) (bool, error) {
+func (failingImageExistsStore) Exists(context.Context, string, ai.RecipeImageStyle) (bool, error) {
 	return false, errors.New("image cache unavailable")
 }
 
@@ -3052,7 +3052,7 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
 			if state == "ready" {
-				require.NoError(t, s.images.Save(t.Context(), "recipe-hash", &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
+				require.NoError(t, s.images.Save(t.Context(), "recipe-hash", ai.RecipeImageSketch, &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
 			}
 			if state == "error" {
 				s.images = failingImageExistsStore{ImageStore: s.images}

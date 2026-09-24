@@ -23,16 +23,26 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 		Instructions: []string{"Roast until golden."},
 	}
 
-	prompt, err := buildRecipeImagePrompt(recipe)
+	prompt, err := buildRecipeImagePrompt(recipe, RecipeImageSketch)
 	if err != nil {
 		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
 	}
-	if !strings.Contains(prompt, "realistic overhead food photograph") {
+	if !strings.Contains(prompt, "hand-drawn chef's planning sketch") {
 		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Roast until golden.\n") {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
+	assert.NotContains(t, prompt, "photograph")
+
+	photoPrompt, err := buildRecipeImagePrompt(recipe, RecipeImagePhoto)
+	require.NoError(t, err)
+	assert.Contains(t, photoPrompt, "realistic overhead food photograph")
+	assert.NotContains(t, photoPrompt, "hand-drawn")
+	assert.Contains(t, photoPrompt, "Recipe:\nRoast Chicken")
+
+	_, err = buildRecipeImagePrompt(recipe, "unknown")
+	require.Error(t, err)
 }
 
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
@@ -52,7 +62,7 @@ func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
 		}, nil
 	})}, nil)
 
-	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"})
+	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"}, RecipeImageSketch)
 	require.NoError(t, err)
 	imageBody, err := io.ReadAll(image.Body)
 	require.NoError(t, err)

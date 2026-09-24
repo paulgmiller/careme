@@ -70,12 +70,12 @@ type generationStatusStore interface {
 }
 
 type imageGenerator interface {
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error)
 }
 
 type imageStore interface {
-	Exists(ctx context.Context, hash string) (bool, error)
-	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
+	Exists(ctx context.Context, hash string, style ai.RecipeImageStyle) (bool, error)
+	Save(ctx context.Context, hash string, style ai.RecipeImageStyle, image *ai.GeneratedImage) error
 }
 
 type userStore interface {
@@ -383,7 +383,7 @@ func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe
 
 func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error {
 	hash := recipe.ComputeHash()
-	exists, err := m.imageStore.Exists(ctx, hash)
+	exists, err := m.imageStore.Exists(ctx, hash, ai.RecipeImageSketch)
 	if err != nil {
 		return fmt.Errorf("check image cache: %w", err)
 	}
@@ -391,11 +391,11 @@ func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error
 		return nil
 	}
 
-	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe)
+	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe, ai.RecipeImageSketch)
 	if err != nil {
 		return fmt.Errorf("generate image: %w", err)
 	}
-	if err := m.imageStore.Save(ctx, hash, generated); err != nil {
+	if err := m.imageStore.Save(ctx, hash, ai.RecipeImageSketch, generated); err != nil {
 		return fmt.Errorf("save image: %w", err)
 	}
 	return nil
