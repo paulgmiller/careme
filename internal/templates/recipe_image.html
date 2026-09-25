@@ -4,7 +4,7 @@
      alt="{{if eq .Style "photo"}}Generated photo of the dish{{else}}Chef's sketch of the dish{{end}}" class="h-auto w-full object-cover" loading="lazy" />
 {{else}}
 <!-- 204 keeps polling; a ready image replaces this placeholder and stops polling. -->
-<div {{if .Thumbnail}}hidden{{else}}class="p-6 text-sm text-gray-600"{{end}}
+<div {{if .Thumbnail}}hidden{{else}}class="min-h-24 p-6 pr-28 text-sm text-gray-600"{{end}}
      hx-get="/recipe/{{.Hash}}/image-panel{{if .Thumbnail}}?view=shopping{{else if eq .Style "photo"}}?style=photo{{end}}"
      hx-trigger="every 5s" hx-swap="outerHTML">{{if not .Thumbnail}}{{if eq .Style "photo"}}Making a photo of your dish…{{else}}Sketching your dish…{{end}}{{end}}</div>
 {{end}}

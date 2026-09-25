@@ -68,13 +68,16 @@
             </div>
 
             <div class="print-hidden">
-              <nav aria-label="Dish image style" class="mb-2 flex items-center gap-2 text-sm">
-                <span class="text-gray-600">Dish image:</span>
-                <a href="/recipe/{{.RecipeHash}}" {{if ne .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="rounded-lg px-3 py-1 font-medium text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if ne .RecipeImage.Style "photo"}}bg-brand-100{{end}}">Chef's sketch</a>
-                <a href="/recipe/{{.RecipeHash}}?style=photo" {{if eq .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="rounded-lg px-3 py-1 font-medium text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if eq .RecipeImage.Style "photo"}}bg-brand-100{{end}}">Photo</a>
-              </nav>
-              <div id="recipe-image-panel" class="{{if or .RecipeImage.HasImage .Saved}}block{{else}}hidden has-[img]:block{{end}} overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+              <div id="recipe-image-panel" class="relative overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
                 {{template "recipe_image" .RecipeImage}}
+                <nav aria-label="Dish image style" class="absolute right-3 top-3 flex gap-1 rounded-xl border border-brand-100 bg-white/90 p-1 shadow-md backdrop-blur-sm">
+                  <a href="/recipe/{{.RecipeHash}}" aria-label="Show chef's sketch" title="Show chef's sketch" {{if ne .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="inline-flex size-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if ne .RecipeImage.Style "photo"}}bg-brand-100{{end}}">
+                    {{template "icon_pencil" .}}
+                  </a>
+                  <a href="/recipe/{{.RecipeHash}}?style=photo" aria-label="Show photo" title="Show photo" {{if eq .RecipeImage.Style "photo"}}aria-current="page"{{end}} class="inline-flex size-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 {{if eq .RecipeImage.Style "photo"}}bg-brand-100{{end}}">
+                    {{template "icon_camera" .}}
+                  </a>
+                </nav>
               </div>
             </div>
 

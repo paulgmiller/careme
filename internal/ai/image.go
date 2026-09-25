@@ -36,12 +36,14 @@ const recipeSketchPromptInstructions = `
 Create an approachable black-and-white pencil sketch from a home cook's recipe notebook.
 - Use only loose graphite pencil lines on off-white paper: no color, watercolor, paint, or polished digital illustration.
 - Keep visible construction lines, light cross-hatching, and a few natural smudges so it feels casually sketched rather than like fine art.
-- Show the main ingredients and how the recipe's components come together on one ordinary plate.
+- Fill the image with one ordinary plate containing the finished dish. Make that single plate the only illustrated subject.
 - Suggest an achievable home-cooked result, with natural portions and relaxed, imperfect plating.
-- Add two or three short, legible handwritten notes with simple arrows pointing to relevant parts of the dish. Base the notes only on the recipe; do not invent ingredients or claims.
 - Keep the image clearly illustrative, not photorealistic, glossy, restaurant styled, or precious.
-- Avoid people, hands, branded packaging, collages, decorative titles, and extra side dishes.
+- Do not add handwriting, notes, labels, arrows, or other text to the image.
+- Do not show separate ingredients, preparation stages, cookware, utensils, measuring vessels, or step-by-step panels. Avoid people, hands, branded packaging, collages, decorative titles, and extra side dishes.
 `
+
+// TODO: Consider generating small, separate illustrations for individual recipe instructions.
 
 const (
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.

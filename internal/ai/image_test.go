@@ -34,10 +34,11 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
 	assert.NotContains(t, prompt, "photograph")
-	assert.Contains(t, prompt, "two or three short, legible handwritten notes")
-	assert.Contains(t, prompt, "do not invent ingredients or claims")
+	assert.Contains(t, prompt, "one ordinary plate")
+	assert.Contains(t, prompt, "single plate the only illustrated subject")
+	assert.Contains(t, prompt, "Do not add handwriting, notes, labels, arrows, or other text")
 	assert.Contains(t, prompt, "no color, watercolor, paint")
-	assert.NotContains(t, prompt, "Avoid text")
+	assert.Contains(t, prompt, "Do not show separate ingredients, preparation stages, cookware")
 
 	photoPrompt, err := buildRecipeImagePrompt(recipe, RecipeImagePhoto)
 	require.NoError(t, err)

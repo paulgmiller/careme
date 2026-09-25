@@ -419,12 +419,48 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	if !strings.Contains(html, "/recipe/"+recipeHash+"/image") {
 		t.Fatalf("recipe HTML should render the cached recipe image URL, got body: %s", html)
 	}
-	if !strings.Contains(html, "Chef's sketch") || !strings.Contains(html, `?style=photo`) {
-		t.Fatalf("saved recipe should offer sketch and photo styles, got body: %s", html)
-	}
+	assert.Contains(t, html, `aria-label="Dish image style"`)
+	assert.Contains(t, html, `aria-label="Show chef's sketch"`)
+	assert.Contains(t, html, `aria-label="Show photo"`)
+	assert.Contains(t, html, `href="/recipe/`+recipeHash+`?style=photo"`)
+	assert.Contains(t, html, `aria-label="Show chef's sketch" title="Show chef's sketch" aria-current="page"`)
+	assert.NotContains(t, html, `Dish image:`)
 	if strings.Contains(html, "View dish image") || strings.Contains(html, "See plated dish") {
 		t.Fatalf("recipe HTML should not render an image action when an image exists, got body: %s", html)
 	}
+}
+
+func TestFormatRecipeHTML_PhotoImageControlIsSelected(t *testing.T) {
+	t.Parallel()
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	w := httptest.NewRecorder()
+	writeRecipePage(t.Context(), w, recipeViewInput{
+		params:         DefaultParams(&loc, time.Now()),
+		recipe:         list.Recipes[0],
+		currentUser:    renderTestUser(true),
+		hasRecipeImage: true,
+		imageStyle:     ai.RecipeImagePhoto,
+	})
+	html := assertHTTPSuccess(t, w)
+
+	assert.Contains(t, html, `aria-label="Show photo" title="Show photo" aria-current="page"`)
+	assert.NotContains(t, html, `aria-label="Show chef's sketch" title="Show chef's sketch" aria-current="page"`)
+}
+
+func TestFormatRecipeHTML_ImageControlsRemainAvailableWhileLoading(t *testing.T) {
+	t.Parallel()
+	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
+	w := httptest.NewRecorder()
+	writeRecipePage(t.Context(), w, recipeViewInput{
+		params:      DefaultParams(&loc, time.Now()),
+		recipe:      list.Recipes[0],
+		currentUser: renderTestUser(true),
+	})
+	html := assertHTTPSuccess(t, w)
+
+	assert.Contains(t, html, "Sketching your dish…")
+	assert.Contains(t, html, `aria-label="Show photo"`)
+	assert.NotContains(t, html, `id="recipe-image-panel" class="hidden`)
 }
 
 func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
