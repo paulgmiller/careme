@@ -18,6 +18,21 @@ Because evaluations can make paid model calls, running every suite requires an e
 ./task.sh evals EVAL=all
 ```
 
+## Image latency
+
+Compare the production sketch and photo image paths using the same recipe:
+
+```sh
+./task.sh evals EVAL=image-latency -- --no-cache
+```
+
+The provider makes two paid image calls, sequentially: the Flare sketch first and
+the Sunburst photo second. It reports each latency, their difference, and the
+photo-to-sketch ratio, and passes only when the sketch finishes first. Running the
+sketch first gives the photo any benefit from connection reuse. Use Promptfoo's
+`--repeat 3` (or more) when assessing the result beyond a smoke comparison; each
+repeat makes two additional paid image calls. Only `AI_API_KEY` is required.
+
 Generate recipe test cases from a cached shopping-list hash:
 
 ```sh

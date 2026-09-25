@@ -1,0 +1,58 @@
+description: Recipe image latency comparison
+evaluateOptions:
+  maxConcurrency: 1
+
+# The Go provider ignores the rendered prompt. It generates both image styles
+# from the same recipe and reports their production-model latency.
+prompts:
+  - image-latency-eval
+
+providers:
+  - id: 'file://provider.go'
+    label: Flare sketch vs Sunburst photo
+
+defaultTest:
+  assert:
+    - type: is-json
+      metric: latency-result-json
+    - type: javascript
+      value: |
+        const timings = JSON.parse(output);
+        const pass = timings.sketch.latency_ms < timings.photo.latency_ms;
+        return {
+          pass,
+          score: pass ? 1 : 0,
+          reason: `Sketch/Flare ${timings.sketch.latency_ms}ms; photo/Sunburst ${timings.photo.latency_ms}ms; difference ${timings.difference_ms}ms; photo is ${timings.photo_to_sketch_ratio.toFixed(2)}x sketch latency.`,
+        };
+      metric: flare-sketch-faster-than-sunburst-photo
+
+tests:
+  - description: Same sheet-pan dinner rendered as sketch and photo
+    vars:
+      recipe:
+        title: Sheet Pan Lemon Chicken and Broccoli
+        description: Roasted lemon-garlic chicken thighs with browned broccoli and tender potatoes.
+        properties:
+          total_minutes: 45
+          servings: 4
+          estimated_cost_dollars: 18
+          calories_per_serving: 540
+          cooking_methods: [oven]
+        ingredients:
+          - name: Bone-in chicken thighs
+            quantity: 2 pounds
+          - name: Broccoli florets
+            quantity: 12 ounces
+          - name: Baby potatoes
+            quantity: 1 pound
+          - name: Lemon
+            quantity: '1'
+          - name: Garlic
+            quantity: 3 cloves
+        instructions:
+          - Arrange the seasoned chicken, broccoli, and potatoes on a sheet pan.
+          - Roast until the chicken is browned and cooked through, the potatoes are tender, and the broccoli edges are crisp.
+          - Finish with fresh lemon juice and serve everything together.
+        health: ''
+        drink_pairing: Sparkling water with lemon
+        wine_styles: []

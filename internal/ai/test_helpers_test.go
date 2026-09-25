@@ -11,9 +11,10 @@ import (
 
 func testAIConfig(recipeModel string) config.AIConfig {
 	return config.AIConfig{
-		APIKey:      "test-key",
-		RecipeModel: recipeModel,
-		ImageModel:  config.DefaultImageModel,
+		APIKey:           "test-key",
+		RecipeModel:      recipeModel,
+		ImageModel:       config.DefaultImageModel,
+		SketchImageModel: config.DefaultSketchImageModel,
 	}
 }
 

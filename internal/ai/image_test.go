@@ -27,13 +27,17 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
 	}
-	if !strings.Contains(prompt, "hand-drawn chef's planning sketch") {
+	if !strings.Contains(prompt, "approachable black-and-white pencil sketch") {
 		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Roast until golden.\n") {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
 	assert.NotContains(t, prompt, "photograph")
+	assert.Contains(t, prompt, "two or three short, legible handwritten notes")
+	assert.Contains(t, prompt, "do not invent ingredients or claims")
+	assert.Contains(t, prompt, "no color, watercolor, paint")
+	assert.NotContains(t, prompt, "Avoid text")
 
 	photoPrompt, err := buildRecipeImagePrompt(recipe, RecipeImagePhoto)
 	require.NoError(t, err)
@@ -45,28 +49,36 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
-	const imageModel = "gpt-image-2.5-sunburst"
-	aiConfig := testAIConfig(config.DefaultRecipeModel)
-	aiConfig.ImageModel = imageModel
-	client := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(req.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(body), `"model":"`+imageModel+`"`)
+func TestGenerateRecipeImageUsesConfiguredModelForStyle(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		style RecipeImageStyle
+		model openai.ImageModel
+	}{
+		{"sketch", RecipeImageSketch, config.DefaultSketchImageModel},
+		{"photo", RecipeImagePhoto, config.DefaultImageModel},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				assert.Contains(t, string(body), `"model":"`+string(test.model)+`"`)
 
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
-			Request:    req,
-		}, nil
-	})}, nil)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
+					Request:    req,
+				}, nil
+			})}, nil)
 
-	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"}, RecipeImageSketch)
-	require.NoError(t, err)
-	imageBody, err := io.ReadAll(image.Body)
-	require.NoError(t, err)
-	assert.Equal(t, []byte("image"), imageBody)
+			image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"}, test.style)
+			require.NoError(t, err)
+			imageBody, err := io.ReadAll(image.Body)
+			require.NoError(t, err)
+			assert.Equal(t, []byte("image"), imageBody)
+		})
+	}
 }
 
 func TestImageUsageLogAttr(t *testing.T) {

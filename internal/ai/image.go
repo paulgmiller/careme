@@ -33,12 +33,14 @@ Generate a realistic overhead food photograph of a single finished plate.
 `
 
 const recipeSketchPromptInstructions = `
-Create a warm, hand-drawn chef's planning sketch of the finished home-cooked dish.
-- Use loose pencil and watercolor strokes on off-white paper, with visible sketch lines and gentle color washes.
+Create an approachable black-and-white pencil sketch from a home cook's recipe notebook.
+- Use only loose graphite pencil lines on off-white paper: no color, watercolor, paint, or polished digital illustration.
+- Keep visible construction lines, light cross-hatching, and a few natural smudges so it feels casually sketched rather than like fine art.
 - Show the main ingredients and how the recipe's components come together on one ordinary plate.
 - Suggest an achievable home-cooked result, with natural portions and relaxed, imperfect plating.
-- Keep the image clearly illustrative, not photorealistic, glossy, or restaurant styled.
-- Avoid text, labels, people, hands, branded packaging, collages, and extra side dishes.
+- Add two or three short, legible handwritten notes with simple arrows pointing to relevant parts of the dish. Base the notes only on the recipe; do not invent ingredients or claims.
+- Keep the image clearly illustrative, not photorealistic, glossy, restaurant styled, or precious.
+- Avoid people, hands, branded packaging, collages, decorative titles, and extra side dishes.
 `
 
 const (
@@ -53,10 +55,14 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe, style R
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
+	imageModel := c.imageModel
+	if style == RecipeImageSketch {
+		imageModel = c.sketchImageModel
+	}
 
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
-		Model:        c.imageModel,
+		Model:        imageModel,
 		N:            openai.Int(1),
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
@@ -66,7 +72,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe, style R
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(c.imageModel), imageUsageLogAttr(string(c.imageModel), resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(imageModel), imageUsageLogAttr(string(imageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
