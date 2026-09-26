@@ -2,33 +2,27 @@ description: Recipe image latency comparison
 evaluateOptions:
   maxConcurrency: 1
 
-# The Go provider ignores the rendered prompt. It generates both image styles
-# from the same recipe and reports their production-model latency.
+# The Go provider ignores the rendered prompt. Each test generates one image
+# style from the same recipe and reports its production-model latency.
 prompts:
   - image-latency-eval
 
 providers:
   - id: 'file://provider.go'
-    label: Flare sketch vs Sunburst photo
+    label: imagegeneration
 
 defaultTest:
   assert:
-    - type: is-json
-      metric: latency-result-json
-    - type: javascript
-      value: |
-        const timings = JSON.parse(output);
-        const pass = timings.sketch.latency_ms < timings.photo.latency_ms;
-        return {
-          pass,
-          score: pass ? 1 : 0,
-          reason: `Sketch/Flare ${timings.sketch.latency_ms}ms; photo/Sunburst ${timings.photo.latency_ms}ms; difference ${timings.difference_ms}ms; photo is ${timings.photo_to_sketch_ratio.toFixed(2)}x sketch latency.`,
-        };
-      metric: flare-sketch-faster-than-sunburst-photo
+    - type: latency
+      threshold: 11000
+      metric: fastenough
 
 tests:
   - description: Same sheet-pan dinner rendered as sketch and photo
     vars:
+      image_style:
+        - photo
+        - sketch
       recipe:
         title: Sheet Pan Lemon Chicken and Broccoli
         description: Roasted lemon-garlic chicken thighs with browned broccoli and tender potatoes.

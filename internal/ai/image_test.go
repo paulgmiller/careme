@@ -1,9 +1,7 @@
 package ai
 
 import (
-	"io"
 	"log/slog"
-	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -48,38 +46,6 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 
 	_, err = buildRecipeImagePrompt(recipe, "unknown")
 	require.Error(t, err)
-}
-
-func TestGenerateRecipeImageUsesConfiguredModelForStyle(t *testing.T) {
-	for _, test := range []struct {
-		name  string
-		style RecipeImageStyle
-		model openai.ImageModel
-	}{
-		{"sketch", RecipeImageSketch, config.DefaultSketchImageModel},
-		{"photo", RecipeImagePhoto, config.DefaultImageModel},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				body, err := io.ReadAll(req.Body)
-				require.NoError(t, err)
-				assert.Contains(t, string(body), `"model":"`+string(test.model)+`"`)
-
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header:     http.Header{"Content-Type": []string{"application/json"}},
-					Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
-					Request:    req,
-				}, nil
-			})}, nil)
-
-			image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"}, test.style)
-			require.NoError(t, err)
-			imageBody, err := io.ReadAll(image.Body)
-			require.NoError(t, err)
-			assert.Equal(t, []byte("image"), imageBody)
-		})
-	}
 }
 
 func TestImageUsageLogAttr(t *testing.T) {

@@ -22,9 +22,7 @@ const (
 	// DefaultRecipeModel is the production model for recipe and menu generation.
 	DefaultRecipeModel openai.ResponsesModel = "gpt-6-sol"
 	// DefaultImageModel is the production model for recipe image generation.
-	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Sunburst
-	// DefaultSketchImageModel is the production model for recipe sketch generation.
-	DefaultSketchImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Flare
+	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Flare
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
 	DefaultCritiqueModel = "google/gemini-3.1-pro-preview"
 )
@@ -50,11 +48,10 @@ type Config struct {
 
 type AIConfig struct {
 	// ServiceTier selects processing for recipe and menu requests on this client.
-	ServiceTier      responses.ResponseNewParamsServiceTier `json:"service_tier,omitempty"`
-	APIKey           string                                 `json:"api_key"`
-	RecipeModel      openai.ResponsesModel                  `json:"recipe_model"`
-	ImageModel       openai.ImageModel                      `json:"image_model"`
-	SketchImageModel openai.ImageModel                      `json:"sketch_image_model"`
+	ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier,omitempty"`
+	APIKey      string                                 `json:"api_key"`
+	RecipeModel openai.ResponsesModel                  `json:"recipe_model"`
+	ImageModel  openai.ImageModel                      `json:"image_model"`
 }
 
 type IngredientGradingConfig struct {
@@ -187,10 +184,9 @@ func Load() (*Config, error) {
 
 	config := &Config{
 		AI: AIConfig{
-			APIKey:           os.Getenv("AI_API_KEY"),
-			RecipeModel:      DefaultRecipeModel,
-			ImageModel:       DefaultImageModel,
-			SketchImageModel: DefaultSketchImageModel,
+			APIKey:      os.Getenv("AI_API_KEY"),
+			RecipeModel: DefaultRecipeModel,
+			ImageModel:  DefaultImageModel,
 		},
 		IngredientGrading: IngredientGradingConfig{
 			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),

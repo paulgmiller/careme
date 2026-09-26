@@ -58,9 +58,6 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe, style R
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
 	imageModel := c.imageModel
-	if style == RecipeImageSketch {
-		imageModel = c.sketchImageModel
-	}
 
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,

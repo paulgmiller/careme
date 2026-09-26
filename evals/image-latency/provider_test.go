@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
+	"testing/iotest"
 
 	"careme/internal/ai"
 
@@ -15,6 +15,7 @@ import (
 
 const validImageLatencyContext = `{
 	"vars": {
+		"image_style": "photo",
 		"recipe": {
 			"title": "Sheet Pan Chicken and Broccoli",
 			"description": "Roasted chicken with crisp broccoli.",
@@ -23,33 +24,23 @@ const validImageLatencyContext = `{
 	}
 }`
 
-func TestRunEvalComparesSketchAndPhotoLatency(t *testing.T) {
-	var styles []ai.RecipeImageStyle
-	measure := func(_ context.Context, _ imageGenerator, _ ai.Recipe, style ai.RecipeImageStyle) (time.Duration, error) {
-		styles = append(styles, style)
-		if style == ai.RecipeImageSketch {
-			return 4 * time.Second, nil
-		}
-		return 10 * time.Second, nil
+func TestRunEvalReportsImageStyle(t *testing.T) {
+	for _, style := range []ai.RecipeImageStyle{ai.RecipeImagePhoto, ai.RecipeImageSketch} {
+		t.Run(string(style), func(t *testing.T) {
+			body := []byte(`{"vars":{"image_style":"` + string(style) + `","recipe":{"title":"Dinner","instructions":["Cook it."]}}}`)
+			calls := 0
+			measure := func(_ context.Context, _ imageGenerator, _ ai.Recipe, gotStyle ai.RecipeImageStyle) error {
+				calls++
+				assert.Equal(t, style, gotStyle)
+				return nil
+			}
+
+			result, err := runEval(body, nil, measure)
+			require.NoError(t, err)
+			assert.Equal(t, 1, calls)
+			assert.Equal(t, map[string]interface{}{"output": string(style)}, result)
+		})
 	}
-
-	result, err := runEval([]byte(validImageLatencyContext), nil, imageModels{
-		Sketch: "gpt-image-2.5-flare",
-		Photo:  "gpt-image-2.5-sunburst",
-	}, measure)
-	require.NoError(t, err)
-
-	assert.Equal(t, []ai.RecipeImageStyle{ai.RecipeImageSketch, ai.RecipeImagePhoto}, styles)
-	assert.Equal(t, int64(14_000), result["latencyMs"])
-	assert.JSONEq(t, `{
-		"sketch":{"style":"sketch","model":"gpt-image-2.5-flare","latency_ms":4000},
-		"photo":{"style":"photo","model":"gpt-image-2.5-sunburst","latency_ms":10000},
-		"difference_ms":6000,
-		"photo_to_sketch_ratio":2.5
-	}`, result["output"].(string))
-	metadata := result["metadata"].(map[string]interface{})
-	assert.Equal(t, int64(4_000), metadata["sketchLatencyMs"])
-	assert.Equal(t, int64(10_000), metadata["photoLatencyMs"])
 }
 
 func TestRunEvalRejectsIncompleteRecipe(t *testing.T) {
@@ -60,10 +51,12 @@ func TestRunEvalRejectsIncompleteRecipe(t *testing.T) {
 	}{
 		{"missing title", `{"vars":{"recipe":{"instructions":["Cook it."]}}}`, "eval recipe title is required"},
 		{"missing instructions", `{"vars":{"recipe":{"title":"Dinner"}}}`, "at least one eval recipe instruction is required"},
+		{"missing style", `{"vars":{"recipe":{"title":"Dinner","instructions":["Cook it."]}}}`, "eval image_style must be photo or sketch"},
+		{"invalid style", `{"vars":{"image_style":"painting","recipe":{"title":"Dinner","instructions":["Cook it."]}}}`, "eval image_style must be photo or sketch"},
 		{"invalid JSON", `{"vars":`, "failed to decode Promptfoo context"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := runEval([]byte(test.body), nil, imageModels{}, nil)
+			result, err := runEval([]byte(test.body), nil, nil)
 			assert.Nil(t, result)
 			require.ErrorContains(t, err, test.want)
 		})
@@ -71,14 +64,14 @@ func TestRunEvalRejectsIncompleteRecipe(t *testing.T) {
 }
 
 func TestRunEvalReturnsStyleSpecificError(t *testing.T) {
-	measure := func(_ context.Context, _ imageGenerator, _ ai.Recipe, style ai.RecipeImageStyle) (time.Duration, error) {
+	measure := func(_ context.Context, _ imageGenerator, _ ai.Recipe, style ai.RecipeImageStyle) error {
 		if style == ai.RecipeImagePhoto {
-			return 0, errors.New("model unavailable")
+			return errors.New("model unavailable")
 		}
-		return time.Second, nil
+		return nil
 	}
 
-	result, err := runEval([]byte(validImageLatencyContext), nil, imageModels{}, measure)
+	result, err := runEval([]byte(validImageLatencyContext), nil, measure)
 	assert.Nil(t, result)
 	require.EqualError(t, err, "measure photo latency: model unavailable")
 }
@@ -93,12 +86,16 @@ func (s stubImageGenerator) GenerateRecipeImage(context.Context, ai.Recipe, ai.R
 }
 
 func TestMeasureImageLatencyConsumesImage(t *testing.T) {
-	result, err := measureImageLatency(t.Context(), stubImageGenerator{
+	err := measureImageLatency(t.Context(), stubImageGenerator{
 		image: &ai.GeneratedImage{Body: bytes.NewBufferString("image")},
 	}, ai.Recipe{Title: "Dinner"}, ai.RecipeImageSketch)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, result, time.Duration(0))
 
-	_, err = measureImageLatency(t.Context(), stubImageGenerator{}, ai.Recipe{}, ai.RecipeImageSketch)
+	err = measureImageLatency(t.Context(), stubImageGenerator{}, ai.Recipe{}, ai.RecipeImageSketch)
 	require.EqualError(t, err, "image generation returned no image body")
+
+	err = measureImageLatency(t.Context(), stubImageGenerator{
+		image: &ai.GeneratedImage{Body: iotest.ErrReader(errors.New("read failed"))},
+	}, ai.Recipe{}, ai.RecipeImageSketch)
+	require.EqualError(t, err, "read generated image: read failed")
 }

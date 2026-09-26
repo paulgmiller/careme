@@ -13,15 +13,13 @@ import (
 
 func TestNewClientTrimsModels(t *testing.T) {
 	client := NewClient(config.AIConfig{
-		APIKey:           "test-key",
-		RecipeModel:      " candidate-model ",
-		ImageModel:       " candidate-image-model ",
-		SketchImageModel: " candidate-sketch-image-model ",
+		APIKey:      "test-key",
+		RecipeModel: " candidate-model ",
+		ImageModel:  " candidate-image-model ",
 	}, nil, &capturePromptRecorder{})
 
 	assert.Equal(t, "candidate-model", client.model)
 	assert.Equal(t, "candidate-image-model", string(client.imageModel))
-	assert.Equal(t, "candidate-sketch-image-model", string(client.sketchImageModel))
 	assert.Equal(t, defaultWineModel, client.wineModel)
 }
 

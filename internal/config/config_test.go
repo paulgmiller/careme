@@ -152,7 +152,6 @@ func TestLoadDefaultsAIModels(t *testing.T) {
 
 	assert.Equal(t, DefaultRecipeModel, cfg.AI.RecipeModel)
 	assert.Equal(t, DefaultImageModel, cfg.AI.ImageModel)
-	assert.Equal(t, DefaultSketchImageModel, cfg.AI.SketchImageModel)
 	assert.Equal(t, DefaultCritiqueModel, cfg.OpenRouter.CritiqueModel)
 }
 

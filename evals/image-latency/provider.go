@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/config"
@@ -18,32 +17,15 @@ type promptfooContext struct {
 }
 
 type evalCase struct {
-	Recipe ai.Recipe `json:"recipe"`
+	Recipe     ai.Recipe           `json:"recipe"`
+	ImageStyle ai.RecipeImageStyle `json:"image_style"` // photo or sketch
 }
 
 type imageGenerator interface {
 	GenerateRecipeImage(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error)
 }
 
-type imageModels struct {
-	Sketch string
-	Photo  string
-}
-
-type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) (time.Duration, error)
-
-type latencyResult struct {
-	Style     ai.RecipeImageStyle `json:"style"`
-	Model     string              `json:"model"`
-	LatencyMS int64               `json:"latency_ms"`
-}
-
-type comparisonResult struct {
-	Sketch       latencyResult `json:"sketch"`
-	Photo        latencyResult `json:"photo"`
-	DifferenceMS int64         `json:"difference_ms"`
-	PhotoRatio   float64       `json:"photo_to_sketch_ratio"`
-}
+type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error
 
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
 	body, err := json.Marshal(ctx)
@@ -60,10 +42,7 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	}
 
 	generator := ai.NewClient(cfg.AI, http.DefaultClient, nil)
-	result, err := runEval(body, generator, imageModels{
-		Sketch: string(cfg.AI.SketchImageModel),
-		Photo:  string(cfg.AI.ImageModel),
-	}, measureImageLatency)
+	result, err := runEval(body, generator, measureImageLatency)
 	if err != nil {
 		// Preserve errors in Promptfoo's Go wrapper, which otherwise hides them.
 		return map[string]interface{}{"error": err.Error()}, nil
@@ -71,7 +50,7 @@ func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (ma
 	return result, nil
 }
 
-func runEval(body []byte, generator imageGenerator, models imageModels, measure latencyMeasurer) (map[string]interface{}, error) {
+func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (map[string]interface{}, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return nil, fmt.Errorf("failed to decode Promptfoo context: %w", err)
@@ -82,57 +61,30 @@ func runEval(body []byte, generator imageGenerator, models imageModels, measure 
 	if len(pf.Vars.Recipe.Instructions) == 0 {
 		return nil, fmt.Errorf("at least one eval recipe instruction is required")
 	}
-
-	// Run sketch first so the photo request gets any benefit from connection reuse.
-	sketchLatency, err := measure(context.Background(), generator, pf.Vars.Recipe, ai.RecipeImageSketch)
-	if err != nil {
-		return nil, fmt.Errorf("measure sketch latency: %w", err)
-	}
-	photoLatency, err := measure(context.Background(), generator, pf.Vars.Recipe, ai.RecipeImagePhoto)
-	if err != nil {
-		return nil, fmt.Errorf("measure photo latency: %w", err)
+	if pf.Vars.ImageStyle != ai.RecipeImageSketch && pf.Vars.ImageStyle != ai.RecipeImagePhoto {
+		return nil, fmt.Errorf("eval image_style must be photo or sketch")
 	}
 
-	sketchMS := sketchLatency.Milliseconds()
-	photoMS := photoLatency.Milliseconds()
-	ratio := 0.0
-	if sketchLatency > 0 {
-		ratio = float64(photoLatency) / float64(sketchLatency)
-	}
-	comparison := comparisonResult{
-		Sketch:       latencyResult{Style: ai.RecipeImageSketch, Model: models.Sketch, LatencyMS: sketchMS},
-		Photo:        latencyResult{Style: ai.RecipeImagePhoto, Model: models.Photo, LatencyMS: photoMS},
-		DifferenceMS: photoMS - sketchMS,
-		PhotoRatio:   ratio,
-	}
-	output, err := json.Marshal(comparison)
+	err := measure(context.Background(), generator, pf.Vars.Recipe, pf.Vars.ImageStyle)
 	if err != nil {
-		return nil, fmt.Errorf("encode latency comparison: %w", err)
+		return nil, fmt.Errorf("measure %s latency: %w", pf.Vars.ImageStyle, err)
 	}
 	return map[string]interface{}{
-		"output":    string(output),
-		"latencyMs": (sketchLatency + photoLatency).Milliseconds(),
-		"metadata": map[string]interface{}{
-			"sketchLatencyMs": sketchMS,
-			"photoLatencyMs":  photoMS,
-			"differenceMs":    photoMS - sketchMS,
-			"photoRatio":      ratio,
-		},
+		"output": string(pf.Vars.ImageStyle),
 	}, nil
 }
 
-func measureImageLatency(ctx context.Context, generator imageGenerator, recipe ai.Recipe, style ai.RecipeImageStyle) (time.Duration, error) {
-	start := time.Now()
+// TODO should we measure dimensions? assert webp? let another ai analyze the image?
+func measureImageLatency(ctx context.Context, generator imageGenerator, recipe ai.Recipe, style ai.RecipeImageStyle) error {
 	image, err := generator.GenerateRecipeImage(ctx, recipe, style)
-	latency := time.Since(start)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if image == nil || image.Body == nil {
-		return 0, fmt.Errorf("image generation returned no image body")
+		return fmt.Errorf("image generation returned no image body")
 	}
 	if _, err := io.Copy(io.Discard, image.Body); err != nil {
-		return 0, fmt.Errorf("read generated image: %w", err)
+		return fmt.Errorf("read generated image: %w", err)
 	}
-	return latency, nil
+	return nil
 }
