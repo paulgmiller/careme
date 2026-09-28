@@ -15,6 +15,13 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
+type RecipeImageStyle string
+
+const (
+	RecipeImagePhoto  RecipeImageStyle = "photo"
+	RecipeImageSketch RecipeImageStyle = "sketch"
+)
+
 const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
 - Home cooked by a above average cook, not a restaurant or food stylist.
@@ -25,6 +32,14 @@ Generate a realistic overhead food photograph of a single finished plate.
 - If the recipe has multiple components, show them plated together
 `
 
+const recipeSketchPromptInstructions = `
+Create an approachable black-and-white pencil sketch from a home cook's recipe notebook.
+- Use only loose graphite pencil lines on off-white paper: no color, watercolor, paint, or polished digital illustration.
+- Keep visible construction lines, light cross-hatching, and a few natural smudges.
+- Show one ordinary plate containing the finished dish, with natural portions and relaxed plating.
+- Avoid handwriting, labels, people, hands, branded packaging, collages, and extra side dishes.
+`
+
 const (
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
@@ -33,7 +48,12 @@ const (
 )
 
 func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
-	prompt, err := buildRecipeImagePrompt(recipe)
+	return c.GenerateRecipeImageWithStyle(ctx, recipe, RecipeImagePhoto)
+}
+
+// GenerateRecipeImageWithStyle lets image evaluations compare styles without changing production callers.
+func (c *client) GenerateRecipeImageWithStyle(ctx context.Context, recipe Recipe, style RecipeImageStyle) (*GeneratedImage, error) {
+	prompt, err := buildRecipeImagePromptWithStyle(recipe, style)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
@@ -87,8 +107,19 @@ func imageUsageLogAttr(model string, usage openai.ImagesResponseUsage) slog.Attr
 }
 
 func buildRecipeImagePrompt(recipe Recipe) (string, error) {
+	return buildRecipeImagePromptWithStyle(recipe, RecipeImagePhoto)
+}
+
+func buildRecipeImagePromptWithStyle(recipe Recipe, style RecipeImageStyle) (string, error) {
 	var promptBuilder strings.Builder
-	fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	switch style {
+	case RecipeImagePhoto:
+		fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	case RecipeImageSketch:
+		fmt.Fprintf(&promptBuilder, "%s\n", recipeSketchPromptInstructions)
+	default:
+		return "", fmt.Errorf("unknown recipe image style %q", style)
+	}
 	fmt.Fprintf(&promptBuilder, "\n")
 	fmt.Fprintf(&promptBuilder, "Recipe:\n")
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)

@@ -35,6 +35,19 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 	}
 }
 
+func TestBuildRecipeImagePromptWithStyle(t *testing.T) {
+	recipe := Recipe{Title: "Roast Chicken", Instructions: []string{"Roast until golden."}}
+
+	sketch, err := buildRecipeImagePromptWithStyle(recipe, RecipeImageSketch)
+	require.NoError(t, err)
+	assert.Contains(t, sketch, "black-and-white pencil sketch")
+	assert.Contains(t, sketch, "Recipe:\nRoast Chicken")
+	assert.NotContains(t, sketch, "realistic overhead food photograph")
+
+	_, err = buildRecipeImagePromptWithStyle(recipe, "painting")
+	require.ErrorContains(t, err, "unknown recipe image style")
+}
+
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
 	const imageModel = "gpt-image-2.5-sunburst"
 	aiConfig := testAIConfig(config.DefaultRecipeModel)

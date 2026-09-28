@@ -18,6 +18,19 @@ Because evaluations can make paid model calls, running every suite requires an e
 ./task.sh evals EVAL=all
 ```
 
+## Image latency
+
+Check that the production photo and sketch image paths each finish within 11 seconds using the same recipe:
+
+```sh
+./task.sh evals EVAL=image-latency -- --no-cache
+```
+
+The eval passes `image_style` as either `photo` or `sketch` to the provider, making
+one paid image call per case. Each case passes when its latency is under 11,000 ms.
+Use Promptfoo's `--repeat 3` (or more) when assessing the result beyond a smoke
+check; each repeat makes two additional paid image calls. Only `AI_API_KEY` is required.
+
 Generate recipe test cases from a cached shopping-list hash:
 
 ```sh
