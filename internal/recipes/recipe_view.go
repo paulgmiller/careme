@@ -38,6 +38,7 @@ type recipePageView struct {
 	Feedback                feedback.Feedback
 	RecipeHash              string
 	RecipeImage             recipeImageView
+	ImageStyleSwitcher      bool
 	ServerSignedIn          bool
 	User                    *utypes.User
 	AuthReturnTo            string
@@ -56,6 +57,7 @@ type recipeViewInput struct {
 	recipeCritique     *ai.RecipeCritique
 	hasRecipeImage     bool
 	imageStyle         ai.RecipeImageStyle
+	imageStyleSwitcher bool
 	thread             []RecipeThreadEntry
 	feedback           feedback.Feedback
 	wineRecommendation *ai.WineSelection
@@ -102,6 +104,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
 		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage, Style: input.imageStyle},
+		ImageStyleSwitcher:      input.imageStyleSwitcher,
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,

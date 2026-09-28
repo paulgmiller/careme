@@ -383,7 +383,7 @@ func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe
 
 func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error {
 	hash := recipe.ComputeHash()
-	exists, err := m.imageStore.Exists(ctx, hash, ai.RecipeImageSketch)
+	exists, err := m.imageStore.Exists(ctx, hash, ai.RecipeImagePhoto)
 	if err != nil {
 		return fmt.Errorf("check image cache: %w", err)
 	}
@@ -391,11 +391,11 @@ func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error
 		return nil
 	}
 
-	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe, ai.RecipeImageSketch)
+	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe, ai.RecipeImagePhoto)
 	if err != nil {
 		return fmt.Errorf("generate image: %w", err)
 	}
-	if err := m.imageStore.Save(ctx, hash, ai.RecipeImageSketch, generated); err != nil {
+	if err := m.imageStore.Save(ctx, hash, ai.RecipeImagePhoto, generated); err != nil {
 		return fmt.Errorf("save image: %w", err)
 	}
 	return nil

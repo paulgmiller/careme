@@ -34,6 +34,19 @@ func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
 	}
 }
 
+func TestLoadImageStyleSwitcherIsOptIn(t *testing.T) {
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("IMAGE_STYLE_SWITCHER_ENABLE", "")
+	cfg, err := Load()
+	assert.NoError(t, err)
+	assert.False(t, cfg.ImageStyleSwitcher)
+
+	t.Setenv("IMAGE_STYLE_SWITCHER_ENABLE", "true")
+	cfg, err = Load()
+	assert.NoError(t, err)
+	assert.True(t, cfg.ImageStyleSwitcher)
+}
+
 func TestLoadRetainsIndividualStoreFlags(t *testing.T) {
 	resetStoreEnvs(t)
 	t.Setenv("ENABLE_MOCKS", "1")

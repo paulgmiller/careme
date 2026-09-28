@@ -45,7 +45,7 @@ func (v shoppingRecipeView) DOMID() string {
 }
 
 func (v shoppingRecipeView) Image() recipeImageView {
-	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true, Style: ai.RecipeImageSketch}
+	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true, Style: ai.RecipeImagePhoto}
 }
 
 type shoppingProgress struct {

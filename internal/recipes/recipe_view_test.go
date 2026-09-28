@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -405,6 +406,8 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 		currentUser:        renderTestUser(true),
 		recipeCritique:     nil,
 		hasRecipeImage:     true,
+		imageStyle:         ai.RecipeImagePhoto,
+		imageStyleSwitcher: true,
 		thread:             []RecipeThreadEntry{},
 		feedback:           feedback.Feedback{},
 		wineRecommendation: nil,
@@ -422,8 +425,8 @@ func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	assert.Contains(t, html, `aria-label="Dish image style"`)
 	assert.Contains(t, html, `aria-label="Show chef's sketch"`)
 	assert.Contains(t, html, `aria-label="Show photo"`)
-	assert.Contains(t, html, `href="/recipe/`+recipeHash+`?style=photo"`)
-	assert.Contains(t, html, `aria-label="Show chef's sketch" title="Show chef's sketch" aria-current="page"`)
+	assert.Contains(t, html, `href="/recipe/`+recipeHash+`?style=sketch"`)
+	assert.Contains(t, html, `aria-label="Show photo" title="Show photo" aria-current="page"`)
 	assert.NotContains(t, html, `Dish image:`)
 	if strings.Contains(html, "View dish image") || strings.Contains(html, "See plated dish") {
 		t.Fatalf("recipe HTML should not render an image action when an image exists, got body: %s", html)
@@ -435,11 +438,12 @@ func TestFormatRecipeHTML_PhotoImageControlIsSelected(t *testing.T) {
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	w := httptest.NewRecorder()
 	writeRecipePage(t.Context(), w, recipeViewInput{
-		params:         DefaultParams(&loc, time.Now()),
-		recipe:         list.Recipes[0],
-		currentUser:    renderTestUser(true),
-		hasRecipeImage: true,
-		imageStyle:     ai.RecipeImagePhoto,
+		params:             DefaultParams(&loc, time.Now()),
+		recipe:             list.Recipes[0],
+		currentUser:        renderTestUser(true),
+		hasRecipeImage:     true,
+		imageStyle:         ai.RecipeImagePhoto,
+		imageStyleSwitcher: true,
 	})
 	html := assertHTTPSuccess(t, w)
 
@@ -447,7 +451,7 @@ func TestFormatRecipeHTML_PhotoImageControlIsSelected(t *testing.T) {
 	assert.NotContains(t, html, `aria-label="Show chef's sketch" title="Show chef's sketch" aria-current="page"`)
 }
 
-func TestFormatRecipeHTML_ImageControlsRemainAvailableWhileLoading(t *testing.T) {
+func TestFormatRecipeHTML_HidesImageControlsByDefaultWhileLoading(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	w := httptest.NewRecorder()
@@ -455,12 +459,31 @@ func TestFormatRecipeHTML_ImageControlsRemainAvailableWhileLoading(t *testing.T)
 		params:      DefaultParams(&loc, time.Now()),
 		recipe:      list.Recipes[0],
 		currentUser: renderTestUser(true),
+		imageStyle:  ai.RecipeImagePhoto,
 	})
 	html := assertHTTPSuccess(t, w)
 
-	assert.Contains(t, html, "Sketching your dish…")
-	assert.Contains(t, html, `aria-label="Show photo"`)
+	assert.Contains(t, html, "Making a photo of your dish…")
+	assert.NotContains(t, html, `aria-label="Dish image style"`)
 	assert.NotContains(t, html, `id="recipe-image-panel" class="hidden`)
+}
+
+func TestRequestedImageStyleDefaultsToPhoto(t *testing.T) {
+	for _, tc := range []struct {
+		query string
+		style ai.RecipeImageStyle
+		ok    bool
+	}{
+		{"", ai.RecipeImagePhoto, true},
+		{"?style=photo", ai.RecipeImagePhoto, true},
+		{"?style=sketch", ai.RecipeImageSketch, true},
+		{"?style=painting", "", false},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/recipe/hash"+tc.query, nil)
+		style, ok := requestedImageStyle(req)
+		assert.Equal(t, tc.style, style)
+		assert.Equal(t, tc.ok, ok)
+	}
 }
 
 func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {

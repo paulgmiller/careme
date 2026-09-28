@@ -1,9 +1,9 @@
-description: Recipe image latency comparison
+description: Recipe photo and sketch latency budgets
 evaluateOptions:
   maxConcurrency: 1
 
 # The Go provider ignores the rendered prompt. Each test generates one image
-# style from the same recipe and reports its production-model latency.
+# style from the same recipe. Each style must finish within 11 seconds.
 prompts:
   - image-latency-eval
 
@@ -18,7 +18,7 @@ defaultTest:
       metric: fastenough
 
 tests:
-  - description: Same sheet-pan dinner rendered as sketch and photo
+  - description: Photo and sketch each finish within 11 seconds
     vars:
       image_style:
         - photo

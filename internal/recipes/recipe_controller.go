@@ -53,6 +53,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown image style", http.StatusBadRequest)
 		return
 	}
+	showImageStyleSwitcher := s.cfg != nil && s.cfg.ImageStyleSwitcher
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
@@ -139,6 +140,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				recipeCritique:     recipeCritique,
 				hasRecipeImage:     hasRecipeImage,
 				imageStyle:         imageStyle,
+				imageStyleSwitcher: showImageStyleSwitcher,
 				thread:             thread,
 				feedback:           feedback,
 				wineRecommendation: wineRecommendation,
@@ -181,6 +183,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		recipeCritique:     recipeCritique,
 		hasRecipeImage:     hasRecipeImage,
 		imageStyle:         imageStyle,
+		imageStyleSwitcher: showImageStyleSwitcher,
 		thread:             thread,
 		feedback:           feedback,
 		wineRecommendation: wineRecommendation,
@@ -189,10 +192,10 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 func requestedImageStyle(r *http.Request) (ai.RecipeImageStyle, bool) {
 	switch r.URL.Query().Get("style") {
-	case "", string(ai.RecipeImageSketch):
-		return ai.RecipeImageSketch, true
-	case string(ai.RecipeImagePhoto):
+	case "", string(ai.RecipeImagePhoto):
 		return ai.RecipeImagePhoto, true
+	case string(ai.RecipeImageSketch):
+		return ai.RecipeImageSketch, true
 	default:
 		return "", false
 	}

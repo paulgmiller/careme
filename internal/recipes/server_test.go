@@ -1531,6 +1531,7 @@ func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
 
 type countingImageGenerator struct {
 	imageCalls   int
+	styles       []ai.RecipeImageStyle
 	panicOnImage bool
 	imageBody    []byte
 }
@@ -1542,6 +1543,7 @@ func (c *countingImageGenerator) GenerateRecipeImage(ctx context.Context, recipe
 	_ = ctx
 	_ = recipe
 	c.imageCalls++
+	c.styles = append(c.styles, style)
 	body := c.imageBody
 	if len(body) == 0 {
 		body = []byte("webp-bytes")
@@ -1711,7 +1713,7 @@ func TestHandleRecipeImage_ServesCachedImageWithoutGenerator(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	imageBody := []byte{'R', 'I', 'F', 'F', 0x24, 0x00, 0x00, 0x00, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
-	if err := s.images.Save(t.Context(), recipeHash, ai.RecipeImageSketch, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
+	if err := s.images.Save(t.Context(), recipeHash, ai.RecipeImagePhoto, &ai.GeneratedImage{Body: bytes.NewReader(imageBody)}); err != nil {
 		t.Fatalf("failed to seed recipe image: %v", err)
 	}
 
@@ -2083,13 +2085,14 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	s.Wait()
 	assert.Equal(t, 1, g.winePickCalls)
 	assert.Equal(t, 1, ig.imageCalls)
+	assert.Equal(t, []ai.RecipeImageStyle{ai.RecipeImagePhoto}, ig.styles)
 
 	wine, err := s.WineFromCache(t.Context(), recipeHash)
 	require.NoError(t, err)
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
-	imageBody, err := s.images.FromCache(t.Context(), recipeHash, ai.RecipeImageSketch)
+	imageBody, err := s.images.FromCache(t.Context(), recipeHash, ai.RecipeImagePhoto)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, imageBody.Close()) }()
 	gotImage, err := io.ReadAll(imageBody)
@@ -3052,7 +3055,7 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
 			if state == "ready" {
-				require.NoError(t, s.images.Save(t.Context(), "recipe-hash", ai.RecipeImageSketch, &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
+				require.NoError(t, s.images.Save(t.Context(), "recipe-hash", ai.RecipeImagePhoto, &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
 			}
 			if state == "error" {
 				s.images = failingImageExistsStore{ImageStore: s.images}

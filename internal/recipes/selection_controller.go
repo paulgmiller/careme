@@ -221,7 +221,7 @@ func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash strin
 }
 
 func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string) bool {
-	exists, err := s.images.Exists(ctx, recipeHash, ai.RecipeImageSketch)
+	exists, err := s.images.Exists(ctx, recipeHash, ai.RecipeImagePhoto)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached recipe image for recipe card render", "recipe_hash", recipeHash, "error", err)
 		return false
@@ -235,7 +235,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 		defer cancel()
 		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
 	})
-	s.startRecipeImageGeneration(ctx, recipeHash, recipe, ai.RecipeImageSketch)
+	s.startRecipeImageGeneration(ctx, recipeHash, recipe, ai.RecipeImagePhoto)
 }
 
 func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
