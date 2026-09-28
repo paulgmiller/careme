@@ -2344,6 +2344,10 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 		withTestStorage(storage),
 	)
 	t.Cleanup(s.Wait)
+	currentUser, err := storage.FromRequest(t.Context(), httptest.NewRequest(http.MethodGet, "/recipes", nil), auth.DefaultMock())
+	require.NoError(t, err)
+	currentUser.Directive = "No shellfish"
+	require.NoError(t, storage.Update(currentUser))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	originHash := p.Hash()
@@ -2397,6 +2401,12 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	if newHash == originHash {
 		t.Fatal("expected a new hash after regenerate")
 	}
+	page := httptest.NewRecorder()
+	s.handleRecipes(page, httptest.NewRequest(http.MethodGet, "/recipes?h="+newHash, nil))
+	require.Equal(t, http.StatusOK, page.Code)
+	require.NotContains(t, page.Body.String(), "Recipe generation did not start.")
+	_, err = s.generationStatuses.Load(t.Context(), newHash)
+	require.NoError(t, err, "redirect must point to the generation that was started")
 
 	updatedParams, err := s.ParamsFromCache(t.Context(), newHash)
 	if err != nil {
@@ -2405,6 +2415,8 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	if updatedParams.Instructions != "make it vegetarian" {
 		t.Fatalf("expected instructions to persist, got %q", updatedParams.Instructions)
 	}
+	require.Equal(t, currentUser.Directive, updatedParams.Directive)
+	require.Equal(t, newHash, updatedParams.Hash())
 	if len(updatedParams.Saved) != 1 || updatedParams.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected saved recipe selection to persist in params, got %#v", updatedParams.Saved)
 	}

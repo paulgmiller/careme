@@ -85,6 +85,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
+	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -92,7 +93,6 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
 	}
-	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	if err := s.kickgeneration(ctx, p, currentUser.ID); err != nil {
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
