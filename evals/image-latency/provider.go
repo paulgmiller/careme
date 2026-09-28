@@ -22,7 +22,7 @@ type evalCase struct {
 }
 
 type imageGenerator interface {
-	GenerateRecipeImage(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error)
+	GenerateRecipeImageWithStyle(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error)
 }
 
 type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error
@@ -76,7 +76,7 @@ func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (ma
 
 // TODO should we measure dimensions? assert webp? let another ai analyze the image?
 func measureImageLatency(ctx context.Context, generator imageGenerator, recipe ai.Recipe, style ai.RecipeImageStyle) error {
-	image, err := generator.GenerateRecipeImage(ctx, recipe, style)
+	image, err := generator.GenerateRecipeImageWithStyle(ctx, recipe, style)
 	if err != nil {
 		return err
 	}

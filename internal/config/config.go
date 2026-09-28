@@ -28,23 +28,22 @@ const (
 )
 
 type Config struct {
-	AI                 AIConfig                `json:"ai"`
-	OpenRouter         OpenRouterConfig        `json:"openrouter"`
-	IngredientGrading  IngredientGradingConfig `json:"ingredient_grading"`
-	Kroger             KrogerConfig            `json:"kroger"`
-	Walmart            WalmartConfig           `json:"walmart"`
-	Aldi               AldiConfig              `json:"aldi"`
-	WholeFoods         WholeFoodsConfig        `json:"wholefoods"`
-	Albertsons         AlbertsonsConfig        `json:"albertsons"`
-	Publix             PublixConfig            `json:"publix"`
-	HEB                HEBConfig               `json:"heb"`
-	Wegmans            WegmansConfig           `json:"wegmans"`
-	BrightDataProxy    brightdata.ProxyConfig  `json:"brightdata_proxy"`
-	Mocks              MockConfig              `json:"mocks"`
-	Clerk              ClerkConfig             `json:"clerk"`
-	Admin              AdminConfig             `json:"admin"`
-	PublicOrigin       string                  `json:"public_origin"`
-	ImageStyleSwitcher bool                    `json:"image_style_switcher"`
+	AI                AIConfig                `json:"ai"`
+	OpenRouter        OpenRouterConfig        `json:"openrouter"`
+	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
+	Kroger            KrogerConfig            `json:"kroger"`
+	Walmart           WalmartConfig           `json:"walmart"`
+	Aldi              AldiConfig              `json:"aldi"`
+	WholeFoods        WholeFoodsConfig        `json:"wholefoods"`
+	Albertsons        AlbertsonsConfig        `json:"albertsons"`
+	Publix            PublixConfig            `json:"publix"`
+	HEB               HEBConfig               `json:"heb"`
+	Wegmans           WegmansConfig           `json:"wegmans"`
+	BrightDataProxy   brightdata.ProxyConfig  `json:"brightdata_proxy"`
+	Mocks             MockConfig              `json:"mocks"`
+	Clerk             ClerkConfig             `json:"clerk"`
+	Admin             AdminConfig             `json:"admin"`
+	PublicOrigin      string                  `json:"public_origin"`
 }
 
 type AIConfig struct {
@@ -213,8 +212,7 @@ func Load() (*Config, error) {
 		Admin: AdminConfig{
 			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
 		},
-		PublicOrigin:       os.Getenv("PUBLIC_ORIGIN"),
-		ImageStyleSwitcher: os.Getenv("IMAGE_STYLE_SWITCHER_ENABLE") == "true",
+		PublicOrigin: os.Getenv("PUBLIC_ORIGIN"),
 		Aldi: AldiConfig{
 			Enable: envEnabled("ALDI_ENABLE"),
 		},

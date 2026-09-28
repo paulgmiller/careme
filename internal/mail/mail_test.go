@@ -166,14 +166,10 @@ func (f *fakeGenerationStatusStore) Fail(_ context.Context, _ string, err error)
 }
 
 type fakeMailImageGenerator struct {
-	err    error
-	styles *[]ai.RecipeImageStyle
+	err error
 }
 
-func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
-	if f.styles != nil {
-		*f.styles = append(*f.styles, style)
-	}
+func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -265,19 +261,6 @@ func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
 			t.Fatalf("expected error to contain %q, got %q", want, err)
 		}
 	}
-}
-
-func TestPrepareRecipeImageUsesPhoto(t *testing.T) {
-	store := recipes.NewImageStore(cache.NewInMemoryCache())
-	var styles []ai.RecipeImageStyle
-	m := &mailer{imageGenerator: fakeMailImageGenerator{styles: &styles}, imageStore: store}
-	recipe := ai.Recipe{Title: "Dinner"}
-
-	require.NoError(t, m.prepareRecipeImage(t.Context(), recipe))
-	assert.Equal(t, []ai.RecipeImageStyle{ai.RecipeImagePhoto}, styles)
-	image, err := store.FromCache(t.Context(), recipe.ComputeHash(), ai.RecipeImagePhoto)
-	require.NoError(t, err)
-	require.NoError(t, image.Close())
 }
 
 func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {

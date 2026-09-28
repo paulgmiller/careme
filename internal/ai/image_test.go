@@ -1,7 +1,9 @@
 package ai
 
 import (
+	"io"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,31 +23,53 @@ func TestBuildRecipeImagePrompt(t *testing.T) {
 		Instructions: []string{"Roast until golden."},
 	}
 
-	prompt, err := buildRecipeImagePrompt(recipe, RecipeImageSketch)
+	prompt, err := buildRecipeImagePrompt(recipe)
 	if err != nil {
 		t.Fatalf("buildRecipeImagePrompt returned error: %v", err)
 	}
-	if !strings.Contains(prompt, "approachable black-and-white pencil sketch") {
+	if !strings.Contains(prompt, "realistic overhead food photograph") {
 		t.Fatalf("expected image prompt instructions in prompt: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Recipe:\nRoast Chicken\nCrisp skin and herbs.\nInstructions:\n- Roast until golden.\n") {
 		t.Fatalf("expected recipe summary in prompt: %s", prompt)
 	}
-	assert.NotContains(t, prompt, "photograph")
-	assert.Contains(t, prompt, "one ordinary plate")
-	assert.Contains(t, prompt, "single plate the only illustrated subject")
-	assert.Contains(t, prompt, "Do not add handwriting, notes, labels, arrows, or other text")
-	assert.Contains(t, prompt, "no color, watercolor, paint")
-	assert.Contains(t, prompt, "Do not show separate ingredients, preparation stages, cookware")
+}
 
-	photoPrompt, err := buildRecipeImagePrompt(recipe, RecipeImagePhoto)
+func TestBuildRecipeImagePromptWithStyle(t *testing.T) {
+	recipe := Recipe{Title: "Roast Chicken", Instructions: []string{"Roast until golden."}}
+
+	sketch, err := buildRecipeImagePromptWithStyle(recipe, RecipeImageSketch)
 	require.NoError(t, err)
-	assert.Contains(t, photoPrompt, "realistic overhead food photograph")
-	assert.NotContains(t, photoPrompt, "hand-drawn")
-	assert.Contains(t, photoPrompt, "Recipe:\nRoast Chicken")
+	assert.Contains(t, sketch, "black-and-white pencil sketch")
+	assert.Contains(t, sketch, "Recipe:\nRoast Chicken")
+	assert.NotContains(t, sketch, "realistic overhead food photograph")
 
-	_, err = buildRecipeImagePrompt(recipe, "unknown")
-	require.Error(t, err)
+	_, err = buildRecipeImagePromptWithStyle(recipe, "painting")
+	require.ErrorContains(t, err, "unknown recipe image style")
+}
+
+func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
+	const imageModel = "gpt-image-2.5-sunburst"
+	aiConfig := testAIConfig(config.DefaultRecipeModel)
+	aiConfig.ImageModel = imageModel
+	client := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Contains(t, string(body), `"model":"`+imageModel+`"`)
+
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
+			Request:    req,
+		}, nil
+	})}, nil)
+
+	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"})
+	require.NoError(t, err)
+	imageBody, err := io.ReadAll(image.Body)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("image"), imageBody)
 }
 
 func TestImageUsageLogAttr(t *testing.T) {

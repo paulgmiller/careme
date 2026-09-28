@@ -48,12 +48,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	imageStyle, ok := requestedImageStyle(r)
-	if !ok {
-		http.Error(w, "unknown image style", http.StatusBadRequest)
-		return
-	}
-	showImageStyleSwitcher := s.cfg != nil && s.cfg.ImageStyleSwitcher
 
 	recipe, err := s.SingleFromCache(ctx, hash)
 	if err != nil {
@@ -104,7 +98,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		wineRecommendation = selection
 	})
 	loadWG.Go(func() {
-		exists, err := s.images.Exists(ctx, hash, imageStyle)
+		exists, err := s.images.Exists(ctx, hash)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", hash, "error", err)
 			return
@@ -139,8 +133,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				currentUser:        currentUser,
 				recipeCritique:     recipeCritique,
 				hasRecipeImage:     hasRecipeImage,
-				imageStyle:         imageStyle,
-				imageStyleSwitcher: showImageStyleSwitcher,
 				thread:             thread,
 				feedback:           feedback,
 				wineRecommendation: wineRecommendation,
@@ -170,9 +162,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			return r.Hash == hash
 		})
 	}
-	if (saved || imageStyle == ai.RecipeImagePhoto) && !hasRecipeImage {
-		s.startRecipeImageGeneration(ctx, hash, *recipe, imageStyle)
-	}
 
 	slog.InfoContext(ctx, "serving recipe by hash", "hash", hash, "signedIn", signedIn)
 	writeRecipePage(ctx, w, recipeViewInput{
@@ -182,34 +171,16 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		currentUser:        currentUser,
 		recipeCritique:     recipeCritique,
 		hasRecipeImage:     hasRecipeImage,
-		imageStyle:         imageStyle,
-		imageStyleSwitcher: showImageStyleSwitcher,
 		thread:             thread,
 		feedback:           feedback,
 		wineRecommendation: wineRecommendation,
 	})
 }
 
-func requestedImageStyle(r *http.Request) (ai.RecipeImageStyle, bool) {
-	switch r.URL.Query().Get("style") {
-	case "", string(ai.RecipeImagePhoto):
-		return ai.RecipeImagePhoto, true
-	case string(ai.RecipeImageSketch):
-		return ai.RecipeImageSketch, true
-	default:
-		return "", false
-	}
-}
-
 // A 204 leaves the polling placeholder intact; the ready image replaces it.
 func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
 	hash := r.PathValue("hash")
-	style, ok := requestedImageStyle(r)
-	if !ok {
-		http.Error(w, "unknown image style", http.StatusBadRequest)
-		return
-	}
-	exists, err := s.images.Exists(r.Context(), hash, style)
+	exists, err := s.images.Exists(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "check recipe image: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -219,7 +190,7 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	renderHTML(w, templates.Recipe, "recipe_image", recipeImageView{
-		Hash: hash, HasImage: true, Thumbnail: r.URL.Query().Get("view") == "shopping", Style: style,
+		Hash: hash, HasImage: true, Thumbnail: r.URL.Query().Get("view") == "shopping",
 	})
 }
 
@@ -230,13 +201,8 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	style, ok := requestedImageStyle(r)
-	if !ok {
-		http.Error(w, "unknown image style", http.StatusBadRequest)
-		return
-	}
 
-	imageBody, err := s.images.FromCache(ctx, hash, style)
+	imageBody, err := s.images.FromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe image not found", http.StatusNotFound)

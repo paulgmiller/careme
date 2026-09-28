@@ -12,14 +12,10 @@ import (
 const (
 	RecipeImagesContainer   = "images"
 	recipeImagesCachePrefix = "recipes/"
-	recipeSketchCachePrefix = "recipes/sketch/"
 )
 
-func recipeImageCacheKey(hash string, style ai.RecipeImageStyle) string {
-	if style == ai.RecipeImageSketch {
-		return recipeSketchCachePrefix + hash
-	}
-	return recipeImagesCachePrefix + hash // Existing images are photographs.
+func recipeImageCacheKey(hash string) string {
+	return recipeImagesCachePrefix + hash
 }
 
 // imageStore reads and writes generated recipe images in their dedicated cache.
@@ -32,15 +28,15 @@ func NewImageStore(c cache.Cache) imageStore {
 	return imageStore{cache: c}
 }
 
-func (iio imageStore) Exists(ctx context.Context, hash string, style ai.RecipeImageStyle) (bool, error) {
-	return iio.cache.Exists(ctx, recipeImageCacheKey(hash, style))
+func (iio imageStore) Exists(ctx context.Context, hash string) (bool, error) {
+	return iio.cache.Exists(ctx, recipeImageCacheKey(hash))
 }
 
-func (iio imageStore) FromCache(ctx context.Context, hash string, style ai.RecipeImageStyle) (io.ReadCloser, error) {
-	return iio.cache.Get(ctx, recipeImageCacheKey(hash, style))
+func (iio imageStore) FromCache(ctx context.Context, hash string) (io.ReadCloser, error) {
+	return iio.cache.Get(ctx, recipeImageCacheKey(hash))
 }
 
-func (iio imageStore) Save(ctx context.Context, hash string, style ai.RecipeImageStyle, image *ai.GeneratedImage) error {
+func (iio imageStore) Save(ctx context.Context, hash string, image *ai.GeneratedImage) error {
 	if image == nil {
 		return fmt.Errorf("recipe image is required")
 	}
@@ -48,5 +44,5 @@ func (iio imageStore) Save(ctx context.Context, hash string, style ai.RecipeImag
 		return fmt.Errorf("recipe image body is required")
 	}
 	// TODO store content meta data somewher?
-	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash, style), image.Body, cache.Unconditional())
+	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }

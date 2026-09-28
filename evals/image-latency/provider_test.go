@@ -81,7 +81,7 @@ type stubImageGenerator struct {
 	err   error
 }
 
-func (s stubImageGenerator) GenerateRecipeImage(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
+func (s stubImageGenerator) GenerateRecipeImageWithStyle(context.Context, ai.Recipe, ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
 	return s.image, s.err
 }
 

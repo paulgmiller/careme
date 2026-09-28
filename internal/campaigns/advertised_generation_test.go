@@ -46,17 +46,15 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 }
 
 type campaignImageStub struct {
-	mu     sync.Mutex
-	calls  int
-	styles []ai.RecipeImageStyle
-	err    error
+	mu    sync.Mutex
+	calls int
+	err   error
 }
 
-func (g *campaignImageStub) GenerateRecipeImage(_ context.Context, _ ai.Recipe, style ai.RecipeImageStyle) (*ai.GeneratedImage, error) {
+func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.calls++
-	g.styles = append(g.styles, style)
 	if g.err != nil {
 		return nil, g.err
 	}
@@ -80,9 +78,6 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	require.True(t, waited)
 	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
 	require.Equal(t, len(g.params), images.calls)
-	for _, style := range images.styles {
-		assert.Equal(t, ai.RecipeImagePhoto, style)
-	}
 	for i, p := range g.params {
 		assert.Equal(t, "Hydrated "+p.Location.ID, p.Location.Name)
 		session, ok := logsetup.SessionIDFromContext(g.contexts[i])
@@ -95,7 +90,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, list.Recipes, 1)
 		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
-		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash(), ai.RecipeImagePhoto)
+		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
 		require.NoError(t, err)
 		data, err := io.ReadAll(body)
 		require.NoError(t, err)
