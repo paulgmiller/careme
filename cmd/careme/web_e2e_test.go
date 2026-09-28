@@ -137,7 +137,42 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
 	}
 
-	// TODO step 6 make sure recipes are saved to user page?
+	// Step 8: change cooking preferences, then regenerate from the finalized page.
+	// The redirect must use the same hash as the generation started with those preferences.
+	_ = mustPostFormBody(t, client, srv.URL+"/user", url.Values{
+		"directive": {"No shellfish"},
+	})
+	finalizedBody = mustGetBody(t, client, srv.URL+finalizeRedirect)
+	regenerateHash := extractRecipesHash(t, finalizedBody)
+	regenerateURL := srv.URL + "/recipes/" + url.PathEscape(regenerateHash) + "/regenerate"
+	regenerateRedirect := mustPostFormRedirectHTMX(t, client, regenerateURL, url.Values{
+		"instructions": {"make it vegetarian"},
+	})
+	redirectURL, err := url.Parse(regenerateRedirect)
+	if err != nil {
+		t.Fatalf("invalid regeneration redirect %q: %v", regenerateRedirect, err)
+	}
+	newHash := redirectURL.Query().Get("h")
+	if newHash == "" || newHash == regenerateHash {
+		t.Fatalf("expected regeneration redirect with a new hash, got %q", regenerateRedirect)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		body := mustGetBody(t, client, srv.URL+regenerateRedirect)
+		if strings.Contains(body, "Recipe generation did not start.") {
+			t.Fatalf("regeneration redirect %q has no generation status", regenerateRedirect)
+		}
+		if strings.Contains(body, `/recipes/`+newHash+`/regenerate`) {
+			if len(extractRecipeHashes(t, body)) < 2 {
+				t.Fatal("expected regenerated recipes alongside the saved recipe")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for regenerated recipes at %q", regenerateRedirect)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
