@@ -106,14 +106,16 @@ Fetch the first three pages of both produce (sorted by bestselling) and meat,
 and display their ingredients and prices:
 
 ```sh
-INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -source mnfoodclub -verbose
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
 ```
 
-This source requires no location or MNFoodClub credentials. With grading disabled,
+Any store ID starting with `mnfoodclub_` routes to the same public catalog through
+the staples provider. No MNFoodClub credentials are required. Variant price ranges
+use the starting price. With grading disabled,
 the displayed 10/10 scores are placeholders, not quality assessments. Enable
 grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
-the existing grading and nearest-ingredient lookup. The default source remains
-`staples`, which requires `-location`.
+the existing grading and nearest-ingredient lookup. This provider supplies no wine
+candidates.
 
 ### Ingredient embedding lookup
 

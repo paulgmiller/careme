@@ -24,6 +24,7 @@ import (
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/mnfoodclub"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -417,6 +418,7 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 		krogerBackend,
 		publixProvider,
 		farmersMarketProvider,
+		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(brightdataClient)),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),

@@ -14,6 +14,7 @@ import (
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
+	"careme/internal/mnfoodclub"
 	"careme/internal/publix"
 	"careme/internal/walmart"
 	"careme/internal/wholefoods"
@@ -64,6 +65,7 @@ func defaultIdentityProviders() []identityProvider {
 		aldi.NewIdentityProvider(),
 		publix.NewIdentityProvider(),
 		farmersmarket.NewIdentityProvider(),
+		mnfoodclub.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),
 	}
