@@ -52,7 +52,6 @@ type statusStore interface {
 
 type server struct {
 	recipeio
-	stepImageMu        sync.Mutex
 	images             ImageStore
 	imagegen           ImageGen
 	generationStatuses statusStore

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"careme/internal/ai"
 	"careme/internal/auth"
+	"careme/internal/cache"
 	"careme/internal/templates"
 )
 
@@ -20,25 +20,21 @@ type stepImageView struct {
 	ServerSignedIn bool
 }
 
-func (s *server) recipeStepFromRequest(r *http.Request) (*ai.Recipe, int, int) {
+func (s *server) recipeStepFromRequest(r *http.Request) (hash string, step int) {
 	step, err := strconv.Atoi(r.PathValue("step"))
-	if err != nil || step < 1 {
-		return nil, 0, http.StatusNotFound
+	if err != nil {
+		return "", -1
 	}
-	recipe, err := s.SingleFromCache(r.Context(), r.PathValue("hash"))
-	if err != nil || step > len(recipe.Instructions) {
-		return nil, 0, http.StatusNotFound
-	}
-	return recipe, step, 0
+	return r.PathValue("hash"), step
 }
 
 func (s *server) handleStepImage(w http.ResponseWriter, r *http.Request) {
-	_, step, status := s.recipeStepFromRequest(r)
-	if status != 0 {
-		http.Error(w, "recipe step not found", status)
+	hash, step := s.recipeStepFromRequest(r)
+	if step < 1 {
+		http.Error(w, "bad step", http.StatusNotFound)
 		return
 	}
-	s.serveCachedImage(w, r, stepImageID(r.PathValue("hash"), step))
+	s.serveCachedImage(w, r, stepImageID(hash, step))
 }
 
 func (s *server) handleGenerateStepImage(w http.ResponseWriter, r *http.Request) {
@@ -51,16 +47,28 @@ func (s *server) handleGenerateStepImage(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "unable to verify account", http.StatusInternalServerError)
 		return
 	}
-	recipe, step, status := s.recipeStepFromRequest(r)
-	if status != 0 {
-		http.Error(w, "recipe step not found", status)
+	hash, step := s.recipeStepFromRequest(r)
+	if step < 1 {
+		http.Error(w, "bad step", http.StatusNotFound)
 		return
 	}
-	hash := r.PathValue("hash")
+
+	recipe, err := s.SingleFromCache(r.Context(), hash)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, cache.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, "could not fetch recipe", status)
+		return
+	}
+
+	if step > len(recipe.Instructions) {
+		http.Error(w, "bad step", http.StatusNotFound)
+		return
+	}
 	imageID := stepImageID(hash, step)
-	// Serialize the cache check and generation to avoid duplicate requests from this server.
-	s.stepImageMu.Lock()
-	defer s.stepImageMu.Unlock()
+	// use a job id to prevent double generation? Hard to do through ui but easy with posts.
 	exists, err := s.images.Exists(r.Context(), imageID)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to check step image", "image", imageID, "error", err)

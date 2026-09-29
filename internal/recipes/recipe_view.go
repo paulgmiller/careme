@@ -25,7 +25,6 @@ type recipePageView struct {
 	Location                locations.Location
 	Date                    string
 	Recipe                  ai.Recipe
-	InstructionsHTML        []template.HTML
 	Steps                   []recipeStepView
 	Saved                   bool
 	DisplayIngredients      []ai.Ingredient
@@ -101,7 +100,6 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Location:                *input.params.Location,
 		Date:                    input.params.Date.Format("2006-01-02"),
 		Recipe:                  recipe,
-		InstructionsHTML:        instructionsHTML,
 		Steps:                   steps,
 		Saved:                   input.saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, input.wineRecommendation),
