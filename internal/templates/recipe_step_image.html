@@ -1,23 +1,23 @@
 {{define "step_image"}}
-<div id="step-image-{{.Number}}" class="print-hidden shrink-0">
+<div id="step-image-{{.Number}}" class="print-hidden basis-full">
   {{if .HasImage}}
-  <a href="/recipe/{{.Hash}}/steps/{{.Number}}/image" target="_blank" rel="noopener"
+  <a href="/recipe/{{.Hash}}/steps/{{.Number}}/image" target="_blank" rel="noopener" class="block w-full max-w-md"
      aria-label="View illustration for step {{.Number}}" title="View illustration for step {{.Number}}">
     <img src="/recipe/{{.Hash}}/steps/{{.Number}}/image" alt="Pencil sketch of step {{.Number}}" loading="lazy"
-         class="size-16 rounded-lg border border-brand-100 object-cover sm:size-24" />
+         class="h-auto w-full rounded-xl border border-brand-100" />
   </a>
   {{else if .ServerSignedIn}}
   <button type="button" data-step-image-action
           hx-post="/recipe/{{.Hash}}/steps/{{.Number}}/image" hx-target="#step-image-{{.Number}}" hx-swap="outerHTML" hx-disabled-elt="this"
           aria-label="Generate illustration for step {{.Number}}" title="Generate illustration for step {{.Number}}"
-          class="inline-flex size-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50">
+          class="ml-8 inline-flex size-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-50">
     {{template "icon_eye" .}}
   </button>
-  <span class="hidden text-xs text-gray-500" data-step-image-status role="status"></span>
+  <span class="ml-2 hidden text-xs text-gray-500" data-step-image-status role="status"></span>
   {{else}}
   <a href="{{SignInPath (print "/recipe/" .Hash)}}" data-step-image-action
      aria-label="Sign in to generate illustration for step {{.Number}}" title="Sign in to generate illustration for step {{.Number}}"
-     class="inline-flex size-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400">
+     class="ml-8 inline-flex size-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400">
     {{template "icon_eye" .}}
   </a>
   {{end}}

@@ -140,31 +140,14 @@ function initializeRecipeSteps() {
   });
 }
 
-function initializeStickyIngredients() {
-  const original = document.getElementById("recipe-ingredients");
-  const sticky = document.getElementById("sticky-ingredients");
-  const toggle = document.getElementById("sticky-ingredients-toggle");
-  const list = document.getElementById("sticky-ingredients-list");
-  if (!original || !sticky || !toggle || !list) return;
-
-  function updateVisibility() {
-    const pastIngredients = original.getBoundingClientRect().bottom < 0;
-    sticky.classList.toggle("hidden", !pastIngredients);
-    if (!pastIngredients) {
-      list.classList.add("hidden");
-      toggle.setAttribute("aria-expanded", "false");
-    }
-  }
-
-  toggle.addEventListener("click", () => {
-    const expanded = toggle.getAttribute("aria-expanded") === "true";
-    toggle.setAttribute("aria-expanded", String(!expanded));
-    list.classList.toggle("hidden", expanded);
+function initializeIngredients() {
+  const details = document.getElementById("recipe-ingredients");
+  if (!details) return;
+  details.addEventListener("click", (event) => {
+    if (event.target.closest("summary")) return;
+    if (window.getSelection()?.toString()) return;
+    details.open = false;
   });
-  window.addEventListener("scroll", updateVisibility, { passive: true });
-  window.addEventListener("resize", updateVisibility);
-  original.addEventListener("toggle", updateVisibility);
-  updateVisibility();
 }
 
 function initializeStepImages() {
@@ -187,6 +170,6 @@ function initializeStepImages() {
 document.addEventListener("DOMContentLoaded", () => {
   initializeStarRating();
   initializeRecipeSteps();
-  initializeStickyIngredients();
+  initializeIngredients();
   initializeStepImages();
 });

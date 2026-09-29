@@ -53,7 +53,7 @@ func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 	})
 }
 
-func TestRecipeStepIllustrationControlsAndStickyIngredients(t *testing.T) {
+func TestRecipeStepIllustrationControlsAndIngredients(t *testing.T) {
 	loc := locations.Location{ID: "store", Name: "Store"}
 	params := DefaultParams(&loc, time.Now())
 	recipe := ai.Recipe{Title: "Soup", Ingredients: []ai.Ingredient{{Name: "Carrot", Quantity: "2"}}, Instructions: []string{"Chop carrots.", "Simmer carrots."}}
@@ -66,8 +66,8 @@ func TestRecipeStepIllustrationControlsAndStickyIngredients(t *testing.T) {
 		})
 		html := assertHTTPSuccess(t, w)
 		isValidHTML(t, html)
-		assert.Contains(t, html, `id="sticky-ingredients"`)
-		assert.Contains(t, html, `id="sticky-ingredients-list"`)
+		assert.Contains(t, html, `id="recipe-ingredients"`)
+		assert.NotContains(t, html, `id="sticky-ingredients"`)
 		assert.Contains(t, html, `Pencil sketch of step 2`)
 		assert.Contains(t, html, `/recipe/`+hash+`/steps/2/image`)
 		assert.NotContains(t, html, `hx-post="/recipe/`+hash+`/steps/2/image"`)
@@ -189,7 +189,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.Contains(t, html, `Swipe a step aside or click its number when it’s done.`)
 	assert.Contains(t, html, `<script src="`+static.AssetPath+`recipe.js"></script>`)
 	assert.NotContains(t, html, `initializeRecipeSteps`)
-	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group"[^>]*\sopen>`, html)
+	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group cursor-pointer"[^>]*\sopen>`, html)
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("recipe HTML should no longer use the old wrapped ingredient row layout")
 	}

@@ -75,19 +75,9 @@
 
             {{template "recipe_properties" .PropertyDisplay}}
 
-            <div id="sticky-ingredients" class="print-hidden fixed left-1/2 top-2 z-50 hidden w-[min(90vw,32rem)] -translate-x-1/2 rounded-xl border border-brand-200 bg-white shadow-lg">
-              <button type="button" id="sticky-ingredients-toggle" aria-controls="sticky-ingredients-list" aria-expanded="false"
-                      class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400">
-                Ingredients <span aria-hidden="true">⌄</span>
-              </button>
-              <div id="sticky-ingredients-list" class="hidden max-h-[60vh] overflow-y-auto border-t border-brand-100 p-4">
-                {{template "recipe_ingredient_list" .DisplayIngredients}}
-              </div>
-            </div>
-
             <div class="grid gap-6 md:grid-cols-2">
               <details id="recipe-ingredients"
-                       class="recipe-ingredients group"
+                       class="recipe-ingredients group cursor-pointer"
                        open>
                 <summary class="cursor-pointer list-none focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   <h3 class="flex items-center justify-between gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
@@ -106,7 +96,7 @@
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
                   {{range .Steps}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
-                    <div class="flex items-start gap-3">
+                    <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
                       <button type="button"
                               class="w-5 shrink-0 cursor-pointer text-right transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
                               data-recipe-step-number
