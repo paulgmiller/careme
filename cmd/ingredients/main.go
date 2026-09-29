@@ -13,6 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
+	"careme/internal/mnfoodclub"
 	"careme/internal/recipes"
 
 	"github.com/samber/lo"
@@ -23,14 +24,16 @@ func main() {
 	var verbose bool
 	var ingredient string
 	var limit int
+	var source string
+	flag.StringVar(&source, "source", "staples", "Ingredient source: staples or mnfoodclub")
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
 	flag.StringVar(&ingredient, "ingredient", "", "Find nearest ingredients to this description")
 	flag.IntVar(&limit, "limit", 20, "Number of nearest ingredients to return")
 	flag.Parse()
-	if strings.TrimSpace(location) == "" {
-		log.Fatal("-location is required")
+	if err := validateSource(source, location); err != nil {
+		log.Fatal(err)
 	}
 	if limit < 1 {
 		log.Fatal("-limit must be positive")
@@ -45,12 +48,7 @@ func main() {
 	if ingredient != "" && (!cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "") {
 		log.Fatal("nearest ingredient lookup requires ingredient grading enabled and an OpenAI API key")
 	}
-	sp, err := recipes.NewStaplesProvider(cfg)
-	if err != nil {
-		log.Fatalf("failed to create recipe generator: %s", err)
-	}
-
-	ings, err := sp.FetchStaples(ctx, location)
+	ings, err := fetchIngredients(ctx, source, location, cfg, http.DefaultClient)
 	if err != nil {
 		log.Fatalf("failed to get ingredients: %s", err)
 	}
@@ -119,6 +117,30 @@ func main() {
 	}
 	sumGrades := lo.SumBy(graded, func(ing ai.InputIngredient) int { return ing.Grade.Score })
 	fmt.Printf("Total count %d and score %d\n", len(graded), sumGrades)
+}
+
+func validateSource(source, location string) error {
+	switch source {
+	case "staples":
+		if strings.TrimSpace(location) == "" {
+			return fmt.Errorf("-location is required for -source staples")
+		}
+	case "mnfoodclub":
+	default:
+		return fmt.Errorf("unknown ingredient source %q: use staples or mnfoodclub", source)
+	}
+	return nil
+}
+
+func fetchIngredients(ctx context.Context, source, location string, cfg *config.Config, httpClient *http.Client) ([]ai.InputIngredient, error) {
+	if source == "mnfoodclub" {
+		return mnfoodclub.NewClient(httpClient).FetchIngredients(ctx)
+	}
+	sp, err := recipes.NewStaplesProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("create staples provider: %w", err)
+	}
+	return sp.FetchStaples(ctx, location)
 }
 
 func priceString(price *float32) string {

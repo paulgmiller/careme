@@ -100,6 +100,21 @@ kubectl create job -n caremetest --from=cronjob/careme-advertised-recipes "carem
 
 Manual Jobs do not change the suspension and are not protected by the CronJob's overlap prevention, so wait for an existing run to finish before starting another. To restore automatic test runs on the 1st and 15th of each month, set `advertised_recipes_suspend="false"` in the `caremetest` block of `deploy/deploy.sh` and deploy.
 
+### MNFoodClub ingredients
+
+Fetch the first three pages of both produce (sorted by bestselling) and meat,
+and display their ingredients and prices:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -source mnfoodclub -verbose
+```
+
+This source requires no location or MNFoodClub credentials. With grading disabled,
+the displayed 10/10 scores are placeholders, not quality assessments. Enable
+grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
+the existing grading and nearest-ingredient lookup. The default source remains
+`staples`, which requires `-location`.
+
 ### Ingredient embedding lookup
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
