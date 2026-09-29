@@ -41,11 +41,11 @@ Create an approachable black-and-white pencil sketch from a home cook's recipe n
 `
 
 const stepSketchPromptInstructions = `
-Create an approachable black-and-white pencil sketch from a home cook's recipe notebook.
-- Use only loose graphite pencil lines on off-white paper: no color, watercolor, paint, or polished digital illustration.
-- Keep visible construction lines, light cross-hatching, and a few natural smudges.
-- Show the food, ingredients, and ordinary cookware at this exact cooking step, before later steps happen.
-- Avoid handwriting, labels, people, hands, branded packaging, collages, and unrelated dishes.
+Create an approachable black-and-white pencil sketch from a teaching chef's recipe notebook.
+- Show one close-up scene of the most useful cutting or cooking technique in this step. If the step has several actions, choose one; favor knife work over mixing or waiting.
+- Show the food and tool during that action, with enough of the ingredient visible to make the cut and relative sizes clear.
+- Don't show explicit measurements, temperatures, or timings that are already in the instructions.
+- Avoid multiple panels, insets, arrows, diagrams, before-and-after sequences, handwriting, labels, people, branded packaging, and unrelated dishes.
 `
 
 const (

@@ -31,6 +31,7 @@ func (s *server) registerRecipeRoutes(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
 	mux.HandleFunc("GET /recipe/{hash}/image-panel", s.handleRecipeImagePanel)
+	// GET serves WebP bytes; POST reuses or generates the sketch and returns the eye control's HTML fragment.
 	mux.HandleFunc("GET /recipe/{hash}/steps/{step}/image", s.handleStepImage)
 	mux.HandleFunc("POST /recipe/{hash}/steps/{step}/image", s.handleGenerateStepImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
@@ -68,7 +69,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
 	var hasRecipeImage bool
-	stepImages := make(map[int]bool, len(recipe.Instructions))
 	var loadWG sync.WaitGroup
 	loadWG.Go(func() {
 		existing, err := s.FeedbackFromCache(ctx, hash)
@@ -119,14 +119,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		recipeCritique = result
 	})
 	loadWG.Wait()
-	for step := range recipe.Instructions {
-		exists, err := s.images.Exists(ctx, stepImageID(hash, step+1))
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to check step image", "hash", hash, "step", step+1, "error", err)
-			continue
-		}
-		stepImages[step+1] = exists
-	}
 
 	if recipe.OriginHash == "" {
 		// Would like to make this an error however this in album is missing a origin hash and its too pretty to break
@@ -144,7 +136,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				currentUser:        currentUser,
 				recipeCritique:     recipeCritique,
 				hasRecipeImage:     hasRecipeImage,
-				stepImages:         stepImages,
 				thread:             thread,
 				feedback:           feedback,
 				wineRecommendation: wineRecommendation,
@@ -183,7 +174,6 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		currentUser:        currentUser,
 		recipeCritique:     recipeCritique,
 		hasRecipeImage:     hasRecipeImage,
-		stepImages:         stepImages,
 		thread:             thread,
 		feedback:           feedback,
 		wineRecommendation: wineRecommendation,

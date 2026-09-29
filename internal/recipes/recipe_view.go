@@ -55,7 +55,6 @@ type recipeViewInput struct {
 	currentUser        *utypes.User
 	recipeCritique     *ai.RecipeCritique
 	hasRecipeImage     bool
-	stepImages         map[int]bool
 	thread             []RecipeThreadEntry
 	feedback           feedback.Feedback
 	wineRecommendation *ai.WineSelection
@@ -84,7 +83,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 	}
 	steps := make([]recipeStepView, len(instructionsHTML))
 	for index, html := range instructionsHTML {
-		steps[index] = recipeStepView{Number: index + 1, HTML: html, HasImage: input.stepImages[index+1], Hash: recipeHash, ServerSignedIn: input.currentUser != nil}
+		steps[index] = recipeStepView{Number: index + 1, HTML: html, Hash: recipeHash, ServerSignedIn: input.currentUser != nil}
 	}
 	activeResponseID := recipe.ResponseID
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
