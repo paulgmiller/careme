@@ -80,6 +80,8 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
+	FinalizedKroger      bool
+	KrogerCartAvailable  bool
 }
 
 type shoppingListViewInput struct {
@@ -94,6 +96,7 @@ type shoppingListViewInput struct {
 	pendingInstructions  string
 	progress             shoppingProgress
 	useTodaysIngredients bool
+	krogerCartAvailable  bool
 }
 
 func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
@@ -134,6 +137,8 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
+		FinalizedKroger:      strings.EqualFold(input.params.Location.Chain, "Kroger") && len(input.params.Saved) > 0,
+		KrogerCartAvailable:  input.krogerCartAvailable && serverSignedIn,
 	}
 
 	data.Title = "Recipes for " + data.Location.Name

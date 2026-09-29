@@ -27,16 +27,18 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 		if name == "" {
 			continue
 		}
-		existing, ok := items[name]
+		productID := strings.TrimSpace(ingredient.ProductID)
+		key := shoppingListKey(ingredient)
+		existing, ok := items[key]
 		if !ok {
 			item := &ai.Ingredient{
-				ProductID:   strings.TrimSpace(ingredient.ProductID),
+				ProductID:   productID,
 				AisleNumber: strings.TrimSpace(ingredient.AisleNumber),
 				Name:        ingredient.Name, // show non normalized
 				Quantity:    strings.TrimSpace(ingredient.Quantity),
 				Price:       strings.TrimSpace(ingredient.Price),
 			}
-			items[name] = item
+			items[key] = item
 			combined = append(combined, item)
 
 			continue
@@ -59,6 +61,13 @@ func shoppingListForDisplay(ingredients []ai.Ingredient) []shoppingListGroup {
 		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}
 	return groups
+}
+
+func shoppingListKey(ingredient ai.Ingredient) string {
+	if id := strings.TrimSpace(ingredient.ProductID); id != "" {
+		return "product:" + id
+	}
+	return "name:" + normalizeShoppingListName(ingredient.Name)
 }
 
 var shoppingQtyWithSuffixPattern = regexp.MustCompile(`^\s*(\d+(?:\.\d+)?)\s+(.+?)\s*$`)
