@@ -91,6 +91,10 @@ function initializeRecipeSteps() {
       doneButton.addEventListener("click", () => completeStep(step));
     }
 
+    step.querySelectorAll("[data-step-image-action]").forEach((action) => {
+      action.addEventListener("pointerdown", (event) => event.stopPropagation());
+    });
+
     step.addEventListener("pointerdown", (event) => {
       if (!event.isPrimary) return;
       if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
@@ -136,7 +140,53 @@ function initializeRecipeSteps() {
   });
 }
 
+function initializeStickyIngredients() {
+  const original = document.getElementById("recipe-ingredients");
+  const sticky = document.getElementById("sticky-ingredients");
+  const toggle = document.getElementById("sticky-ingredients-toggle");
+  const list = document.getElementById("sticky-ingredients-list");
+  if (!original || !sticky || !toggle || !list) return;
+
+  function updateVisibility() {
+    const pastIngredients = original.getBoundingClientRect().bottom < 0;
+    sticky.classList.toggle("hidden", !pastIngredients);
+    if (!pastIngredients) {
+      list.classList.add("hidden");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    list.classList.toggle("hidden", expanded);
+  });
+  window.addEventListener("scroll", updateVisibility, { passive: true });
+  window.addEventListener("resize", updateVisibility);
+  original.addEventListener("toggle", updateVisibility);
+  updateVisibility();
+}
+
+function initializeStepImages() {
+  document.body.addEventListener("htmx:beforeRequest", (event) => {
+    const action = event.target.closest("[data-step-image-action]");
+    if (!action) return;
+    const status = action.parentElement.querySelector("[data-step-image-status]");
+    status.textContent = "Sketching…";
+    status.classList.remove("hidden");
+  });
+  document.body.addEventListener("htmx:responseError", (event) => {
+    const action = event.target.closest("[data-step-image-action]");
+    if (!action) return;
+    const status = action.parentElement.querySelector("[data-step-image-status]");
+    status.textContent = "Could not make a sketch. Try again, chef.";
+    status.classList.remove("hidden");
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initializeStarRating();
   initializeRecipeSteps();
+  initializeStickyIngredients();
+  initializeStepImages();
 });

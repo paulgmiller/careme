@@ -61,6 +61,10 @@ func (g *campaignImageStub) GenerateRecipeImage(context.Context, ai.Recipe) (*ai
 	return &ai.GeneratedImage{Body: strings.NewReader("campaign-image")}, nil
 }
 
+func (g *campaignImageStub) GenerateStepImage(context.Context, ai.Recipe, int) (*ai.GeneratedImage, error) {
+	panic("unexpected step image request")
+}
+
 func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 	c := cache.NewInMemoryCache()
 	g, images := &campaignGeneratorStub{}, &campaignImageStub{}

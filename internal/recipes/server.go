@@ -33,6 +33,7 @@ type ExtGenerator = generator
 // should probably be in ai package?
 type ImageGen interface {
 	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
+	GenerateStepImage(ctx context.Context, recipe ai.Recipe, step int) (*ai.GeneratedImage, error)
 }
 
 type ImageStore interface {
@@ -51,6 +52,7 @@ type statusStore interface {
 
 type server struct {
 	recipeio
+	stepImageMu        sync.Mutex
 	images             ImageStore
 	imagegen           ImageGen
 	generationStatuses statusStore

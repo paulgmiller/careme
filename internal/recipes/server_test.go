@@ -1535,6 +1535,10 @@ type countingImageGenerator struct {
 	imageBody    []byte
 }
 
+func (c *countingImageGenerator) GenerateStepImage(ctx context.Context, recipe ai.Recipe, step int) (*ai.GeneratedImage, error) {
+	return c.GenerateRecipeImage(ctx, recipe)
+}
+
 func (c *countingImageGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	if c.panicOnImage {
 		panic("unexpected call to GenerateRecipeImage")

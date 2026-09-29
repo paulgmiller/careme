@@ -31,6 +31,8 @@ func (s *server) registerRecipeRoutes(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
 	mux.HandleFunc("GET /recipe/{hash}/image-panel", s.handleRecipeImagePanel)
+	mux.HandleFunc("GET /recipe/{hash}/steps/{step}/image", s.handleStepImage)
+	mux.HandleFunc("POST /recipe/{hash}/steps/{step}/image", s.handleGenerateStepImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
 	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
@@ -66,6 +68,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	var thread []RecipeThreadEntry
 	var wineRecommendation *ai.WineSelection
 	var hasRecipeImage bool
+	stepImages := make(map[int]bool, len(recipe.Instructions))
 	var loadWG sync.WaitGroup
 	loadWG.Go(func() {
 		existing, err := s.FeedbackFromCache(ctx, hash)
@@ -116,6 +119,14 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		recipeCritique = result
 	})
 	loadWG.Wait()
+	for step := range recipe.Instructions {
+		exists, err := s.images.Exists(ctx, stepImageID(hash, step+1))
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check step image", "hash", hash, "step", step+1, "error", err)
+			continue
+		}
+		stepImages[step+1] = exists
+	}
 
 	if recipe.OriginHash == "" {
 		// Would like to make this an error however this in album is missing a origin hash and its too pretty to break
@@ -133,6 +144,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 				currentUser:        currentUser,
 				recipeCritique:     recipeCritique,
 				hasRecipeImage:     hasRecipeImage,
+				stepImages:         stepImages,
 				thread:             thread,
 				feedback:           feedback,
 				wineRecommendation: wineRecommendation,
@@ -171,6 +183,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		currentUser:        currentUser,
 		recipeCritique:     recipeCritique,
 		hasRecipeImage:     hasRecipeImage,
+		stepImages:         stepImages,
 		thread:             thread,
 		feedback:           feedback,
 		wineRecommendation: wineRecommendation,
@@ -195,33 +208,37 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	s.serveCachedImage(w, r, hash)
+}
 
-	imageBody, err := s.images.FromCache(ctx, hash)
+func (s *server) serveCachedImage(w http.ResponseWriter, r *http.Request, imageID string) {
+	ctx := r.Context()
+
+	imageBody, err := s.images.FromCache(ctx, imageID)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe image not found", http.StatusNotFound)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to load cached recipe image", "image", imageID, "error", err)
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
 		if err := imageBody.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close cached recipe image", "hash", hash, "error", err)
+			slog.ErrorContext(ctx, "failed to close cached recipe image", "image", imageID, "error", err)
 		}
 	}()
 
 	imageReader := bufio.NewReader(imageBody)
 	header, err := imageReader.Peek(512)
 	if err != nil && !errors.Is(err, bufio.ErrBufferFull) && !errors.Is(err, io.EOF) {
-		slog.ErrorContext(ctx, "failed to sniff cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to sniff cached recipe image", "image", imageID, "error", err)
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
@@ -230,10 +247,10 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if _, err := io.Copy(w, imageReader); err != nil {
 		if ctx.Err() != nil {
-			slog.DebugContext(ctx, "image stream canceled", "hash", hash, "ctxErr", ctx.Err(), "error", err)
+			slog.DebugContext(ctx, "image stream canceled", "image", imageID, "ctxErr", ctx.Err(), "error", err)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to stream cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to stream cached recipe image", "image", imageID, "error", err)
 	}
 }
 

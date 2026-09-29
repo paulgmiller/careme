@@ -75,6 +75,16 @@
 
             {{template "recipe_properties" .PropertyDisplay}}
 
+            <div id="sticky-ingredients" class="print-hidden fixed left-1/2 top-2 z-50 hidden w-[min(90vw,32rem)] -translate-x-1/2 rounded-xl border border-brand-200 bg-white shadow-lg">
+              <button type="button" id="sticky-ingredients-toggle" aria-controls="sticky-ingredients-list" aria-expanded="false"
+                      class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400">
+                Ingredients <span aria-hidden="true">⌄</span>
+              </button>
+              <div id="sticky-ingredients-list" class="hidden max-h-[60vh] overflow-y-auto border-t border-brand-100 p-4">
+                {{template "recipe_ingredient_list" .DisplayIngredients}}
+              </div>
+            </div>
+
             <div class="grid gap-6 md:grid-cols-2">
               <details id="recipe-ingredients"
                        class="recipe-ingredients group"
@@ -88,42 +98,23 @@
                     </span>
                   </h3>
                 </summary>
-                <ul class="mt-3 space-y-2 text-gray-700">
-                  {{range .DisplayIngredients}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
-                        {{if .Quantity}}
-                        <span class="text-gray-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                        {{else}}
-                        <span class="hidden sm:block" aria-hidden="true"></span>
-                        {{end}}
-                        {{if .Price}}
-                        <span class="text-gray-500 sm:text-right sm:text-sm">{{.Price}}</span>
-                        {{else}}
-                        <span class="hidden sm:block" aria-hidden="true"></span>
-                        {{end}}
-                      </div>
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
+                {{template "recipe_ingredient_list" .DisplayIngredients}}
               </details>
               <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
                 <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe a step aside or click its number when it’s done.</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
-                  {{range $index, $instruction := .InstructionsHTML}}
+                  {{range .Steps}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
                     <div class="flex items-start gap-3">
                       <button type="button"
                               class="w-5 shrink-0 cursor-pointer text-right transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
                               data-recipe-step-number
                               data-recipe-step-done
-                              aria-label="Mark step {{InstructionNumber $index}} done"
-                              title="Mark step done">{{InstructionNumber $index}}.</button>
-                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{$instruction}}</div>
+                              aria-label="Mark step {{.Number}} done"
+                              title="Mark step done">{{.Number}}.</button>
+                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{.HTML}}</div>
+                      {{template "step_image" .}}
                     </div>
                   </li>
                   {{end}}

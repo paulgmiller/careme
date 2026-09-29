@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -16,6 +17,10 @@ const (
 
 func recipeImageCacheKey(hash string) string {
 	return recipeImagesCachePrefix + hash
+}
+
+func stepImageID(hash string, step int) string {
+	return "steps/" + hash + "/" + strconv.Itoa(step)
 }
 
 // imageStore reads and writes generated recipe images in their dedicated cache.

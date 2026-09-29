@@ -53,6 +53,34 @@ func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 	})
 }
 
+func TestRecipeStepIllustrationControlsAndStickyIngredients(t *testing.T) {
+	loc := locations.Location{ID: "store", Name: "Store"}
+	params := DefaultParams(&loc, time.Now())
+	recipe := ai.Recipe{Title: "Soup", Ingredients: []ai.Ingredient{{Name: "Carrot", Quantity: "2"}}, Instructions: []string{"Chop carrots.", "Simmer carrots."}}
+	hash := recipe.ComputeHash()
+	for _, signedIn := range []bool{false, true} {
+		w := httptest.NewRecorder()
+		writeRecipePage(t.Context(), w, recipeViewInput{
+			params: params, recipe: recipe, currentUser: renderTestUser(signedIn),
+			stepImages: map[int]bool{2: true},
+		})
+		html := assertHTTPSuccess(t, w)
+		isValidHTML(t, html)
+		assert.Contains(t, html, `id="sticky-ingredients"`)
+		assert.Contains(t, html, `id="sticky-ingredients-list"`)
+		assert.Contains(t, html, `Pencil sketch of step 2`)
+		assert.Contains(t, html, `/recipe/`+hash+`/steps/2/image`)
+		assert.NotContains(t, html, `hx-post="/recipe/`+hash+`/steps/2/image"`)
+		if signedIn {
+			assert.Contains(t, html, `hx-post="/recipe/`+hash+`/steps/1/image"`)
+			assert.Contains(t, html, `aria-label="Generate illustration for step 1"`)
+		} else {
+			assert.NotContains(t, html, `hx-post="/recipe/`+hash+`/steps/1/image"`)
+			assert.Contains(t, html, `aria-label="Sign in to generate illustration for step 1"`)
+		}
+	}
+}
+
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	t.Parallel()
 	lat := 47.6097

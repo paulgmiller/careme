@@ -26,6 +26,7 @@ type recipePageView struct {
 	Date                    string
 	Recipe                  ai.Recipe
 	InstructionsHTML        []template.HTML
+	Steps                   []recipeStepView
 	Saved                   bool
 	DisplayIngredients      []ai.Ingredient
 	PropertyDisplay         recipePropertyDisplay
@@ -54,9 +55,18 @@ type recipeViewInput struct {
 	currentUser        *utypes.User
 	recipeCritique     *ai.RecipeCritique
 	hasRecipeImage     bool
+	stepImages         map[int]bool
 	thread             []RecipeThreadEntry
 	feedback           feedback.Feedback
 	wineRecommendation *ai.WineSelection
+}
+
+type recipeStepView struct {
+	Number         int
+	HTML           template.HTML
+	HasImage       bool
+	Hash           string
+	ServerSignedIn bool
 }
 
 func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageView, error) {
@@ -71,6 +81,10 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
 	if err != nil {
 		return recipePageView{}, fmt.Errorf("instruction rendering error: %w", err)
+	}
+	steps := make([]recipeStepView, len(instructionsHTML))
+	for index, html := range instructionsHTML {
+		steps[index] = recipeStepView{Number: index + 1, HTML: html, HasImage: input.stepImages[index+1], Hash: recipeHash, ServerSignedIn: input.currentUser != nil}
 	}
 	activeResponseID := recipe.ResponseID
 	if threadResponseID := latestThreadResponseID(thread); threadResponseID != "" {
@@ -89,6 +103,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Date:                    input.params.Date.Format("2006-01-02"),
 		Recipe:                  recipe,
 		InstructionsHTML:        instructionsHTML,
+		Steps:                   steps,
 		Saved:                   input.saved,
 		DisplayIngredients:      ingredientsForDisplay(recipe.Ingredients, input.wineRecommendation),
 		PropertyDisplay:         newRecipePropertyDisplay(recipe),
