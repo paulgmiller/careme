@@ -140,6 +140,7 @@ function initializeRecipeSteps() {
   });
 }
 
+//make clicking anywhere on ingredients make it collapse.
 function initializeIngredients() {
   const details = document.getElementById("recipe-ingredients");
   if (!details) return;
@@ -150,26 +151,9 @@ function initializeIngredients() {
   });
 }
 
-function initializeStepImages() {
-  document.body.addEventListener("htmx:beforeRequest", (event) => {
-    const action = event.target.closest("[data-step-image-action]");
-    if (!action) return;
-    const status = action.parentElement.querySelector("[data-step-image-status]");
-    status.textContent = "Sketching…";
-    status.classList.remove("hidden");
-  });
-  document.body.addEventListener("htmx:responseError", (event) => {
-    const action = event.target.closest("[data-step-image-action]");
-    if (!action) return;
-    const status = action.parentElement.querySelector("[data-step-image-status]");
-    status.textContent = "Could not make a sketch. Try again, chef.";
-    status.classList.remove("hidden");
-  });
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   initializeStarRating();
   initializeRecipeSteps();
   initializeIngredients();
-  initializeStepImages();
 });
