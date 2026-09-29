@@ -48,6 +48,25 @@ func TestBuildRecipeImagePromptWithStyle(t *testing.T) {
 	require.ErrorContains(t, err, "unknown recipe image style")
 }
 
+func TestBuildStepImagePromptFocusesOnSelectedInstruction(t *testing.T) {
+	recipe := Recipe{Title: "Soup", Ingredients: []Ingredient{{Name: "carrot", Quantity: "2"}}, Instructions: []string{"Chop carrots.", "Simmer the carrots."}}
+	prompt, err := buildStepImagePrompt(recipe, 2)
+	require.NoError(t, err)
+	assert.Contains(t, prompt, "black-and-white pencil sketch")
+	assert.Contains(t, prompt, "one close-up scene")
+	assert.Contains(t, prompt, "choose one")
+	assert.Contains(t, prompt, "relative sizes")
+	assert.Contains(t, prompt, "Avoid multiple panels, insets, arrows")
+	assert.Contains(t, prompt, "2 carrot")
+	assert.Contains(t, prompt, "Illustrate only step 2 of 2:\nSimmer the carrots.")
+	assert.NotContains(t, prompt, "Chop carrots.")
+	assert.NotContains(t, prompt, "finished dish")
+	_, err = buildStepImagePrompt(recipe, 0)
+	require.Error(t, err)
+	_, err = buildStepImagePrompt(recipe, 3)
+	require.Error(t, err)
+}
+
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
 	const imageModel = "gpt-image-2.5-sunburst"
 	aiConfig := testAIConfig(config.DefaultRecipeModel)

@@ -53,6 +53,34 @@ func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 	})
 }
 
+func TestRecipeStepIllustrationControlsAndIngredients(t *testing.T) {
+	loc := locations.Location{ID: "store", Name: "Store"}
+	params := DefaultParams(&loc, time.Now())
+	recipe := ai.Recipe{Title: "Soup", Ingredients: []ai.Ingredient{{Name: "Carrot", Quantity: "2"}}, Instructions: []string{"Chop carrots.", "Simmer carrots."}}
+	hash := recipe.ComputeHash()
+	for _, signedIn := range []bool{false, true} {
+		w := httptest.NewRecorder()
+		writeRecipePage(t.Context(), w, recipeViewInput{
+			params: params, recipe: recipe, currentUser: renderTestUser(signedIn),
+		})
+		html := assertHTTPSuccess(t, w)
+		isValidHTML(t, html)
+		assert.Contains(t, html, `id="recipe-ingredients"`)
+		assert.NotContains(t, html, `id="sticky-ingredients"`)
+		assert.NotContains(t, html, `Pencil sketch of step 2`)
+		assert.NotContains(t, html, `<img src="/recipe/`+hash+`/steps/2/image"`)
+		if signedIn {
+			assert.Contains(t, html, `hx-post="/recipe/`+hash+`/steps/1/image"`)
+			assert.Contains(t, html, `hx-post="/recipe/`+hash+`/steps/2/image"`)
+			assert.Contains(t, html, `aria-label="Generate illustration for step 1"`)
+		} else {
+			assert.NotContains(t, html, `hx-post="/recipe/`+hash+`/steps/1/image"`)
+			assert.NotContains(t, html, `id="step-image-1"`)
+			assert.NotContains(t, html, `aria-label="Generate illustration for step 1"`)
+		}
+	}
+}
+
 func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	t.Parallel()
 	lat := 47.6097
@@ -161,7 +189,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.Contains(t, html, `Swipe a step aside or click its number when it’s done.`)
 	assert.Contains(t, html, `<script src="`+static.AssetPath+`recipe.js"></script>`)
 	assert.NotContains(t, html, `initializeRecipeSteps`)
-	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group"[^>]*\sopen>`, html)
+	assert.Regexp(t, `<details id="recipe-ingredients"[^>]*class="recipe-ingredients group cursor-pointer"[^>]*\sopen>`, html)
 	if strings.Contains(html, `flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm`) {
 		t.Error("recipe HTML should no longer use the old wrapped ingredient row layout")
 	}

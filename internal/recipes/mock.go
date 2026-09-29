@@ -31,6 +31,10 @@ func NewMockImageGen() mock {
 	return mock{}
 }
 
+func (m mock) GenerateStepImage(context.Context, ai.Recipe, int) (*ai.GeneratedImage, error) {
+	return &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}, nil
+}
+
 var mockRecipeImage = []byte{
 	0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n',
 	0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',

@@ -31,6 +31,9 @@ func (s *server) registerRecipeRoutes(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipe/{hash}", s.handleSingle)
 	mux.HandleFunc("GET /recipe/{hash}/image", s.handleRecipeImage)
 	mux.HandleFunc("GET /recipe/{hash}/image-panel", s.handleRecipeImagePanel)
+	// GET serves WebP bytes; POST reuses or generates the sketch and returns the eye control's HTML fragment.
+	mux.HandleFunc("GET /recipe/{hash}/steps/{step}/image", s.handleStepImage)
+	mux.HandleFunc("POST /recipe/{hash}/steps/{step}/image", s.handleGenerateStepImage)
 	mux.HandleFunc("POST /recipe/{hash}/question", s.handleQuestion)
 	mux.HandleFunc("POST /recipe/{hash}/regenerate", s.handleRegenerateSingleRecipe)
 	mux.HandleFunc("GET /recipe/{hash}/regen/{jobID}", s.handleSingleRecipeRegeneration)
@@ -195,33 +198,37 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	hash := strings.TrimSpace(r.PathValue("hash"))
 	if hash == "" {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
+	s.serveCachedImage(w, r, hash)
+}
 
-	imageBody, err := s.images.FromCache(ctx, hash)
+func (s *server) serveCachedImage(w http.ResponseWriter, r *http.Request, imageID string) {
+	ctx := r.Context()
+
+	imageBody, err := s.images.FromCache(ctx, imageID)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			http.Error(w, "recipe image not found", http.StatusNotFound)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to load cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to load cached recipe image", "image", imageID, "error", err)
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
 	defer func() {
 		if err := imageBody.Close(); err != nil {
-			slog.ErrorContext(ctx, "failed to close cached recipe image", "hash", hash, "error", err)
+			slog.ErrorContext(ctx, "failed to close cached recipe image", "image", imageID, "error", err)
 		}
 	}()
 
 	imageReader := bufio.NewReader(imageBody)
 	header, err := imageReader.Peek(512)
 	if err != nil && !errors.Is(err, bufio.ErrBufferFull) && !errors.Is(err, io.EOF) {
-		slog.ErrorContext(ctx, "failed to sniff cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to sniff cached recipe image", "image", imageID, "error", err)
 		http.Error(w, "failed to load recipe image", http.StatusInternalServerError)
 		return
 	}
@@ -230,10 +237,10 @@ func (s *server) handleRecipeImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	if _, err := io.Copy(w, imageReader); err != nil {
 		if ctx.Err() != nil {
-			slog.DebugContext(ctx, "image stream canceled", "hash", hash, "ctxErr", ctx.Err(), "error", err)
+			slog.DebugContext(ctx, "image stream canceled", "image", imageID, "ctxErr", ctx.Err(), "error", err)
 			return
 		}
-		slog.ErrorContext(ctx, "failed to stream cached recipe image", "hash", hash, "error", err)
+		slog.ErrorContext(ctx, "failed to stream cached recipe image", "image", imageID, "error", err)
 	}
 }
 
