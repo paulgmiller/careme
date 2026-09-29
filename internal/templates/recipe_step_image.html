@@ -2,16 +2,15 @@
 {{if .ServerSignedIn}}
 <div id="step-image-{{.Number}}" class="print-hidden basis-full">
   {{if .HasImage}}
-  <details open>
+  <details open class="group">
     <summary data-step-image-action aria-label="Toggle illustration for step {{.Number}}" title="Toggle illustration for step {{.Number}}"
-             class="ml-8 inline-flex size-9 cursor-pointer list-none items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 [&::-webkit-details-marker]:hidden">
-      {{template "icon_eye" .}}
-    </summary>
-    <a href="/recipe/{{.Hash}}/steps/{{.Number}}/image" target="_blank" rel="noopener" class="mt-2 block w-full max-w-md"
-       aria-label="View illustration for step {{.Number}}" title="View illustration for step {{.Number}}">
+             class="block w-fit max-w-full cursor-pointer list-none rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
+      <span class="ml-8 inline-flex size-9 items-center justify-center rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 group-open:hidden">
+        {{template "icon_eye" .}}
+      </span>
       <img src="/recipe/{{.Hash}}/steps/{{.Number}}/image" alt="Pencil sketch of step {{.Number}}" loading="lazy"
-           class="h-auto w-full rounded-xl border border-brand-100" />
-    </a>
+           class="hidden h-auto w-full max-w-md rounded-xl border border-brand-100 group-open:block" />
+    </summary>
   </details>
   {{else}}
   <button type="button" data-step-image-action

@@ -58,7 +58,9 @@ func TestStepImageGenerationAndCacheReuse(t *testing.T) {
 		s.handleGenerateStepImage(rr, stepImageRequest(http.MethodPost, hash, "2"))
 		require.Equal(t, http.StatusOK, rr.Code)
 		assert.Contains(t, rr.Body.String(), "Pencil sketch of step 2")
-		assert.Contains(t, rr.Body.String(), `<details open>`)
+		assert.Contains(t, rr.Body.String(), `<details open`)
+		assert.Regexp(t, `(?s)<summary[^>]*>.*<img[^>]*Pencil sketch of step 2[^>]*>\s*</summary>`, rr.Body.String())
+		assert.NotContains(t, rr.Body.String(), `target="_blank"`)
 	}
 	assert.Equal(t, 1, g.calls)
 	assert.Equal(t, 2, g.step)
