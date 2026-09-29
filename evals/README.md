@@ -43,6 +43,8 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe generation
 
+The [2026-09-29 GPT-6.1 Sol comparison](recipe-generation/gpt61-sol-comparison-2026-09-29.md) records fresh recipe and menu runs against GPT-6 Sol and the new shared default.
+
 The [2026-09-22 GPT-6 Sol rollout](recipe-generation/gpt6-sol-rollout-2026-09-22.md) records recipe and menu results and compares the eight shared recipe cases with the recorded Astra baseline. The [2026-09-07 model comparison](recipe-generation/README.md) records earlier Astra, GPT-5.6 Sol, and Luna results.
 
 Select the recipe model without editing the suite:
@@ -63,7 +65,7 @@ Direct Promptfoo runs accept `RECIPE_EVAL_REASONING_EFFORT`; provider `config.re
 
 Promptfoo's **cost** column reports estimated recipe-generation USD, matching its generation-only latency column. Exported JSON also includes `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD` for generation and judging together. The provider gets cost directly from `GenerateRecipeWithCost` and `CritiqueRecipeWithCost`; it does not intercept HTTP responses. Token counts, including reasoning and cache tokens, remain in the AI usage logs and are not exported in new eval results. Promptfoo token totals are therefore unavailable, not zero-cost usage.
 
-Generation cost uses the application's standard short-context price table, including cache reads and writes; GPT-6 Sol pricing is included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
+Generation cost uses the application's standard short-context price table, including cache reads and writes; GPT-6 Sol and GPT-6.1 Sol pricing are included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
 
 The suite requires `AI_API_KEY` and `OPENROUTER_API_KEY`, loaded through the existing configuration/kage path. Each case makes one generation call and one call to the production critiquer. `config.judge_model` pins Gemini for every candidate. The judge sees only the newly generated recipe, with response IDs and provenance removed. Its full critique, model, and timestamp are retained in response metadata. `critique-quality` reports the score divided by ten and passes at 8/10; judge errors fail the evaluation.
 
@@ -116,7 +118,11 @@ The [GPT-6 Sol rollout report](recipe-generation/gpt6-sol-rollout-2026-09-22.md#
 records the three-case production-model result.
 
 Run `./task.sh evals EVAL=menu-plan -- --no-cache --output /tmp/menu-plan-eval.json`.
-The provider uses the production menu model (currently `gpt-6-sol`) with medium
+Select either candidate with `MODEL=gpt-6-sol` or `MODEL=gpt-6.1-sol`; direct
+Promptfoo runs accept `RECIPE_EVAL_MODEL`, and provider `config.model` takes
+precedence. The selected model is recorded in `metadata.requestedModel`.
+
+The provider uses the production menu model (currently `gpt-6.1-sol`) with medium
 reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
 configuration path. Each case makes a menu generation call and a separate judge call.
 
@@ -132,9 +138,9 @@ These keyword assertions check handoff coverage, not semantic correctness:
 a negated instruction could still match. The generated recipes are not evaluated
 by this suite.
 
-The latency budget is 15 seconds per menu call, including SDK retries and ingredient
+The latency budget is 20 seconds per menu call, including SDK retries and ingredient
 correction calls, excluding configuration, Go compilation, and JSON serialization.
-Use `--no-cache` for meaningful timing. The suite runs sequentially by default.
+Use `--no-cache` for meaningful timing. The suite defaults to concurrency four.
 The suite pins `config.judge_model` to `google/gemini-3.1-pro-preview`. Its menu-specific
 rubric evaluates request fidelity, culinary coherence, and meaningful variety from
 the original request, catalog, location/date, recent recipe titles, and complete
@@ -146,7 +152,7 @@ it does not demand steps, quantities, or cooking temperatures.
 
 Malformed responses and judge API errors fail explicitly. Full critique, returned
 judge model, timestamp, and separate `judgeLatencyMs` are retained in metadata.
-The 15-second latency assertion excludes judging. Judge scores can vary; calibrate
+The 20-second latency assertion excludes judging. Judge scores can vary; calibrate
 against human-reviewed good/bad menus before treating them as a quality benchmark.
 This provider does not export cost or token usage; Promptfoo totals are not a
 billing estimate.

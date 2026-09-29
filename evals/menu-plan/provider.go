@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{
 
 type Settings struct {
 	Config struct {
+		Model      string `json:"model"`
 		JudgeModel string `json:"judge_model"`
 	} `json:"config"`
 }
@@ -67,6 +69,7 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if err := json.Unmarshal(encoded, &settings); err != nil {
 		return nil, fmt.Errorf("decode provider options: %w", err)
 	}
+	cfg.AI.RecipeModel = resolveModel(settings, cfg.AI.RecipeModel)
 	model := strings.TrimSpace(settings.Config.JudgeModel)
 	if model == "" {
 		return nil, fmt.Errorf("config.judge_model is required")
@@ -76,7 +79,22 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	}
 	planner := ai.NewClient(cfg.AI, http.DefaultClient, nil)
 	judge := newMenuJudge(cfg.OpenRouter.APIKey, model, http.DefaultClient)
-	return runEval(body, planner, judge)
+	result, err := runEval(body, planner, judge)
+	if err != nil {
+		return nil, err
+	}
+	result["metadata"].(map[string]interface{})["requestedModel"] = cfg.AI.RecipeModel
+	return result, nil
+}
+
+func resolveModel(settings Settings, productionModel string) string {
+	if model := strings.TrimSpace(settings.Config.Model); model != "" {
+		return model
+	}
+	if model := strings.TrimSpace(os.Getenv("RECIPE_EVAL_MODEL")); model != "" {
+		return model
+	}
+	return productionModel
 }
 
 func runEval(body []byte, planner menuPlanner, judge menuJudge) (map[string]interface{}, error) {

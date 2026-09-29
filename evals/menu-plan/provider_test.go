@@ -28,6 +28,24 @@ type stubMenuPlanner struct {
 	err          error
 }
 
+func TestResolveModel(t *testing.T) {
+	for _, tc := range []struct {
+		name, configured, environment, want string
+	}{
+		{"production default", "", "", "production-model"},
+		{"environment override", "", " gpt-6-sol ", "gpt-6-sol"},
+		{"provider takes precedence", " gpt-6.1-sol ", "gpt-6-sol", "gpt-6.1-sol"},
+		{"blank overrides", " ", " ", "production-model"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("RECIPE_EVAL_MODEL", tc.environment)
+			var settings Settings
+			settings.Config.Model = tc.configured
+			assert.Equal(t, tc.want, resolveModel(settings, "production-model"))
+		})
+	}
+}
+
 func (s *stubMenuPlanner) CreateMenuPlan(_ context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error) {
 	s.location = location
 	s.ingredients = ingredients
