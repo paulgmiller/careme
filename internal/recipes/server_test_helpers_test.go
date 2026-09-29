@@ -39,6 +39,9 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if cfg.cfg == nil {
+		cfg.cfg = &config.Config{}
+	}
 	if cfg.imageCache == nil {
 		cfg.imageCache = cfg.cache
 	}
@@ -53,7 +56,10 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}
