@@ -75,7 +75,7 @@
 
             {{template "recipe_properties" .PropertyDisplay}}
 
-            <div class="grid gap-6 md:grid-cols-2">
+            <div class="grid gap-6 md:grid-cols-2 md:has-[.recipe-ingredients:not([open])]:grid-cols-1">
               <details id="recipe-ingredients"
                        class="recipe-ingredients group cursor-pointer"
                        open>

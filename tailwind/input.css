@@ -132,14 +132,6 @@
     corner-shape: squircle;
   }
 
-  /* Let instructions use the whole recipe card when ingredients are closed. */
-  @media screen and (min-width: 48rem) {
-    .recipe-ingredients:not([open]),
-    .recipe-ingredients:not([open]) + #recipe-instructions {
-      grid-column: 1 / -1;
-    }
-  }
-
   /* Let recipe steps follow the finger without interfering with vertical scrolling. */
   .recipe-step {
     touch-action: pan-y;
