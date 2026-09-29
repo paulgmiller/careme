@@ -114,6 +114,23 @@ func newFakeStatusStore() *fakeStatusStore {
 func (s *fakeStatusStore) Start(_ context.Context, hash, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.statuses[hash]; exists {
+		return cache.ErrAlreadyExists
+	}
+	s.statuses[hash] = status.Status{Message: message}
+	return nil
+}
+
+func (s *fakeStatusStore) Restart(_ context.Context, hash, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, exists := s.statuses[hash]
+	if !exists {
+		return cache.ErrNotFound
+	}
+	if current.Failed == "" || current.Redirect != "" {
+		return cache.ErrAlreadyExists
+	}
 	s.statuses[hash] = status.Status{Message: message}
 	return nil
 }

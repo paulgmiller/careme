@@ -43,6 +43,7 @@ type ImageStore interface {
 
 type statusStore interface {
 	Start(ctx context.Context, hash, message string) error
+	Restart(ctx context.Context, hash, message string) error
 	Update(ctx context.Context, hash, message string) error
 	Fail(ctx context.Context, hash string, err error) error
 	Load(ctx context.Context, hash string) (status.Status, error)

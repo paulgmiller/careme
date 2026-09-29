@@ -94,6 +94,10 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.kickgeneration(ctx, p, currentUser.ID); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", newHash, "error", err)
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
 		return
@@ -557,7 +561,11 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.kickgeneration(ctx, p, userID); err != nil {
+	if err := s.retryGeneration(ctx, p, userID); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
 		return
@@ -608,6 +616,25 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 	if err := s.generationStatuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start generation status %w", err)
 	}
+	s.runGeneration(ctx, p, userID, hash)
+	return nil
+}
+
+func (s *server) retryGeneration(ctx context.Context, p *generatorParams, userID string) error {
+	hash := p.Hash()
+	if err := s.generationStatuses.Restart(ctx, hash, status.InitialMessage); err != nil {
+		if !errors.Is(err, cache.ErrNotFound) {
+			return fmt.Errorf("restart generation status: %w", err)
+		}
+		if err := s.generationStatuses.Start(ctx, hash, status.InitialMessage); err != nil {
+			return fmt.Errorf("start missing generation status: %w", err)
+		}
+	}
+	s.runGeneration(ctx, p, userID, hash)
+	return nil
+}
+
+func (s *server) runGeneration(ctx context.Context, p *generatorParams, userID, hash string) {
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
@@ -635,7 +662,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 			return
 		}
 	})
-	return nil
 }
 
 func (s *server) recordShoppingListForUser(userID, hash string, location *locations.Location) error {

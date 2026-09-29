@@ -400,7 +400,11 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err = s.generationStatuses.Start(ctx, id, "") // put thread questin or critique here?
+	start := s.generationStatuses.Start
+	if err == nil && status.Failed != "" {
+		start = s.generationStatuses.Restart
+	}
+	err = start(ctx, id, "") // put thread questin or critique here?
 	if err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			redirectToRecipeRegeneration(w, r, hash, id)
