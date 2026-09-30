@@ -272,11 +272,22 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 }
 
 func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
-	for _, effort := range []responses.ReasoningEffort{"", responses.ReasoningEffortLow, responses.ReasoningEffortMedium, responses.ReasoningEffortHigh, responses.ReasoningEffortNone} {
-		t.Run(string(effort), func(t *testing.T) {
+	for _, tc := range []struct {
+		model  string
+		effort responses.ReasoningEffort
+	}{
+		{config.DefaultRecipeModel, ""},
+		{"candidate-model", ""},
+		{"candidate-model", responses.ReasoningEffortLow},
+		{"candidate-model", responses.ReasoningEffortMedium},
+		{"candidate-model", responses.ReasoningEffortHigh},
+		{"candidate-model", responses.ReasoningEffortNone},
+	} {
+		t.Run(tc.model+"/"+string(tc.effort), func(t *testing.T) {
+			effort := tc.effort
 			recorder := &capturePromptRecorder{}
 			var requestBody string
-			client := NewClient(testAIConfig("candidate-model"), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			client := NewClient(testAIConfig(tc.model), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if !strings.HasSuffix(req.URL.Path, "/responses") {
 					t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 				}
@@ -338,8 +349,8 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 			if strings.Contains(requestBody, "Chicken thighs") {
 				t.Fatalf("recipe continuation should not resend ingredient TSV: %s", requestBody)
 			}
-			assert.Contains(t, requestBody, `"model":"candidate-model"`)
-			assert.Equal(t, "candidate-model", recorder.record.Model)
+			assert.Contains(t, requestBody, fmt.Sprintf(`"model":%q`, tc.model))
+			assert.Equal(t, tc.model, recorder.record.Model)
 			if !strings.Contains(requestBody, `"previous_response_id":"resp-menu-plan"`) {
 				t.Fatalf("expected previous response id in request: %s", requestBody)
 			}

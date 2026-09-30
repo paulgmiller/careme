@@ -2,7 +2,9 @@
 
 Latest prompt comparison: [new vs. old at medium reasoning, 2026-09-10](prompt-comparison-medium-2026-09-10.md). The recipe suite defaults to concurrency eight; override with `--max-concurrency`.
 
-Latest results: [GPT-6 Sol rollout and comparison with the recorded Astra baseline, 2026-09-22](gpt6-sol-rollout-2026-09-22.md), including the menu-plan result. The [September 9 explicit-medium comparison](model-comparison-medium-2026-09-09.md) retains the prior GPT-5.6 Sol and Astra results, reasoning tokens, and costs.
+Latest results: [GPT-6.1 Sol versus GPT-6 Sol, 2026-09-29](gpt61-sol-comparison-2026-09-29.md), with ten recipe cases and three menu cases per model. Both models passed all 13 cases; GPT-6.1 Sol is now the shared default.
+
+Previous results: [GPT-6 Sol rollout and comparison with the recorded Astra baseline, 2026-09-22](gpt6-sol-rollout-2026-09-22.md), including the menu-plan result. The [September 9 explicit-medium comparison](model-comparison-medium-2026-09-09.md) retains the prior GPT-5.6 Sol and Astra results, reasoning tokens, and costs.
 
 Run with an explicit recipe model and reasoning effort:
 
