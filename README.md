@@ -102,6 +102,10 @@ Manual Jobs do not change the suspension and are not protected by the CronJob's 
 
 ### Ingredient embedding lookup
 
+Ingredient grading and wine pairing default to `gpt-6-luna` with reasoning
+disabled. Set `INGREDIENT_GRADING_MODEL` to override the grader; recipe generation
+and meal planning continue to use `gpt-6.1-sol`.
+
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
 OpenAI `text-embedding-3-small` embedding of each ingredient description alongside
 its grade, using a separate embedding cache keyed by model, dimensions, and

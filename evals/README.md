@@ -112,6 +112,33 @@ Run just this suite from the repository root:
 
 The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
 
+## Ingredient grading
+
+The [September 29 Luna comparison](ingredient-grader/gpt6-luna-comparison-2026-09-29.md)
+records 23 batches and 92 ingredient scores per model, including remaining failures.
+
+Compare the old and new Luna graders on the checked-in ingredient batches:
+
+```sh
+./task.sh evals EVAL=ingredient-grader MODEL=gpt-5.6-luna -- --no-cache --output /tmp/ingredients-gpt56-luna.json
+./task.sh evals EVAL=ingredient-grader MODEL=gpt-6-luna -- --no-cache --output /tmp/ingredients-gpt6-luna.json
+```
+
+Direct Promptfoo runs accept `INGREDIENT_EVAL_MODEL`; provider `config.model`
+takes precedence. Without either override, the provider uses
+`INGREDIENT_GRADING_MODEL` or the production default, currently `gpt-6-luna`.
+Both OpenAI graders use `none` reasoning. The existing `jev` option is preserved.
+OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
+
+Each case uses the production grading manager with grading enabled and a fresh
+in-memory cache, so persistent grades cannot bypass live calls. Promptfoo caching
+still requires `--no-cache`. A batch passes only when every requested ingredient
+has a grade within its checked-in bounds. Incomplete, duplicate, or unexpected
+results fail explicitly. JSON exports retain grades, ingredient/pass counts, and
+`metadata.requestedModel` (empty means the production default); `latencyMs` measures
+grading including SDK retries, excluding configuration and Go startup. The suite
+defaults to concurrency sixteen and has no latency assertion or exported costs.
+
 ## Menu planning
 
 The [GPT-6 Sol rollout report](recipe-generation/gpt6-sol-rollout-2026-09-22.md#menu-planning)

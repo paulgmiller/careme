@@ -62,7 +62,11 @@ func TestRunEvalPassesScoresWithinInclusiveBounds(t *testing.T) {
 
 	result, err := runEval(ctx, grader)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"output": "PASS"}, result)
+	assert.Equal(t, "PASS", result["output"])
+	metadata := result["metadata"].(map[string]interface{})
+	assert.Equal(t, 2, metadata["ingredientCount"])
+	assert.Equal(t, 2, metadata["passedIngredientCount"])
+	assert.Equal(t, grader.grades, metadata["grades"])
 	require.Len(t, grader.inputs, 2)
 	assert.Equal(t, "0", grader.inputs[0].ProductID)
 	assert.Equal(t, "rice", grader.inputs[1].ProductID)
@@ -104,15 +108,79 @@ func TestRunEvalReportsScoresOutsideBounds(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, output, "grade=4<5 desc=Plain Lentils reason=scored too low")
 	assert.Contains(t, output, "grade=8>7  desc=Prepared Dip reason=scored too high")
+	assert.Equal(t, 0, result["metadata"].(map[string]interface{})["passedIngredientCount"])
 }
 
 func TestRunEvalReturnsGraderError(t *testing.T) {
 	grader := &stubIngredientGrader{err: errors.New("grader unavailable")}
 
-	result, err := runEval(map[string]interface{}{}, grader)
+	ctx := promptfooContextFromJSON(t, `{"vars":{"cases":[{"ingredient":{"description":"Broccoli"}}]}}`)
+	result, err := runEval(ctx, grader)
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "failed to grade ingredients: grader unavailable")
+}
+
+func TestDecodeOptionsModelPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, configured, environment, want string
+	}{
+		{"production default", "", "", ""},
+		{"environment", "", " gpt-5.6-luna ", "gpt-5.6-luna"},
+		{"provider precedence", " gpt-6-luna ", "gpt-5.6-luna", "gpt-6-luna"},
+		{"blank override", " ", " ", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("INGREDIENT_EVAL_MODEL", tc.environment)
+			settings, err := decodeOptions(map[string]interface{}{"config": map[string]interface{}{"model": tc.configured}})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, settings.Config.Model)
+		})
+	}
+}
+
+func TestDecodeOptionsRejectsMalformedOptions(t *testing.T) {
+	for _, options := range []map[string]interface{}{
+		{"config": map[string]interface{}{"model": 42}},
+		{"config": make(chan struct{})},
+	} {
+		_, err := decodeOptions(options)
+		require.Error(t, err)
+	}
+}
+
+func TestRunEvalRejectsIncompleteOrInvalidGrades(t *testing.T) {
+	for _, tc := range []struct {
+		name, wantErr string
+		grades        []ai.InputIngredient
+	}{
+		{"missing", "received 0 of 1 grades", nil},
+		{"nil grade", "missing grade", []ai.InputIngredient{{ProductID: "0"}}},
+		{"unknown id", "unexpected or duplicate", []ai.InputIngredient{{ProductID: "other"}}},
+		{"duplicate", "unexpected or duplicate", []ai.InputIngredient{
+			{ProductID: "0", Grade: &ai.IngredientGrade{Score: 8}},
+			{ProductID: "0", Grade: &ai.IngredientGrade{Score: 8}},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := promptfooContextFromJSON(t, `{"vars":{"cases":[{"ingredient":{"description":"Broccoli"}}]}}`)
+			result, err := runEval(ctx, &stubIngredientGrader{grades: tc.grades})
+			require.ErrorContains(t, err, tc.wantErr)
+			assert.Nil(t, result)
+		})
+	}
+}
+
+func TestRunEvalRejectsEmptyOrDuplicateCases(t *testing.T) {
+	for _, ctxJSON := range []string{
+		`{"vars":{"cases":[]}}`,
+		`{"vars":{"cases":[{"ingredient":{"id":"same"}},{"ingredient":{"id":"same"}}]}}`,
+	} {
+		grader := &stubIngredientGrader{}
+		_, err := runEval(promptfooContextFromJSON(t, ctxJSON), grader)
+		require.Error(t, err)
+		assert.Empty(t, grader.inputs)
+	}
 }
 
 func TestRunEvalRejectsContextThatCannotBeEncoded(t *testing.T) {

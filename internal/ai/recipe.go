@@ -21,6 +21,7 @@ import (
 const (
 	gpt56Terra = "gpt-5.6-terra"
 	gpt56Luna  = "gpt-5.6-luna"
+	gpt6Luna   = "gpt-6-luna"
 )
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up

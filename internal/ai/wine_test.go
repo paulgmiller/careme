@@ -91,7 +91,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
 		}
-		if !strings.Contains(string(body), `"model":"`+gpt56Luna+`"`) {
+		if !strings.Contains(string(body), `"model":"`+gpt6Luna+`"`) {
 			t.Fatalf("expected Luna model in request: %s", body)
 		}
 		if !strings.Contains(string(body), `"reasoning":{"effort":"none"}`) {
@@ -124,7 +124,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, gpt56Luna))),
+			}`, gpt6Luna))),
 			Request: req,
 		}, nil
 	})}, nil)
