@@ -19,11 +19,11 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/kroger"
 	"careme/internal/locations"
+	"careme/internal/mnfoodclub"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -410,13 +410,13 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	}
 
 	return []backendStaplesProvider{
-		demo.Provider{},
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,
 		krogerBackend,
 		publixProvider,
 		farmersMarketProvider,
+		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(brightdataClient)),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
