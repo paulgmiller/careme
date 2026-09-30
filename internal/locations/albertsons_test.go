@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/providers/albertsons"
 )
 
 func TestNewAddsAlbertsonsBackendWhenEnabled(t *testing.T) {

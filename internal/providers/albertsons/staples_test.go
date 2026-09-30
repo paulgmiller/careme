@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"careme/internal/albertsons/query"
+	"careme/internal/providers/albertsons/query"
 )
 
 func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {

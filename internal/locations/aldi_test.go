@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/providers/aldi"
 )
 
 func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {

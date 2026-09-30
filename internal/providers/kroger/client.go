@@ -13,7 +13,7 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/httpretry"
-	"careme/internal/kroger/products"
+	"careme/internal/providers/kroger/products"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )

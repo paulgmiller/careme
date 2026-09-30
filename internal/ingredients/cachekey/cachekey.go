@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/albertsons"
-	"careme/internal/aldi"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
-	"careme/internal/kroger"
-	"careme/internal/mnfoodclub"
-	"careme/internal/publix"
-	"careme/internal/walmart"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/publix"
+	"careme/internal/providers/walmart"
+	"careme/internal/providers/wholefoods"
 
 	"github.com/samber/lo"
 )

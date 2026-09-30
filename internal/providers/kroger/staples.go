@@ -11,8 +11,8 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
-	"careme/internal/kroger/products"
 	"careme/internal/parallelism"
+	"careme/internal/providers/kroger/products"
 
 	"github.com/samber/lo"
 )

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	krogerlocations "careme/internal/kroger/locations"
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
+	krogerlocations "careme/internal/providers/kroger/locations"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

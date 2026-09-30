@@ -20,10 +20,10 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/locations/geo"
 	"careme/internal/parallelism"
+	"careme/internal/providers/kroger"
 	"careme/internal/recipes"
 	"careme/internal/recipes/prompts"
 

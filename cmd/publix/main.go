@@ -14,7 +14,8 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
-	"careme/internal/publix"
+	"careme/internal/providers/publix"
+
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 
