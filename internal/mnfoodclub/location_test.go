@@ -35,7 +35,8 @@ func TestLocationsWithinDeliveryBox(t *testing.T) {
 			assert.True(t, NewIdentityProvider().IsID(got[0].ID))
 			lookup, err := backend.GetLocationByID(t.Context(), got[0].ID)
 			require.NoError(t, err)
-			assert.Equal(t, got[0], *lookup)
+			assert.Equal(t, got[0].ID, lookup.ID)
+			assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, lookup.Coordinate())
 		})
 	}
 }
@@ -64,12 +65,14 @@ func TestDeliveryLocationIDsRemainStable(t *testing.T) {
 	require.NoError(t, err)
 	other, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 44.01, Lon: -92.48})
 	require.NoError(t, err)
-	assert.Equal(t, "mnfoodclub_44.98_-93.27", first[0].ID)
+	assert.Equal(t, "mnfoodclub_delivery", first[0].ID)
 	assert.Equal(t, first, repeated)
-	assert.NotEqual(t, first[0].ID, other[0].ID)
+	assert.Equal(t, first[0].ID, other[0].ID)
+	assert.Equal(t, coordinates, first[0].Coordinate())
+	assert.Equal(t, geo.Coordinate{Lat: 44.01, Lon: -92.48}, other[0].Coordinate())
 	lookup, err := backend.GetLocationByID(t.Context(), first[0].ID)
 	require.NoError(t, err)
-	assert.Equal(t, coordinates, lookup.Coordinate())
+	assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, lookup.Coordinate())
 }
 
 func TestDeliveryAlias(t *testing.T) {
@@ -77,13 +80,13 @@ func TestDeliveryAlias(t *testing.T) {
 	got, err := backend.GetLocationByID(t.Context(), "mnfoodclub_delivery")
 	require.NoError(t, err)
 	assert.Equal(t, "mnfoodclub_delivery", got.ID)
-	assert.Equal(t, geo.Coordinate{Lat: 44.985367, Lon: -93.270208}, got.Coordinate())
+	assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, got.Coordinate())
 	assert.True(t, backend.HasInventory(got.ID))
 }
 
 func TestInvalidDeliveryLocationIDs(t *testing.T) {
 	backend := NewLocationBackend()
-	for _, id := range []string{"other_1", "mnfoodclub_", "mnfoodclub_invalid", "mnfoodclub_44.98_bad", "mnfoodclub_NaN_-93", "mnfoodclub_91_-93", "mnfoodclub_46_-93"} {
+	for _, id := range []string{"other_1", "mnfoodclub_", "mnfoodclub_invalid", "mnfoodclub_44.98_-93.27", "mnfoodclub_44.98_bad", "mnfoodclub_NaN_-93", "mnfoodclub_91_-93", "mnfoodclub_46_-93"} {
 		got, err := backend.GetLocationByID(t.Context(), id)
 		require.Error(t, err, id)
 		assert.Nil(t, got)

@@ -3,8 +3,6 @@ package mnfoodclub
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"careme/internal/locations/geo"
 	locationtypes "careme/internal/locations/types"
@@ -12,6 +10,7 @@ import (
 
 // Rough rectangle around the supplied delivery map, not its exact service polygon.
 // It includes St. Cloud, the Twin Cities, Hudson, and Rochester.
+// https://mnfood.club/About/ see Delivery Deails.
 const (
 	deliverySouth = 43.90
 	deliveryNorth = 45.65
@@ -19,10 +18,16 @@ const (
 	deliveryEast  = -92.35
 )
 
+const theLocationID = LocationIDPrefix + "delivery"
+
 // LocationBackend exposes MNFoodClub home delivery within the approximate area.
 type LocationBackend struct{ identityProvider }
 
 func NewLocationBackend() LocationBackend { return LocationBackend{} }
+
+// IsCacheable disables location caching because search coordinates represent
+// the current delivery point rather than a fixed store.
+func (LocationBackend) IsCacheable() bool { return false }
 
 func (b LocationBackend) HasInventory(locationID string) bool {
 	_, err := b.GetLocationByID(context.Background(), locationID)
@@ -33,25 +38,12 @@ func (b LocationBackend) GetLocationByID(ctx context.Context, locationID string)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !b.IsID(locationID) {
+	if locationID != theLocationID {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}
-	// Preserve the direct CLI ID as a Minneapolis delivery location.
-	coordinates := geo.Coordinate{Lat: 44.985367, Lon: -93.270208}
-	if locationID != LocationIDPrefix+"delivery" {
-		lat, lon, ok := strings.Cut(strings.TrimPrefix(locationID, LocationIDPrefix), "_")
-		if !ok {
-			return nil, fmt.Errorf("invalid MNFoodClub delivery coordinates in %q", locationID)
-		}
-		var err error
-		coordinates, err = geo.FromString(lat, lon)
-		if err != nil {
-			return nil, fmt.Errorf("MNFoodClub location %q: %w", locationID, err)
-		}
-	}
-	if !inDeliveryArea(coordinates) {
-		return nil, fmt.Errorf("MNFoodClub location %q is outside the delivery area", locationID)
-	}
+	// 10035 Flanders Court NE
+	// Blaine, MN 55449
+	coordinates := geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}
 	return deliveryLocation(locationID, coordinates), nil
 }
 
@@ -66,10 +58,8 @@ func (LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinate
 		return nil, nil
 	}
 	// Home delivery is located at the search point so the shared nearby-store
-	// distance filter works across the whole area. Coordinates in the ID keep
-	// cached locations stable when another search uses a different delivery point.
-	id := LocationIDPrefix + strconv.FormatFloat(coordinates.Lat, 'f', -1, 64) + "_" + strconv.FormatFloat(coordinates.Lon, 'f', -1, 64)
-	return []locationtypes.Location{*deliveryLocation(id, coordinates)}, nil
+	// distance filter works across the whole area. These locations are not cached.
+	return []locationtypes.Location{*deliveryLocation(theLocationID, coordinates)}, nil
 }
 
 func inDeliveryArea(coordinates geo.Coordinate) bool {
