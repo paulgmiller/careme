@@ -21,6 +21,7 @@ import (
 	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
+	"careme/internal/mnfoodclub"
 	"careme/internal/parallelism"
 	"careme/internal/publix"
 	"careme/internal/walmart"
@@ -85,6 +86,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	backendfactories := []locationBackendFactory{
 		func(context.Context) (locationBackend, error) { return demo.Provider{}, nil },
+		func(context.Context) (locationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
 		func(context.Context) (locationBackend, error) {
 			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
 		},

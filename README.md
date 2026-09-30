@@ -102,6 +102,12 @@ Manual Jobs do not change the suspension and are not protected by the CronJob's 
 
 ### MNFoodClub ingredients
 
+Nearby location search includes MNFoodClub home delivery within an approximate
+rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
+-94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
+Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
+coordinates retained for distance filtering and store dates.
+
 Fetch the first three pages of both produce (sorted by bestselling) and meat,
 and display their ingredients and prices:
 
