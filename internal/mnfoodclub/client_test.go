@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,42 +27,58 @@ func (b *trackedBody) Close() error {
 	return nil
 }
 
-func TestFetchIngredients(t *testing.T) {
-	var urls []string
-	var bodies []*trackedBody
-	ctx := t.Context()
-	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, http.MethodGet, req.Method)
-		assert.Equal(t, ctx, req.Context())
-		urls = append(urls, req.URL.String())
-		page := req.URL.Query().Get("page")
-		category := "Produce"
-		if strings.Contains(req.URL.Path, "meat") {
-			category = "Meat"
-		}
-		body := &trackedBody{Reader: strings.NewReader(`<h1 class="page-heading">` + category + `</h1><ul class="productGrid"><li><article class="card"><a data-product-id="` + category + page + `"></a><h4 class="card-title">Product ` + page + `</h4><span data-product-price-without-tax>$2.50</span></article></li></ul>`)}
-		bodies = append(bodies, body)
-		return &http.Response{StatusCode: http.StatusOK, Body: body, Header: make(http.Header)}, nil
-	})})
-	got, err := client.FetchIngredients(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"https://mnfood.club/shop-all/produce/?page=1&sort=bestselling",
-		"https://mnfood.club/shop-all/produce/?page=2&sort=bestselling",
-		"https://mnfood.club/shop-all/produce/?page=3&sort=bestselling",
-		"https://mnfood.club/shop-all/meat/?page=1",
-		"https://mnfood.club/shop-all/meat/?page=2",
-		"https://mnfood.club/shop-all/meat/?page=3",
-	}, urls)
-	require.Len(t, got, 6)
-	for i, id := range []string{"Produce1", "Produce2", "Produce3", "Meat1", "Meat2", "Meat3"} {
-		assert.Equal(t, id, got[i].ProductID)
-		assert.Equal(t, pricePointer(2.50), got[i].PriceRegular)
-		assert.True(t, bodies[i].closed)
+func TestFetch(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		url      string
+		pages    int
+		wantURLs []string
+	}{
+		{"produce", "https://mnfood.club/shop-all/produce/?sort=bestselling&page=9", 3, []string{
+			"https://mnfood.club/shop-all/produce/?page=1&sort=bestselling",
+			"https://mnfood.club/shop-all/produce/?page=2&sort=bestselling",
+			"https://mnfood.club/shop-all/produce/?page=3&sort=bestselling",
+		}},
+		{"pasta", "https://mnfood.club/shop/pantry/pasta/", 1, []string{"https://mnfood.club/shop/pantry/pasta/?page=1"}},
+		{"wines", "https://mnfood.club/shop/beverage/n-a-tasty-drinks/wine-wine-alternatives/", 1, []string{"https://mnfood.club/shop/beverage/n-a-tasty-drinks/wine-wine-alternatives/?page=1"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var urls []string
+			var bodies []*trackedBody
+			ctx := t.Context()
+			client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, http.MethodGet, req.Method)
+				assert.Equal(t, ctx, req.Context())
+				urls = append(urls, req.URL.String())
+				page := req.URL.Query().Get("page")
+				body := &trackedBody{Reader: strings.NewReader(`<h1 class="page-heading">` + test.name + `</h1><ul class="productGrid"><li><article class="card"><a data-product-id="` + page + `"></a><h4 class="card-title">Product ` + page + `</h4><span data-product-price-without-tax>$2.50</span></article></li></ul>`)}
+				bodies = append(bodies, body)
+				return &http.Response{StatusCode: http.StatusOK, Body: body, Header: make(http.Header)}, nil
+			})})
+			got, err := client.Fetch(ctx, test.url, test.pages)
+			require.NoError(t, err)
+			assert.Equal(t, test.wantURLs, urls)
+			require.Len(t, got, test.pages)
+			for i, item := range got {
+				assert.Equal(t, strconv.Itoa(i+1), item.ProductID)
+				assert.Equal(t, pricePointer(2.50), item.PriceRegular)
+				assert.True(t, bodies[i].closed)
+			}
+		})
 	}
 }
 
-func TestFetchIngredientsFailures(t *testing.T) {
+func TestFetchInvalidURL(t *testing.T) {
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Fatal("invalid URL should not make a request")
+		return nil, nil
+	})})
+	got, err := client.Fetch(t.Context(), "https://mnfood.club/%zz", 1)
+	require.ErrorContains(t, err, "parse category URL")
+	assert.Nil(t, got)
+}
+
+func TestFetchFailures(t *testing.T) {
 	transportErr := errors.New("connection failed")
 	for _, test := range []struct {
 		name   string
@@ -89,7 +106,7 @@ func TestFetchIngredientsFailures(t *testing.T) {
 				failedBody = &trackedBody{Reader: test.body}
 				return &http.Response{StatusCode: test.status, Body: failedBody}, nil
 			})})
-			got, err := client.FetchIngredients(t.Context())
+			got, err := client.Fetch(t.Context(), "https://mnfood.club/shop-all/produce/?sort=bestselling", 3)
 			require.ErrorContains(t, err, test.want)
 			assert.Contains(t, err.Error(), "page=2&sort=bestselling")
 			assert.Nil(t, got)
@@ -101,13 +118,13 @@ func TestFetchIngredientsFailures(t *testing.T) {
 	}
 }
 
-func TestFetchIngredientsCancellation(t *testing.T) {
+func TestFetchCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return nil, req.Context().Err()
 	})})
-	got, err := client.FetchIngredients(ctx)
+	got, err := client.Fetch(ctx, "https://mnfood.club/shop-all/produce/?sort=bestselling", 3)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, got)
 }

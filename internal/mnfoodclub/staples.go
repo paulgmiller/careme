@@ -2,6 +2,7 @@ package mnfoodclub
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,16 @@ import (
 )
 
 const LocationIDPrefix = "mnfoodclub_"
+
+var stapleCategories = []struct {
+	url   string
+	pages int
+}{
+	{"https://mnfood.club/shop-all/produce/?sort=bestselling", 3},
+	{"https://mnfood.club/shop-all/meat/", 3},
+	{"https://mnfood.club/shop/pantry/pasta/", 1},
+	{"https://mnfood.club/shop-all/fish-seafood/", 1},
+}
 
 type identityProvider struct{}
 
@@ -19,14 +30,21 @@ func (identityProvider) IsID(locationID string) bool {
 }
 
 func (identityProvider) Signature() string {
-	return "mnfoodclub-staples-pages-1-3-v1"
+	signatureParts := make([]string, len(stapleCategories))
+	for i, category := range stapleCategories {
+		signatureParts[i] = category.url
+	}
+	for _, ingredient := range produceShareIngredients() {
+		signatureParts = append(signatureParts, ingredient.Description)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
 }
 
 type ingredientClient interface {
-	FetchIngredients(context.Context) ([]ai.InputIngredient, error)
+	Fetch(context.Context, string, int) ([]ai.InputIngredient, error)
 }
 
-// StaplesProvider serves the same public produce and meat catalog for every
+// StaplesProvider serves the public catalog and static produce shares for every
 // location ID beginning with mnfoodclub_.
 type StaplesProvider struct {
 	identityProvider
@@ -41,13 +59,21 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}
-	return p.client.FetchIngredients(ctx)
+	var ingredients []ai.InputIngredient
+	for _, category := range stapleCategories {
+		items, err := p.client.Fetch(ctx, category.url, category.pages)
+		if err != nil {
+			return nil, fmt.Errorf("fetch MNFoodClub staples from %s: %w", category.url, err)
+		}
+		ingredients = append(ingredients, items...)
+	}
+	return append(ingredients, produceShareIngredients()...), nil
 }
 
-// FetchWines returns no candidates: the sourced catalog contains produce and meat.
-func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+// FetchWines fetches one page of wines and wine alternatives.
+func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}
-	return nil, nil
+	return p.client.Fetch(ctx, "https://mnfood.club/shop/beverage/n-a-tasty-drinks/wine-wine-alternatives/", 1)
 }

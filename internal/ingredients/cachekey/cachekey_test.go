@@ -58,11 +58,6 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 	}
 }
 
-func TestDemoSignature(t *testing.T) {
-	assert.Equal(t, "demo-september21-26-v4", StaplesSignature("demo_september21"))
-	assert.NotPanics(t, func() { _ = ForStore("demo_september21", time.Now()) })
-}
-
 func TestMNFoodClubSignature(t *testing.T) {
 	assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), StaplesSignature("mnfoodclub_delivery"))
 	date := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)

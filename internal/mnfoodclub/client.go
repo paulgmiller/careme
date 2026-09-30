@@ -20,28 +20,23 @@ func NewClient(httpClient *http.Client) *Client {
 	return &Client{httpClient: httpClient}
 }
 
-// FetchIngredients fetches pages 1–3 of produce, followed by pages 1–3 of meat.
+// Fetch fetches the requested number of pages from a category URL, starting at page 1.
 // It preserves listing order and returns no partial results on failure.
-func (c *Client) FetchIngredients(ctx context.Context) ([]ai.InputIngredient, error) {
+func (c *Client) Fetch(ctx context.Context, categoryURL string, pages int) ([]ai.InputIngredient, error) {
+	listingURL, err := url.Parse(categoryURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse category URL %q: %w", categoryURL, err)
+	}
 	var ingredients []ai.InputIngredient
-	for _, categoryURL := range []string{
-		"https://mnfood.club/shop-all/produce/?sort=bestselling",
-		"https://mnfood.club/shop-all/meat/",
-	} {
-		listingURL, err := url.Parse(categoryURL)
+	for page := 1; page <= pages; page++ {
+		query := listingURL.Query()
+		query.Set("page", strconv.Itoa(page))
+		listingURL.RawQuery = query.Encode()
+		items, err := c.fetchPage(ctx, listingURL.String())
 		if err != nil {
-			return nil, fmt.Errorf("parse category URL: %w", err)
+			return nil, err
 		}
-		for page := 1; page <= 3; page++ {
-			query := listingURL.Query()
-			query.Set("page", strconv.Itoa(page))
-			listingURL.RawQuery = query.Encode()
-			items, err := c.fetchPage(ctx, listingURL.String())
-			if err != nil {
-				return nil, err
-			}
-			ingredients = append(ingredients, items...)
-		}
+		ingredients = append(ingredients, items...)
 	}
 	return ingredients, nil
 }
