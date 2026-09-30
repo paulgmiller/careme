@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/albertsons"
-	"careme/internal/aldi"
-	"careme/internal/mnfoodclub"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/mnfoodclub"
+
 	"github.com/stretchr/testify/assert"
 )
 

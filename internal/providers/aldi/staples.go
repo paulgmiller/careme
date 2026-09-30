@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/aldi/query"
 	"careme/internal/cache"
 	"careme/internal/parallelism"
+	"careme/internal/providers/aldi/query"
 
 	"github.com/samber/lo"
 )

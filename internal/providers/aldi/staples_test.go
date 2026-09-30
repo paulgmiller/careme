@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"careme/internal/aldi/query"
 	"careme/internal/cache"
+	"careme/internal/providers/aldi/query"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

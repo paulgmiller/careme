@@ -14,7 +14,8 @@ import (
 
 	cachepkg "careme/internal/cache"
 	"careme/internal/locations/geo"
-	"careme/internal/mnfoodclub"
+	"careme/internal/providers/mnfoodclub"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

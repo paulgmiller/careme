@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"careme/internal/kroger/products"
+	"careme/internal/providers/kroger/products"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

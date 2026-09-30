@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
-	"careme/internal/wegmans"
+	"careme/internal/providers/wegmans"
 )
 
 func TestSyncStoresCachesSummariesAndTracksMissing(t *testing.T) {

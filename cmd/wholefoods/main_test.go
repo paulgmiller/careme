@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/wholefoods"
 )
 
 func TestResolveStoreReferencesFillsMissingCachedSitemapEntries(t *testing.T) {

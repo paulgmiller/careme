@@ -51,30 +51,30 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `users/` | JSON `users/types.User` by user ID, including up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 | `location-store-requests/` | JSON `{store_id, zip, requested_at}` for stores present in location search but not yet supported for staples | `internal/locations/locations.go` (`POST /locations/request-store`) | `internal/locations/locations.go` (`RequestedStoreIDs`) and operational triage from shared cache/blob storage |
-| `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/aldi` cache helpers | `internal/aldi` location backend |
-| `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `internal/albertsons` location backend |
-| `albertsons/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Albertsons-family stores (`id`, `lat`, `lon`) | `cmd/albertsons` rebuilds after sync | `internal/albertsons` location backend |
-| `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/albertsons` cache helpers | `cmd/albertsons` incremental sync |
-| `albertsons/reese84/latest.json` | JSON `albertsons.CookieRecord` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/reese84 -site albertsons -container albertsons` | `internal/albertsons` staples/search cookie resolver |
+| `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/providers/aldi` cache helpers | `internal/providers/aldi` location backend |
+| `albertsons/stores/` | JSON `albertsons.StoreSummary` keyed by prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/providers/albertsons` cache helpers | `internal/providers/albertsons` location backend |
+| `albertsons/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Albertsons-family stores (`id`, `lat`, `lon`) | `cmd/albertsons` rebuilds after sync | `internal/providers/albertsons` location backend |
+| `albertsons/store_url_map.json` | JSON object mapping store URL to prefixed Albertsons-family location ID | `cmd/albertsons` and `internal/providers/albertsons` cache helpers | `cmd/albertsons` incremental sync |
+| `albertsons/reese84/latest.json` | JSON `albertsons.CookieRecord` containing the freshest ACME/Albertsons-family `reese84` cookie plus metadata | `cmd/reese84 -site albertsons -container albertsons` | `internal/providers/albertsons` staples/search cookie resolver |
 | `albertsons/reese84/history/` | JSON `albertsons.CookieRecord` append-only history keyed by fetch timestamp | `cmd/reese84 -site albertsons -container albertsons` | Operational debugging and manual rollback/reference |
-| `aldi/store_locations.json` | JSON `[]storeindex.Entry` spatial index for ALDI stores (`id`, `lat`, `lon`) | `cmd/aldi` rebuilds after sync | `internal/aldi` location backend |
+| `aldi/store_locations.json` | JSON `[]storeindex.Entry` spatial index for ALDI stores (`id`, `lat`, `lon`) | `cmd/aldi` rebuilds after sync | `internal/providers/aldi` location backend |
 | `heb/stores/` | JSON `heb.StoreSummary` keyed by prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `internal/heb` location backend |
 | `heb/store_locations.json` | JSON `[]storeindex.Entry` spatial index for HEB stores (`id`, `lat`, `lon`) | `cmd/heb` rebuilds after sync | `internal/heb` location backend |
 | `heb/store_url_map.json` | JSON object mapping store URL to prefixed HEB location ID | `cmd/heb` and `internal/heb` cache helpers | `cmd/heb` incremental sync |
 | `heb/reese84/latest.json` | JSON `heb.Reese84Record` containing the freshest HEB `reese84` cookie plus metadata | `cmd/reese84 -site heb -container heb` | `internal/heb` staples provider |
 | `heb/reese84/history/` | JSON `heb.Reese84Record` append-only history keyed by fetch timestamp | `cmd/reese84 -site heb -container heb` | Operational debugging and manual rollback/reference |
 | `heb/build_id/latest.json` | JSON `heb.BuildIDRecord` containing the latest HEB Next.js data build ID | `internal/heb` staples provider after discovery | `internal/heb` staples provider before category fetches |
-| `publix/stores/` | JSON `publix.StoreSummary` keyed by numeric Publix store ID | `cmd/publix` and `internal/publix` cache helpers | `internal/publix` location backend |
-| `publix/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Publix stores (`id`, `lat`, `lon`) | `cmd/publix` rebuilds after sync | `internal/publix` location backend |
-| `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
-| `publix/missing_store_ids.json` | JSON array of numeric Publix store IDs known to redirect back to `/locations` | `cmd/publix` and `internal/publix` cache helpers | `cmd/publix` incremental sync |
-| `publix/abck/latest.json` | JSON `publix.AbckRecord` containing the freshest Publix `_abck` cookie plus metadata | `cmd/publixabck` | `internal/publix` staples cookie resolver |
+| `publix/stores/` | JSON `publix.StoreSummary` keyed by numeric Publix store ID | `cmd/publix` and `internal/providers/publix` cache helpers | `internal/providers/publix` location backend |
+| `publix/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Publix stores (`id`, `lat`, `lon`) | `cmd/publix` rebuilds after sync | `internal/providers/publix` location backend |
+| `publix/store_url_map.json` | JSON object mapping numeric Publix store ID to canonical location URL | `cmd/publix` and `internal/providers/publix` cache helpers | `cmd/publix` incremental sync |
+| `publix/missing_store_ids.json` | JSON array of numeric Publix store IDs known to redirect back to `/locations` | `cmd/publix` and `internal/providers/publix` cache helpers | `cmd/publix` incremental sync |
+| `publix/abck/latest.json` | JSON `publix.AbckRecord` containing the freshest Publix `_abck` cookie plus metadata | `cmd/publixabck` | `internal/providers/publix` staples cookie resolver |
 | `publix/abck/history/` | JSON `publix.AbckRecord` append-only history keyed by fetch timestamp | `cmd/publixabck` | Operational debugging and manual rollback/reference |
-| `wegmans/stores/` | JSON `wegmans.StoreSummary` keyed by numeric Wegmans store ID | `cmd/wegmans` and `internal/wegmans` cache helpers | `internal/wegmans` location backend |
-| `wegmans/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Wegmans stores (`id`, `lat`, `lon`) | `cmd/wegmans` rebuilds after sync | `internal/wegmans` location backend |
-| `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `internal/wholefoods` location backend |
-| `wholefoods/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Whole Foods stores (`id`, `lat`, `lon`) | `cmd/wholefoods` rebuilds after sync | `internal/wholefoods` location backend |
-| `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
+| `wegmans/stores/` | JSON `wegmans.StoreSummary` keyed by numeric Wegmans store ID | `cmd/wegmans` and `internal/providers/wegmans` cache helpers | `internal/providers/wegmans` location backend |
+| `wegmans/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Wegmans stores (`id`, `lat`, `lon`) | `cmd/wegmans` rebuilds after sync | `internal/providers/wegmans` location backend |
+| `wholefoods/stores/` | JSON `wholefoods.StoreSummaryResponse` keyed by Whole Foods store ID | `cmd/wholefoods` and `internal/providers/wholefoods` cache helpers | `internal/providers/wholefoods` location backend |
+| `wholefoods/store_locations.json` | JSON `[]storeindex.Entry` spatial index for Whole Foods stores (`id`, `lat`, `lon`) | `cmd/wholefoods` rebuilds after sync | `internal/providers/wholefoods` location backend |
+| `wholefoods/store_url_map.json` | JSON object mapping store URL to Whole Foods store ID | `cmd/wholefoods` and `internal/providers/wholefoods` cache helpers | `cmd/wholefoods` when `-stores` is not provided |
 
 ## Recipe identity and structured properties
 

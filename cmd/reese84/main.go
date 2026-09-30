@@ -13,10 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/albertsons"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/logsetup"
+	"careme/internal/providers/albertsons"
+
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 

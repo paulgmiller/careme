@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/aldi/query"
+	"careme/internal/providers/aldi/query"
 )
 
 func main() {

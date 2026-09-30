@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"careme/internal/cache"
-	"careme/internal/publix"
+	"careme/internal/providers/publix"
 )
 
 func TestSyncStoresCachesSuccessesAndMisses(t *testing.T) {

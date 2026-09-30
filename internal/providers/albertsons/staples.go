@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons/query"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/parallelism"
+	"careme/internal/providers/albertsons/query"
 
 	"github.com/samber/lo"
 )

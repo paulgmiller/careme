@@ -14,7 +14,8 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
-	"careme/internal/wegmans"
+	"careme/internal/providers/wegmans"
+
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 

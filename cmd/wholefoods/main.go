@@ -14,7 +14,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/wholefoods"
 )
 
 func main() {
