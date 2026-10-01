@@ -100,6 +100,29 @@ kubectl create job -n caremetest --from=cronjob/careme-advertised-recipes "carem
 
 Manual Jobs do not change the suspension and are not protected by the CronJob's overlap prevention, so wait for an existing run to finish before starting another. To restore automatic test runs on the 1st and 15th of each month, set `advertised_recipes_suspend="false"` in the `caremetest` block of `deploy/deploy.sh` and deploy.
 
+### MNFoodClub ingredients
+
+Nearby location search includes MNFoodClub home delivery within an approximate
+rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
+-94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
+Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
+coordinates retained for distance filtering and store dates.
+
+Fetch the first three pages of both produce (sorted by bestselling) and meat,
+and display their ingredients and prices:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
+```
+
+Any store ID starting with `mnfoodclub_` routes to the same public catalog through
+the staples provider. No MNFoodClub credentials are required. Variant price ranges
+use the starting price. With grading disabled,
+the displayed 10/10 scores are placeholders, not quality assessments. Enable
+grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
+the existing grading and nearest-ingredient lookup. This provider supplies no wine
+candidates.
+
 ### Ingredient embedding lookup
 
 Ingredient grading and wine pairing default to `gpt-6-luna` with reasoning

@@ -17,7 +17,6 @@ import (
 	"careme/internal/auth"
 	"careme/internal/campaigns"
 	"careme/internal/config"
-	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
@@ -136,7 +135,6 @@ func runServer(cfg *config.Config, addr string) error {
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
-	demo.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
@@ -144,6 +142,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))

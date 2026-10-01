@@ -1,8 +1,8 @@
 package locations
 
 import (
-	"careme/internal/kroger"
-	"careme/internal/walmart"
+	"careme/internal/providers/kroger"
+	"careme/internal/providers/walmart"
 )
 
 var (

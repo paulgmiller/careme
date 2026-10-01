@@ -14,6 +14,8 @@ import (
 
 	cachepkg "careme/internal/cache"
 	"careme/internal/locations/geo"
+	"careme/internal/providers/mnfoodclub"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -484,6 +486,125 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 				}
 			}
 			assert.True(t, found, "backend failure should remain observable")
+		})
+	}
+}
+
+func TestMNFoodClubLocationsByCoordinatesAreNotCached(t *testing.T) {
+	fc := cachepkg.NewInMemoryCache()
+	server := newTestLocationServerWithBackendsAndCache([]locationBackend{mnfoodclub.NewLocationBackend()}, fc)
+	for _, coordinates := range []geo.Coordinate{
+		{Lat: 44.98, Lon: -93.27},
+		{Lat: 44.01, Lon: -92.48},
+	} {
+		locations, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
+		require.NoError(t, err)
+		require.Len(t, locations, 1)
+		assert.Equal(t, "mnfoodclub_delivery", locations[0].ID)
+		assert.Equal(t, coordinates, locations[0].Coordinate())
+	}
+	assert.Never(t, func() bool {
+		keys, err := fc.List(t.Context(), locationCachePrefix, "")
+		require.NoError(t, err)
+		return len(keys) > 0
+	}, 50*time.Millisecond, time.Millisecond)
+}
+
+func TestMNFoodClubLocationByIDIgnoresCache(t *testing.T) {
+	fc := cachepkg.NewInMemoryCache()
+	backend := mnfoodclub.NewLocationBackend()
+	server := newTestLocationServerWithBackendsAndCache([]locationBackend{backend}, fc)
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_44.98_-93.27"} {
+		t.Run(id, func(t *testing.T) {
+			mustPutJSONInCache(t, fc, locationCachePrefix+id, Location{
+				ID: id, Name: "Stale search point", Lat: new(44.98), Lon: new(-93.27),
+			})
+			got, err := server.GetLocationByID(t.Context(), id)
+			if id == "mnfoodclub_delivery" {
+				require.NoError(t, err)
+				want, err := backend.GetLocationByID(t.Context(), id)
+				require.NoError(t, err)
+				assert.Equal(t, want, got)
+			} else {
+				require.ErrorContains(t, err, "invalid MNFoodClub location ID")
+				assert.Nil(t, got)
+			}
+		})
+	}
+}
+
+func TestMNFoodClubLocationByIDDoesNotWriteCache(t *testing.T) {
+	fc := cachepkg.NewInMemoryCache()
+	server := newTestLocationServerWithBackendsAndCache([]locationBackend{mnfoodclub.NewLocationBackend()}, fc)
+	got, err := server.GetLocationByID(t.Context(), "mnfoodclub_delivery")
+	require.NoError(t, err)
+	assert.Equal(t, "mnfoodclub_delivery", got.ID)
+	assert.Never(t, func() bool {
+		exists, err := fc.Exists(t.Context(), locationCachePrefix+got.ID)
+		require.NoError(t, err)
+		return exists
+	}, 50*time.Millisecond, time.Millisecond)
+}
+
+type cachePolicyBackend struct {
+	*fakeLocationClient
+	cacheable bool
+}
+
+func (b cachePolicyBackend) IsCacheable() bool { return b.cacheable }
+
+func TestLocationBackendCachePolicy(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		policy        *bool
+		wantCacheable bool
+	}{
+		{"default", nil, true},
+		{"enabled", new(true), true},
+		{"disabled", new(false), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fc := cachepkg.NewInMemoryCache()
+			client := newFakeLocationClient()
+			coordinates := coordinatesForZIP(t, "00601")
+			fresh := Location{ID: "fresh", Name: "Fresh backend location", Lat: &coordinates.Lat, Lon: &coordinates.Lon}
+			client.setDetailResponse("cached", Location{ID: "cached", Name: "Backend location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+			client.setDetailResponse("fresh", fresh)
+			client.setListResponse("00601", []Location{{ID: "search", Name: "Search result", Lat: &coordinates.Lat, Lon: &coordinates.Lon}})
+			var backend locationBackend = client
+			if test.policy != nil {
+				backend = cachePolicyBackend{client, *test.policy}
+			}
+			server := newTestLocationServerWithBackendsAndCache([]locationBackend{backend}, fc)
+			mustPutJSONInCache(t, fc, locationCachePrefix+"cached", Location{ID: "cached", Name: "Cached location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+
+			got, err := server.GetLocationByID(t.Context(), "cached")
+			require.NoError(t, err)
+			if test.wantCacheable {
+				assert.Equal(t, "Cached location", got.Name)
+			} else {
+				assert.Equal(t, "Backend location", got.Name)
+			}
+
+			got, err = server.GetLocationByID(t.Context(), "fresh")
+			require.NoError(t, err)
+			assert.Equal(t, fresh, *got)
+			locations, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
+			require.NoError(t, err)
+			require.Len(t, locations, 1)
+			assert.Equal(t, "search", locations[0].ID)
+
+			for _, id := range []string{"fresh", "search"} {
+				if test.wantCacheable {
+					requireEventuallyCached(t, fc, locationCachePrefix+id)
+				} else {
+					assert.Never(t, func() bool {
+						exists, err := fc.Exists(t.Context(), locationCachePrefix+id)
+						require.NoError(t, err)
+						return exists
+					}, 50*time.Millisecond, time.Millisecond)
+				}
+			}
 		})
 	}
 }

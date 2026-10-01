@@ -6,10 +6,10 @@ import (
 	"net/http"
 
 	"careme/internal/config"
-	krogerlocations "careme/internal/kroger/locations"
 	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	locationtypes "careme/internal/locations/types"
+	krogerlocations "careme/internal/providers/kroger/locations"
 )
 
 const chainName = "kroger"

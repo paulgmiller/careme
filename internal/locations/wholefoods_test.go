@@ -7,7 +7,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/wholefoods"
 )
 
 func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {

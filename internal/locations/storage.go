@@ -10,22 +10,22 @@ import (
 	"sort"
 	"time"
 
-	"careme/internal/albertsons"
-	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
-	"careme/internal/kroger"
 	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
-	"careme/internal/publix"
-	"careme/internal/walmart"
-	"careme/internal/wegmans"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/publix"
+	"careme/internal/providers/walmart"
+	"careme/internal/providers/wegmans"
+	"careme/internal/providers/wholefoods"
 
 	locationtypes "careme/internal/locations/types"
 
@@ -49,6 +49,11 @@ type locationGetter interface {
 type locationBackend interface {
 	locationGetter
 	IsID(locationID string) bool
+}
+
+// locationCachePolicy is optional; backends without it are cacheable.
+type locationCachePolicy interface {
+	IsCacheable() bool
 }
 
 // name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
@@ -84,7 +89,7 @@ func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locati
 	ctx := context.Background()
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	backendfactories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) { return demo.Provider{}, nil },
+		func(context.Context) (locationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
 		func(context.Context) (locationBackend, error) {
 			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
 		},
@@ -150,15 +155,25 @@ func (l *locationStorage) HasInventory(locationID string) bool {
 	return found
 }
 
-func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
-	if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
-		// could relook up on error here.
-		return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
+// Backends without an explicit cache policy retain the default of caching locations.
+func cachable(backend locationBackend) bool {
+	if policy, ok := backend.(locationCachePolicy); ok {
+		return policy.IsCacheable()
 	}
+	return true
+}
 
+func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string) (*Location, error) {
 	for _, backend := range l.clients {
 		if !backend.IsID(locationID) {
 			continue
+		}
+		cachable := cachable(backend)
+		if cachable {
+			if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+				// could relook up on error here.
+				return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
+			}
 		}
 
 		loc, err := backend.GetLocationByID(ctx, locationID)
@@ -170,11 +185,13 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 			return nil, err
 		}
 
-		go func() {
-			if err := l.storeLocationIfMissing(*loc); err != nil {
-				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
-			}
-		}()
+		if cachable {
+			go func() {
+				if err := l.storeLocationIfMissing(*loc); err != nil {
+					slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+				}
+			}()
+		}
 		return loc, nil
 	}
 	return nil, fmt.Errorf("location ID %s not supported by any backend", locationID)
@@ -207,20 +224,21 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 			}
 			hydrated = append(hydrated, backfilled)
 		}
+		if cachable(backend) {
+			for _, loc := range hydrated {
+				go func() {
+					if err := l.storeLocationIfMissing(*loc); err != nil {
+						slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
+					}
+				}()
+			}
+		}
 		return hydrated, nil
 	})
 
 	// Cancellation applies to the whole search, even if some backends succeeded.
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-
-	for _, loc := range allLocations {
-		go func() {
-			if err := l.storeLocationIfMissing(*loc); err != nil {
-				slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
-			}
-		}()
 	}
 
 	filtered := make([]Location, 0, len(allLocations))

@@ -27,11 +27,6 @@
         {{template "shopping_content" .}}
       </div>
 
-      {{if .AdminURL}}
-      <p class="text-center text-[0.6875rem] text-ink-400">
-        <a href="{{.AdminURL}}" class="hover:text-ink-500">Admin</a>
-      </p>
-      {{end}}
       <p class="text-center text-sm text-ink-500">Planned by Careme.</p>
     </section>
   </main>
@@ -365,5 +360,10 @@
             </section>
             {{end}}
           </div>
+          {{if .AdminURL}}
+          <p class="mt-8 text-center text-[0.6875rem] text-ink-400">
+            <a href="{{.AdminURL}}" class="hover:text-ink-500">Admin</a>
+          </p>
+          {{end}}
         </div>
 {{end}}

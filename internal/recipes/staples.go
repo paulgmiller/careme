@@ -14,20 +14,20 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/albertsons"
-	"careme/internal/aldi"
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/demo"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
-	"careme/internal/kroger"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
-	"careme/internal/publix"
-	"careme/internal/walmart"
-	"careme/internal/wholefoods"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/publix"
+	"careme/internal/providers/walmart"
+	"careme/internal/providers/wholefoods"
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -410,13 +410,13 @@ func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error
 	}
 
 	return []backendStaplesProvider{
-		demo.Provider{},
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,
 		krogerBackend,
 		publixProvider,
 		farmersMarketProvider,
+		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(brightdataClient)),
 		// actowiz.NewStaplesProvider(),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),

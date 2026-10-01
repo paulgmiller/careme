@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	"careme/internal/providers/albertsons"
 )
 
 func main() {

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/albertsons"
 	"careme/internal/cache"
 	"careme/internal/heb"
+	"careme/internal/providers/albertsons"
 )
 
 func TestSaveReese84RecordWritesAlbertsonsCompatibleCache(t *testing.T) {
