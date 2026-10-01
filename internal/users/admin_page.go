@@ -2,9 +2,11 @@ package users
 
 import (
 	"context"
+	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ import (
 
 type adminUserView struct {
 	ID                string
+	URL               string
 	Emails            []string
 	CreatedDate       string
 	SavedRecipeCount  int
@@ -49,7 +52,7 @@ var adminUsersPageTmpl = template.Must(template.New("admin-users").Parse(`<!doct
     <tbody>
       {{range .Users}}
       <tr>
-        <td>{{.ID}}</td>
+        <td><a href="{{.URL}}">{{.ID}}</a></td>
         <td>
           {{if .Emails}}
           <ul>
@@ -103,6 +106,7 @@ func AdminUsersPage(storage *Storage) http.Handler {
 			}
 			views = append(views, adminUserView{
 				ID:                user.ID,
+				URL:               "/admin/users/" + url.PathEscape(user.ID),
 				Emails:            append([]string(nil), user.Email...),
 				CreatedDate:       createdDate,
 				SavedRecipeCount:  len(user.LastRecipes),
@@ -130,6 +134,84 @@ func AdminUsersPage(storage *Storage) http.Handler {
 			slog.ErrorContext(r.Context(), "failed to render admin users page", "error", err)
 			http.Error(w, "unable to render users", http.StatusInternalServerError)
 			return
+		}
+	})
+}
+
+var adminUserDetailPageTmpl = template.Must(template.New("admin-user-detail").Parse(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin User {{.ID}}</title>
+</head>
+<body>
+  <nav><a href="/admin/users">Users</a></nav>
+  <h1>User <code>{{.ID}}</code></h1>
+  <h2>Emails</h2>
+  {{if .Emails}}
+  <ul>{{range .Emails}}<li>{{.}}</li>{{end}}</ul>
+  {{else}}<p>None</p>{{end}}
+  <h2>Cooking preferences</h2>
+  {{if .Directive}}<p style="white-space: pre-wrap">{{.Directive}}</p>{{else}}<p>No cooking preferences saved.</p>{{end}}
+  <h2>Saved recipes ({{len .Recipes}})</h2>
+  {{if .Recipes}}
+  <ul>{{range .Recipes}}<li>{{if .URL}}<a href="{{.URL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</li>{{end}}</ul>
+  {{else}}<p>No saved recipes.</p>{{end}}
+</body>
+</html>`))
+
+// AdminUserDetailPage shows one user's stored preferences and recipe references.
+// The caller must register it behind the admin middleware.
+func AdminUserDetailPage(storage *Storage) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		id := r.PathValue("id")
+		if !strings.HasPrefix(id, "user_") || strings.ContainsAny(id, "/\\") {
+			http.NotFound(w, r)
+			return
+		}
+		user, err := storage.GetByID(id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			slog.ErrorContext(r.Context(), "failed to load user for admin detail page", "user_id", id, "error", err)
+			http.Error(w, "unable to load user", http.StatusInternalServerError)
+			return
+		}
+
+		type recipeView struct {
+			Title string
+			URL   string
+		}
+		recipes := make([]recipeView, 0, len(user.LastRecipes))
+		for _, recipe := range user.LastRecipes {
+			recipeURL := ""
+			if recipe.Hash != "" {
+				recipeURL = "/recipe/" + url.PathEscape(recipe.Hash)
+			}
+			recipes = append(recipes, recipeView{
+				Title: recipe.Title,
+				URL:   recipeURL,
+			})
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if err := adminUserDetailPageTmpl.Execute(w, struct {
+			ID        string
+			Emails    []string
+			Directive string
+			Recipes   []recipeView
+		}{ID: user.ID, Emails: user.Email, Directive: user.Directive, Recipes: recipes}); err != nil {
+			slog.ErrorContext(r.Context(), "failed to render admin user detail page", "user_id", id, "error", err)
+			http.Error(w, "unable to render user", http.StatusInternalServerError)
 		}
 	})
 }

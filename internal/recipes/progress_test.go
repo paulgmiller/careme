@@ -40,6 +40,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 		return rr.Body.String()
 	}
 	body := poll(false)
+	assert.NotContains(t, body, `href="/admin/mealplan/`)
 	assert.Contains(t, body, "Your meals are taking shape. You can add finished recipes as they arrive.")
 	assert.Contains(t, body, `hx-get="" hx-trigger="every 1s"`)
 	assert.Contains(t, body, "animate-spin")
@@ -143,6 +144,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	body = poll(true)
 	assert.NotContains(t, body, "<!doctype html>")
 	assert.Contains(t, body, `id="shopping-content"`)
+	assert.Contains(t, body, `href="/admin/mealplan/`+hash+`"`)
 	assert.NotContains(t, body, `hx-trigger="every 1s"`)
 	assert.NotContains(t, body, "Considering 12 out of 30 ingredients")
 	assert.NotContains(t, body, "shopping-recipe-pending-")
