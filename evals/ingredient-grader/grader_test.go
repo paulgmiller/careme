@@ -30,6 +30,29 @@ func promptfooContextFromJSON(t *testing.T, value string) map[string]interface{}
 	return ctx
 }
 
+func TestCallApiReturnsConfigurationError(t *testing.T) {
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("INGREDIENT_GRADING_ENABLE", "1")
+	t.Setenv("INGREDIENT_GRADING_MODEL", "gpt-6-luna")
+	t.Setenv("AI_API_KEY", "")
+
+	result, err := CallApi("", nil, map[string]interface{}{})
+
+	assert.Nil(t, result)
+	require.ErrorContains(t, err, "failed to load configuration: AI_API_KEY is required for ingredient grading")
+}
+
+func TestCallApiRejectsDisabledGrading(t *testing.T) {
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("INGREDIENT_GRADING_ENABLE", "false")
+	t.Setenv("AI_API_KEY", "")
+
+	result, err := CallApi("", nil, map[string]interface{}{})
+
+	assert.Nil(t, result)
+	require.EqualError(t, err, "ingredient grading eval requires INGREDIENT_GRADING_ENABLE to be enabled")
+}
+
 func TestRunEvalPassesScoresWithinInclusiveBounds(t *testing.T) {
 	grader := &stubIngredientGrader{
 		grades: []ai.InputIngredient{

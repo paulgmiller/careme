@@ -36,24 +36,19 @@ type ingredientGrader interface {
 }
 
 func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	result, err := callAPI(ctx)
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}, nil
-	}
-	return result, nil
+	return callAPI(ctx)
 }
 
 func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %s", err)
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
-	if cfg.IngredientGrading.Model != "jev" && strings.TrimSpace(cfg.AI.APIKey) == "" {
-		return nil, fmt.Errorf("AI_API_KEY is required for ingredient grading evals")
+	if !cfg.IngredientGrading.Enable {
+		return nil, fmt.Errorf("ingredient grading eval requires INGREDIENT_GRADING_ENABLE to be enabled")
 	}
-	// Every evaluation must grade fresh inputs, regardless of production settings
-	// or previously stored grades. Keep the production batching path.
-	cfg.IngredientGrading.Enable = true
+	// Every evaluation must grade fresh inputs, regardless of previously stored
+	// grades. Keep the production batching path.
 	grader := grading.NewManager(cfg, cache.NewInMemoryCache(), http.DefaultClient)
 	result, err := runEval(ctx, grader)
 	if err != nil {

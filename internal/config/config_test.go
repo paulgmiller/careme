@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
@@ -155,6 +156,36 @@ func TestLoadDefaultsAIModels(t *testing.T) {
 	assert.Equal(t, DefaultCritiqueModel, cfg.OpenRouter.CritiqueModel)
 }
 
+func TestLoadValidatesIngredientGradingCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name, model, enabled, apiKey string
+		wantErr                      bool
+	}{
+		{"default grader without key", "", "1", "", true},
+		{"OpenAI grader without key", "gpt-6-luna", "1", "", true},
+		{"OpenAI grader with blank key", "gpt-6-luna", "1", " \t ", true},
+		{"OpenAI grader with key", "gpt-6-luna", "1", "test-key", false},
+		{"JEV without OpenAI key", "jev", "1", "", false},
+		{"disabled grader without key", "gpt-6-luna", "false", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetStoreEnvs(t)
+			t.Setenv("ENABLE_MOCKS", "1")
+			t.Setenv("INGREDIENT_GRADING_MODEL", tc.model)
+			t.Setenv("INGREDIENT_GRADING_ENABLE", tc.enabled)
+			t.Setenv("AI_API_KEY", tc.apiKey)
+
+			cfg, err := Load()
+			if tc.wantErr {
+				require.ErrorContains(t, err, "AI_API_KEY is required for ingredient grading")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.model, cfg.IngredientGrading.Model)
+		})
+	}
+}
+
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
 	cfg := &Config{}
 	if got, want := cfg.ResolvedPublicOrigin(), "http://localhost:8080"; got != want {
@@ -214,6 +245,9 @@ func resetStoreEnvs(t *testing.T) {
 	} {
 		t.Setenv(name, "")
 	}
+	t.Setenv("AI_API_KEY", "")
+	t.Setenv("INGREDIENT_GRADING_MODEL", "")
+	t.Setenv("INGREDIENT_GRADING_ENABLE", "false")
 }
 
 func contains(got, want string) bool {

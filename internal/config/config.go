@@ -271,6 +271,10 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	if cfg.IngredientGrading.Enable && cfg.IngredientGrading.Model != "jev" && strings.TrimSpace(cfg.AI.APIKey) == "" {
+		return fmt.Errorf("AI_API_KEY is required for ingredient grading")
+	}
+
 	if cfg.Mocks.Enable {
 		return nil
 	}
