@@ -114,19 +114,23 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 ## Ingredient grading
 
+The [October 1 JEV comparison](ingredient-grader/jev-comparison-2026-10-01.md)
+records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
+
 The [September 29 Luna comparison](ingredient-grader/gpt6-luna-comparison-2026-09-29.md)
 records 23 batches and 92 ingredient scores per model, including remaining failures.
 
 Compare the old and new Luna graders on the checked-in ingredient batches:
 
 ```sh
-./task.sh evals EVAL=ingredient-grader MODEL=gpt-5.6-luna -- --no-cache --output /tmp/ingredients-gpt56-luna.json
-./task.sh evals EVAL=ingredient-grader MODEL=gpt-6-luna -- --no-cache --output /tmp/ingredients-gpt6-luna.json
+INGREDIENT_GRADING_MODEL=gpt-5.6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt56-luna.json
+INGREDIENT_GRADING_MODEL=gpt-6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt6-luna.json
 ```
 
-Direct Promptfoo runs accept `INGREDIENT_EVAL_MODEL`; provider `config.model`
-takes precedence. Without either override, the provider uses
-`INGREDIENT_GRADING_MODEL` or the production default, currently `gpt-6-luna`.
+Use the existing `INGREDIENT_GRADING_MODEL` configuration variable for both task
+and direct Promptfoo runs. Leave it unset to use the production default, currently
+`gpt-6-luna`. The provider has no separate model selector; `MODEL` is for the recipe
+and menu suites.
 Both OpenAI graders use `none` reasoning. The existing `jev` option is preserved.
 OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
 

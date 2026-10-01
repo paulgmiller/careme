@@ -104,7 +104,6 @@ tasks:
     env:
       CAREME_EVAL: "{{.EVAL}}"
       RECIPE_EVAL_MODEL: "{{.MODEL}}"
-      INGREDIENT_EVAL_MODEL: "{{.MODEL}}"
       RECIPE_EVAL_REASONING_EFFORT: "{{.REASONING_EFFORT}}"
     cmds:
       - |

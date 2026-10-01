@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -36,47 +35,18 @@ type ingredientGrader interface {
 	GradeIngredients(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
-type providerOptions struct {
-	Config struct {
-		Model string `json:"model"`
-	} `json:"config"`
-}
-
-func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	result, err := callAPI(options, ctx)
+func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+	result, err := callAPI(ctx)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func decodeOptions(options map[string]interface{}) (providerOptions, error) {
-	var settings providerOptions
-	body, err := json.Marshal(options)
-	if err != nil {
-		return settings, fmt.Errorf("encode provider options: %w", err)
-	}
-	if err := json.Unmarshal(body, &settings); err != nil {
-		return settings, fmt.Errorf("decode provider options: %w", err)
-	}
-	settings.Config.Model = strings.TrimSpace(settings.Config.Model)
-	if settings.Config.Model == "" {
-		settings.Config.Model = strings.TrimSpace(os.Getenv("INGREDIENT_EVAL_MODEL"))
-	}
-	return settings, nil
-}
-
-func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %s", err)
-	}
-	settings, err := decodeOptions(options)
-	if err != nil {
-		return nil, err
-	}
-	if settings.Config.Model != "" {
-		cfg.IngredientGrading.Model = settings.Config.Model
 	}
 	if cfg.IngredientGrading.Model != "jev" && strings.TrimSpace(cfg.AI.APIKey) == "" {
 		return nil, fmt.Errorf("AI_API_KEY is required for ingredient grading evals")

@@ -121,34 +121,6 @@ func TestRunEvalReturnsGraderError(t *testing.T) {
 	require.EqualError(t, err, "failed to grade ingredients: grader unavailable")
 }
 
-func TestDecodeOptionsModelPrecedence(t *testing.T) {
-	for _, tc := range []struct {
-		name, configured, environment, want string
-	}{
-		{"production default", "", "", ""},
-		{"environment", "", " gpt-5.6-luna ", "gpt-5.6-luna"},
-		{"provider precedence", " gpt-6-luna ", "gpt-5.6-luna", "gpt-6-luna"},
-		{"blank override", " ", " ", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("INGREDIENT_EVAL_MODEL", tc.environment)
-			settings, err := decodeOptions(map[string]interface{}{"config": map[string]interface{}{"model": tc.configured}})
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, settings.Config.Model)
-		})
-	}
-}
-
-func TestDecodeOptionsRejectsMalformedOptions(t *testing.T) {
-	for _, options := range []map[string]interface{}{
-		{"config": map[string]interface{}{"model": 42}},
-		{"config": make(chan struct{})},
-	} {
-		_, err := decodeOptions(options)
-		require.Error(t, err)
-	}
-}
-
 func TestRunEvalRejectsIncompleteOrInvalidGrades(t *testing.T) {
 	for _, tc := range []struct {
 		name, wantErr string
