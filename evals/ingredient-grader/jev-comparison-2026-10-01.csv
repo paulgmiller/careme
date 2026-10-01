@@ -1,0 +1,185 @@
+grader,batch,ingredient,score,minimum,maximum,passed,batch_generation_seconds
+gpt-6-luna,Fresh vegetables vs prepared vegetables,Broccoli Crowns,9,8,10,True,2.568
+gpt-6-luna,Fresh vegetables vs prepared vegetables,Fresh Baby Spinach,9,8,10,True,2.568
+gpt-6-luna,Fresh vegetables vs prepared vegetables,Broccoli & Cheese Bites,2,0,3,True,2.568
+gpt-6-luna,Fresh vegetables vs prepared vegetables,Broccoli Florets in Cheese Sauce,4,0,4,True,2.568
+gpt-6-luna,Whole grains vs prepared grains,Organic Quinoa,8,7,10,True,2.954
+gpt-6-luna,Whole grains vs prepared grains,Basmati Rice,8,7,10,True,2.954
+gpt-6-luna,Whole grains vs prepared grains,Ready Rice Jasmine Rice,4,0,5,True,2.954
+gpt-6-luna,Whole grains vs prepared grains,Old Fashioned Rolled Oats,8,7,10,True,2.954
+gpt-6-luna,Fresh fruit vs prepared fruit,Yellow Peaches,9,8,10,True,2.575
+gpt-6-luna,Fresh fruit vs prepared fruit,Honeycrisp Apples,9,8,10,True,2.575
+gpt-6-luna,Fresh fruit vs prepared fruit,Sliced Peaches in Heavy Syrup,5,0,5,True,2.575
+gpt-6-luna,Fresh fruit vs prepared fruit,Pre-Cut Mixed Fruit Bowl,4,2,5,True,2.575
+gpt-6-luna,Plain vegetables vs increasingly prepared forms,Whole Carrots,10,8,10,True,2.121
+gpt-6-luna,Plain vegetables vs increasingly prepared forms,Steamfresh Carrots,7,4,6,False,2.121
+gpt-6-luna,Plain vegetables vs increasingly prepared forms,Brown Sugar Glazed Carrots,4,0,4,True,2.121
+gpt-6-luna,Plain vegetables vs increasingly prepared forms,Breaded Cauliflower Bites,3,0,4,True,2.121
+gpt-6-luna,Pasta and convenience foods,Spaghetti Pasta,7,7,10,True,2.182
+gpt-6-luna,Pasta and convenience foods,Whole Wheat Penne Pasta,7,7,10,True,2.182
+gpt-6-luna,Pasta and convenience foods,Chickpea Rotini Pasta,5,0,6,True,2.182
+gpt-6-luna,Pasta and convenience foods,Frozen Macaroni and Cheese,2,0,3,True,2.182
+gpt-6-luna,Raw meat vs seasoned and fully prepared meat,Boneless Skinless Chicken Thighs,10,9,10,True,2.644
+gpt-6-luna,Raw meat vs seasoned and fully prepared meat,80% Lean Ground Beef,10,9,10,True,2.644
+gpt-6-luna,Raw meat vs seasoned and fully prepared meat,Garlic Herb Marinated Chicken Breasts,7,6,8,True,2.644
+gpt-6-luna,Raw meat vs seasoned and fully prepared meat,Fully Cooked Breaded Chicken Breast Tenders,3,0,3,True,2.644
+gpt-6-luna,"Raw, cooked, and snack-format seafood",Atlantic Salmon Fillet,10,9,10,True,2.473
+gpt-6-luna,"Raw, cooked, and snack-format seafood",Raw Peeled and Deveined Shrimp,9,8,10,True,2.473
+gpt-6-luna,"Raw, cooked, and snack-format seafood",Cooked Tail-Off Shrimp,7,5,7,True,2.473
+gpt-6-luna,"Raw, cooked, and snack-format seafood",Smoked Salmon Snack Pack with Cream Cheese,3,0,3,True,2.473
+gpt-6-luna,Uncommon vegetables remain strong ingredients,Fresh Rutabaga,9,9,10,True,4.503
+gpt-6-luna,Uncommon vegetables remain strong ingredients,Fresh Collard Greens,9,9,10,True,4.503
+gpt-6-luna,Uncommon vegetables remain strong ingredients,Fresh Yuca Root,9,9,10,True,4.503
+gpt-6-luna,Uncommon vegetables remain strong ingredients,Fresh Globe Artichokes,9,9,10,True,4.503
+gpt-6-luna,Organ meats and bones are valid cooking ingredients,Fresh Chicken Livers,9,7,10,True,4.081
+gpt-6-luna,Organ meats and bones are valid cooking ingredients,Beef Soup Bones,8,7,9,True,4.081
+gpt-6-luna,Organ meats and bones are valid cooking ingredients,Fresh Beef Heart,9,7,10,True,4.081
+gpt-6-luna,Organ meats and bones are valid cooking ingredients,Pork Neck Bones,8,7,9,True,4.081
+gpt-6-luna,Flexible dairy and eggs,Large Grade A Eggs,9,9,10,True,2.442
+gpt-6-luna,Flexible dairy and eggs,Whole Milk,9,8,10,True,2.442
+gpt-6-luna,Flexible dairy and eggs,Unsalted Butter,9,8,10,True,2.442
+gpt-6-luna,Flexible dairy and eggs,Plain Whole Milk Greek Yogurt,9,7,9,True,2.442
+gpt-6-luna,Dry legumes vs convenient prepared legumes,Dry Green Lentils,9,8,10,True,3.556
+gpt-6-luna,Dry legumes vs convenient prepared legumes,Dried Chickpeas,9,8,10,True,3.556
+gpt-6-luna,Dry legumes vs convenient prepared legumes,No Salt Added Canned Black Beans,8,6,8,True,3.556
+gpt-6-luna,Dry legumes vs convenient prepared legumes,Seasoned Refried Beans with Lime,5,3,5,True,3.556
+gpt-6-luna,Herbs and spices vs seasoning mixes,Fresh Basil,9,9,10,True,4.001
+gpt-6-luna,Herbs and spices vs seasoning mixes,Fresh Cilantro,9,9,10,True,4.001
+gpt-6-luna,Herbs and spices vs seasoning mixes,Ground Cumin,8,8,10,True,4.001
+gpt-6-luna,Herbs and spices vs seasoning mixes,Cheesy Taco Seasoning Mix,4,3,5,True,4.001
+gpt-6-luna,Explicit dry pasta score anchors,Standard Dry Spaghetti,7,6,7,True,3.785
+gpt-6-luna,Explicit dry pasta score anchors,Bronze-Cut Slow-Dried Rigatoni,9,8,9,True,3.785
+gpt-6-luna,Explicit dry pasta score anchors,Red Lentil Penne Pasta,6,5,6,True,3.785
+gpt-6-luna,Explicit dry pasta score anchors,Gluten-Free Brown Rice Spaghetti,5,5,6,True,3.785
+gpt-6-luna,Real pasta quality signals vs generic marketing claims,High-Protein Durum Semolina Penne Rigate,9,8,9,True,2.845
+gpt-6-luna,Real pasta quality signals vs generic marketing claims,Bronze-Die Spaghetti,9,8,9,True,2.845
+gpt-6-luna,Real pasta quality signals vs generic marketing claims,Premium Quality Organic Non-GMO Traditional Spaghetti,7,6,7,True,2.845
+gpt-6-luna,Real pasta quality signals vs generic marketing claims,Dry Spaghetti,7,6,7,True,2.845
+gpt-6-luna,Grain cooking signals vs instant flavored mixes,Pearled Farro,8,8,9,True,2.701
+gpt-6-luna,Grain cooking signals vs instant flavored mixes,Hulled Barley,8,8,9,True,2.701
+gpt-6-luna,Grain cooking signals vs instant flavored mixes,Plain Cracked Freekeh,8,7,9,True,2.701
+gpt-6-luna,Grain cooking signals vs instant flavored mixes,Instant Chicken-Flavored Rice Mix,4,3,5,True,2.701
+gpt-6-luna,Bread and prepared sauce anchors,100% Whole Wheat Sandwich Bread,6,5,6,True,3.27
+gpt-6-luna,Bread and prepared sauce anchors,Artisan Sourdough Bread,6,5,6,True,3.27
+gpt-6-luna,Bread and prepared sauce anchors,Prepared Marinara Pasta Sauce,5,0,6,True,3.27
+gpt-6-luna,Bread and prepared sauce anchors,Four Cheese Alfredo Pasta Sauce,4,0,6,True,3.27
+gpt-6-luna,"Ready-to-eat meals, kits, bowls, and trays",Ready-to-Eat Chicken Caesar Salad Bowl,2,0,3,True,2.777
+gpt-6-luna,"Ready-to-eat meals, kits, bowls, and trays",Taco Dinner Meal Kit,2,0,3,True,2.777
+gpt-6-luna,"Ready-to-eat meals, kits, bowls, and trays",Cheese and Crackers Snack Tray,1,0,3,True,2.777
+gpt-6-luna,"Ready-to-eat meals, kits, bowls, and trays",Vegetable Party Tray with Ranch Dip,3,0,3,True,2.777
+gpt-6-luna,"Dips, gravies, mixes, and prepared sides",Seven Layer Party Dip,1,0,3,True,2.341
+gpt-6-luna,"Dips, gravies, mixes, and prepared sides",Ready-to-Serve Turkey Gravy,3,0,3,True,2.341
+gpt-6-luna,"Dips, gravies, mixes, and prepared sides",Loaded Mashed Potatoes Prepared Side,2,0,3,True,2.341
+gpt-6-luna,"Dips, gravies, mixes, and prepared sides",Instant Cheddar Broccoli Rice Mix,4,3,5,True,2.341
+gpt-6-luna,"Whole, pre-cut, and cooking-friendly fruit formats",Whole Fresh Pineapple,9,9,10,True,2.456
+gpt-6-luna,"Whole, pre-cut, and cooking-friendly fruit formats",Fresh Pineapple Spears,6,4,7,True,2.456
+gpt-6-luna,"Whole, pre-cut, and cooking-friendly fruit formats",Frozen Unsweetened Sliced Peaches,8,6,8,True,2.456
+gpt-6-luna,"Whole, pre-cut, and cooking-friendly fruit formats",Sliced Apple Snack Pouch with Caramel Dip,2,0,3,True,2.456
+gpt-6-luna,Diverse flexible ingredients that are difficult to make at home,Extra-Firm Tofu,9,7,9,True,2.607
+gpt-6-luna,Diverse flexible ingredients that are difficult to make at home,Paneer Cheese,8,7,9,True,2.607
+gpt-6-luna,Diverse flexible ingredients that are difficult to make at home,Dried Shiitake Mushrooms,9,8,10,True,2.607
+gpt-6-luna,Diverse flexible ingredients that are difficult to make at home,Masa Harina Corn Flour,9,7,9,True,2.607
+gpt-6-luna,Plain ground meat vs sausage and cured meat,Fresh Ground Pork,9,9,10,True,2.037
+gpt-6-luna,Plain ground meat vs sausage and cured meat,Fresh Mild Italian Pork Sausage,8,7,8,True,2.037
+gpt-6-luna,Plain ground meat vs sausage and cured meat,Cured Sliced Pepperoni,4,0,5,True,2.037
+gpt-6-luna,Plain ground meat vs sausage and cured meat,Fully Cooked Maple Breakfast Sausage Links,4,0,4,True,2.037
+gpt-6-luna,Seasonal produce remains a strong ingredient,Fresh Rhubarb Stalks,9,8,10,True,2.732
+gpt-6-luna,Seasonal produce remains a strong ingredient,Fresh Fuyu Persimmons,9,8,10,True,2.732
+gpt-6-luna,Seasonal produce remains a strong ingredient,Whole Delicata Squash,9,8,10,True,2.732
+gpt-6-luna,Seasonal produce remains a strong ingredient,Fresh Cranberries,9,8,10,True,2.732
+gpt-6-luna,Minimally processed staples vs sauced versions,Plain Frozen Green Peas,8,7,9,True,2.629
+gpt-6-luna,Minimally processed staples vs sauced versions,No Salt Added Canned Diced Tomatoes,8,6,9,True,2.629
+gpt-6-luna,Minimally processed staples vs sauced versions,Plain Tomato Paste,7,6,8,True,2.629
+gpt-6-luna,Minimally processed staples vs sauced versions,Frozen Stir-Fry Vegetables with Teriyaki Sauce,4,0,5,True,2.629
+jev,Fresh vegetables vs prepared vegetables,Broccoli Crowns,9,8,10,True,0.262
+jev,Fresh vegetables vs prepared vegetables,Fresh Baby Spinach,9,8,10,True,0.262
+jev,Fresh vegetables vs prepared vegetables,Broccoli & Cheese Bites,2,0,3,True,0.262
+jev,Fresh vegetables vs prepared vegetables,Broccoli Florets in Cheese Sauce,2,0,4,True,0.262
+jev,Whole grains vs prepared grains,Organic Quinoa,8,7,10,True,0.195
+jev,Whole grains vs prepared grains,Basmati Rice,8,7,10,True,0.195
+jev,Whole grains vs prepared grains,Ready Rice Jasmine Rice,3,0,5,True,0.195
+jev,Whole grains vs prepared grains,Old Fashioned Rolled Oats,8,7,10,True,0.195
+jev,Fresh fruit vs prepared fruit,Yellow Peaches,9,8,10,True,0.171
+jev,Fresh fruit vs prepared fruit,Honeycrisp Apples,9,8,10,True,0.171
+jev,Fresh fruit vs prepared fruit,Sliced Peaches in Heavy Syrup,3,0,5,True,0.171
+jev,Fresh fruit vs prepared fruit,Pre-Cut Mixed Fruit Bowl,2,2,5,True,0.171
+jev,Plain vegetables vs increasingly prepared forms,Whole Carrots,10,8,10,True,0.191
+jev,Plain vegetables vs increasingly prepared forms,Steamfresh Carrots,4,4,6,True,0.191
+jev,Plain vegetables vs increasingly prepared forms,Brown Sugar Glazed Carrots,2,0,4,True,0.191
+jev,Plain vegetables vs increasingly prepared forms,Breaded Cauliflower Bites,2,0,4,True,0.191
+jev,Pasta and convenience foods,Spaghetti Pasta,7,7,10,True,0.173
+jev,Pasta and convenience foods,Whole Wheat Penne Pasta,8,7,10,True,0.173
+jev,Pasta and convenience foods,Chickpea Rotini Pasta,6,0,6,True,0.173
+jev,Pasta and convenience foods,Frozen Macaroni and Cheese,1,0,3,True,0.173
+jev,Raw meat vs seasoned and fully prepared meat,Boneless Skinless Chicken Thighs,9,9,10,True,0.171
+jev,Raw meat vs seasoned and fully prepared meat,80% Lean Ground Beef,9,9,10,True,0.171
+jev,Raw meat vs seasoned and fully prepared meat,Garlic Herb Marinated Chicken Breasts,7,6,8,True,0.171
+jev,Raw meat vs seasoned and fully prepared meat,Fully Cooked Breaded Chicken Breast Tenders,2,0,3,True,0.171
+jev,"Raw, cooked, and snack-format seafood",Atlantic Salmon Fillet,9,9,10,True,0.169
+jev,"Raw, cooked, and snack-format seafood",Raw Peeled and Deveined Shrimp,9,8,10,True,0.169
+jev,"Raw, cooked, and snack-format seafood",Cooked Tail-Off Shrimp,5,5,7,True,0.169
+jev,"Raw, cooked, and snack-format seafood",Smoked Salmon Snack Pack with Cream Cheese,1,0,3,True,0.169
+jev,Uncommon vegetables remain strong ingredients,Fresh Rutabaga,9,9,10,True,0.221
+jev,Uncommon vegetables remain strong ingredients,Fresh Collard Greens,9,9,10,True,0.221
+jev,Uncommon vegetables remain strong ingredients,Fresh Yuca Root,9,9,10,True,0.221
+jev,Uncommon vegetables remain strong ingredients,Fresh Globe Artichokes,9,9,10,True,0.221
+jev,Organ meats and bones are valid cooking ingredients,Fresh Chicken Livers,8,7,10,True,0.195
+jev,Organ meats and bones are valid cooking ingredients,Beef Soup Bones,7,7,9,True,0.195
+jev,Organ meats and bones are valid cooking ingredients,Fresh Beef Heart,8,7,10,True,0.195
+jev,Organ meats and bones are valid cooking ingredients,Pork Neck Bones,8,7,9,True,0.195
+jev,Flexible dairy and eggs,Large Grade A Eggs,9,9,10,True,0.23
+jev,Flexible dairy and eggs,Whole Milk,9,8,10,True,0.23
+jev,Flexible dairy and eggs,Unsalted Butter,9,8,10,True,0.23
+jev,Flexible dairy and eggs,Plain Whole Milk Greek Yogurt,8,7,9,True,0.23
+jev,Dry legumes vs convenient prepared legumes,Dry Green Lentils,9,8,10,True,0.227
+jev,Dry legumes vs convenient prepared legumes,Dried Chickpeas,9,8,10,True,0.227
+jev,Dry legumes vs convenient prepared legumes,No Salt Added Canned Black Beans,7,6,8,True,0.227
+jev,Dry legumes vs convenient prepared legumes,Seasoned Refried Beans with Lime,3,3,5,True,0.227
+jev,Herbs and spices vs seasoning mixes,Fresh Basil,9,9,10,True,0.179
+jev,Herbs and spices vs seasoning mixes,Fresh Cilantro,9,9,10,True,0.179
+jev,Herbs and spices vs seasoning mixes,Ground Cumin,9,8,10,True,0.179
+jev,Herbs and spices vs seasoning mixes,Cheesy Taco Seasoning Mix,3,3,5,True,0.179
+jev,Explicit dry pasta score anchors,Standard Dry Spaghetti,7,6,7,True,0.264
+jev,Explicit dry pasta score anchors,Bronze-Cut Slow-Dried Rigatoni,8,8,9,True,0.264
+jev,Explicit dry pasta score anchors,Red Lentil Penne Pasta,6,5,6,True,0.264
+jev,Explicit dry pasta score anchors,Gluten-Free Brown Rice Spaghetti,6,5,6,True,0.264
+jev,Real pasta quality signals vs generic marketing claims,High-Protein Durum Semolina Penne Rigate,8,8,9,True,0.18
+jev,Real pasta quality signals vs generic marketing claims,Bronze-Die Spaghetti,8,8,9,True,0.18
+jev,Real pasta quality signals vs generic marketing claims,Premium Quality Organic Non-GMO Traditional Spaghetti,7,6,7,True,0.18
+jev,Real pasta quality signals vs generic marketing claims,Dry Spaghetti,7,6,7,True,0.18
+jev,Grain cooking signals vs instant flavored mixes,Pearled Farro,8,8,9,True,0.226
+jev,Grain cooking signals vs instant flavored mixes,Hulled Barley,9,8,9,True,0.226
+jev,Grain cooking signals vs instant flavored mixes,Plain Cracked Freekeh,8,7,9,True,0.226
+jev,Grain cooking signals vs instant flavored mixes,Instant Chicken-Flavored Rice Mix,3,3,5,True,0.226
+jev,Bread and prepared sauce anchors,100% Whole Wheat Sandwich Bread,5,5,6,True,0.172
+jev,Bread and prepared sauce anchors,Artisan Sourdough Bread,5,5,6,True,0.172
+jev,Bread and prepared sauce anchors,Prepared Marinara Pasta Sauce,3,0,6,True,0.172
+jev,Bread and prepared sauce anchors,Four Cheese Alfredo Pasta Sauce,3,0,6,True,0.172
+jev,"Ready-to-eat meals, kits, bowls, and trays",Ready-to-Eat Chicken Caesar Salad Bowl,1,0,3,True,0.144
+jev,"Ready-to-eat meals, kits, bowls, and trays",Taco Dinner Meal Kit,1,0,3,True,0.144
+jev,"Ready-to-eat meals, kits, bowls, and trays",Cheese and Crackers Snack Tray,1,0,3,True,0.144
+jev,"Ready-to-eat meals, kits, bowls, and trays",Vegetable Party Tray with Ranch Dip,1,0,3,True,0.144
+jev,"Dips, gravies, mixes, and prepared sides",Seven Layer Party Dip,1,0,3,True,0.142
+jev,"Dips, gravies, mixes, and prepared sides",Ready-to-Serve Turkey Gravy,1,0,3,True,0.142
+jev,"Dips, gravies, mixes, and prepared sides",Loaded Mashed Potatoes Prepared Side,2,0,3,True,0.142
+jev,"Dips, gravies, mixes, and prepared sides",Instant Cheddar Broccoli Rice Mix,3,3,5,True,0.142
+jev,"Whole, pre-cut, and cooking-friendly fruit formats",Whole Fresh Pineapple,9,9,10,True,0.151
+jev,"Whole, pre-cut, and cooking-friendly fruit formats",Fresh Pineapple Spears,4,4,7,True,0.151
+jev,"Whole, pre-cut, and cooking-friendly fruit formats",Frozen Unsweetened Sliced Peaches,6,6,8,True,0.151
+jev,"Whole, pre-cut, and cooking-friendly fruit formats",Sliced Apple Snack Pouch with Caramel Dip,1,0,3,True,0.151
+jev,Diverse flexible ingredients that are difficult to make at home,Extra-Firm Tofu,8,7,9,True,0.113
+jev,Diverse flexible ingredients that are difficult to make at home,Paneer Cheese,8,7,9,True,0.113
+jev,Diverse flexible ingredients that are difficult to make at home,Dried Shiitake Mushrooms,8,8,10,True,0.113
+jev,Diverse flexible ingredients that are difficult to make at home,Masa Harina Corn Flour,8,7,9,True,0.113
+jev,Plain ground meat vs sausage and cured meat,Fresh Ground Pork,9,9,10,True,0.112
+jev,Plain ground meat vs sausage and cured meat,Fresh Mild Italian Pork Sausage,7,7,8,True,0.112
+jev,Plain ground meat vs sausage and cured meat,Cured Sliced Pepperoni,3,0,5,True,0.112
+jev,Plain ground meat vs sausage and cured meat,Fully Cooked Maple Breakfast Sausage Links,3,0,4,True,0.112
+jev,Seasonal produce remains a strong ingredient,Fresh Rhubarb Stalks,8,8,10,True,0.117
+jev,Seasonal produce remains a strong ingredient,Fresh Fuyu Persimmons,8,8,10,True,0.117
+jev,Seasonal produce remains a strong ingredient,Whole Delicata Squash,9,8,10,True,0.117
+jev,Seasonal produce remains a strong ingredient,Fresh Cranberries,9,8,10,True,0.117
+jev,Minimally processed staples vs sauced versions,Plain Frozen Green Peas,8,7,9,True,0.123
+jev,Minimally processed staples vs sauced versions,No Salt Added Canned Diced Tomatoes,7,6,9,True,0.123
+jev,Minimally processed staples vs sauced versions,Plain Tomato Paste,7,6,8,True,0.123
+jev,Minimally processed staples vs sauced versions,Frozen Stir-Fry Vegetables with Teriyaki Sauce,2,0,5,True,0.123
