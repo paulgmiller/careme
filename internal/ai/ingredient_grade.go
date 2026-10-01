@@ -18,7 +18,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const defaultIngredientGradeModel = gpt56Luna
+const defaultIngredientGradeModel = gpt6Luna
 
 // should we have category spefic grading prompts?
 const ingredientGradeSystemInstruction = `

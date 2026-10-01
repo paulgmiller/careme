@@ -167,6 +167,13 @@ configured cache rather than trusting unversioned vectors in staple snapshots.
 Old combined grade/embedding cache entries remain on disk and are not migrated.
 Grading-disabled mode does not request or store embeddings.
 
+The default ingredient grader changed from `gpt-5.6-luna` to `gpt-6-luna` on
+2026-09-29. This produces a different model-derived grade cache version in the
+existing `ingredient_grades/<cache_version>/` namespace; old grades and reviews
+remain under their original versions. `INGREDIENT_GRADING_MODEL` still selects an
+explicit model (including `jev`). Wine pairing now uses `gpt-6-luna`, while existing
+`wine_recommendations/<recipe_hash>` records remain valid and are reused.
+
 The ingredients CLI fetches the selected store's current staple catalog, reuses
 cached grades and embeddings, embeds the query description, and ranks that
 catalog by cosine similarity. It does not search other stores or filter by grade.
