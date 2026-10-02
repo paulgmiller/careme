@@ -99,10 +99,11 @@ func runServer(cfg *config.Config, addr string) error {
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
+		backends, err := locations.NewStaplesBackends(cfg)
 		if err != nil {
-			return fmt.Errorf("failed to create staples service: %w", err)
+			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
+		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))

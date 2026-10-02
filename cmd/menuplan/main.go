@@ -168,10 +168,11 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, httpClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := locations.NewStaplesBackends(cfg)
 	if err != nil {
-		return planService{}, fmt.Errorf("create staples service: %w", err)
+		return planService{}, fmt.Errorf("create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 	return planService{
 		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
 		staples:  staples,

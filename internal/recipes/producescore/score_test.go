@@ -123,7 +123,7 @@ func repeatGradedIngredients(score, count int) []ai.InputIngredient {
 
 func seedProduceScoreIngredients(t *testing.T, c *testIngredientCache, loc *locations.Location, date time.Time, ingredients []ai.InputIngredient) {
 	t.Helper()
-	c.ingredients[cachekey.ForStore(loc.ID, date)] = ingredients
+	c.ingredients[cachekey.ForStore(loc.ID, date, locations.StaplesSignature(loc.ID))] = ingredients
 }
 
 func withNow(t *testing.T, now time.Time) {

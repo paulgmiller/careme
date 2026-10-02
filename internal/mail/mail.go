@@ -112,10 +112,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, ig)
+	backends, err := locations.NewStaplesBackends(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create staples service: %w", err)
+		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig)
 	generationStatuses := status.NewStore(cacheStore)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"

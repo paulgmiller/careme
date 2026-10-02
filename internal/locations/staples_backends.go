@@ -1,0 +1,80 @@
+package locations
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+
+	"careme/internal/ai"
+	"careme/internal/brightdata"
+	"careme/internal/config"
+	"careme/internal/farmersmarket"
+	"careme/internal/heb"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/publix"
+	"careme/internal/providers/walmart"
+	"careme/internal/providers/wholefoods"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+)
+
+// StaplesBackend is the provider contract consumed by recipe sourcing.
+type StaplesBackend interface {
+	IsID(string) bool
+	Signature() string
+	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
+	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
+}
+
+// NewStaplesBackends assembles grocery integrations in routing order.
+func NewStaplesBackends(cfg *config.Config) ([]StaplesBackend, error) {
+	// Should this be per request so proxies can vary per user?
+	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
+	if err != nil {
+		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
+	}
+	brightdataClient.Transport = otelhttp.NewTransport(brightdataClient.Transport)
+
+	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
+	}
+	publixProvider, err := publix.NewStaplesProvider(cfg.Publix, brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create publix staples provider: %w", err)
+	}
+	hebProvider, err := heb.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create heb staples provider: %w", err)
+	}
+	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
+	if err != nil {
+		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
+	}
+
+	// Kroger uses its public API, without the Bright Data proxy.
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("create kroger staples provider: %w", err)
+	}
+	farmersMarketProvider, err := farmersmarket.NewStaplesProvider()
+	if err != nil {
+		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
+	}
+
+	return []StaplesBackend{
+		albertsonsProvider,
+		hebProvider,
+		aldiProvider,
+		krogerBackend,
+		publixProvider,
+		farmersMarketProvider,
+		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(brightdataClient)),
+		walmart.NewStaplesProvider(),
+		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
+	}, nil
+}

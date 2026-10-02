@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/locations"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/mnfoodclub"
@@ -14,7 +15,7 @@ import (
 func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
 	t.Parallel()
 
-	got := StaplesSignature("safeway_1142")
+	got := locations.StaplesSignature("safeway_1142")
 	want := albertsons.NewIdentityProvider().Signature()
 	if got != want {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
@@ -24,7 +25,7 @@ func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T
 func TestStaplesSignatureForLocation_UsesAldiIdentityProvider(t *testing.T) {
 	t.Parallel()
 
-	got := StaplesSignature("aldi_F100")
+	got := locations.StaplesSignature("aldi_F100")
 	want := aldi.NewIdentityProvider().Signature()
 	if got != want {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
@@ -38,7 +39,7 @@ func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
 		}
 	}()
 
-	_ = StaplesSignature("loc-unknown")
+	_ = locations.StaplesSignature("loc-unknown")
 }
 
 func TestForStorePreservesExistingHashes(t *testing.T) {
@@ -52,17 +53,19 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			for _, hour := range []int{0, 12, 23} {
 				date := time.Date(2025, 9, 17, hour, 0, 0, 0, time.FixedZone("store", -7*60*60))
-				assert.Equal(t, want, ForStore(id, date))
-				assert.NotEqual(t, want, ForStore(id, date.AddDate(0, 0, 1)))
+				signature := locations.StaplesSignature(id)
+				assert.Equal(t, want, ForStore(id, date, signature))
+				assert.NotEqual(t, want, ForStore(id, date.AddDate(0, 0, 1), signature))
 			}
 		})
 	}
 }
 
 func TestMNFoodClubSignature(t *testing.T) {
-	assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), StaplesSignature("mnfoodclub_delivery"))
+	assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), locations.StaplesSignature("mnfoodclub_delivery"))
 	date := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)
-	assert.NotPanics(t, func() { _ = ForStore("mnfoodclub_delivery", date) })
-	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date), ForStore("mnfoodclub_other", date))
-	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date), ForStore("mnfoodclub_delivery", date.AddDate(0, 0, 1)))
+	signature := locations.StaplesSignature("mnfoodclub_delivery")
+	assert.NotPanics(t, func() { _ = ForStore("mnfoodclub_delivery", date, signature) })
+	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date, signature), ForStore("mnfoodclub_other", date, signature))
+	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date, signature), ForStore("mnfoodclub_delivery", date.AddDate(0, 0, 1), signature))
 }

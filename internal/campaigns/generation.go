@@ -64,10 +64,11 @@ func NewService(cfg *config.Config) (*Service, error) {
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, c, httpClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, c, grader)
+	backends, err := locations.NewStaplesBackends(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("create campaign staples: %w", err)
+		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, c, grader)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))

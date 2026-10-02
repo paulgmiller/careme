@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/locations"
 	"careme/internal/recipes"
 
 	"golang.org/x/text/unicode/norm"
@@ -41,10 +42,11 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	staples, err := recipes.NewStaplesProvider(cfg)
+	backends, err := locations.NewStaplesBackends(cfg)
 	if err != nil {
-		log.Fatalf("failed to create staples provider: %v", err)
+		log.Fatalf("failed to create staples backends: %v", err)
 	}
+	staples := recipes.NewStaplesProvider(backends)
 
 	missing, results, err := checkProduceAvailability(ctx, staples, locationID, produce)
 	if err != nil {

@@ -80,10 +80,11 @@ func main() {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)})
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := locations.NewStaplesBackends(cfg)
 	if err != nil {
-		log.Fatalf("failed to create staples service: %v", err)
+		log.Fatalf("failed to create staples backends: %v", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 
 	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
