@@ -1216,6 +1216,8 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	assert.Equal(t, spinLocation, duplicateRR.Header().Get("Location"))
 	assert.Equal(t, 1, generator.regenerateCalls)
 
+	// Replace the completed fixture with a new attempt to exercise failed-job retry.
+	require.NoError(t, cacheStore.Delete(t.Context(), "generation_status/"+jobID))
 	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID, ""))
 	require.NoError(t, s.generationStatuses.Fail(t.Context(), jobID, fmt.Errorf("timed out")))
 	timedOutReq := httptest.NewRequest(http.MethodGet, spinLocation, nil)
@@ -1318,6 +1320,33 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	clone.Saved = append([]ai.Recipe(nil), c.last.Saved...)
 	clone.Dismissed = append([]ai.Recipe(nil), c.last.Dismissed...)
 	return &clone
+}
+
+func TestKickgenerationDuplicateDoesNotLaunchAnotherWorker(t *testing.T) {
+	t.Parallel()
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 2)}
+	s := newTestServer(t, withTestGenerator(generator))
+	t.Cleanup(s.Wait)
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+
+	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
+	require.ErrorIs(t, s.kickgeneration(t.Context(), params, guestUser.ID), cache.ErrAlreadyExists)
+	s.Wait()
+	require.Len(t, generator.called, 1)
+}
+
+func TestRetryGenerationStartsMissingStatus(t *testing.T) {
+	t.Parallel()
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+	s := newTestServer(t, withTestGenerator(generator))
+	t.Cleanup(s.Wait)
+	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, time.Now())
+
+	require.NoError(t, s.retryGeneration(t.Context(), params, guestUser.ID))
+	s.Wait()
+	require.Len(t, generator.called, 1)
+	_, err := s.generationStatuses.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
 }
 
 func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {

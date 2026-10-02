@@ -18,6 +18,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
+	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
@@ -158,6 +159,19 @@ type fakeGenerationStatusStore struct {
 func (f *fakeGenerationStatusStore) Start(_ context.Context, hash, _ string) error {
 	f.startedHash = hash
 	return nil
+}
+
+func (f *fakeGenerationStatusStore) Restart(_ context.Context, hash, _ string) error {
+	f.startedHash = hash
+	f.failedErr = nil
+	return nil
+}
+
+func (f *fakeGenerationStatusStore) Load(_ context.Context, _ string) (status.Status, error) {
+	if f.failedErr == nil {
+		return status.Status{}, nil
+	}
+	return status.Status{Failed: f.failedErr.Error()}, nil
 }
 
 func (f *fakeGenerationStatusStore) Fail(_ context.Context, _ string, err error) error {

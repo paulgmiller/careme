@@ -83,9 +83,29 @@ func NewStore(c cache.Cache) *Store {
 	return &Store{cache: c, now: time.Now}
 }
 
-// Start  creates or resets an existing
-// TODO take a cache option so we can do this oon not exists.
+// Start creates a generation status without replacing an existing attempt.
 func (ss *Store) Start(ctx context.Context, hash, message string) error {
+	return ss.saveWithOptions(ctx, hash, payload{
+		StartedAt: ss.now().UTC(),
+		Message:   message,
+	}, cache.IfNoneMatch())
+}
+
+// Restart clears an attempt that failed or timed out for an explicit retry.
+func (ss *Store) Restart(ctx context.Context, hash, message string) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	stored, err := ss.load(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if stored.Redirect != "" {
+		return fmt.Errorf("%w: generation %s is already completed", cache.ErrAlreadyExists, hash)
+	}
+	if stored.failed() == "" {
+		return fmt.Errorf("%w: generation %s is still running", cache.ErrAlreadyExists, hash)
+	}
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
 		Message:   message,
@@ -221,6 +241,10 @@ func (ss *Store) load(ctx context.Context, hash string) (payload, error) {
 }
 
 func (ss *Store) save(ctx context.Context, hash string, status payload) error {
+	return ss.saveWithOptions(ctx, hash, status, cache.Unconditional())
+}
+
+func (ss *Store) saveWithOptions(ctx context.Context, hash string, status payload, opts cache.PutOptions) error {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
 		return fmt.Errorf("generation hash is required")
@@ -229,7 +253,7 @@ func (ss *Store) save(ctx context.Context, hash string, status payload) error {
 	if err != nil {
 		return fmt.Errorf("marshal generation status: %w", err)
 	}
-	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), cache.Unconditional()); err != nil {
+	if err := ss.cache.Put(ctx, generationStatusCachePrefix+hash, string(raw), opts); err != nil {
 		return fmt.Errorf("save generation status for hash %s: %w", hash, err)
 	}
 	return nil
