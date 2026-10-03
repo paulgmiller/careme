@@ -28,12 +28,12 @@ type mailView struct {
 
 // FormatMail renders the recipe email using the configured public origin.
 // TODO move this over to internal/mail once recipePropertyDisplay is in shared helper?
-func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsubscribeURL string, writer io.Writer) error {
-	view := newMailView(p, l, publicOrigin, unsubscribeURL)
+func FormatMail(p *generatorParams, l ai.ShoppingList, publicOrigin string, unsubscribeURL string, staplesSignature string, writer io.Writer) error {
+	view := newMailView(p, l, publicOrigin, unsubscribeURL, staplesSignature)
 	return templates.Mail.Execute(writer, view)
 }
 
-func newMailView(p *generatorParams, list ai.ShoppingList, publicOrigin string, unsubscribeURL string) mailView {
+func newMailView(p *generatorParams, list ai.ShoppingList, publicOrigin string, unsubscribeURL string, staplesSignature string) mailView {
 	recipeViews := make([]mailRecipeView, 0, len(list.Recipes))
 	for _, recipe := range list.Recipes {
 		hash := recipe.ComputeHash()
@@ -49,7 +49,7 @@ func newMailView(p *generatorParams, list ai.ShoppingList, publicOrigin string, 
 	return mailView{
 		Location:       *p.Location,
 		Date:           p.Date.Format("2006-01-02"),
-		Hash:           p.Hash(),
+		Hash:           p.Hash(staplesSignature),
 		Recipes:        recipeViews,
 		Domain:         publicOrigin,
 		UnsubscribeURL: unsubscribeURL,

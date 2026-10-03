@@ -17,6 +17,8 @@ import (
 
 type mock struct{}
 
+func NewMock() Store { return mock{} }
+
 var fakes = map[string]Location{
 	"70500010": {
 		ID:      "70500010",
@@ -47,7 +49,8 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 }
 
 func (m mock) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
-	return lo.Values(fakes), nil
+	locations := lo.Values(fakes)
+	return locations, nil
 }
 
 func (mock) HasInventory(locationID string) bool {

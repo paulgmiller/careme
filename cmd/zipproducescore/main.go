@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations/geo"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/producescore"
 
@@ -75,22 +76,24 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	providers := providerregistry.NewFactory(cfg)
+	locationStorage, err := providers.NewLocations(cacheStore, locations.LoadCentroids())
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)})
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		log.Fatalf("failed to create staples service: %v", err)
+		log.Fatalf("failed to create staples backends: %v", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader, providers.StaplesSignature)
 
 	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore)))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature))
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)

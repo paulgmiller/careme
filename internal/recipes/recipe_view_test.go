@@ -92,7 +92,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
-	recipe.OriginHash = p.Hash()
+	recipe.OriginHash = p.Hash("")
 	w := httptest.NewRecorder()
 	writeRecipePage(t.Context(), w, recipeViewInput{
 		params:             p,

@@ -73,7 +73,7 @@ func purgeInvalidShoppingLists(ctx context.Context, c purgeCache, apply bool, ou
 	hashes := normalizeShoppingListHashes(keys)
 	stats.Found = len(hashes)
 
-	rio := recipes.IO(c)
+	rio := recipes.IO(c, nil)
 	for _, hash := range hashes {
 		_, err := rio.FromCache(ctx, hash)
 		if err == nil {

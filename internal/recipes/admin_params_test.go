@@ -24,11 +24,11 @@ func TestAdminParamsJSON(t *testing.T) {
 		ZipCode: "98101",
 	}, time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	params.Instructions = "make it vegetarian"
-	require.NoError(t, IO(cacheStore).SaveParams(t.Context(), params))
+	require.NoError(t, IO(cacheStore, nil).SaveParams(t.Context(), params))
 
 	mux := http.NewServeMux()
 	mux.Handle("/params/{hash}", AdminParamsJSON(cacheStore))
-	req := httptest.NewRequest(http.MethodGet, "/params/"+params.Hash(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/params/"+params.Hash(""), nil)
 	rr := httptest.NewRecorder()
 
 	mux.ServeHTTP(rr, req)

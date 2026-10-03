@@ -95,10 +95,11 @@ type mailer struct {
 	publicOrigin       string
 	wait               func()
 	unsubscribeFactory users.UnsubscribeTokenFactory
+	staplesSignature   func(string) string
 }
 
 // TODO share some of this with web.go? good for mocking?
-func NewMailer(cfg *config.Config) (*mailer, error) {
+func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer, error) {
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -112,22 +113,23 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, ig)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create staples service: %w", err)
+		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig, providers.StaplesSignature)
 	generationStatuses := status.NewStore(cacheStore)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := locations.New(cfg, cacheStore, centroids)
+	locationserver, err := providers.NewLocations(cacheStore, centroids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -150,6 +152,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
 		wait:               mc.Wait,
 		unsubscribeFactory: users.NewUnsubscribeTokenFactory(*cfg),
+		staplesSignature:   providers.StaplesSignature,
 	}, nil
 }
 
@@ -195,7 +198,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	paramsHash := p.Hash()
+	paramsHash := p.Hash(m.staplesSignature(p.Location.ID))
 	alreadySent, err := m.cache.Exists(ctx, sentMailKey(user.ID, paramsHash))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check sent-mail status", "user", user.ID, "params_hash", paramsHash, "error", err)
@@ -268,10 +271,10 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
-	rio := recipes.IO(m.cache)
+	rio := recipes.IO(m.cache, m.staplesSignature)
 	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
-	paramsHash := p.Hash()
+	paramsHash := p.Hash(m.staplesSignature(p.Location.ID))
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -317,7 +320,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, m.staplesSignature(p.Location.ID), &buf); err != nil {
 		return fmt.Errorf("format recipe email: %w", err)
 	}
 

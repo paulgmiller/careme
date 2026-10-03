@@ -23,6 +23,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/locations/geo"
 	"careme/internal/parallelism"
+	"careme/internal/providerregistry"
 	"careme/internal/providers/kroger"
 	"careme/internal/recipes"
 	"careme/internal/recipes/prompts"
@@ -110,11 +111,12 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	centroids := locations.LoadCentroids()
-	locationStore, err := locations.New(cfg, cacheStore, centroids)
+	providers := providerregistry.NewFactory(cfg)
+	locationStore, err := providers.NewLocations(cacheStore, centroids)
 	if err != nil {
 		return fmt.Errorf("create location store: %w", err)
 	}
-	service, err := newPlanService(cfg, cacheStore)
+	service, err := newPlanService(cfg, cacheStore, providers)
 	if err != nil {
 		return err
 	}
@@ -157,7 +159,7 @@ func newCache(cfg *config.Config) (cache.ListCache, error) {
 	return cacheStore, nil
 }
 
-func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService, error) {
+func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers providerregistry.Factory) (planService, error) {
 	if cfg.Mocks.Enable {
 		return planService{
 			planner: mockMenuPlanner{},
@@ -168,10 +170,11 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, httpClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return planService{}, fmt.Errorf("create staples service: %w", err)
+		return planService{}, fmt.Errorf("create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader, providers.StaplesSignature)
 	return planService{
 		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
 		staples:  staples,

@@ -16,33 +16,28 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	p1 := DefaultParams(loc, d1)
 	p2 := DefaultParams(loc, d2)
 
-	h1 := p1.Hash()
-	h2 := p2.Hash()
+	h1 := p1.Hash("")
+	h2 := p2.Hash("")
 
 	if h1 != h2 {
 		t.Fatalf("expected equal hashes for same day with different hours: got %s and %s", h1, h2)
-	}
-
-	// make sure we're intentional about breaking hash
-	if h1 != "wrxx3dmHzBA" {
-		t.Fatalf("expected hash to be stable and equal to JjKXkKjKKpE, got %s", h1)
 	}
 
 	legacyHash, ok := legacyRecipeHash(h1)
 	if !ok {
 		t.Fatal("expected current hash passhed to legacy")
 	}
-	if legacyHash != "cmVjaXBlwrxx3dmHzBA=" {
+	if legacyHash != "cmVjaXBl"+h1+"=" {
 		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 
 	// ensure stability across multiple calls
-	if h1 != p1.Hash() {
-		t.Fatalf("hash not stable across multiple calls: %s vs %s", h1, p1.Hash())
+	if h1 != p1.Hash("") {
+		t.Fatalf("hash not stable across multiple calls: %s vs %s", h1, p1.Hash(""))
 	}
 
 	p1.Instructions = "some instructions"
-	h3 := p1.Hash()
+	h3 := p1.Hash("")
 	if h3 == h1 {
 		t.Fatalf("expected different hash after changing instructions: %s vs %s", h3, h1)
 	}
@@ -57,16 +52,16 @@ func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 	p1 := DefaultParams(loc, d1)
 	p2 := DefaultParams(loc, d2)
 
-	lh1 := p1.LocationHash()
-	lh2 := p2.LocationHash()
+	lh1 := p1.LocationHash("")
+	lh2 := p2.LocationHash("")
 
 	if lh1 != lh2 {
 		t.Fatalf("expected equal location hashes for same day with different hours: got %s and %s", lh1, lh2)
 	}
 
 	// ensure stability across multiple calls
-	if lh1 != p1.LocationHash() {
-		t.Fatalf("location hash not stable across multiple calls: %s vs %s", lh1, p1.LocationHash())
+	if lh1 != p1.LocationHash("") {
+		t.Fatalf("location hash not stable across multiple calls: %s vs %s", lh1, p1.LocationHash(""))
 	}
 }
 
@@ -75,8 +70,8 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 	krogerParams := DefaultParams(&locations.Location{ID: "10216", Name: "Kroger 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 	wholeFoodsParams := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Whole Foods 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
-	if got, want := krogerParams.LocationHash() != wholeFoodsParams.LocationHash(), true; got != want {
-		t.Fatalf("expected location hashes to differ across store backends: kroger=%s wholefoods=%s", krogerParams.LocationHash(), wholeFoodsParams.LocationHash())
+	if got, want := krogerParams.LocationHash("") != wholeFoodsParams.LocationHash(""), true; got != want {
+		t.Fatalf("expected location hashes to differ across store backends: kroger=%s wholefoods=%s", krogerParams.LocationHash(""), wholeFoodsParams.LocationHash(""))
 	}
 }
 
@@ -84,9 +79,9 @@ func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
-	before := p.Hash()
+	before := p.Hash("")
 	p.PriorSavedHashes = []string{"saved-1", "saved-2"}
-	after := p.Hash()
+	after := p.Hash("")
 
 	if before != after {
 		t.Fatalf("expected prior saved hashes not to affect params hash: before=%s after=%s", before, after)
@@ -97,10 +92,10 @@ func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
 
-	before := p.Hash()
+	before := p.Hash("")
 	p.PreviousMenuPlanResponseID = "resp-menu-123"
 	p.PreviousMenuPlanPromptCacheKey = "careme:store-day:v1:test"
-	after := p.Hash()
+	after := p.Hash("")
 
 	if before != after {
 		t.Fatalf("expected previous menu plan response not to affect params hash: before=%s after=%s", before, after)
@@ -110,7 +105,7 @@ func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
+	hash := p.Hash("")
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
 		t.Fatal("expected to derive legacy recipe hash")

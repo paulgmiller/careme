@@ -80,9 +80,9 @@ func TestNotFoundRecentGenerationAttemptShowsShoppingProgress(t *testing.T) {
 	s := newTestServer(t, withTestGenerator(generator), withTestStatusStore(statuses))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	statuses.setProgress(p.Hash(), "Planning your meals…")
+	statuses.setProgress(p.Hash(""), "Planning your meals…")
 
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(""), nil)
 	req.Header.Set("HX-Request", "true")
 	rr := httptest.NewRecorder()
 
@@ -132,9 +132,9 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 			s := newTestServer(t, withTestStatusStore(newFakeStatusStore()))
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 			require.NoError(t, s.SaveParams(t.Context(), p))
-			tt.setup(t, s, p.Hash())
+			tt.setup(t, s, p.Hash(""))
 
-			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(""), nil)
 			rr := httptest.NewRecorder()
 			s.notFound(t.Context(), rr, req)
 
@@ -167,11 +167,11 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	}))
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(), ""))
-	require.NoError(t, s.generationStatuses.Fail(t.Context(), p.Hash(), errors.New("first attempt failed")))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(""), ""))
+	require.NoError(t, s.generationStatuses.Fail(t.Context(), p.Hash(""), errors.New("first attempt failed")))
 
-	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/retry?help=Save+two+dinners", nil)
-	req.SetPathValue("hash", p.Hash())
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash("")+"/retry?help=Save+two+dinners", nil)
+	req.SetPathValue("hash", p.Hash(""))
 	rr := httptest.NewRecorder()
 
 	s.handleRetryGeneration(rr, req)
@@ -179,7 +179,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	redirect, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
-	assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
+	assert.Equal(t, p.Hash(""), redirect.Query().Get(queryArgHash))
 	assert.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
 	select {
 	case <-generator.called:
@@ -187,7 +187,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 		t.Fatal("timed out waiting for retried generation")
 	}
 	s.Wait()
-	status, err := s.generationStatuses.Load(t.Context(), p.Hash())
+	status, err := s.generationStatuses.Load(t.Context(), p.Hash(""))
 	require.NoError(t, err)
 	assert.NotContains(t, status.Failed, "first attempt failed")
 }
@@ -215,7 +215,7 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	canonical, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
 	assert.Equal(t, "/recipes", canonical.Path)
-	assert.Equal(t, p.Hash(), canonical.Query().Get(queryArgHash))
+	assert.Equal(t, p.Hash(""), canonical.Query().Get(queryArgHash))
 	assert.Equal(t, "Save two dinners", canonical.Query().Get(QueryArgHelp))
 
 	followReq := httptest.NewRequest(http.MethodGet, canonical.String(), nil)
@@ -238,9 +238,9 @@ func TestHandleRecipes_ReadySpinnerPollRedirectsToFullPage(t *testing.T) {
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{{Title: "Scrollable supper"}},
-	}, p.Hash()))
+	}, p.Hash("")))
 
-	target := "/recipes?h=" + url.QueryEscape(p.Hash()) + "&help=Pick+dinner"
+	target := "/recipes?h=" + url.QueryEscape(p.Hash("")) + "&help=Pick+dinner"
 	req := httptest.NewRequest(http.MethodGet, target, nil)
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", "spin-page-work")
@@ -275,7 +275,7 @@ func currentHashToLegacy(hash string, seed string) (string, bool) {
 func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
+	hash := p.Hash("")
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
 		t.Fatal("expected to derive legacy recipe hash")
@@ -306,7 +306,7 @@ func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
 func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70000456", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
+	hash := p.Hash("")
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {
 		t.Fatal("expected to derive legacy recipe hash")
@@ -355,7 +355,7 @@ func TestHandleRecipes_UsesSelectionForSavedAndDismissedRenderState(t *testing.T
 	s := newTestServer(t, withTestCache(cacheStore))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved"}
@@ -389,7 +389,7 @@ func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
 
 	p := DefaultParams(&locations.Location{ID: "70004002", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Visible save action"}
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
@@ -453,9 +453,9 @@ func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T
 	if err != nil {
 		t.Fatalf("failed to build expected params: %v", err)
 	}
-	baselineHash := expectedParams.Hash()
+	baselineHash := expectedParams.Hash("")
 	expectedParams.Directive = currentUser.Directive
-	expectedHash := expectedParams.Hash()
+	expectedHash := expectedParams.Hash("")
 	if expectedHash == baselineHash {
 		t.Fatal("expected stored directive to change params hash")
 	}
@@ -489,7 +489,7 @@ func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T
 	if got, want := savedParams.Directive, currentUser.Directive; got != want {
 		t.Fatalf("expected saved directive %q, got %q", want, got)
 	}
-	if got, want := savedParams.Hash(), expectedHash; got != want {
+	if got, want := savedParams.Hash(""), expectedHash; got != want {
 		t.Fatalf("expected saved params hash %q, got %q", want, got)
 	}
 }
@@ -642,7 +642,7 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing
 		t.Fatal("expected guest generation without guest shopping list cookie not to start")
 	default:
 	}
-	if _, err := s.ParamsFromCache(t.Context(), DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60))).Hash()); !errors.Is(err, cache.ErrNotFound) {
+	if _, err := s.ParamsFromCache(t.Context(), DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60))).Hash("")); !errors.Is(err, cache.ErrNotFound) {
 		t.Fatalf("expected params not to be saved, got %v", err)
 	}
 }
@@ -720,7 +720,7 @@ func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 
 	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
 	p.Instructions = "make it vegetarian"
-	hash := p.Hash()
+	hash := p.Hash("")
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Recipes: []ai.Recipe{{Title: "Cached Recipe", Description: "Already made"}},
 	}, hash); err != nil {
@@ -823,7 +823,7 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		&locations.Location{ID: "70002001", Name: "Canonical Test Store"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
-	canonicalHash := p.Hash()
+	canonicalHash := p.Hash("")
 	legacyHash, ok := legacyRecipeHash(canonicalHash)
 	if !ok {
 		t.Fatal("expected to derive legacy recipe hash")
@@ -879,7 +879,7 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 		&locations.Location{ID: "70002002", Name: "Ignored"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
-	canonicalHash := p.Hash()
+	canonicalHash := p.Hash("")
 	legacyHash, ok := legacyRecipeHash(canonicalHash)
 	if !ok {
 		t.Fatal("expected to derive legacy recipe hash")
@@ -916,7 +916,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 		&locations.Location{ID: "70003001", Name: "Wine Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -972,7 +972,7 @@ func TestHandleSingle_UsesUserProfileForSavedState(t *testing.T) {
 		&locations.Location{ID: "70003002", Name: "Single Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	recipe := ai.Recipe{
@@ -1019,7 +1019,7 @@ func TestHandleSingle_GuestSeesSaveButton(t *testing.T) {
 		&locations.Location{ID: "70003003", Name: "Single Store"},
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	)
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	recipe := ai.Recipe{
@@ -1119,7 +1119,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	now := time.Now()
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
-	shoppingListHash := params.Hash()
+	shoppingListHash := params.Hash("")
 	original := ai.Recipe{
 		Title:        "Original Steak Dinner",
 		Description:  "Original.",
@@ -1377,8 +1377,8 @@ func TestKickgeneration_WritesGeneratorErrorsToStatus(t *testing.T) {
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
-	require.EqualError(t, statuses.failure(params.Hash()), "plan exploded")
-	progress, err := statuses.Load(t.Context(), params.Hash())
+	require.EqualError(t, statuses.failure(params.Hash("")), "plan exploded")
+	progress, err := statuses.Load(t.Context(), params.Hash(""))
 	require.NoError(t, err)
 	assert.Equal(t, status.InitialMessage, progress.Message)
 }
@@ -1405,7 +1405,7 @@ func TestKickgeneration_RecordsCompletedShoppingListForUser(t *testing.T) {
 	user, err := storage.GetByID("shopping-list-user")
 	require.NoError(t, err)
 	require.Len(t, user.ShoppingLists, 1)
-	assert.Equal(t, params.Hash(), user.ShoppingLists[0].Hash)
+	assert.Equal(t, params.Hash(""), user.ShoppingLists[0].Hash)
 	assert.Equal(t, "Neighborhood Market", user.ShoppingLists[0].Name)
 }
 
@@ -1421,7 +1421,7 @@ func TestKickgeneration_FailsWhenCompletedShoppingListCannotBeRecordedForUser(t 
 	require.NoError(t, s.kickgeneration(t.Context(), params, "missing-user"))
 	s.Wait()
 
-	err := statuses.failure(params.Hash())
+	err := statuses.failure(params.Hash(""))
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "remember shopping list")
 	assert.ErrorContains(t, err, "user not found")
@@ -1441,7 +1441,7 @@ func TestKickgeneration_WritesShoppingListSaveErrorsToStatus(t *testing.T) {
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 	s.Wait()
 
-	require.ErrorContains(t, statuses.failure(params.Hash()), "shopping list save exploded")
+	require.ErrorContains(t, statuses.failure(params.Hash("")), "shopping list save exploded")
 }
 
 func TestSpinRendersGenerationProgress(t *testing.T) {
@@ -1559,7 +1559,7 @@ func seedQuestionConversation(t *testing.T, s *server, responseID string) string
 	t.Helper()
 
 	p := DefaultParams(&locations.Location{ID: "70003002", Name: "Question Test Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -1754,7 +1754,7 @@ func TestHandleSaveRecipe_SavesRecipeToUserProfile(t *testing.T) {
 		ResponseID:  "resp-123",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -1864,7 +1864,7 @@ func TestHandleRecipes_ReturnAfterSignInDoesNotSaveRecipe(t *testing.T) {
 		ResponseID:  "resp-save-after-login",
 	}
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	hash := params.Hash()
+	hash := params.Hash("")
 	recipeHash := recipe.ComputeHash()
 	require.NoError(t, s.SaveParams(t.Context(), params))
 	saveRecipesForOrigin(t, s, hash, recipe)
@@ -1903,7 +1903,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		ResponseID:  "resp-123",
 	}
 	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	currentHash := currentParams.Hash()
+	currentHash := currentParams.Hash("")
 	if err := s.SaveParams(t.Context(), currentParams); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -1960,7 +1960,7 @@ func TestHandleSaveRecipe_RestoresDismissedRecipeCard(t *testing.T) {
 		DrinkPairing: "Water",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -2013,7 +2013,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 		DrinkPairing: "Water",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -2064,7 +2064,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 		Description: "Recipe to save",
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -2117,7 +2117,7 @@ func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{recipe}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2210,7 +2210,7 @@ func TestHandleDismissRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	}
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{recipe}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
@@ -2284,7 +2284,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 		ResponseID:  "resp-123",
 	}
 	currentParams := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	currentHash := currentParams.Hash()
+	currentHash := currentParams.Hash("")
 	if err := s.SaveParams(t.Context(), currentParams); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2354,7 +2354,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 	require.NoError(t, storage.Update(currentUser))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2420,7 +2420,7 @@ func TestHandleRegenerate_UsesServerSideSelectionAndRedirects(t *testing.T) {
 		t.Fatalf("expected instructions to persist, got %q", updatedParams.Instructions)
 	}
 	require.Equal(t, currentUser.Directive, updatedParams.Directive)
-	require.Equal(t, newHash, updatedParams.Hash())
+	require.Equal(t, newHash, updatedParams.Hash(""))
 	if len(updatedParams.Saved) != 1 || updatedParams.Saved[0].ComputeHash() != savedRecipe.ComputeHash() {
 		t.Fatalf("expected saved recipe selection to persist in params, got %#v", updatedParams.Saved)
 	}
@@ -2441,7 +2441,7 @@ func TestHandleRegenerate_GuestUsesRemainingGenerationAndRedirects(t *testing.T)
 	t.Cleanup(s.Wait)
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2607,7 +2607,7 @@ func TestHandleRecipes_ReturnFromSignInPreservesChefNoteWithoutRegenerating(t *t
 	t.Cleanup(s.Wait)
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	recipe := ai.Recipe{Title: "Guest Recipe", Description: "Guest", ResponseID: "resp-guest"}
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
@@ -2653,7 +2653,7 @@ func TestHandleRegenerate_PassesPriorSavedHashesAndDismissesUnsavedRecipesToGene
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{alreadySaved}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2724,7 +2724,7 @@ func TestHandleRegenerate_AllRecipesSavedDoesNotCarryBaseDismissed(t *testing.T)
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{savedRecipe}
 	p.Dismissed = []ai.Recipe{staleDismissedRecipe}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2779,7 +2779,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	}))
 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2848,7 +2848,7 @@ func TestParamsForAction_PreservesBaseSavedSelectionAndDropsBaseDismissedWhenSel
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{savedRecipe}
 	p.Dismissed = []ai.Recipe{dismissedRecipe}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}
@@ -2884,7 +2884,7 @@ func TestParamsForAction_MergesSelectionAndRemovesOppositeRecipes(t *testing.T) 
 	p := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{savedRecipe}
 	p.Dismissed = []ai.Recipe{dismissedRecipe}
-	originHash := p.Hash()
+	originHash := p.Hash("")
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save params: %v", err)
 	}

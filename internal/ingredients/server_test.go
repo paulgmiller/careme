@@ -15,7 +15,7 @@ import (
 
 func TestServerReturnsIngredientsJSON(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	rio := recipes.IO(cacheStore)
+	rio := recipes.IO(cacheStore, nil)
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000003", Name: "Store 1"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
@@ -25,14 +25,14 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	}
 
 	entries := []ai.InputIngredient{{ProductID: "apple-1", Description: "Honeycrisp apple"}}
-	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(""), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore).Register(mux)
+	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(""), nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -49,7 +49,7 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 
 func TestServerReturnsIngredientsTSV(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	rio := recipes.IO(cacheStore)
+	rio := recipes.IO(cacheStore, nil)
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000004", Name: "Store 2"},
 		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC),
@@ -59,14 +59,14 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	}
 
 	entries := []ai.InputIngredient{{ProductID: "broccoli-1", Description: "Broccoli"}}
-	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(""), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore).Register(mux)
+	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?format=tsv", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash("")+"?format=tsv", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -88,7 +88,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 func TestServerReturnsNotFoundWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	mux := http.NewServeMux()
-	NewHandler(cacheStore).Register(mux)
+	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/missing-hash", nil)
 	rr := httptest.NewRecorder()

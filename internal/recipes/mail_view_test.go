@@ -15,7 +15,7 @@ func TestFormatMail_ValidHTML(t *testing.T) {
 	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
 	recipeHash := list.Recipes[0].ComputeHash()
-	if err := FormatMail(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", &w); err != nil {
+	if err := FormatMail(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", "", &w); err != nil {
 		t.Fatalf("FormatMail() error = %v", err)
 	}
 	html := w.String()

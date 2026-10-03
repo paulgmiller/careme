@@ -51,16 +51,17 @@ type statusWriter interface {
 }
 
 type generatorService struct {
-	aiClient     aiClient
-	critiquer    recipeCritiquer
-	staples      staplesService
-	statusWriter statusWriter
-	saver        recipeSaver
+	aiClient         aiClient
+	critiquer        recipeCritiquer
+	staples          staplesService
+	statusWriter     statusWriter
+	saver            recipeSaver
+	staplesSignature func(string) string
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, staplesSignature func(string) string) (*generatorService, error) {
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -77,11 +78,12 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		return nil, fmt.Errorf("recipe saver is required")
 	}
 	return &generatorService{
-		aiClient:     &tracingAIClient{aiClient},
-		critiquer:    critiquer,
-		staples:      staples,
-		statusWriter: statuses,
-		saver:        recipeSaver,
+		aiClient:         &tracingAIClient{aiClient},
+		critiquer:        critiquer,
+		staples:          staples,
+		statusWriter:     statuses,
+		saver:            recipeSaver,
+		staplesSignature: staplesSignature,
 	}, nil
 }
 
@@ -121,7 +123,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 }
 
 func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	hash := p.Hash()
+	hash := p.Hash(g.staplesSignature(p.Location.ID))
 	start := time.Now()
 
 	if p.isRegeneration() {

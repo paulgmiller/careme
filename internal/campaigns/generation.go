@@ -40,16 +40,17 @@ type recipeStore interface {
 
 // Service runs advertised recipe generation independently of the web server.
 type Service struct {
-	locations      advertisedLocationStore
-	generator      recipeGenerator
-	store          recipeStore
-	statuses       *status.Store
-	images         recipes.ImageStore
-	imageGenerator recipes.ImageGen
-	wait           func()
+	locations        advertisedLocationStore
+	generator        recipeGenerator
+	store            recipeStore
+	statuses         *status.Store
+	images           recipes.ImageStore
+	imageGenerator   recipes.ImageGen
+	wait             func()
+	staplesSignature func(string) string
 }
 
-func NewService(cfg *config.Config) (*Service, error) {
+func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Service, error) {
 	c, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign cache: %w", err)
@@ -58,29 +59,31 @@ func NewService(cfg *config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create campaign image cache: %w", err)
 	}
-	locationStore, err := locations.New(cfg, c, locations.LoadCentroids())
+	locationStore, err := providers.NewLocations(c, locations.LoadCentroids())
 	if err != nil {
 		return nil, fmt.Errorf("create campaign locations: %w", err)
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, c, httpClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, c, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return nil, fmt.Errorf("create campaign staples: %w", err)
+		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, c, grader, providers.StaplesSignature)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))
 	critiquer := critique.NewManager(cfg, c, httpClient)
 	statuses := status.NewStore(c)
-	store := recipes.IO(c)
-	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store)
+	store := recipes.IO(c, providers.StaplesSignature)
+	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, providers.StaplesSignature)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}
 	return &Service{
 		locations: locationStore, generator: generator, store: store,
 		statuses: statuses, images: recipes.NewImageStore(imageCache), imageGenerator: client, wait: critiquer.Wait,
+		staplesSignature: providers.StaplesSignature,
 	}, nil
 }
 
@@ -113,7 +116,7 @@ func (s *Service) generateLocation(ctx context.Context, locationID string) error
 }
 
 func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) error {
-	hash := p.Hash()
+	hash := p.Hash(s.staplesSignature(p.Location.ID))
 	list, err := s.store.FromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
@@ -152,7 +155,7 @@ func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 	if len(list.Recipes) == 0 {
 		return fmt.Errorf("campaign shopping list contains no recipes")
 	}
-	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
+	if err := s.store.SaveShoppingList(ctx, list, p.Hash(s.staplesSignature(p.Location.ID))); err != nil {
 		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 

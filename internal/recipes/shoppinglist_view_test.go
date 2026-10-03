@@ -60,7 +60,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	if !strings.Contains(html, "chef@example.com") {
 		t.Error("shopping list HTML should render signed-in account widget")
 	}
-	if !strings.Contains(html, `href="/admin/mealplan/`+p.Hash()+`"`) {
+	if !strings.Contains(html, `href="/admin/mealplan/`+p.Hash("")+`"`) {
 		t.Error("shopping list HTML should link to admin meal plan")
 	}
 	if !strings.Contains(html, `>Admin</a>`) {
@@ -192,7 +192,7 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 		wineRecommendations: nil,
 		recipeImages:        nil,
 		currentUser:         renderTestUser(true),
-		hash:                p.Hash(),
+		hash:                p.Hash(""),
 		selection:           recipeSelection{},
 		helpMessage:         "Save two dinners before building your shopping list.",
 		pendingInstructions: "",
@@ -535,7 +535,7 @@ func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn
 		wineRecommendations: nil,
 		recipeImages:        map[string]bool{recipeHash: true},
 		currentUser:         renderTestUser(true),
-		hash:                p.Hash(),
+		hash:                p.Hash(""),
 		selection:           recipeSelection{},
 		helpMessage:         "",
 		pendingInstructions: "",
@@ -590,7 +590,7 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 		},
 		recipeImages:        nil,
 		currentUser:         renderTestUser(true),
-		hash:                p.Hash(),
+		hash:                p.Hash(""),
 		selection:           selection,
 		helpMessage:         "",
 		pendingInstructions: "",

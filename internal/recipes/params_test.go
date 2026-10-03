@@ -80,7 +80,7 @@ func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T)
 	if err != nil {
 		t.Fatalf("ParseGenerationForm without help returned error: %v", err)
 	}
-	if got, want := p.Hash(), pWithoutHelp.Hash(); got != want {
+	if got, want := p.Hash(""), pWithoutHelp.Hash(""); got != want {
 		t.Fatalf("help query should not influence params hash: got %q, want %q", got, want)
 	}
 }

@@ -219,7 +219,7 @@ func testMailLocation() *locations.Location {
 func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T) {
 	fc := newFakeMailCache(t)
 	location := testMailLocation()
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
@@ -247,7 +247,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 }
 
 func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		imageGenerator: fakeMailImageGenerator{err: errors.New("image service unavailable")},
 		imageStore:     recipes.NewImageStore(cache.NewInMemoryCache()),
 	}
@@ -268,7 +268,7 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 	fc.shoppingListJSON = `{"recipes":[]}`
 	location := testMailLocation()
 	client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache:     fc,
 		locServer: &fakeMailLocServer{location: location},
 		client:    client,
@@ -297,7 +297,7 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 	location := testMailLocation()
 	generationErr := errors.New("plan exploded")
 	generationStatuses := &fakeGenerationStatusStore{}
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache:              fc,
 		generator:          &capturingMailGenerator{err: generationErr},
 		generationStatuses: generationStatuses,
@@ -319,12 +319,12 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 
 func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	t.Run("not opted in", func(t *testing.T) {
-		m := &mailer{}
+		m := &mailer{staplesSignature: func(string) string { return "" }, }
 		m.sendEmail(context.Background(), utypes.User{ID: "user-1"})
 	})
 
 	t.Run("no favorite store", func(t *testing.T) {
-		m := &mailer{}
+		m := &mailer{staplesSignature: func(string) string { return "" }, }
 		m.sendEmail(context.Background(), utypes.User{
 			ID:        "user-1",
 			MailOptIn: true,
@@ -341,7 +341,7 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	t.Run("wrong shopping day", func(t *testing.T) {
 		fc := newFakeMailCache(t)
 		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
-		m := &mailer{
+		m := &mailer{staplesSignature: func(string) string { return "" }, 
 			cache:     fc,
 			locServer: &fakeMailLocServer{location: location},
 			client:    client,
@@ -364,10 +364,10 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 
 	t.Run("already sent", func(t *testing.T) {
 		fc := newFakeMailCache(t)
-		paramsHash := recipes.DefaultParams(location, today).Hash()
+		paramsHash := recipes.DefaultParams(location, today).Hash("")
 		fc.data[sentMailKey("user-1", paramsHash)] = "already sent"
 		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
-		m := &mailer{
+		m := &mailer{staplesSignature: func(string) string { return "" }, 
 			cache:     fc,
 			locServer: &fakeMailLocServer{location: location},
 			client:    client,
@@ -395,7 +395,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	client := &fakeMailClient{
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
@@ -487,7 +487,7 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	location := testMailLocation()
 	generator := &capturingMailGenerator{}
 	generationStatuses := &fakeGenerationStatusStore{}
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache:              fc,
 		generationStatuses: generationStatuses,
 		locServer: &fakeMailLocServer{
@@ -546,7 +546,7 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 		ShoppingDay:   "not today",
 	}}
 	waited := false
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache:       fc,
 		userStorage: store,
 		locServer: &fakeMailLocServer{
@@ -646,7 +646,7 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 	client := &fakeMailClient{
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
-	m := &mailer{
+	m := &mailer{staplesSignature: func(string) string { return "" }, 
 		cache:              fc,
 		generationStatuses: generationStatuses,
 		generator:          g,

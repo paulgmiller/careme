@@ -25,7 +25,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	hash := p.Hash()
+	hash := p.Hash("")
 	statuses := s.generationStatuses.(*status.Store)
 	require.NoError(t, statuses.Start(t.Context(), hash, status.InitialMessage))
 	poll := func(fragment bool) string {
@@ -163,17 +163,17 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{saved}
 	require.NoError(t, s.SaveParams(t.Context(), p))
-	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(), ""))
-	require.NoError(t, s.generationStatuses.(*status.Store).Plan(t.Context(), p.Hash(), []ai.RecipePlan{{Cuisine: "French", AnchorIngredient: "beans"}}))
+	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(""), ""))
+	require.NoError(t, s.generationStatuses.(*status.Store).Plan(t.Context(), p.Hash(""), []ai.RecipePlan{{Cuisine: "French", AnchorIngredient: "beans"}}))
 	rr := httptest.NewRecorder()
-	s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil))
+	s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(""), nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), saved.Title)
 	assert.Contains(t, rr.Body.String(), `href="/recipe/`+saved.ComputeHash()+`"`)
 	assert.Contains(t, rr.Body.String(), `/recipe/`+saved.ComputeHash()+`/dismiss`)
 	assert.Contains(t, rr.Body.String(), "Recipe added")
-	assert.NotContains(t, rr.Body.String(), `/recipes/`+p.Hash()+`/finalize`)
-	_, err := s.FromCache(t.Context(), p.Hash())
+	assert.NotContains(t, rr.Body.String(), `/recipes/`+p.Hash("")+`/finalize`)
+	_, err := s.FromCache(t.Context(), p.Hash(""))
 	require.ErrorIs(t, err, cache.ErrNotFound)
 }
 
@@ -245,7 +245,7 @@ func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 		wineRecommendations: map[string]*ai.WineSelection{},
 		recipeImages:        map[string]bool{},
 		currentUser:         &utypes.User{ID: "test-user"},
-		hash:                p.Hash(),
+		hash:                p.Hash(""),
 		selection:           selectionFromSaved(p.Saved),
 		helpMessage:         "",
 		pendingInstructions: "",

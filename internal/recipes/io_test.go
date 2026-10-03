@@ -25,7 +25,7 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 		}
 	})
 
-	rio := IO(cache.NewFileCache(tmpDir))
+	rio := IO(cache.NewFileCache(tmpDir), nil)
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 
 	const n = 32
@@ -60,17 +60,17 @@ func TestSaveParams_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	if err := rio.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(tmpDir, paramsCachePrefix, p.Hash())); err != nil {
+	if _, err := os.Stat(filepath.Join(tmpDir, paramsCachePrefix, p.Hash(""))); err != nil {
 		t.Fatalf("expected params at prefixed key: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(tmpDir, p.Hash()+".params")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(tmpDir, p.Hash("")+".params")); !os.IsNotExist(err) {
 		t.Fatalf("did not expect legacy params key to be written; err=%v", err)
 	}
 }
@@ -79,7 +79,7 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
 	p.PreviousMenuPlanResponseID = "resp-menu-123"
@@ -89,7 +89,7 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
-	got, err := rio.ParamsFromCache(t.Context(), p.Hash())
+	got, err := rio.ParamsFromCache(t.Context(), p.Hash(""))
 	if err != nil {
 		t.Fatalf("ParamsFromCache failed: %v", err)
 	}
@@ -101,11 +101,29 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 	}
 }
 
+func TestParamsFromCacheUsesCurrentStaplesSignature(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	location := &locations.Location{ID: "store-123"}
+	params := DefaultParams(location, time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC))
+	rio := IO(cacheStore, func(string) string { return "catalog-v2" })
+	if err := rio.SaveParams(t.Context(), params); err != nil {
+		t.Fatalf("save params: %v", err)
+	}
+
+	loaded, err := rio.ParamsFromCache(t.Context(), params.Hash("catalog-v2"))
+	if err != nil {
+		t.Fatalf("load params: %v", err)
+	}
+	if rio.Hash(loaded) != rio.Hash(params) || rio.LocationHash(loaded) != rio.LocationHash(params) {
+		t.Fatal("restored params changed recipe or ingredient cache keys")
+	}
+}
+
 func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
@@ -151,7 +169,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	hash := "ingredient-hash"
 	ingredients := []ai.InputIngredient{
@@ -186,7 +204,7 @@ func TestSaveIngredients_PreservesGrade(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	hash := "ingredient-input-hash"
 	ingredients := []ai.InputIngredient{
@@ -219,7 +237,7 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	hash := "recipe-hash"
 	if err := cacheStore.Put(t.Context(), recipeCachePrefix+hash, `{"title":"Roast Chicken"}`, cache.Unconditional()); err != nil {

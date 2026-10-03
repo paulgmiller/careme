@@ -47,13 +47,13 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			c := cache.NewInMemoryCache()
-			rio := IO(c)
+			rio := IO(c, nil)
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			if replacement {
 				p.PreviousMenuPlanResponseID = "previous-menu"
 			}
 			progress := notifyingProgress{Store: status.NewStore(c), ready: make(chan int, 4)}
-			require.NoError(t, progress.Start(t.Context(), p.Hash(), ""))
+			require.NoError(t, progress.Start(t.Context(), p.Hash(""), ""))
 			releaseReview := make(chan struct{})
 			reviewStarted := make(chan struct{})
 			defer close(releaseReview)
@@ -85,10 +85,10 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 				t.Fatal("review did not start")
 			}
 			require.Eventually(t, func() bool {
-				got, err := progress.Load(t.Context(), p.Hash())
+				got, err := progress.Load(t.Context(), p.Hash(""))
 				return err == nil && len(got.Slots) == 2 && got.Slots[0].RecipeHash != "" && got.Slots[1].RecipeHash != ""
 			}, 5*time.Second, time.Millisecond)
-			got, err := progress.Load(t.Context(), p.Hash())
+			got, err := progress.Load(t.Context(), p.Hash(""))
 			require.NoError(t, err)
 			require.Len(t, got.Slots, 2)
 			slow, err := rio.SingleFromCache(t.Context(), got.Slots[0].RecipeHash)
@@ -103,7 +103,7 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			t.Cleanup(func() {
 				require.NoError(t, <-done)
 				assert.Len(t, progress.ready, 2, "unchanged recipes should each be published once")
-				final, err := progress.Load(t.Context(), p.Hash())
+				final, err := progress.Load(t.Context(), p.Hash(""))
 				require.NoError(t, err)
 				assert.True(t, final.Slots[0].Reviewed)
 				assert.True(t, final.Slots[1].Reviewed)

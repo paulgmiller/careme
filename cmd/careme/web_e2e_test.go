@@ -19,6 +19,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
@@ -239,9 +240,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore, providerregistry.NewFactory(cfg).StaplesSignature), critique.NewMock(cacheStore), status.NewStore(cacheStore), providerregistry.NewFactory(cfg).StaplesSignature)
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cacheStore, centroids)
+	locationStorage, err := providerregistry.NewFactory(cfg).NewLocations(cacheStore, centroids)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -257,7 +258,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, providerregistry.NewFactory(cfg).StaplesSignature).Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
