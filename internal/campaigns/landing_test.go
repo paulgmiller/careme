@@ -72,3 +72,26 @@ func TestLandingRoutes(t *testing.T) {
 		})
 	}
 }
+
+func TestCampaignIndex(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	mux := http.NewServeMux()
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
+
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c", nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	assert.Contains(t, response.Body.String(), "<title>Dinner ideas | Careme</title>")
+	for slug, campaign := range dinnerCampaigns {
+		assert.Contains(t, response.Body.String(), `href="/c/`+slug+`"`)
+		assert.Contains(t, response.Body.String(), campaign.Title)
+		assert.Contains(t, response.Body.String(), campaign.Blurb)
+	}
+	for slug := range AdvertisedRecipeLocations() {
+		assert.NotContains(t, response.Body.String(), `href="/c/`+slug+`"`)
+	}
+
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/c", nil))
+	assert.Equal(t, http.StatusMethodNotAllowed, response.Code)
+}

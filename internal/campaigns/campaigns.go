@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"careme/internal/auth"
 	"careme/internal/recipes"
@@ -12,6 +13,7 @@ import (
 
 // Register adds campaign landing pages and store redirect routes to mux.
 func Register(mux routing.Registrar, users landingUserLookup, authClient auth.AuthClient) {
+	mux.Handle("GET /c", indexHandler{})
 	for name, campaign := range dinnerCampaigns {
 		mux.Handle("GET /c/"+name, landingHandler{
 			campaign:   campaign,
@@ -25,10 +27,11 @@ func Register(mux routing.Registrar, users landingUserLookup, authClient auth.Au
 }
 
 func SitemapUrls(_ context.Context) []string {
-	var urls []string
+	urls := []string{"/c"}
 	for key := range dinnerCampaigns {
 		urls = append(urls, "/c/"+key)
 	}
+	sort.Strings(urls)
 	return urls
 }
 
