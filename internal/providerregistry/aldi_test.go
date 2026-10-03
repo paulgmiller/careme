@@ -68,7 +68,4 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected provider location")
 	}
-	if got.StaplesSignature != (Factory{}).StaplesSignature(got.ID) {
-		t.Fatal("location is missing its provider signature")
-	}
 }

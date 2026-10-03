@@ -174,7 +174,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers pr
 	if err != nil {
 		return planService{}, fmt.Errorf("create staples backends: %w", err)
 	}
-	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader, providers.StaplesSignature)
 	return planService{
 		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
 		staples:  staples,

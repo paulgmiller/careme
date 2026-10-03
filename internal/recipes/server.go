@@ -72,7 +72,7 @@ type critiqueStore interface {
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
 func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, staplesSignature func(string) string) *server {
 	return &server{
-		recipeio:           IO(c).WithStaplesSignature(staplesSignature),
+		recipeio:           IO(c, staplesSignature),
 		images:             NewImageStore(imageCache),
 		imagegen:           imagegen,
 		generationStatuses: status.NewStore(c),

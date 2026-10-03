@@ -68,7 +68,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 		return nil, err
 	}
 
-	rio := recipes.IO(s.cache).WithStaplesSignature(s.staplesSignature)
+	rio := recipes.IO(s.cache, s.staplesSignature)
 	ingredients, err := rio.IngredientsFromCache(ctx, locationHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -81,7 +81,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 }
 
 func (s *server) loadLocationHash(ctx context.Context, hash string) (string, error) {
-	rio := recipes.IO(s.cache).WithStaplesSignature(s.staplesSignature)
+	rio := recipes.IO(s.cache, s.staplesSignature)
 	params, err := rio.ParamsFromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -90,13 +90,13 @@ func (s *server) loadLocationHash(ctx context.Context, hash string) (string, err
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
 		return "", err
 	}
-	return params.LocationHash(), nil
+	return params.LocationHash(s.staplesSignature(params.Location.ID)), nil
 }
 
 func (s *server) writeIngredientLoadError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, cache.ErrNotFound):
-		if _, paramsErr := recipes.IO(s.cache).ParamsFromCache(r.Context(), r.PathValue("hash")); errors.Is(paramsErr, cache.ErrNotFound) {
+		if _, paramsErr := recipes.IO(s.cache, s.staplesSignature).ParamsFromCache(r.Context(), r.PathValue("hash")); errors.Is(paramsErr, cache.ErrNotFound) {
 			http.Error(w, "parameters not found in cache", http.StatusNotFound)
 			return
 		}

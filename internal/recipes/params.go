@@ -34,9 +34,8 @@ type generatorParams struct {
 	// UserID         string      `json:"user_id,omitempty"`
 	// ideally this would be a section and we'd fetch titles and other things as needed
 	// as is this records a selectio at the time of a regeneration
-	Saved            []ai.Recipe `json:"saved_recipes,omitempty"`
-	Dismissed        []ai.Recipe `json:"dismissed_recipes,omitempty"`
-	StaplesSignature string      `json:"-"`
+	Saved     []ai.Recipe `json:"saved_recipes,omitempty"`
+	Dismissed []ai.Recipe `json:"dismissed_recipes,omitempty"`
 
 	// regeneration-only context from the origin params; not hashed
 	PriorSavedHashes               []string `json:"-"`
@@ -59,9 +58,8 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
 	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
-		Date:             date, // shave time
-		Location:         l,
-		StaplesSignature: l.StaplesSignature,
+		Date:     date, // shave time
+		Location: l,
 	}
 }
 
@@ -71,11 +69,11 @@ func (g *generatorParams) String() string {
 
 // Hash this is how we find shoppinglists and params
 // intentionally not including ResponseID to preserve old hashes
-func (g *generatorParams) Hash() string {
+func (g *generatorParams) Hash(staplesSignature string) string {
 	fnv := fnv.New64a()
 	lo.Must(io.WriteString(fnv, g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, g.StaplesSignature))
+	lo.Must(io.WriteString(fnv, staplesSignature))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -88,8 +86,8 @@ func (g *generatorParams) Hash() string {
 }
 
 // so far just excludes instructions. Can exclude people and other things
-func (g *generatorParams) LocationHash() string {
-	return cachekey.ForStore(g.Location.ID, g.Date, g.StaplesSignature)
+func (g *generatorParams) LocationHash(staplesSignature string) string {
+	return cachekey.ForStore(g.Location.ID, g.Date, staplesSignature)
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {

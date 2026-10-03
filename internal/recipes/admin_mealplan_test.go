@@ -19,10 +19,10 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 	params := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	params.Instructions = "make it vegetarian"
-	hash := params.Hash()
+	hash := params.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), params))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Korean", "tofu", hash), hash))
 
@@ -42,16 +42,16 @@ func TestAdminMealPlanPageWalksBackThroughSavedRecipeOrigins(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
-	ancestorHash := ancestorParams.Hash()
+	ancestorHash := ancestorParams.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), ancestorParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Thai", "chicken", ancestorHash), ancestorHash))
 
 	currentParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	currentParams.Saved = []ai.Recipe{testAdminMealPlanRecipe("Saved Thai Curry", ancestorHash)}
-	currentHash := currentParams.Hash()
+	currentHash := currentParams.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -70,10 +70,10 @@ func TestAdminMealPlanPageDeduplicatesSavedRecipeOrigins(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
-	ancestorHash := ancestorParams.Hash()
+	ancestorHash := ancestorParams.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), ancestorParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Thai", "chicken", ancestorHash), ancestorHash))
 
@@ -82,7 +82,7 @@ func TestAdminMealPlanPageDeduplicatesSavedRecipeOrigins(t *testing.T) {
 		testAdminMealPlanRecipe("Saved Thai Curry", ancestorHash),
 		testAdminMealPlanRecipe("Saved Thai Soup", ancestorHash),
 	}
-	currentHash := currentParams.Hash()
+	currentHash := currentParams.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -97,11 +97,11 @@ func TestAdminMealPlanPageWarnsForMissingAncestor(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore)
+	rio := IO(cacheStore, nil)
 
 	currentParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	currentParams.Saved = []ai.Recipe{testAdminMealPlanRecipe("Missing Origin Recipe", "missing-origin")}
-	currentHash := currentParams.Hash()
+	currentHash := currentParams.Hash("")
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -115,7 +115,7 @@ func TestAdminMealPlanPageWarnsForMissingAncestor(t *testing.T) {
 func TestAdminMealPlanPageMissingStartHashReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
-	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir())), http.MethodGet, "/mealplan/missing")
+	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), nil), http.MethodGet, "/mealplan/missing")
 
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "meal plan not found")
@@ -124,7 +124,7 @@ func TestAdminMealPlanPageMissingStartHashReturnsNotFound(t *testing.T) {
 func TestAdminMealPlanPageRejectsNonGetHead(t *testing.T) {
 	t.Parallel()
 
-	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir())), http.MethodPost, "/mealplan/abc")
+	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), nil), http.MethodPost, "/mealplan/abc")
 
 	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 }

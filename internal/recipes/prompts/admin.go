@@ -18,7 +18,7 @@ func AdminMenuPromptJSON(c cache.Cache) http.Handler {
 	return adminPromptJSON(c, "menu", func(r *http.Request) (string, error) {
 		hash := r.PathValue("hash")
 
-		list, err := recipes.IO(c).FromCache(r.Context(), hash)
+		list, err := recipes.IO(c, nil).FromCache(r.Context(), hash)
 		if err != nil {
 			return "", fmt.Errorf("load menu: %w", err)
 		}
@@ -33,7 +33,7 @@ func AdminRecipePromptJSON(c cache.Cache) http.Handler {
 	return adminPromptJSON(c, "recipe", func(r *http.Request) (string, error) {
 		hash := r.PathValue("hash")
 
-		recipe, err := recipes.IO(c).SingleFromCache(r.Context(), hash)
+		recipe, err := recipes.IO(c, nil).SingleFromCache(r.Context(), hash)
 		if err != nil {
 			return "", fmt.Errorf("load recipe: %w", err)
 		}

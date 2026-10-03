@@ -16,8 +16,6 @@ type Location struct {
 	Lon      *float64  `json:"lon,omitempty"`
 	CachedAt time.Time `json:"cached_at"`
 	Chain    string    `json:"chain,omitempty"`
-	// StaplesSignature is attached by the location store and excluded from location JSON.
-	StaplesSignature string `json:"-"`
 }
 
 // Coordinate Helper will panic nil coordiantes so backfill first.

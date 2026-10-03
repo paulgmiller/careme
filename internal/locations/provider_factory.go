@@ -9,4 +9,5 @@ import (
 type ProviderFactory interface {
 	NewLocations(cache.ListCache, CentroidByZip) (Store, error)
 	NewStaplesBackends() ([]StaplesBackend, error)
+	StaplesSignature(string) string
 }

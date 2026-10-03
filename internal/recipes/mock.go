@@ -14,17 +14,18 @@ import (
 )
 
 type mock struct {
-	saver     recipeSaver
-	critiquer mockRecipeCritiquer
-	statuses  statusWriter
+	saver            recipeSaver
+	critiquer        mockRecipeCritiquer
+	statuses         statusWriter
+	staplesSignature func(string) string
 }
 
 type mockRecipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter) mock {
-	return mock{saver: saver, critiquer: critiquer, statuses: statuses}
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, staplesSignature func(string) string) mock {
+	return mock{saver: saver, critiquer: critiquer, statuses: statuses, staplesSignature: staplesSignature}
 }
 
 func NewMockImageGen() mock {
@@ -400,7 +401,7 @@ var mockRecipes = []ai.Recipe{
 }
 
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
-	originHash := p.Hash()
+	originHash := p.Hash(m.staplesSignature(p.Location.ID))
 	// Keep the planning stage observable in local mock mode.
 	time.Sleep(100 * time.Millisecond)
 

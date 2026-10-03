@@ -17,9 +17,10 @@ import (
 )
 
 type Server struct {
-	cache        cache.ListCache
-	publicOrigin string
-	locations    locationLookup
+	cache            cache.ListCache
+	publicOrigin     string
+	locations        locationLookup
+	staplesSignature func(string) string
 }
 
 type locationLookup interface {
@@ -36,11 +37,12 @@ Sitemap: %s/sitemap.xml
 `
 )
 
-func New(c cache.ListCache, publicOrigin string, locations locationLookup) *Server {
+func New(c cache.ListCache, publicOrigin string, locations locationLookup, staplesSignature func(string) string) *Server {
 	return &Server{
-		cache:        c,
-		publicOrigin: publicOrigin,
-		locations:    locations,
+		cache:            c,
+		publicOrigin:     publicOrigin,
+		locations:        locations,
+		staplesSignature: staplesSignature,
 	}
 }
 
@@ -122,11 +124,11 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 
 		p := recipes.DefaultParams(loc, date)
 
-		io := recipes.IO(s.cache)
+		io := recipes.IO(s.cache, s.staplesSignature)
 		// could be slow if iwe have lots of campaigns
 		exists, err := io.ParamsExist(ctx, p)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", p.Hash())
+			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", io.Hash(p))
 			continue
 		}
 		if !exists {
@@ -136,7 +138,7 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 
 		// this will be out of date quickly. Do we tell the search engine that and let user know
 		// make a different la
-		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
+		urls = append(urls, s.publicOrigin+"/recipes?h="+io.Hash(p))
 	}
 	return urls
 }

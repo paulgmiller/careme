@@ -29,7 +29,7 @@ func (f Factory) NewLocations(c cache.ListCache, centroids locations.CentroidByZ
 		return nil, fmt.Errorf("cache is required")
 	}
 	if cfg.Mocks.Enable {
-		return locations.NewMock(f.StaplesSignature), nil
+		return locations.NewMock(), nil
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	factories := []locations.LocationBackendFactory{
@@ -63,5 +63,5 @@ func (f Factory) NewLocations(c cache.ListCache, centroids locations.CentroidByZ
 			return farmersmarket.NewContainerLocationBackend()
 		},
 	}
-	return locations.New(c, centroids, factories, f.StaplesSignature)
+	return locations.New(c, centroids, factories)
 }

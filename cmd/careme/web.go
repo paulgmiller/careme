@@ -89,7 +89,7 @@ func runServer(cfg *config.Config, addr string) error {
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
+		generator = recipes.NewMockGenerator(recipes.IO(cache, providers.StaplesSignature), mc, status.NewStore(cache), providers.StaplesSignature)
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 
@@ -105,10 +105,10 @@ func runServer(cfg *config.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
-		staples := recipes.NewCachedStaplesService(backends, cache, grader)
+		staples := recipes.NewCachedStaplesService(backends, cache, grader, providers.StaplesSignature)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache, providers.StaplesSignature), providers.StaplesSignature)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -119,7 +119,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache, providers.StaplesSignature), providers.StaplesSignature))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -133,7 +133,7 @@ func runServer(cfg *config.Config, addr string) error {
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
-	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage, providers.StaplesSignature)
 	sitemapHandler.Register(infraRoutes)
 
 	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, providers.StaplesSignature)
@@ -146,7 +146,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
-	recipeIO := recipes.IO(cache).WithStaplesSignature(providers.StaplesSignature)
+	recipeIO := recipes.IO(cache, providers.StaplesSignature)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
 	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))

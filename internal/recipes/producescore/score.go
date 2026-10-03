@@ -22,11 +22,12 @@ type ingredientCache interface {
 }
 
 type CachedProduceScorer struct {
-	cache ingredientCache
+	cache     ingredientCache
+	signature func(string) string
 }
 
-func NewCachedProduceScorer(c ingredientCache) *CachedProduceScorer {
-	return &CachedProduceScorer{cache: c}
+func NewCachedProduceScorer(c ingredientCache, signature func(string) string) *CachedProduceScorer {
+	return &CachedProduceScorer{cache: c, signature: signature}
 }
 
 func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtypes.Location) *int {
@@ -37,7 +38,7 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtype
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, loc.StaplesSignature))
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, s.signature(loc.ID)))
 		if err == nil {
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score

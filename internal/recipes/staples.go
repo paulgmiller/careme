@@ -117,9 +117,10 @@ type staplesFetcher interface {
 }
 
 type cachedStaplesService struct {
-	provider staplesProvider
-	cache    ingredientio
-	grader   grader
+	provider         staplesProvider
+	cache            ingredientio
+	grader           grader
+	staplesSignature func(string) string
 }
 
 type staplesProvider interface {
@@ -148,18 +149,19 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 	return deduped, nil
 }
 
-func NewCachedStaplesService(backends []locations.StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
+func NewCachedStaplesService(backends []locations.StaplesBackend, c cache.Cache, grader grader, staplesSignature func(string) string) *cachedStaplesService {
 	provider := NewStaplesProvider(backends)
-	rio := IO(c)
+	rio := IO(c, nil)
 	return &cachedStaplesService{
-		provider: provider,
-		cache:    rio,
-		grader:   grader,
+		provider:         provider,
+		cache:            rio,
+		grader:           grader,
+		staplesSignature: staplesSignature,
 	}
 }
 
 func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
-	lochash := p.LocationHash()
+	lochash := p.LocationHash(s.staplesSignature(p.Location.ID))
 	locationID := p.Location.ID
 
 	cachedIngredients, err := s.cache.IngredientsFromCache(ctx, lochash)
@@ -197,7 +199,7 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 
 // FetchPantry loads the independently cached pantry catalog for a store.
 func (s *cachedStaplesService) FetchPantry(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
-	key := "pantry/query-categories-v1/" + p.LocationHash()
+	key := "pantry/query-categories-v1/" + p.LocationHash(s.staplesSignature(p.Location.ID))
 	if cached, err := s.cache.IngredientsFromCache(ctx, key); err == nil {
 		return s.grader.GradeIngredients(ctx, cached)
 	} else if !errors.Is(err, cache.ErrNotFound) {
