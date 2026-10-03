@@ -24,7 +24,7 @@ import (
 )
 
 // NewLocations assembles provider backends and delegates storage to locations.
-func NewLocations(cfg *config.Config, c cache.ListCache, centroids locations.CentroidByZip) (locations.Store, error) {
+func (Factory) NewLocations(cfg *config.Config, c cache.ListCache, centroids locations.CentroidByZip) (locations.Store, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}

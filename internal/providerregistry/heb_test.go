@@ -52,7 +52,7 @@ func TestNewAddsHEBBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := NewLocations(&config.Config{
+	storage, err := Factory{}.NewLocations(&config.Config{
 		HEB: config.HEBConfig{Enable: true},
 	}, cacheStore, locations.LoadCentroids())
 	if err != nil {

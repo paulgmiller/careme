@@ -54,7 +54,7 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := NewLocations(&config.Config{
+	storage, err := Factory{}.NewLocations(&config.Config{
 		Aldi: config.AldiConfig{Enable: true},
 	}, cacheStore, locations.LoadCentroids())
 	if err != nil {

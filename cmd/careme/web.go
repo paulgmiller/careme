@@ -77,7 +77,7 @@ func runServer(cfg *config.Config, addr string) error {
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	centroids := locations.LoadCentroids()
-	locationStorage, err := providerregistry.NewLocations(cfg, cache, centroids)
+	locationStorage, err := providerregistry.Factory{}.NewLocations(cfg, cache, centroids)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -100,7 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		backends, err := providerregistry.NewStaplesBackends(cfg)
+		backends, err := providerregistry.Factory{}.NewStaplesBackends(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create staples backends: %w", err)
 		}

@@ -46,7 +46,7 @@ func main() {
 	if ingredient != "" && (!cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "") {
 		log.Fatal("nearest ingredient lookup requires ingredient grading enabled and an OpenAI API key")
 	}
-	backends, err := providerregistry.NewStaplesBackends(cfg)
+	backends, err := providerregistry.Factory{}.NewStaplesBackends(cfg)
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %s", err)
 	}

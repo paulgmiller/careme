@@ -22,7 +22,7 @@ import (
 )
 
 // NewStaplesBackends assembles grocery integrations in routing order.
-func NewStaplesBackends(cfg *config.Config) ([]locations.StaplesBackend, error) {
+func (Factory) NewStaplesBackends(cfg *config.Config) ([]locations.StaplesBackend, error) {
 	// Should this be per request so proxies can vary per user?
 	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {

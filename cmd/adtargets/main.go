@@ -101,7 +101,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	locationStorage, err := providerregistry.NewLocations(cfg, cacheStore, locations.LoadCentroids())
+	locationStorage, err := providerregistry.Factory{}.NewLocations(cfg, cacheStore, locations.LoadCentroids())
 	if err != nil {
 		return err
 	}

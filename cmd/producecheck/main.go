@@ -42,7 +42,7 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	backends, err := providerregistry.NewStaplesBackends(cfg)
+	backends, err := providerregistry.Factory{}.NewStaplesBackends(cfg)
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %v", err)
 	}

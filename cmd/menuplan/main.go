@@ -111,7 +111,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	centroids := locations.LoadCentroids()
-	locationStore, err := providerregistry.NewLocations(cfg, cacheStore, centroids)
+	locationStore, err := providerregistry.Factory{}.NewLocations(cfg, cacheStore, centroids)
 	if err != nil {
 		return fmt.Errorf("create location store: %w", err)
 	}
@@ -169,7 +169,7 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache) (planService
 
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, httpClient)
-	backends, err := providerregistry.NewStaplesBackends(cfg)
+	backends, err := providerregistry.Factory{}.NewStaplesBackends(cfg)
 	if err != nil {
 		return planService{}, fmt.Errorf("create staples backends: %w", err)
 	}

@@ -242,7 +242,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	userStorage := users.NewStorage(cacheStore)
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
-	locationStorage, err := providerregistry.NewLocations(cfg, cacheStore, centroids)
+	locationStorage, err := providerregistry.Factory{}.NewLocations(cfg, cacheStore, centroids)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
