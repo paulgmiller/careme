@@ -55,7 +55,7 @@ func main() {
 	}
 
 	if campaignJob {
-		job, err := campaigns.NewService(cfg, providerregistry.Factory{})
+		job, err := campaigns.NewService(cfg, providerregistry.NewFactory(cfg))
 		if err == nil {
 			err = job.RunOnce(ctx)
 		}
@@ -68,7 +68,7 @@ func main() {
 	}
 
 	if mailer {
-		mailer, err := mail.NewMailer(cfg, providerregistry.Factory{})
+		mailer, err := mail.NewMailer(cfg, providerregistry.NewFactory(cfg))
 		if err != nil {
 			log.Fatalf("failed to create mailer: %v", err)
 		}

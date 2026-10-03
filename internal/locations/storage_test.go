@@ -551,3 +551,26 @@ func TestLocationBackendCachePolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestLocationStorageAddsStaplesSignature(t *testing.T) {
+	coordinates := coordinatesForZIP(t, "00601")
+	backend := newFakeLocationClient()
+	backend.setDetailResponse("fresh", Location{ID: "fresh", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+	backend.setListResponse("00601", []Location{{ID: "search", Lat: &coordinates.Lat, Lon: &coordinates.Lon}})
+	cacheStore := cachepkg.NewInMemoryCache()
+	mustPutJSONInCache(t, cacheStore, locationCachePrefix+"cached", Location{ID: "cached", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+	store, err := New(cacheStore, LoadCentroids(), []LocationBackendFactory{
+		func(context.Context) (LocationBackend, error) { return backend, nil },
+	}, func(id string) string { return "signature-for-" + id })
+	require.NoError(t, err)
+
+	for _, id := range []string{"fresh", "cached"} {
+		loc, err := store.GetLocationByID(t.Context(), id)
+		require.NoError(t, err)
+		assert.Equal(t, "signature-for-"+id, loc.StaplesSignature)
+	}
+	nearby, err := store.GetLocationsByCoordinates(t.Context(), coordinates)
+	require.NoError(t, err)
+	require.Len(t, nearby, 1)
+	assert.Equal(t, "signature-for-search", nearby[0].StaplesSignature)
+}

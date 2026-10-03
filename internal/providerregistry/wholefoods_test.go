@@ -51,9 +51,9 @@ func TestNewAddsWholeFoodsBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := Factory{}.NewLocations(&config.Config{
+	storage, err := NewFactory(&config.Config{
 		WholeFoods: config.WholeFoodsConfig{Enable: true},
-	}, cacheStore, locations.LoadCentroids())
+	}).NewLocations(cacheStore, locations.LoadCentroids())
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}

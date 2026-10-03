@@ -24,6 +24,7 @@ const (
 type recipeio struct {
 	Cache               cache.Cache
 	feedback.FeedbackIO // should this be pulled out?
+	staplesSignature    func(string) string
 }
 
 func IO(c cache.Cache) recipeio {
@@ -31,6 +32,12 @@ func IO(c cache.Cache) recipeio {
 		Cache:      c,
 		FeedbackIO: feedback.NewIO(c),
 	}
+}
+
+// WithStaplesSignature restores provider signatures on cached params before hashing.
+func (rio recipeio) WithStaplesSignature(resolve func(string) string) recipeio {
+	rio.staplesSignature = resolve
+	return rio
 }
 
 func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
@@ -91,6 +98,12 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 	var params generatorParams
 	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
 		return nil, fmt.Errorf("failed to decode params: %w", err)
+	}
+	if params.StaplesSignature == "" && params.Location != nil && rio.staplesSignature != nil {
+		params.StaplesSignature = rio.staplesSignature(params.Location.ID)
+	}
+	if params.Location != nil {
+		params.Location.StaplesSignature = params.StaplesSignature
 	}
 	return &params, nil
 }

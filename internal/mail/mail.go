@@ -112,7 +112,7 @@ func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	backends, err := providers.NewStaplesBackends(cfg)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
@@ -128,7 +128,7 @@ func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := providers.NewLocations(cfg, cacheStore, centroids)
+	locationserver, err := providers.NewLocations(cacheStore, centroids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}

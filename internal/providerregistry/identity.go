@@ -3,8 +3,6 @@ package providerregistry
 import (
 	"testing"
 
-	"careme/internal/locations"
-
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/providers/albertsons"
@@ -24,9 +22,7 @@ type staplesIdentity interface {
 
 // StaplesSignature returns the provider version used for a store's recipe and
 // ingredient cache keys.
-func init() { locations.RegisterStaplesSignature(StaplesSignature) }
-
-func StaplesSignature(locationID string) string {
+func (Factory) StaplesSignature(locationID string) string {
 	for _, provider := range staplesIdentities() {
 		if provider.IsID(locationID) {
 			return provider.Signature()

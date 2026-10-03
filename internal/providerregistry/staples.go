@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"careme/internal/brightdata"
-	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/locations"
@@ -22,7 +21,8 @@ import (
 )
 
 // NewStaplesBackends assembles grocery integrations in routing order.
-func (Factory) NewStaplesBackends(cfg *config.Config) ([]locations.StaplesBackend, error) {
+func (f Factory) NewStaplesBackends() ([]locations.StaplesBackend, error) {
+	cfg := f.config
 	// Should this be per request so proxies can vary per user?
 	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {

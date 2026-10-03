@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("initialize templates: %v", err)
 	}
 
-	sender, err := caremail.NewMailer(cfg, providerregistry.Factory{})
+	sender, err := caremail.NewMailer(cfg, providerregistry.NewFactory(cfg))
 	if err != nil {
 		log.Fatal(err)
 	}

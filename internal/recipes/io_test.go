@@ -101,6 +101,31 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 	}
 }
 
+func TestParamsFromCacheRestoresStaplesSignature(t *testing.T) {
+	cacheStore := cache.NewInMemoryCache()
+	location := &locations.Location{ID: "store-123", StaplesSignature: "catalog-v2"}
+	params := DefaultParams(location, time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC))
+	if err := IO(cacheStore).SaveParams(t.Context(), params); err != nil {
+		t.Fatalf("save params: %v", err)
+	}
+
+	loaded, err := IO(cacheStore).WithStaplesSignature(func(id string) string {
+		if id != location.ID {
+			t.Fatalf("unexpected location ID %q", id)
+		}
+		return "catalog-v2"
+	}).ParamsFromCache(t.Context(), params.Hash())
+	if err != nil {
+		t.Fatalf("load params: %v", err)
+	}
+	if loaded.Hash() != params.Hash() || loaded.LocationHash() != params.LocationHash() {
+		t.Fatal("restored params changed recipe or ingredient cache keys")
+	}
+	if loaded.Location.StaplesSignature != location.StaplesSignature {
+		t.Fatal("restored location is missing its staples signature")
+	}
+}
+
 func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()

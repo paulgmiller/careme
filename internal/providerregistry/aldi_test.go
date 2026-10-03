@@ -54,9 +54,9 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := Factory{}.NewLocations(&config.Config{
+	storage, err := NewFactory(&config.Config{
 		Aldi: config.AldiConfig{Enable: true},
-	}, cacheStore, locations.LoadCentroids())
+	}).NewLocations(cacheStore, locations.LoadCentroids())
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
@@ -67,5 +67,8 @@ func TestNewAddsALDIBackendWhenEnabled(t *testing.T) {
 	}
 	if got == nil {
 		t.Fatal("expected provider location")
+	}
+	if got.StaplesSignature != (Factory{}).StaplesSignature(got.ID) {
+		t.Fatal("location is missing its provider signature")
 	}
 }

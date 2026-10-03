@@ -24,6 +24,7 @@ type locationStorage struct {
 	clients      []locationBackend
 	zipCentroids centroidByZip
 	cache        cache.ListCache
+	signature    func(string) string
 }
 
 type locationGetter interface {
@@ -69,7 +70,7 @@ const (
 	storeRequestPrefix  = "location-store-requests/"
 )
 
-func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackendFactory) (Store, error) {
+func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackendFactory, signature func(string) string) (Store, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
@@ -82,6 +83,7 @@ func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackend
 		clients:      backends,
 		zipCentroids: centroids,
 		cache:        c,
+		signature:    signature,
 	}, nil
 }
 
@@ -128,7 +130,12 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		if cachable {
 			if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
 				// could relook up on error here.
-				return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
+				loc, err := backfillLocationCoordinates(cachedLoc, l.zipCentroids)
+				if err != nil {
+					return nil, err
+				}
+				l.setStaplesSignature(loc)
+				return loc, nil
 			}
 		}
 
@@ -136,6 +143,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		if err != nil {
 			return nil, err
 		}
+		l.setStaplesSignature(loc)
 		loc, err = backfillLocationCoordinates(*loc, l.zipCentroids)
 		if err != nil {
 			return nil, err
@@ -178,6 +186,7 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 				slog.WarnContext(ctx, "location has no coordinates; skipping result", "location_id", loc.ID, "zip", loc.ZipCode, "error", err)
 				continue
 			}
+			l.setStaplesSignature(backfilled)
 			hydrated = append(hydrated, backfilled)
 		}
 		if cachable(backend) {
@@ -215,6 +224,12 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 	// as long a we got some results try and show them
 	// could also desploy to user the chains we failed to query
 	return filtered, nil
+}
+
+func (l *locationStorage) setStaplesSignature(loc *Location) {
+	if l.signature != nil {
+		loc.StaplesSignature = l.signature(loc.ID)
+	}
 }
 
 func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {

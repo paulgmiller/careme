@@ -16,11 +16,12 @@ import (
 )
 
 type server struct {
-	cache cache.Cache
+	cache            cache.Cache
+	staplesSignature func(string) string
 }
 
-func NewHandler(c cache.Cache) *server {
-	return &server{cache: c}
+func NewHandler(c cache.Cache, staplesSignature func(string) string) *server {
+	return &server{cache: c, staplesSignature: staplesSignature}
 }
 
 func (s *server) Register(mux routing.Registrar) {
@@ -67,7 +68,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 		return nil, err
 	}
 
-	rio := recipes.IO(s.cache)
+	rio := recipes.IO(s.cache).WithStaplesSignature(s.staplesSignature)
 	ingredients, err := rio.IngredientsFromCache(ctx, locationHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -80,7 +81,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 }
 
 func (s *server) loadLocationHash(ctx context.Context, hash string) (string, error) {
-	rio := recipes.IO(s.cache)
+	rio := recipes.IO(s.cache).WithStaplesSignature(s.staplesSignature)
 	params, err := rio.ParamsFromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {

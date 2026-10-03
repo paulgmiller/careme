@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/locations"
@@ -24,12 +23,13 @@ import (
 )
 
 // NewLocations assembles provider backends and delegates storage to locations.
-func (Factory) NewLocations(cfg *config.Config, c cache.ListCache, centroids locations.CentroidByZip) (locations.Store, error) {
+func (f Factory) NewLocations(c cache.ListCache, centroids locations.CentroidByZip) (locations.Store, error) {
+	cfg := f.config
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
 	if cfg.Mocks.Enable {
-		return locations.NewMock(), nil
+		return locations.NewMock(f.StaplesSignature), nil
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	factories := []locations.LocationBackendFactory{
@@ -63,5 +63,5 @@ func (Factory) NewLocations(cfg *config.Config, c cache.ListCache, centroids loc
 			return farmersmarket.NewContainerLocationBackend()
 		},
 	}
-	return locations.New(c, centroids, factories)
+	return locations.New(c, centroids, factories, f.StaplesSignature)
 }

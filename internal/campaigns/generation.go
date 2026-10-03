@@ -58,13 +58,13 @@ func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Servi
 	if err != nil {
 		return nil, fmt.Errorf("create campaign image cache: %w", err)
 	}
-	locationStore, err := providers.NewLocations(cfg, c, locations.LoadCentroids())
+	locationStore, err := providers.NewLocations(c, locations.LoadCentroids())
 	if err != nil {
 		return nil, fmt.Errorf("create campaign locations: %w", err)
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, c, httpClient)
-	backends, err := providers.NewStaplesBackends(cfg)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}

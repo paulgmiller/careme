@@ -76,12 +76,13 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	locationStorage, err := providerregistry.Factory{}.NewLocations(cfg, cacheStore, locations.LoadCentroids())
+	providers := providerregistry.NewFactory(cfg)
+	locationStorage, err := providers.NewLocations(cacheStore, locations.LoadCentroids())
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)})
-	backends, err := providerregistry.Factory{}.NewStaplesBackends(cfg)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %v", err)
 	}

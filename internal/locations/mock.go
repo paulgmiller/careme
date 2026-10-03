@@ -15,9 +15,9 @@ import (
 	"github.com/samber/lo"
 )
 
-type mock struct{}
+type mock struct{ signature func(string) string }
 
-func NewMock() Store { return mock{} }
+func NewMock(signature func(string) string) Store { return mock{signature: signature} }
 
 var fakes = map[string]Location{
 	"70500010": {
@@ -45,11 +45,20 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 	if !ok {
 		return nil, fmt.Errorf("no location %s", locationID)
 	}
+	if m.signature != nil {
+		l.StaplesSignature = m.signature(l.ID)
+	}
 	return &l, nil
 }
 
 func (m mock) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
-	return lo.Values(fakes), nil
+	locations := lo.Values(fakes)
+	if m.signature != nil {
+		for i := range locations {
+			locations[i].StaplesSignature = m.signature(locations[i].ID)
+		}
+	}
+	return locations, nil
 }
 
 func (mock) HasInventory(locationID string) bool {

@@ -21,7 +21,7 @@ func newProviderLocationStore(t *testing.T, backend locations.LocationBackend, c
 	t.Helper()
 	store, err := locations.New(c, locations.LoadCentroids(), []locations.LocationBackendFactory{
 		func(context.Context) (locations.LocationBackend, error) { return backend, nil },
-	})
+	}, nil)
 	require.NoError(t, err)
 	return store
 }
