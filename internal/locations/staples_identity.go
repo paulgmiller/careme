@@ -1,50 +1,32 @@
 package locations
 
-import (
-	"testing"
+import "sync"
 
-	"careme/internal/farmersmarket"
-	"careme/internal/heb"
-	"careme/internal/providers/albertsons"
-	"careme/internal/providers/aldi"
-	"careme/internal/providers/kroger"
-	"careme/internal/providers/mnfoodclub"
-	"careme/internal/providers/publix"
-	"careme/internal/providers/smithbrothersfarms"
-	"careme/internal/providers/walmart"
-	"careme/internal/providers/wholefoods"
+var (
+	staplesSignatureMu sync.RWMutex
+	staplesSignature   func(string) string
 )
 
-type staplesIdentity interface {
-	IsID(string) bool
-	Signature() string
+// RegisterStaplesSignature installs the provider-specific signature resolver.
+// It must be called during application initialization, before serving requests.
+func RegisterStaplesSignature(resolve func(string) string) {
+	if resolve == nil {
+		panic("nil staples signature resolver")
+	}
+	staplesSignatureMu.Lock()
+	defer staplesSignatureMu.Unlock()
+	if staplesSignature != nil {
+		panic("staples signature resolver already registered")
+	}
+	staplesSignature = resolve
 }
 
-// StaplesSignature returns the provider version used for a store's recipe and
-// ingredient cache keys.
 func StaplesSignature(locationID string) string {
-	for _, provider := range staplesIdentities() {
-		if provider.IsID(locationID) {
-			return provider.Signature()
-		}
+	staplesSignatureMu.RLock()
+	resolve := staplesSignature
+	staplesSignatureMu.RUnlock()
+	if resolve == nil {
+		panic("staples signature resolver not registered")
 	}
-	if testing.Testing() && locationID == "loc-123" {
-		return kroger.NewIdentityProvider().Signature()
-	}
-	panic("unknown staples provider for location " + locationID)
-}
-
-func staplesIdentities() []staplesIdentity {
-	return []staplesIdentity{
-		kroger.NewIdentityProvider(),
-		albertsons.NewIdentityProvider(),
-		heb.NewIdentityProvider(),
-		aldi.NewIdentityProvider(),
-		publix.NewIdentityProvider(),
-		farmersmarket.NewIdentityProvider(),
-		mnfoodclub.NewIdentityProvider(),
-		smithbrothersfarms.NewIdentityProvider(),
-		wholefoods.NewIdentityProvider(),
-		walmart.NewIdentityProvider(),
-	}
+	return resolve(locationID)
 }

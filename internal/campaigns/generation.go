@@ -49,7 +49,7 @@ type Service struct {
 	wait           func()
 }
 
-func NewService(cfg *config.Config) (*Service, error) {
+func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Service, error) {
 	c, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign cache: %w", err)
@@ -58,13 +58,13 @@ func NewService(cfg *config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create campaign image cache: %w", err)
 	}
-	locationStore, err := locations.New(cfg, c, locations.LoadCentroids())
+	locationStore, err := providers.NewLocations(cfg, c, locations.LoadCentroids())
 	if err != nil {
 		return nil, fmt.Errorf("create campaign locations: %w", err)
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, c, httpClient)
-	backends, err := locations.NewStaplesBackends(cfg)
+	backends, err := providers.NewStaplesBackends(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}

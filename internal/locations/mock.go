@@ -17,6 +17,8 @@ import (
 
 type mock struct{}
 
+func NewMock() Store { return mock{} }
+
 var fakes = map[string]Location{
 	"70500010": {
 		ID:      "70500010",

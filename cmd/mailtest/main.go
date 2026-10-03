@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/config"
 	caremail "careme/internal/mail"
+	"careme/internal/providerregistry"
 	"careme/internal/templates"
 )
 
@@ -27,7 +28,7 @@ func main() {
 		log.Fatalf("initialize templates: %v", err)
 	}
 
-	sender, err := caremail.NewMailer(cfg)
+	sender, err := caremail.NewMailer(cfg, providerregistry.Factory{})
 	if err != nil {
 		log.Fatal(err)
 	}

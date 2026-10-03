@@ -21,6 +21,7 @@ import (
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/producescore"
@@ -76,7 +77,7 @@ func runServer(cfg *config.Config, addr string) error {
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cache, centroids)
+	locationStorage, err := providerregistry.NewLocations(cfg, cache, centroids)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -99,7 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		backends, err := locations.NewStaplesBackends(cfg)
+		backends, err := providerregistry.NewStaplesBackends(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create staples backends: %w", err)
 		}

@@ -1,15 +1,14 @@
-package locations
+package providerregistry
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
-	"careme/internal/ai"
 	"careme/internal/brightdata"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
+	"careme/internal/locations"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/kroger"
@@ -22,16 +21,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// StaplesBackend is the provider contract consumed by recipe sourcing.
-type StaplesBackend interface {
-	IsID(string) bool
-	Signature() string
-	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
-	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
-}
-
 // NewStaplesBackends assembles grocery integrations in routing order.
-func NewStaplesBackends(cfg *config.Config) ([]StaplesBackend, error) {
+func NewStaplesBackends(cfg *config.Config) ([]locations.StaplesBackend, error) {
 	// Should this be per request so proxies can vary per user?
 	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
 	if err != nil {
@@ -67,7 +58,7 @@ func NewStaplesBackends(cfg *config.Config) ([]StaplesBackend, error) {
 		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
 	}
 
-	return []StaplesBackend{
+	return []locations.StaplesBackend{
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,

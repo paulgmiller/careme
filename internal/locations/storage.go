@@ -6,33 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sort"
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/farmersmarket"
-	"careme/internal/heb"
 	"careme/internal/locations/geo"
 	"careme/internal/locations/nearby"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
-	"careme/internal/providers/albertsons"
-	"careme/internal/providers/aldi"
-	"careme/internal/providers/kroger"
-	"careme/internal/providers/mnfoodclub"
-	"careme/internal/providers/publix"
-	"careme/internal/providers/smithbrothersfarms"
-	"careme/internal/providers/walmart"
-	"careme/internal/providers/wegmans"
-	"careme/internal/providers/wholefoods"
 
 	locationtypes "careme/internal/locations/types"
 
 	"github.com/samber/lo"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type locationStorage struct {
@@ -47,10 +32,11 @@ type locationGetter interface {
 	HasInventory(locationID string) bool
 }
 
-type locationBackend interface {
+type LocationBackend interface {
 	locationGetter
 	IsID(locationID string) bool
 }
+type locationBackend = LocationBackend
 
 // locationCachePolicy is optional; backends without it are cacheable.
 type locationCachePolicy interface {
@@ -58,68 +44,36 @@ type locationCachePolicy interface {
 }
 
 // name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
-type locationStore interface {
+type Store interface {
 	locationGetter
 	RequestStore(ctx context.Context, locationID string) error
 	RequestedStoreIDs(ctx context.Context) ([]string, error)
 }
+type locationStore = Store
 
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
 
-type centroidByZip interface {
+type CentroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
+type centroidByZip = CentroidByZip
 
-type locationBackendFactory func(context.Context) (locationBackend, error)
+type (
+	LocationBackendFactory func(context.Context) (LocationBackend, error)
+	locationBackendFactory = LocationBackendFactory
+)
 
 const (
 	locationCachePrefix = "location/"
 	storeRequestPrefix  = "location-store-requests/"
 )
 
-func New(cfg *config.Config, c cache.ListCache, centroids centroidByZip) (locationStore, error) {
+func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackendFactory) (Store, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
-	if cfg.Mocks.Enable {
-		// should probably have something else return th mock so we can just return concerete type here.
-		return mock{}, nil
-	}
-
-	ctx := context.Background()
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	backendfactories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
-		func(context.Context) (locationBackend, error) { return smithbrothersfarms.NewLocationBackend(), nil },
-		func(context.Context) (locationBackend, error) {
-			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
-		},
-		func(context.Context) (locationBackend, error) { return walmart.NewClient(cfg.Walmart) },
-		func(ctx context.Context) (locationBackend, error) {
-			return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			return wholefoods.NewLocationBackendFromConfig(ctx, cfg, centroids)
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			return albertsons.NewLocationBackendFromConfig(ctx, cfg, centroids)
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			return publix.NewLocationBackendFromConfig(ctx, cfg, centroids)
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			return heb.NewLocationBackendFromConfig(ctx, cfg, centroids)
-		},
-		func(ctx context.Context) (locationBackend, error) {
-			return wegmans.NewLocationBackend(ctx, cfg, centroids)
-		},
-		func(context.Context) (locationBackend, error) {
-			return farmersmarket.NewContainerLocationBackend()
-		},
-	}
-
-	backends, err := initializeLocationBackends(ctx, backendfactories)
+	backends, err := initializeLocationBackends(context.Background(), factories)
 	if err != nil {
 		return nil, err
 	}

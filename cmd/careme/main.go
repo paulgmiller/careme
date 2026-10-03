@@ -12,6 +12,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/logsetup"
 	"careme/internal/mail"
+	"careme/internal/providerregistry"
 	"careme/internal/templates"
 )
 
@@ -54,7 +55,7 @@ func main() {
 	}
 
 	if campaignJob {
-		job, err := campaigns.NewService(cfg)
+		job, err := campaigns.NewService(cfg, providerregistry.Factory{})
 		if err == nil {
 			err = job.RunOnce(ctx)
 		}
@@ -67,7 +68,7 @@ func main() {
 	}
 
 	if mailer {
-		mailer, err := mail.NewMailer(cfg)
+		mailer, err := mail.NewMailer(cfg, providerregistry.Factory{})
 		if err != nil {
 			log.Fatalf("failed to create mailer: %v", err)
 		}

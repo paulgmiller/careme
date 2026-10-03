@@ -98,7 +98,7 @@ type mailer struct {
 }
 
 // TODO share some of this with web.go? good for mocking?
-func NewMailer(cfg *config.Config) (*mailer, error) {
+func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer, error) {
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -112,7 +112,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	backends, err := locations.NewStaplesBackends(cfg)
+	backends, err := providers.NewStaplesBackends(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
@@ -128,7 +128,7 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := locations.New(cfg, cacheStore, centroids)
+	locationserver, err := providers.NewLocations(cfg, cacheStore, centroids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}

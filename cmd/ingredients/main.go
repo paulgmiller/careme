@@ -13,7 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
-	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 
 	"github.com/samber/lo"
@@ -46,7 +46,7 @@ func main() {
 	if ingredient != "" && (!cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "") {
 		log.Fatal("nearest ingredient lookup requires ingredient grading enabled and an OpenAI API key")
 	}
-	backends, err := locations.NewStaplesBackends(cfg)
+	backends, err := providerregistry.NewStaplesBackends(cfg)
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %s", err)
 	}

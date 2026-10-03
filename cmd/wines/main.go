@@ -7,7 +7,7 @@ import (
 	"log"
 
 	"careme/internal/config"
-	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 )
 
@@ -27,7 +27,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
-	backends, err := locations.NewStaplesBackends(cfg)
+	backends, err := providerregistry.NewStaplesBackends(cfg)
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %s", err)
 	}
