@@ -8,6 +8,7 @@ import (
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/smithbrothersfarms"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -68,4 +69,13 @@ func TestMNFoodClubSignature(t *testing.T) {
 	assert.NotPanics(t, func() { _ = ForStore("mnfoodclub_delivery", date, signature) })
 	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date, signature), ForStore("mnfoodclub_other", date, signature))
 	assert.NotEqual(t, ForStore("mnfoodclub_delivery", date, signature), ForStore("mnfoodclub_delivery", date.AddDate(0, 0, 1), signature))
+}
+
+func TestSmithBrothersFarmsSignature(t *testing.T) {
+	assert.Equal(t, smithbrothersfarms.NewIdentityProvider().Signature(), locations.StaplesSignature("smithbrothersfarms_delivery"))
+	date := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	signature := locations.StaplesSignature("smithbrothersfarms_delivery")
+	assert.NotPanics(t, func() { _ = ForStore("smithbrothersfarms_delivery", date, signature) })
+	assert.NotEqual(t, ForStore("smithbrothersfarms_delivery", date, signature), ForStore("smithbrothersfarms_other", date, signature))
+	assert.NotEqual(t, ForStore("smithbrothersfarms_delivery", date, signature), ForStore("smithbrothersfarms_delivery", date.AddDate(0, 0, 1), signature))
 }

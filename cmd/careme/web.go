@@ -143,6 +143,7 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))

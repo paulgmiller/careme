@@ -52,6 +52,8 @@ func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
 }
 
 func TestIngredientGradeCacheVersionChangesWhenPromptOrModelChanges(t *testing.T) {
+	assert.NotEqual(t, IngredientGradeCacheVersion("gpt-5.6-luna"), IngredientGradeCacheVersion(""))
+	assert.Equal(t, IngredientGradeCacheVersion("gpt-6-luna"), IngredientGradeCacheVersion(""))
 	base := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(gpt56Luna, "prompt a")}).CacheVersion()
 	same := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion(gpt56Luna, "prompt a")}).CacheVersion()
 	differentModel := (&ingredientGrader{cacheVersion: ingredientGradeCacheVersion("gpt-5-nano", "prompt a")}).CacheVersion()
@@ -80,7 +82,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 	grader := NewIngredientGrader("test-key", "", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
-		assert.Contains(t, string(body), `"model":"`+gpt56Luna+`"`)
+		assert.Contains(t, string(body), `"model":"`+gpt6Luna+`"`)
 		assert.Contains(t, string(body), `"reasoning":{"effort":"none"}`)
 
 		return &http.Response{
@@ -110,7 +112,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, gpt56Luna))),
+			}`, gpt6Luna))),
 			Request: req,
 		}, nil
 	})})
@@ -186,7 +188,7 @@ func ingredientGradeHTTPResponse(req *http.Request, output string) *http.Respons
 			"model":%q,
 			"output":[{"id":"msg-grade","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":%q,"annotations":[]}]}],
 			"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}
-		}`, gpt56Luna, output))),
+		}`, gpt6Luna, output))),
 		Request: req,
 	}
 }

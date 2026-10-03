@@ -1,6 +1,9 @@
 package users
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -89,10 +92,10 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 	if strings.Contains(body, "legacy@example.com") {
 		t.Fatalf("response body should not include legacy guid account: %s", body)
 	}
-	if !regexp.MustCompile(`<td>\s*user_1\s*</td>[\s\S]*?<td>\s*2\s*</td>[\s\S]*?<td>\s*1\s*</td>`).MatchString(body) {
+	if !regexp.MustCompile(`<td>\s*<a href="/admin/users/user_1">user_1</a>\s*</td>[\s\S]*?<td>\s*2\s*</td>[\s\S]*?<td>\s*1\s*</td>`).MatchString(body) {
 		t.Fatalf("response body missing user_1 row with saved/cooked counts: %s", body)
 	}
-	if !regexp.MustCompile(`<td>\s*user_2\s*</td>[\s\S]*?<td>\s*1\s*</td>[\s\S]*?<td>\s*1\s*</td>`).MatchString(body) {
+	if !regexp.MustCompile(`<td>\s*<a href="/admin/users/user_2">user_2</a>\s*</td>[\s\S]*?<td>\s*1\s*</td>[\s\S]*?<td>\s*1\s*</td>`).MatchString(body) {
 		t.Fatalf("response body missing user_2 row with saved/cooked counts: %s", body)
 	}
 	for _, want := range []string{"2026-03-01", "2026-03-02"} {
@@ -110,6 +113,97 @@ func TestAdminUsersPageRendersEmailsAndRecipes(t *testing.T) {
 		if strings.Contains(body, unwanted) {
 			t.Fatalf("response body should not include recipe title %q: %s", unwanted, body)
 		}
+	}
+}
+
+func TestAdminUserDetailPage(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	if err := storage.Update(&utypes.User{
+		ID:          "user_1",
+		Email:       []string{"alice@example.com"},
+		ShoppingDay: time.Monday.String(),
+		Directive:   "Use <fresh> herbs\nNo shellfish",
+		LastRecipes: []utypes.Recipe{
+			{Title: "Tomato & <Basil> Soup", Hash: "hash-1"},
+			{Title: "Manual recipe"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /users/{id}", AdminUserDetailPage(storage))
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/users/user_1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		`href="/admin/users"`, "alice@example.com", "Use &lt;fresh&gt; herbs\nNo shellfish",
+		`href="/recipe/hash-1"`, "Tomato &amp; &lt;Basil&gt; Soup", "Manual recipe", "Saved recipes (2)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "<fresh>") || strings.Contains(body, "<Basil>") || strings.Contains(body, `href="/recipe/"`) {
+		t.Fatalf("unescaped text or empty recipe link in body: %s", body)
+	}
+}
+
+func TestAdminUserDetailPageEmptyAndMissing(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewFileCache(t.TempDir()))
+	if err := storage.Update(&utypes.User{ID: "user_empty", Email: []string{"empty@example.com"}, ShoppingDay: time.Monday.String()}); err != nil {
+		t.Fatal(err)
+	}
+	handler := AdminUserDetailPage(storage)
+	for _, tc := range []struct {
+		name, id, method string
+		status           int
+		body             string
+	}{
+		{"empty", "user_empty", http.MethodGet, http.StatusOK, "No saved recipes."},
+		{"missing", "user_missing", http.MethodGet, http.StatusNotFound, ""},
+		{"legacy", "legacy-id", http.MethodGet, http.StatusNotFound, ""},
+		{"invalid path", "user_../other", http.MethodGet, http.StatusNotFound, ""},
+		{"method", "user_empty", http.MethodPost, http.StatusMethodNotAllowed, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/users/user_empty", nil)
+			req.SetPathValue("id", tc.id)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			if rr.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rr.Code, tc.status)
+			}
+			if tc.body != "" && !strings.Contains(rr.Body.String(), tc.body) {
+				t.Fatalf("body missing %q: %s", tc.body, rr.Body.String())
+			}
+			if tc.name == "empty" && !strings.Contains(rr.Body.String(), "No cooking preferences saved.") {
+				t.Fatalf("missing directive empty state: %s", rr.Body.String())
+			}
+		})
+	}
+}
+
+type failingAdminUserCache struct{ cache.ListCache }
+
+func (f failingAdminUserCache) Get(context.Context, string) (io.ReadCloser, error) {
+	return nil, errors.New("storage unavailable")
+}
+
+func TestAdminUserDetailPageStorageError(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(failingAdminUserCache{cache.NewFileCache(t.TempDir())})
+	req := httptest.NewRequest(http.MethodGet, "/users/user_1", nil)
+	req.SetPathValue("id", "user_1")
+	rr := httptest.NewRecorder()
+	AdminUserDetailPage(storage).ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rr.Code)
 	}
 }
 
