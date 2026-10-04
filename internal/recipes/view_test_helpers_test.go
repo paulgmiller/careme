@@ -42,7 +42,7 @@ func formatShoppingListHTMLForTest(ctx context.Context, p *generatorParams, l ai
 		wineRecommendations: nil,
 		recipeImages:        nil,
 		currentUser:         renderTestUser(signedIn),
-		hash:                p.Hash(""),
+		hash:                p.Hash(),
 		selection:           selection,
 		helpMessage:         "",
 		pendingInstructions: "",

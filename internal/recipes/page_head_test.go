@@ -13,7 +13,7 @@ import (
 )
 
 func TestPageHeadMetadata(t *testing.T) {
-	params := DefaultParams(&locations.Location{Name: "Market & Farm"}, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC))
+	params := DefaultParams(&locations.Location{Name: "Market & Farm"}, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC), "")
 	recipe := ai.Recipe{Title: "Pasta & greens", Description: "A <fresh> dinner"}
 	for _, tc := range []struct {
 		name                   string
@@ -71,7 +71,7 @@ func TestPageHeadMetadata(t *testing.T) {
 
 func TestShoppingListSocialImage(t *testing.T) {
 	recipes := []ai.Recipe{{Title: "Pasta"}, {Title: "Soup"}, {Title: "Salad"}}
-	params := DefaultParams(&locations.Location{Name: "Market"}, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC))
+	params := DefaultParams(&locations.Location{Name: "Market"}, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC), "")
 	for _, tc := range []struct {
 		name     string
 		images   map[string]bool

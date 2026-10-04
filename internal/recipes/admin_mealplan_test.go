@@ -22,7 +22,7 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	rio := IO(cacheStore, nil)
 	params := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	params.Instructions = "make it vegetarian"
-	hash := params.Hash("")
+	hash := params.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), params))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Korean", "tofu", hash), hash))
 
@@ -45,13 +45,13 @@ func TestAdminMealPlanPageWalksBackThroughSavedRecipeOrigins(t *testing.T) {
 	rio := IO(cacheStore, nil)
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
-	ancestorHash := ancestorParams.Hash("")
+	ancestorHash := ancestorParams.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), ancestorParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Thai", "chicken", ancestorHash), ancestorHash))
 
 	currentParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	currentParams.Saved = []ai.Recipe{testAdminMealPlanRecipe("Saved Thai Curry", ancestorHash)}
-	currentHash := currentParams.Hash("")
+	currentHash := currentParams.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -73,7 +73,7 @@ func TestAdminMealPlanPageDeduplicatesSavedRecipeOrigins(t *testing.T) {
 	rio := IO(cacheStore, nil)
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
-	ancestorHash := ancestorParams.Hash("")
+	ancestorHash := ancestorParams.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), ancestorParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Thai", "chicken", ancestorHash), ancestorHash))
 
@@ -82,7 +82,7 @@ func TestAdminMealPlanPageDeduplicatesSavedRecipeOrigins(t *testing.T) {
 		testAdminMealPlanRecipe("Saved Thai Curry", ancestorHash),
 		testAdminMealPlanRecipe("Saved Thai Soup", ancestorHash),
 	}
-	currentHash := currentParams.Hash("")
+	currentHash := currentParams.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -101,7 +101,7 @@ func TestAdminMealPlanPageWarnsForMissingAncestor(t *testing.T) {
 
 	currentParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	currentParams.Saved = []ai.Recipe{testAdminMealPlanRecipe("Missing Origin Recipe", "missing-origin")}
-	currentHash := currentParams.Hash("")
+	currentHash := currentParams.Hash()
 	require.NoError(t, rio.SaveParams(t.Context(), currentParams))
 	require.NoError(t, rio.SaveShoppingList(t.Context(), testAdminMealPlanList("Mexican", "beans", currentHash), currentHash))
 
@@ -144,7 +144,7 @@ func testAdminMealPlanParams(locationID, locationName string, date time.Time) *g
 	return DefaultParams(&locations.Location{
 		ID:   locationID,
 		Name: locationName,
-	}, date)
+	}, date, "")
 }
 
 func testAdminMealPlanList(cuisine, anchorIngredient, originHash string) *ai.ShoppingList {

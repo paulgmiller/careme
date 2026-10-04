@@ -19,20 +19,20 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000003", Name: "Store 1"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
-	)
+		"")
 	if err := rio.SaveParams(t.Context(), params); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
 	entries := []ai.InputIngredient{{ProductID: "apple-1", Description: "Honeycrisp apple"}}
-	if err := rio.SaveIngredients(t.Context(), params.LocationHash(""), entries); err != nil {
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
 	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(""), nil)
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
@@ -53,20 +53,20 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000004", Name: "Store 2"},
 		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC),
-	)
+		"")
 	if err := rio.SaveParams(t.Context(), params); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
 
 	entries := []ai.InputIngredient{{ProductID: "broccoli-1", Description: "Broccoli"}}
-	if err := rio.SaveIngredients(t.Context(), params.LocationHash(""), entries); err != nil {
+	if err := rio.SaveIngredients(t.Context(), params.LocationHash(), entries); err != nil {
 		t.Fatalf("SaveIngredients failed: %v", err)
 	}
 
 	mux := http.NewServeMux()
 	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash("")+"?format=tsv", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?format=tsv", nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 

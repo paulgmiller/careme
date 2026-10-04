@@ -90,7 +90,7 @@ func (s *server) loadLocationHash(ctx context.Context, hash string) (string, err
 		slog.ErrorContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
 		return "", err
 	}
-	return params.LocationHash(s.staplesSignature(params.Location.ID)), nil
+	return params.LocationHash(), nil
 }
 
 func (s *server) writeIngredientLoadError(w http.ResponseWriter, r *http.Request, err error) {

@@ -128,7 +128,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 			p := DefaultParams(&locations.Location{
 				ID:   "",
 				Name: "Unknown Location",
-			}, time.Now())
+			}, time.Now(), "")
 			writeRecipePage(ctx, w, recipeViewInput{
 				params:             p,
 				recipe:             *recipe,

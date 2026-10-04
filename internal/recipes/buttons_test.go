@@ -39,7 +39,7 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Now(), "")
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, multiRecipeList, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
@@ -115,7 +115,7 @@ func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := DefaultParams(&locations.Location{ID: "70000001", Name: "Store"}, time.Now())
+			p := DefaultParams(&locations.Location{ID: "70000001", Name: "Store"}, time.Now(), "")
 			w := httptest.NewRecorder()
 			formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{tt.recipe}}, true, recipeSelection{}, w)
 			html := assertHTTPSuccess(t, w)
@@ -147,7 +147,7 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Now(), "")
 	selection := recipeSelection{SavedHashes: []string{listWithSavedRecipe.Recipes[0].ComputeHash()}}
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, listWithSavedRecipe, true, selection, w)
@@ -211,7 +211,7 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Now(), "")
 	selection := recipeSelection{DismissedHashes: []string{listWithDismissedRecipe.Recipes[0].ComputeHash()}}
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, listWithDismissedRecipe, true, selection, w)
@@ -256,7 +256,7 @@ func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
 	}
 
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now())
+	p := DefaultParams(&loc, time.Now(), "")
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, false, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)

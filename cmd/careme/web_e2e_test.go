@@ -240,7 +240,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore, providerregistry.NewFactory(cfg).StaplesSignature), critique.NewMock(cacheStore), status.NewStore(cacheStore), providerregistry.NewFactory(cfg).StaplesSignature)
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore, providerregistry.NewFactory(cfg).StaplesSignature), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
 	locationStorage, err := providerregistry.NewFactory(cfg).NewLocations(cacheStore, centroids)
 	if err != nil {

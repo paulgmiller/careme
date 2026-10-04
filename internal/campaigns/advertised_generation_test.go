@@ -68,8 +68,9 @@ func (g *campaignImageStub) GenerateStepImage(context.Context, ai.Recipe, int) (
 func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 	c := cache.NewInMemoryCache()
 	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
-	return &Service{staplesSignature: func(string) string { return "" }, 
-		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c, nil),
+	return &Service{
+		staplesSignature: func(string) string { return "" },
+		locations:        advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c, nil),
 		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
 	}, g, images
 }
@@ -90,7 +91,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		user, ok := logsetup.UserIDFromContext(g.contexts[i])
 		require.True(t, ok)
 		assert.Equal(t, "campaign_ads", user)
-		list, err := s.store.FromCache(t.Context(), p.Hash(""))
+		list, err := s.store.FromCache(t.Context(), p.Hash())
 		require.NoError(t, err)
 		require.Len(t, list.Recipes, 1)
 		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
@@ -112,7 +113,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context()), "flex unavailable")
 	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
 	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash(""))
+		state, err := s.statuses.Load(t.Context(), p.Hash())
 		require.NoError(t, err)
 		assert.Contains(t, state.Failed, "flex unavailable")
 	}
@@ -130,7 +131,7 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 	assert.Len(t, g.params, len(AdvertisedRecipeLocations()))
 	assert.Equal(t, 2*len(g.params), images.calls)
 	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash(""))
+		state, err := s.statuses.Load(t.Context(), p.Hash())
 		require.NoError(t, err)
 		assert.Empty(t, state.Failed)
 	}
@@ -139,7 +140,7 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {
 	s, g, _ := testService()
 	s.store = failingCampaignStore{s.store}
-	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now())
+	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now(), "")
 	require.ErrorContains(t, s.generate(t.Context(), p), "cache unavailable")
 	assert.Empty(t, g.params)
 }

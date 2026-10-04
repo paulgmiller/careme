@@ -86,14 +86,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create staples backends: %v", err)
 	}
-	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader, providers.StaplesSignature)
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 
 	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature), providers.StaplesSignature)
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
@@ -137,6 +137,7 @@ func scoreLocations(
 	hasInventory inventoryLookup,
 	staples staplesFetcher,
 	scorer *producescore.CachedProduceScorer,
+	staplesSignature func(string) string,
 ) ([]scoreRow, error) {
 	selected := topLocations(locs, limit)
 	return parallelism.MapWithErrors(selected, func(loc locations.Location) (scoreRow, error) {
@@ -153,7 +154,7 @@ func scoreLocations(
 			return row, err
 		}
 
-		ingredients, err := staples.FetchStaples(ctx, recipes.DefaultParams(&loc, date))
+		ingredients, err := staples.FetchStaples(ctx, recipes.DefaultParams(&loc, date, staplesSignature(loc.ID)))
 		if err != nil {
 			return row, err
 		}

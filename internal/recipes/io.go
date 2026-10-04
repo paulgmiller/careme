@@ -35,21 +35,6 @@ func IO(c cache.Cache, staplesSignature func(string) string) recipeio {
 	}
 }
 
-func (rio recipeio) signatureFor(p *generatorParams) string {
-	if rio.staplesSignature == nil {
-		return ""
-	}
-	return rio.staplesSignature(p.Location.ID)
-}
-
-func (rio recipeio) Hash(p *generatorParams) string {
-	return p.Hash(rio.signatureFor(p))
-}
-
-func (rio recipeio) LocationHash(p *generatorParams) string {
-	return p.LocationHash(rio.signatureFor(p))
-}
-
 func (rio recipeio) SingleFromCache(ctx context.Context, hash string) (*ai.Recipe, error) {
 	recipe, err := rio.Cache.Get(ctx, recipeCachePrefix+hash)
 	if err != nil {
@@ -109,6 +94,9 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
 		return nil, fmt.Errorf("failed to decode params: %w", err)
 	}
+	if rio.staplesSignature != nil && params.Location != nil {
+		params.StaplesSignature = rio.staplesSignature(params.Location.ID)
+	}
 	return &params, nil
 }
 
@@ -158,7 +146,7 @@ var ErrAlreadyExists = errors.New("already exists")
 
 func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 	paramsJSON := lo.Must(json.Marshal(p))
-	if err := rio.Cache.Put(ctx, paramsCachePrefix+rio.Hash(p), string(paramsJSON), cache.IfNoneMatch()); err != nil {
+	if err := rio.Cache.Put(ctx, paramsCachePrefix+p.Hash(), string(paramsJSON), cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			return ErrAlreadyExists
 		}
@@ -169,7 +157,7 @@ func (rio recipeio) SaveParams(ctx context.Context, p *generatorParams) error {
 }
 
 func (rio recipeio) ParamsExist(ctx context.Context, p *generatorParams) (bool, error) {
-	return rio.Cache.Exists(ctx, paramsCachePrefix+rio.Hash(p))
+	return rio.Cache.Exists(ctx, paramsCachePrefix+p.Hash())
 }
 
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {

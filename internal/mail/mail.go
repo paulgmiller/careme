@@ -117,12 +117,12 @@ func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer
 	if err != nil {
 		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
-	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig, providers.StaplesSignature)
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig)
 	generationStatuses := status.NewStore(cacheStore)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature)
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore, providers.StaplesSignature))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -198,7 +198,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	paramsHash := p.Hash(m.staplesSignature(p.Location.ID))
+	paramsHash := p.Hash()
 	alreadySent, err := m.cache.Exists(ctx, sentMailKey(user.ID, paramsHash))
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check sent-mail status", "user", user.ID, "params_hash", paramsHash, "error", err)
@@ -261,7 +261,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 	if err != nil {
 		return nil, fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
 	}
-	return recipes.DefaultParams(l, date), nil
+	return recipes.DefaultParams(l, date, m.staplesSignature(l.ID)), nil
 }
 
 func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
@@ -274,7 +274,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	rio := recipes.IO(m.cache, m.staplesSignature)
 	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
-	paramsHash := p.Hash(m.staplesSignature(p.Location.ID))
+	paramsHash := p.Hash()
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -320,7 +320,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, m.staplesSignature(p.Location.ID), &buf); err != nil {
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
 		return fmt.Errorf("format recipe email: %w", err)
 	}
 

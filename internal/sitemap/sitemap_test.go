@@ -134,9 +134,9 @@ func saveAdvertisedParams(t *testing.T, c cache.Cache) []string {
 		require.NoError(t, err)
 		date, err := locations.StoreToDate(ctx, time.Now(), loc)
 		require.NoError(t, err)
-		params := recipes.DefaultParams(loc, date)
+		params := recipes.DefaultParams(loc, date, "")
 		require.NoError(t, rio.SaveParams(ctx, params))
-		urls = append(urls, testPublicOrigin+"/recipes?h="+params.Hash(""))
+		urls = append(urls, testPublicOrigin+"/recipes?h="+params.Hash())
 	}
 	return urls
 }
@@ -150,8 +150,8 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		ID:      "70005003",
 		Name:    "Test Store",
 		Address: "123 Test St",
-	}, start)
-	shoppingListHash := params.Hash("")
+	}, start, "")
+	shoppingListHash := params.Hash()
 	if err := cacheStore.Put(context.Background(), recipes.ShoppingListCachePrefix+shoppingListHash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}

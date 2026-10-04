@@ -69,14 +69,14 @@ func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Servi
 	if err != nil {
 		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}
-	staples := recipes.NewCachedStaplesService(backends, c, grader, providers.StaplesSignature)
+	staples := recipes.NewCachedStaplesService(backends, c, grader)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))
 	critiquer := critique.NewManager(cfg, c, httpClient)
 	statuses := status.NewStore(c)
 	store := recipes.IO(c, providers.StaplesSignature)
-	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, providers.StaplesSignature)
+	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}
@@ -109,14 +109,14 @@ func (s *Service) generateLocation(ctx context.Context, locationID string) error
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
 	}
-	if err := s.generate(ctx, recipes.DefaultParams(loc, date)); err != nil {
+	if err := s.generate(ctx, recipes.DefaultParams(loc, date, s.staplesSignature(loc.ID))); err != nil {
 		return fmt.Errorf("generate campaign for %s: %w", locationID, err)
 	}
 	return nil
 }
 
 func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) error {
-	hash := p.Hash(s.staplesSignature(p.Location.ID))
+	hash := p.Hash()
 	list, err := s.store.FromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
@@ -155,7 +155,7 @@ func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 	if len(list.Recipes) == 0 {
 		return fmt.Errorf("campaign shopping list contains no recipes")
 	}
-	if err := s.store.SaveShoppingList(ctx, list, p.Hash(s.staplesSignature(p.Location.ID))); err != nil {
+	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
 		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 

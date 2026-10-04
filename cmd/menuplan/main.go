@@ -55,10 +55,11 @@ type ingredientEmbedder interface {
 }
 
 type planService struct {
-	planner  menuPlanner
-	staples  staplesService
-	pantry   pantryService
-	embedder ingredientEmbedder
+	planner          menuPlanner
+	staples          staplesService
+	pantry           pantryService
+	embedder         ingredientEmbedder
+	staplesSignature func(string) string
 }
 
 type storeMenuPlan struct {
@@ -162,9 +163,10 @@ func newCache(cfg *config.Config) (cache.ListCache, error) {
 func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers providerregistry.Factory) (planService, error) {
 	if cfg.Mocks.Enable {
 		return planService{
-			planner: mockMenuPlanner{},
-			staples: mockStaplesService{},
-			pantry:  mockPantryService{},
+			planner:          mockMenuPlanner{},
+			staples:          mockStaplesService{},
+			pantry:           mockPantryService{},
+			staplesSignature: providers.StaplesSignature,
 		}, nil
 	}
 
@@ -174,17 +176,18 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers pr
 	if err != nil {
 		return planService{}, fmt.Errorf("create staples backends: %w", err)
 	}
-	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader, providers.StaplesSignature)
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 	return planService{
-		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
-		staples:  staples,
-		pantry:   staples,
-		embedder: ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
+		planner:          ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
+		staples:          staples,
+		pantry:           staples,
+		embedder:         ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
+		staplesSignature: providers.StaplesSignature,
 	}, nil
 }
 
 func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count, plans int) ([]ai.RecipePlan, error) {
-	params := recipes.DefaultParams(&store, date)
+	params := recipes.DefaultParams(&store, date, service.staplesSignature(store.ID))
 	params.Instructions = instructions
 
 	ingredients, err := service.staples.FetchStaples(ctx, params)

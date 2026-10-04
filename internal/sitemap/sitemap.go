@@ -122,13 +122,13 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 			continue
 		}
 
-		p := recipes.DefaultParams(loc, date)
+		p := recipes.DefaultParams(loc, date, s.staplesSignature(loc.ID))
 
 		io := recipes.IO(s.cache, s.staplesSignature)
 		// could be slow if iwe have lots of campaigns
 		exists, err := io.ParamsExist(ctx, p)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", io.Hash(p))
+			slog.ErrorContext(ctx, "failed to check param", "storeid", p.Location.ID, "hash", p.Hash())
 			continue
 		}
 		if !exists {
@@ -138,7 +138,7 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 
 		// this will be out of date quickly. Do we tell the search engine that and let user know
 		// make a different la
-		urls = append(urls, s.publicOrigin+"/recipes?h="+io.Hash(p))
+		urls = append(urls, s.publicOrigin+"/recipes?h="+p.Hash())
 	}
 	return urls
 }

@@ -86,7 +86,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
 	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
-	newHash := s.Hash(p)
+	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for regeneration", "hash", newHash, "error", err)
@@ -158,7 +158,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newHash := s.Hash(p)
+	newHash := p.Hash()
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for finalize", "hash", newHash, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
@@ -339,7 +339,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam == "" {
 		// FormValue also reads URL query parameters, so links such as
 		// /recipes?location=<id> can be redirected to their canonical hash URL.
-		p, err := ParseGenerationForm(ctx, r, s.locServer)
+		p, err := ParseGenerationForm(ctx, r, s.locServer, s.staplesSignature)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 			return
@@ -348,7 +348,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			// need directive to get to right hash
 			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 		}
-		redirectToHash(w, r, s.Hash(p), QueryArgHelp)
+		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
 	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from
@@ -460,7 +460,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := ParseGenerationForm(ctx, r, s.locServer)
+	p, err := ParseGenerationForm(ctx, r, s.locServer, s.staplesSignature)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid form parameters: %v", err), http.StatusBadRequest)
 		return
@@ -475,8 +475,8 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unable to load account", http.StatusInternalServerError)
 			return
 		}
-		if _, cacheErr := s.FromCache(ctx, s.Hash(p)); cacheErr == nil {
-			redirectToHash(w, r, s.Hash(p), QueryArgHelp)
+		if _, cacheErr := s.FromCache(ctx, p.Hash()); cacheErr == nil {
+			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
 		if !guest.UseShoppingList(w, r) {
@@ -501,8 +501,8 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 			// Another request with these content-addressed params owns the generation.
 			// Redirecting lets this user poll for that shared result; only the owner
 			// records it in their recent shopping lists when generation completes.
-			slog.InfoContext(ctx, "params already existed redirecting", "hash", s.Hash(p))
-			redirectToHash(w, r, s.Hash(p), QueryArgHelp)
+			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
+			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to save params", "error", err)
@@ -510,7 +510,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash := s.Hash(p)
+	hash := p.Hash()
 
 	if err := s.kickgeneration(ctx, p, currentUser.ID); err != nil {
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
@@ -604,7 +604,7 @@ func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.F
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID string) error {
-	hash := s.Hash(p)
+	hash := p.Hash()
 	if err := s.generationStatuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start generation status %w", err)
 	}

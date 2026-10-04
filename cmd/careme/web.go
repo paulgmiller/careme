@@ -89,7 +89,7 @@ func runServer(cfg *config.Config, addr string) error {
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache, providers.StaplesSignature), mc, status.NewStore(cache), providers.StaplesSignature)
+		generator = recipes.NewMockGenerator(recipes.IO(cache, providers.StaplesSignature), mc, status.NewStore(cache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 
@@ -105,10 +105,10 @@ func runServer(cfg *config.Config, addr string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
-		staples := recipes.NewCachedStaplesService(backends, cache, grader, providers.StaplesSignature)
-		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
+		staples := recipes.NewCachedStaplesService(backends, cache, grader)
+		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples, providers.StaplesSignature), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache, providers.StaplesSignature), providers.StaplesSignature)
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache, providers.StaplesSignature))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
