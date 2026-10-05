@@ -123,6 +123,29 @@ grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
 the existing grading and nearest-ingredient lookup. This provider supplies no wine
 candidates.
 
+### Smith Brothers Farms ingredients
+
+Nearby search includes Smith Brothers Farms home delivery in two approximate
+urban-corridor boxes: Puget Sound (latitude 46.95–48.05, longitude -122.80–-121.90)
+and Greater Portland (latitude 45.30–45.80, longitude -122.95–-122.35).
+These are rough discovery areas from the [service-area map](https://www.smithbrothersfarms.com/our-service-area),
+not exact delivery boundaries, and exclude some outer delivery routes.
+Search results use the stable `smithbrothersfarms_delivery` ID at the current
+search coordinates; delivery locations bypass the location cache. Lookup by ID
+uses the Kent headquarters coordinates.
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location smithbrothersfarms_delivery -verbose
+```
+
+The provider fetches the public produce and meat/poultry pages through the existing
+Bright Data client. The organic and standard produce-box products are replaced
+with individual ingredients from the live bullet lists on their product pages.
+Each box ingredient includes its box name and a preassigned 10/10 produce-share
+grade; individual quantities and prices are unspecified. Seasonal contents update
+on the next uncached store-day ingredient fetch. No Smith Brothers Farms account
+credentials are required. Wine lookup is unsupported.
+
 ### Ingredient embedding lookup
 
 Ingredient grading and wine pairing default to `gpt-6-luna` with reasoning
