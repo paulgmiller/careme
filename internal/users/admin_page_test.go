@@ -120,10 +120,11 @@ func TestAdminUserDetailPage(t *testing.T) {
 	t.Parallel()
 	storage := NewStorage(cache.NewFileCache(t.TempDir()))
 	if err := storage.Update(&utypes.User{
-		ID:          "user_1",
-		Email:       []string{"alice@example.com"},
-		ShoppingDay: time.Monday.String(),
-		Directive:   "Use <fresh> herbs\nNo shellfish",
+		ID:            "user_1",
+		Email:         []string{"alice@example.com"},
+		ShoppingDay:   time.Monday.String(),
+		Directive:     "Use <fresh> herbs\nNo shellfish",
+		FavoriteStore: "wholefoods_123",
 		LastRecipes: []utypes.Recipe{
 			{Title: "Tomato & <Basil> Soup", Hash: "hash-1"},
 			{Title: "Manual recipe"},
@@ -143,6 +144,7 @@ func TestAdminUserDetailPage(t *testing.T) {
 	for _, want := range []string{
 		`href="/admin/users"`, "alice@example.com", "Use &lt;fresh&gt; herbs\nNo shellfish",
 		`href="/recipe/hash-1"`, "Tomato &amp; &lt;Basil&gt; Soup", "Manual recipe", "Saved recipes (2)",
+		"Favorite store", "<code>wholefoods_123</code>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q: %s", want, body)
@@ -184,6 +186,9 @@ func TestAdminUserDetailPageEmptyAndMissing(t *testing.T) {
 			}
 			if tc.name == "empty" && !strings.Contains(rr.Body.String(), "No cooking preferences saved.") {
 				t.Fatalf("missing directive empty state: %s", rr.Body.String())
+			}
+			if tc.name == "empty" && !strings.Contains(rr.Body.String(), "No favorite store saved.") {
+				t.Fatalf("missing favorite store empty state: %s", rr.Body.String())
 			}
 		})
 	}

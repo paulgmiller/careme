@@ -152,6 +152,8 @@ var adminUserDetailPageTmpl = template.Must(template.New("admin-user-detail").Pa
   {{if .Emails}}
   <ul>{{range .Emails}}<li>{{.}}</li>{{end}}</ul>
   {{else}}<p>None</p>{{end}}
+  <h2>Favorite store</h2>
+  {{if .FavoriteStore}}<p><code>{{.FavoriteStore}}</code></p>{{else}}<p>No favorite store saved.</p>{{end}}
   <h2>Cooking preferences</h2>
   {{if .Directive}}<p style="white-space: pre-wrap">{{.Directive}}</p>{{else}}<p>No cooking preferences saved.</p>{{end}}
   <h2>Saved recipes ({{len .Recipes}})</h2>
@@ -205,11 +207,12 @@ func AdminUserDetailPage(storage *Storage) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if err := adminUserDetailPageTmpl.Execute(w, struct {
-			ID        string
-			Emails    []string
-			Directive string
-			Recipes   []recipeView
-		}{ID: user.ID, Emails: user.Email, Directive: user.Directive, Recipes: recipes}); err != nil {
+			ID            string
+			Emails        []string
+			FavoriteStore string
+			Directive     string
+			Recipes       []recipeView
+		}{ID: user.ID, Emails: user.Email, FavoriteStore: user.FavoriteStore, Directive: user.Directive, Recipes: recipes}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render admin user detail page", "user_id", id, "error", err)
 			http.Error(w, "unable to render user", http.StatusInternalServerError)
 		}
