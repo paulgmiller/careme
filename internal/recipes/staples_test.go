@@ -280,7 +280,7 @@ func TestFetchStaples_UsesProviderAndCachesWholeFoodsResults(t *testing.T) {
 		},
 	}
 	s := &cachedStaplesService{
-		cache:    IO(cacheStore, nil),
+		cache:    IO(cacheStore, func(string) string { return "" }),
 		provider: provider,
 		grader:   &stubIngredientGrader{},
 	}
@@ -320,7 +320,7 @@ func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 	steak := ai.InputIngredient{ProductID: "steak-1", Description: "Ribeye Steak"}
 	chips := ai.InputIngredient{ProductID: "chips-1", Description: "Potato Chips"}
 	s := &cachedStaplesService{
-		cache:  IO(cacheStore, nil),
+		cache:  IO(cacheStore, func(string) string { return "" }),
 		grader: grader,
 		provider: &stubRoutingStaplesProvider{
 			ingredients: []ai.InputIngredient{chips, steak},
@@ -352,7 +352,7 @@ func TestFetchStaples_GradesCachedIngredientsBeforeReturning(t *testing.T) {
 		t.Fatalf("expected grader to see raw cached ingredients, got %d", len(grader.ingredients))
 	}
 
-	cached, err := IO(cacheStore, nil).IngredientsFromCache(t.Context(), params.LocationHash())
+	cached, err := IO(cacheStore, func(string) string { return "" }).IngredientsFromCache(t.Context(), params.LocationHash())
 	if err != nil {
 		t.Fatalf("IngredientsFromCache returned error: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 		ingredients: []ai.InputIngredient{{ProductID: "apple-1", Description: "Apple"}},
 	}
 	service := &cachedStaplesService{
-		cache:    IO(cacheStore, nil),
+		cache:    IO(cacheStore, func(string) string { return "" }),
 		provider: provider,
 		grader:   &stubIngredientGrader{},
 	}
@@ -394,7 +394,7 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 
 	previousPacificDay := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC)
 	params := DefaultParams(&locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}, previousPacificDay, "")
-	cached, err := IO(cacheStore, nil).IngredientsFromCache(t.Context(), params.LocationHash())
+	cached, err := IO(cacheStore, func(string) string { return "" }).IngredientsFromCache(t.Context(), params.LocationHash())
 	if err != nil {
 		t.Fatalf("expected watchdog to cache previous Pacific store day: %v", err)
 	}
@@ -403,7 +403,7 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 	}
 
 	currentUTCDay := DefaultParams(&locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC), "")
-	if _, err := IO(cacheStore, nil).IngredientsFromCache(t.Context(), currentUTCDay.LocationHash()); !errors.Is(err, cache.ErrNotFound) {
+	if _, err := IO(cacheStore, func(string) string { return "" }).IngredientsFromCache(t.Context(), currentUTCDay.LocationHash()); !errors.Is(err, cache.ErrNotFound) {
 		t.Fatalf("expected no cache for UTC day, got err=%v", err)
 	}
 }

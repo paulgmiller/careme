@@ -128,7 +128,7 @@ func saveAdvertisedParams(t *testing.T, c cache.Cache) []string {
 
 	urls := make([]string, 0, len(campaigns.AdvertisedRecipeLocations()))
 	ctx := context.Background()
-	rio := recipes.IO(c, nil)
+	rio := recipes.IO(c, func(string) string { return "" })
 	for _, campaign := range campaigns.AdvertisedRecipeLocations() {
 		loc, err := (sitemapLocationLookup{}).GetLocationByID(ctx, campaign.Location.ID)
 		require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		t.Fatalf("failed to save shopping list: %v", err)
 	}
 
-	list := recipes.IO(cacheStore, nil)
+	list := recipes.IO(cacheStore, func(string) string { return "" })
 	recipe := ai.Recipe{
 		Title:        "Feedback Soup",
 		Description:  "A soup worth commenting on.",

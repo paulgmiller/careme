@@ -70,7 +70,7 @@ func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
 	return &Service{
 		staplesSignature: func(string) string { return "" },
-		locations:        advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c, nil),
+		locations:        advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c, func(string) string { return "" }),
 		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
 	}, g, images
 }

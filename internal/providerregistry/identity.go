@@ -20,9 +20,12 @@ type staplesIdentity interface {
 	Signature() string
 }
 
+// SignatureFactory resolves provider versions without configuration or clients.
+type SignatureFactory struct{}
+
 // StaplesSignature returns the provider version used for a store's recipe and
 // ingredient cache keys.
-func (Factory) StaplesSignature(locationID string) string {
+func (SignatureFactory) StaplesSignature(locationID string) string {
 	for _, provider := range staplesIdentities() {
 		if provider.IsID(locationID) {
 			return provider.Signature()

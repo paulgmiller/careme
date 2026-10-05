@@ -24,7 +24,7 @@ func TestInitialCritiqueFailureLeavesSlotDraft(t *testing.T) {
 	progress := status.NewStore(c)
 	require.NoError(t, progress.Start(t.Context(), p.Hash(), ""))
 	client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{{Title: "Draft", ResponseID: "response"}}}}}
-	g := newTestGenerator(t, client, &captureCritiqueService{err: errors.New("review unavailable")}, seededStaples(t, p), progress, IO(c, nil))
+	g := newTestGenerator(t, client, &captureCritiqueService{err: errors.New("review unavailable")}, seededStaples(t, p), progress, IO(c, func(string) string { return "" }))
 	result, err := g.GenerateRecipes(t.Context(), p)
 	require.ErrorContains(t, err, "review unavailable")
 	assert.Nil(t, result)
@@ -97,7 +97,7 @@ func TestRegeneratedSlotReadyBeforeBackgroundCritiqueCompletes(t *testing.T) {
 			revised := ai.Recipe{Title: "Revised dinner", ResponseID: "revision"}
 			client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{{Title: "Draft", ResponseID: "response"}}}}, regenerateResponses: []*ai.Recipe{&revised}}
 			critiquer := &deferredSecondCritique{}
-			g := newTestGenerator(t, client, critiquer, seededStaples(t, p), progress, IO(c, nil))
+			g := newTestGenerator(t, client, critiquer, seededStaples(t, p), progress, IO(c, func(string) string { return "" }))
 			result, err := g.GenerateRecipes(t.Context(), p)
 			require.NoError(t, err)
 			require.Len(t, result.Recipes, 1)

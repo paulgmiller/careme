@@ -46,7 +46,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
 	if cfg.generator == nil {
-		cfg.generator = NewMockGenerator(IO(cfg.cache, nil), critique.NewMock(cfg.cache), noopstatuswriter{})
+		cfg.generator = NewMockGenerator(IO(cfg.cache, func(string) string { return "" }), critique.NewMock(cfg.cache), noopstatuswriter{})
 	}
 
 	if cfg.imagegen == nil {

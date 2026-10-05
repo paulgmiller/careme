@@ -25,7 +25,7 @@ func TestSaveParams_IsAtomic(t *testing.T) {
 		}
 	})
 
-	rio := IO(cache.NewFileCache(tmpDir), nil)
+	rio := IO(cache.NewFileCache(tmpDir), func(string) string { return "" })
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC), "")
 
 	const n = 32
@@ -60,7 +60,7 @@ func TestSaveParams_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC), "")
 	if err := rio.SaveParams(t.Context(), p); err != nil {
@@ -79,7 +79,7 @@ func TestSaveParams_PersistsPreviousMenuPlanResponse(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	p := DefaultParams(&locations.Location{ID: "123", Name: "Test Store"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC), "")
 	p.PreviousMenuPlanResponseID = "resp-menu-123"
@@ -126,7 +126,7 @@ func TestSaveShoppingList_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	hash := "test-hash"
 	list := &ai.ShoppingList{
@@ -172,7 +172,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	hash := "ingredient-hash"
 	ingredients := []ai.InputIngredient{
@@ -207,7 +207,7 @@ func TestSaveIngredients_PreservesGrade(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	hash := "ingredient-input-hash"
 	ingredients := []ai.InputIngredient{
@@ -240,7 +240,7 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	t.Parallel()
 	tmpDir := t.TempDir()
 	cacheStore := cache.NewFileCache(tmpDir)
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	hash := "recipe-hash"
 	if err := cacheStore.Put(t.Context(), recipeCachePrefix+hash, `{"title":"Roast Chicken"}`, cache.Unconditional()); err != nil {

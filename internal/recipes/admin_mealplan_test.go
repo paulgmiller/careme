@@ -19,7 +19,7 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 	params := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	params.Instructions = "make it vegetarian"
 	hash := params.Hash()
@@ -42,7 +42,7 @@ func TestAdminMealPlanPageWalksBackThroughSavedRecipeOrigins(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
 	ancestorHash := ancestorParams.Hash()
@@ -70,7 +70,7 @@ func TestAdminMealPlanPageDeduplicatesSavedRecipeOrigins(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	ancestorParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 5, 0, 0, 0, 0, time.UTC))
 	ancestorHash := ancestorParams.Hash()
@@ -97,7 +97,7 @@ func TestAdminMealPlanPageWarnsForMissingAncestor(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, nil)
+	rio := IO(cacheStore, func(string) string { return "" })
 
 	currentParams := testAdminMealPlanParams("70001001", "Test Store", time.Date(2026, time.May, 6, 0, 0, 0, 0, time.UTC))
 	currentParams.Saved = []ai.Recipe{testAdminMealPlanRecipe("Missing Origin Recipe", "missing-origin")}
@@ -115,7 +115,7 @@ func TestAdminMealPlanPageWarnsForMissingAncestor(t *testing.T) {
 func TestAdminMealPlanPageMissingStartHashReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
-	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), nil), http.MethodGet, "/mealplan/missing")
+	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), func(string) string { return "" }), http.MethodGet, "/mealplan/missing")
 
 	require.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "meal plan not found")
@@ -124,7 +124,7 @@ func TestAdminMealPlanPageMissingStartHashReturnsNotFound(t *testing.T) {
 func TestAdminMealPlanPageRejectsNonGetHead(t *testing.T) {
 	t.Parallel()
 
-	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), nil), http.MethodPost, "/mealplan/abc")
+	rr := serveAdminMealPlanPage(t, IO(cache.NewFileCache(t.TempDir()), func(string) string { return "" }), http.MethodPost, "/mealplan/abc")
 
 	require.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 }

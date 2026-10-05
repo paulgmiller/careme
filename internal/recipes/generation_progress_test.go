@@ -47,7 +47,7 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			c := cache.NewInMemoryCache()
-			rio := IO(c, nil)
+			rio := IO(c, func(string) string { return "" })
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
 			if replacement {
 				p.PreviousMenuPlanResponseID = "previous-menu"
