@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"time"
@@ -70,10 +69,7 @@ func (g *generatorParams) String() string {
 // Hash this is how we find shoppinglists and params
 // intentionally not including ResponseID to preserve old hashes
 func (g *generatorParams) Hash() string {
-	fnv := fnv.New64a()
-	lo.Must(io.WriteString(fnv, g.Location.ID))
-	lo.Must(io.WriteString(fnv, g.Date.Format("2006-01-02")))
-	lo.Must(io.WriteString(fnv, cachekey.StaplesSignature(g.Location.ID)))
+	fnv := cachekey.HashForStore(g.Location.ID, g.Date, cachekey.StaplesSignature(g.Location.ID))
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -85,7 +81,6 @@ func (g *generatorParams) Hash() string {
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
 	return cachekey.ForStore(g.Location.ID, g.Date, cachekey.StaplesSignature(g.Location.ID))
 }
