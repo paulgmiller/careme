@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"careme/internal/ai"
-	"careme/internal/locations"
 	"careme/internal/providers/smithbrothersfarms"
 	"careme/internal/recipes"
 
@@ -33,7 +32,7 @@ func TestSmithBrothersFarmsStaplesRouting(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data))}, nil
 	})}
 	backend := smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(client))
-	provider := recipes.NewStaplesProvider([]locations.StaplesBackend{backend})
+	provider := recipes.NewStaplesProvider([]recipes.StaplesBackend{backend})
 	got, err := provider.FetchStaples(t.Context(), "smithbrothersfarms_delivery")
 	require.NoError(t, err)
 	require.Len(t, got, 25)

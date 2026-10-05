@@ -21,7 +21,15 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type backendStaplesProvider = locations.StaplesBackend
+// StaplesBackend is the provider contract consumed by recipe sourcing.
+type StaplesBackend interface {
+	IsID(string) bool
+	Signature() string
+	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
+	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
+}
+
+type backendStaplesProvider = StaplesBackend
 
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
@@ -31,7 +39,7 @@ type dedupingStaplesProvider struct {
 	provider staplesProvider
 }
 
-func NewStaplesProvider(backends []locations.StaplesBackend) staplesProvider {
+func NewStaplesProvider(backends []StaplesBackend) staplesProvider {
 	return dedupingStaplesProvider{provider: routingStaplesProvider{
 		backends: backends,
 	}}
@@ -148,7 +156,7 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 	return deduped, nil
 }
 
-func NewCachedStaplesService(backends []locations.StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
+func NewCachedStaplesService(backends []StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
 	provider := NewStaplesProvider(backends)
 	rio := IO(c)
 	return &cachedStaplesService{

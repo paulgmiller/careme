@@ -7,7 +7,6 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
-	"careme/internal/locations"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/kroger"
@@ -16,12 +15,13 @@ import (
 	"careme/internal/providers/smithbrothersfarms"
 	"careme/internal/providers/walmart"
 	"careme/internal/providers/wholefoods"
+	"careme/internal/recipes"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // NewStaplesBackends assembles grocery integrations in routing order.
-func (f Factory) NewStaplesBackends() ([]locations.StaplesBackend, error) {
+func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 	cfg := f.config
 	// Should this be per request so proxies can vary per user?
 	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
@@ -58,7 +58,7 @@ func (f Factory) NewStaplesBackends() ([]locations.StaplesBackend, error) {
 		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
 	}
 
-	return []locations.StaplesBackend{
+	return []recipes.StaplesBackend{
 		albertsonsProvider,
 		hebProvider,
 		aldiProvider,

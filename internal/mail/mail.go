@@ -97,8 +97,13 @@ type mailer struct {
 	unsubscribeFactory users.UnsubscribeTokenFactory
 }
 
+type providerFactory interface {
+	NewLocations(cache.ListCache, locations.CentroidByZip) (locations.Store, error)
+	NewStaplesBackends() ([]recipes.StaplesBackend, error)
+}
+
 // TODO share some of this with web.go? good for mocking?
-func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer, error) {
+func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)

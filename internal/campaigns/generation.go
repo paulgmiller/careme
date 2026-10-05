@@ -49,7 +49,12 @@ type Service struct {
 	wait           func()
 }
 
-func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Service, error) {
+type providerFactory interface {
+	NewLocations(cache.ListCache, locations.CentroidByZip) (locations.Store, error)
+	NewStaplesBackends() ([]recipes.StaplesBackend, error)
+}
+
+func NewService(cfg *config.Config, providers providerFactory) (*Service, error) {
 	c, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign cache: %w", err)
