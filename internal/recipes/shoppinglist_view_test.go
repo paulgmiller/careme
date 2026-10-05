@@ -18,7 +18,7 @@ import (
 func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
@@ -77,7 +77,7 @@ func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	p.Instructions = "make it vegetarian"
 	w := httptest.NewRecorder()
 
@@ -92,7 +92,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesPreviousInstructionsAsPlaceholder(t
 func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousInstructions(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	menuList := list
 	menuList.Plan = &ai.MenuPlan{ChefNoteSuggestion: "make the quail faster."}
 	w := httptest.NewRecorder()
@@ -107,7 +107,7 @@ func TestFormatShoppingListHTML_ChefNotesUsesMenuPlanSuggestionWithoutPreviousIn
 func TestFormatShoppingListHTML_ChefNotesUsesEmptyWithoutMenuPlanSuggestions(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -123,7 +123,7 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	lat := 47.61
 	lon := -122.33
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101", Lat: &lat, Lon: &lon}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 12, 0, 0, 0, 0, time.UTC), "")
+	p := DefaultParams(&loc, time.Date(2026, time.January, 12, 0, 0, 0, 0, time.UTC))
 	w := httptest.NewRecorder()
 
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -147,7 +147,7 @@ func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 	lat := 47.61
 	lon := -122.33
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101", Lat: &lat, Lon: &lon}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC), "")
+	p := DefaultParams(&loc, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC))
 	w := httptest.NewRecorder()
 
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -167,7 +167,7 @@ func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
 func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC), "")
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	w := httptest.NewRecorder()
 
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
@@ -183,7 +183,7 @@ func TestFormatShoppingListHTML_ShowsLocationWithoutDateWhenFresh(t *testing.T) 
 func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 
 	writeShoppingListPage(t.Context(), w, shoppingListViewInput{
@@ -229,7 +229,7 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 		DrinkPairing: "Tea",
 	}
 	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{addedRecipe, unaddedRecipe}}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC), "")
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	selection := recipeSelection{SavedHashes: []string{addedRecipe.ComputeHash()}}
 
 	w := httptest.NewRecorder()
@@ -267,7 +267,7 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 		Health:       "Balanced",
 		DrinkPairing: "Water",
 	}}}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	selection := recipeSelection{SavedHashes: []string{shoppingList.Recipes[0].ComputeHash()}}
 
 	w := httptest.NewRecorder()
@@ -289,7 +289,7 @@ func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
 func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 
 	prev := templates.Clarityproject
 	t.Cleanup(func() {
@@ -311,7 +311,7 @@ func TestFormatShoppingListHTML_IncludesClarityScript(t *testing.T) {
 func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 
 	prev := templates.Clarityproject
 	t.Cleanup(func() {
@@ -332,7 +332,7 @@ func TestFormatShoppingListHTML_IncludesClaritySessionID(t *testing.T) {
 func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	prev := templates.Clarityproject
 	t.Cleanup(func() {
 		templates.Clarityproject = prev
@@ -349,7 +349,7 @@ func TestFormatShoppingListHTML_NoClarityWhenEmpty(t *testing.T) {
 func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 
 	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
@@ -375,7 +375,7 @@ func TestFormatShoppingListHTML_IncludesGoogleTagManagerScript(t *testing.T) {
 func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	prev := templates.GoogleTagManagerID
 	t.Cleanup(func() {
 		templates.GoogleTagManagerID = prev
@@ -392,7 +392,7 @@ func TestFormatShoppingListHTML_NoGoogleTagWhenEmpty(t *testing.T) {
 func TestFormatShoppingListHTML_HomePageLink(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
 	html := assertHTTPSuccess(t, w)
@@ -435,7 +435,7 @@ func TestShoppingCardDetailsIndependentOfReadiness(t *testing.T) {
 func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -488,7 +488,7 @@ func TestFormatShoppingListHTML_ShowsSaveButHidesOtherMutationsWhenSignedOut(t *
 func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	listWithoutPrice := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -525,7 +525,7 @@ func TestFormatShoppingListHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	recipeHash := list.Recipes[0].ComputeHash()
 
@@ -552,7 +552,7 @@ func TestFormatShoppingListHTML_RendersRecipeImageInResponsiveQuarterWidthColumn
 func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	multi := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -621,7 +621,7 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 	t.Parallel()
 	recipe := list.Recipes[0]
 	hash := recipe.ComputeHash()
-	params := DefaultParams(&locations.Location{ID: "store"}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), "")
+	params := DefaultParams(&locations.Location{ID: "store"}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
 	page, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
 		params:      params,
 		list:        ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
@@ -653,7 +653,7 @@ func TestShoppingImagesPollIndependently(t *testing.T) {
 			hash := recipe.ComputeHash()
 			w := httptest.NewRecorder()
 			writeShoppingListPage(t.Context(), w, shoppingListViewInput{
-				params:       DefaultParams(&locations.Location{ID: "store"}, time.Now(), ""),
+				params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
 				list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
 				hash:         "list-hash",
 				recipeImages: map[string]bool{hash: ready},

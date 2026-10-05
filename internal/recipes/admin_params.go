@@ -17,7 +17,7 @@ func AdminParamsJSON(c cache.Cache) http.Handler {
 			return
 		}
 
-		params, err := IO(c, nil).ParamsFromCache(r.Context(), hash)
+		params, err := IO(c).ParamsFromCache(r.Context(), hash)
 		if err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
 				http.Error(w, "parameters not found in cache", http.StatusNotFound)

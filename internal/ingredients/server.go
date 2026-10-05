@@ -16,12 +16,11 @@ import (
 )
 
 type server struct {
-	cache            cache.Cache
-	staplesSignature func(string) string
+	cache cache.Cache
 }
 
-func NewHandler(c cache.Cache, staplesSignature func(string) string) *server {
-	return &server{cache: c, staplesSignature: staplesSignature}
+func NewHandler(c cache.Cache) *server {
+	return &server{cache: c}
 }
 
 func (s *server) Register(mux routing.Registrar) {
@@ -68,7 +67,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 		return nil, err
 	}
 
-	rio := recipes.IO(s.cache, s.staplesSignature)
+	rio := recipes.IO(s.cache)
 	ingredients, err := rio.IngredientsFromCache(ctx, locationHash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -81,7 +80,7 @@ func (s *server) loadCachedIngredients(r *http.Request) ([]ai.InputIngredient, e
 }
 
 func (s *server) loadLocationHash(ctx context.Context, hash string) (string, error) {
-	rio := recipes.IO(s.cache, s.staplesSignature)
+	rio := recipes.IO(s.cache)
 	params, err := rio.ParamsFromCache(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
@@ -96,7 +95,7 @@ func (s *server) loadLocationHash(ctx context.Context, hash string) (string, err
 func (s *server) writeIngredientLoadError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, cache.ErrNotFound):
-		if _, paramsErr := recipes.IO(s.cache, s.staplesSignature).ParamsFromCache(r.Context(), r.PathValue("hash")); errors.Is(paramsErr, cache.ErrNotFound) {
+		if _, paramsErr := recipes.IO(s.cache).ParamsFromCache(r.Context(), r.PathValue("hash")); errors.Is(paramsErr, cache.ErrNotFound) {
 			http.Error(w, "parameters not found in cache", http.StatusNotFound)
 			return
 		}

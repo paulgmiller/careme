@@ -24,14 +24,12 @@ const (
 type recipeio struct {
 	Cache               cache.Cache
 	feedback.FeedbackIO // should this be pulled out?
-	staplesSignature    func(string) string
 }
 
-func IO(c cache.Cache, staplesSignature func(string) string) recipeio {
+func IO(c cache.Cache) recipeio {
 	return recipeio{
-		Cache:            c,
-		FeedbackIO:       feedback.NewIO(c),
-		staplesSignature: staplesSignature,
+		Cache:      c,
+		FeedbackIO: feedback.NewIO(c),
 	}
 }
 
@@ -93,9 +91,6 @@ func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generato
 	var params generatorParams
 	if err := json.NewDecoder(paramsReader).Decode(&params); err != nil {
 		return nil, fmt.Errorf("failed to decode params: %w", err)
-	}
-	if rio.staplesSignature != nil && params.Location != nil {
-		params.StaplesSignature = rio.staplesSignature(params.Location.ID)
 	}
 	return &params, nil
 }

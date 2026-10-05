@@ -15,11 +15,11 @@ import (
 
 func TestServerReturnsIngredientsJSON(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	rio := recipes.IO(cacheStore, func(string) string { return "" })
+	rio := recipes.IO(cacheStore)
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000003", Name: "Store 1"},
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
-		"")
+	)
 	if err := rio.SaveParams(t.Context(), params); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash(), nil)
 	rr := httptest.NewRecorder()
@@ -49,11 +49,11 @@ func TestServerReturnsIngredientsJSON(t *testing.T) {
 
 func TestServerReturnsIngredientsTSV(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
-	rio := recipes.IO(cacheStore, func(string) string { return "" })
+	rio := recipes.IO(cacheStore)
 	params := recipes.DefaultParams(
 		&locations.Location{ID: "70000004", Name: "Store 2"},
 		time.Date(2026, 1, 26, 0, 0, 0, 0, time.UTC),
-		"")
+	)
 	if err := rio.SaveParams(t.Context(), params); err != nil {
 		t.Fatalf("SaveParams failed: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/"+params.Hash()+"?format=tsv", nil)
 	rr := httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestServerReturnsIngredientsTSV(t *testing.T) {
 func TestServerReturnsNotFoundWhenParamsMissing(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	mux := http.NewServeMux()
-	NewHandler(cacheStore, func(string) string { return "" }).Register(mux)
+	NewHandler(cacheStore).Register(mux)
 
 	req := httptest.NewRequest(http.MethodGet, "/ingredients/missing-hash", nil)
 	rr := httptest.NewRecorder()

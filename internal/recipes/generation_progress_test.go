@@ -47,8 +47,8 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			c := cache.NewInMemoryCache()
-			rio := IO(c, func(string) string { return "" })
-			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+			rio := IO(c)
+			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			if replacement {
 				p.PreviousMenuPlanResponseID = "previous-menu"
 			}
@@ -132,7 +132,7 @@ func TestGenerationHandlesProgressWriteFailures(t *testing.T) {
 	t.Parallel()
 	for _, failPlan := range []bool{true, false} {
 		t.Run(map[bool]string{true: "plan", false: "ready recipe"}[failPlan], func(t *testing.T) {
-			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			client := &captureGenerateAIClient{shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Dinner"}}}}
 			generator := newTestGenerator(t, client, &captureCritiqueService{}, fixedStaplesService{}, failingProgress{failPlan: failPlan}, noopRecipeSaver{})
 			list, err := generator.GenerateRecipes(t.Context(), p)

@@ -526,7 +526,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	cacheDate := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, func(string) string { return "" })
+	rio := IO(cacheStore)
 	salePrice := float32(18.99)
 	cached := []ai.InputIngredient{
 		{
@@ -590,7 +590,7 @@ func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 			"Pinot Noir": {{ProductID: "pinot", Description: "Pinot Noir", AisleNumber: "wine"}},
 		},
 	}
-	rio := IO(cache.NewFileCache(t.TempDir()), func(string) string { return "" })
+	rio := IO(cache.NewFileCache(t.TempDir()))
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: staplesStub}, nil, nil)
 
 	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
@@ -632,10 +632,10 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		}}, ResponseID: "resp-menu-next"},
 	}
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
+	io := IO(cacheStore)
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -692,7 +692,7 @@ func TestGenerateRecipes_RegenerateNoReplacementPlansReturnsHelpfulError(t *test
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{}, ResponseID: "resp-menu-next"},
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it brighter"
 	params.Dismissed = []ai.Recipe{dismissed}
 	params.PreviousMenuPlanResponseID = "resp-menu-old"
@@ -715,7 +715,7 @@ func TestGenerateRecipes_RegenerateAllowsUserRequestedCountDifferentFromDismisse
 		}, ResponseID: "resp-menu-next"},
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "give me two more recipes, a slow cooker recipe and a different pasta"
 	params.Dismissed = []ai.Recipe{dismissed}
 	params.PreviousMenuPlanResponseID = "resp-menu-old"
@@ -736,7 +736,7 @@ func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T)
 		recipe: &newResult,
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 22, 0, 0, 0, 0, time.UTC), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Date(2026, time.May, 22, 0, 0, 0, 0, time.UTC))
 	params.Directive = "Use the store's sale ingredients."
 	params.Instructions = "make it brighter"
 	params.Dismissed = []ai.Recipe{dismissed}
@@ -763,7 +763,7 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t 
 		}}, ResponseID: "resp-menu-next"},
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make the next round brighter"
 	params.Saved = []ai.Recipe{saved}
 	params.PreviousMenuPlanResponseID = "resp-menu-old"
@@ -790,7 +790,7 @@ func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *tes
 		}}, ResponseID: "resp-menu-next"},
 	}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "more recipes"
 	params.PreviousMenuPlanResponseID = "resp-menu-old"
 
@@ -805,7 +805,7 @@ func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *tes
 
 func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirectionsToEveryRecipe(t *testing.T) {
 	t.Parallel()
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Directive = "Use sale ingredients."
 	params.Instructions = "I have some anise."
 
@@ -848,7 +848,7 @@ func TestGenerateRecipes_SortsMenuPlanIngredientsByGradeThenProductID(t *testing
 		{ProductID: "product-d", Description: "D", Grade: grade(8)},
 	}}
 	aiStub := &captureGenerateAIClient{}
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	g := newTestGenerator(t, aiStub, nil, staples, noopstatuswriter{}, nil)
 
 	_, err := g.GenerateRecipes(t.Context(), params)
@@ -880,8 +880,8 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 	}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -936,8 +936,8 @@ func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *tes
 	}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	regularPrice := float32(8.99)
 	salePrice := float32(6.49)
 	require.NoError(t, io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{
@@ -981,7 +981,7 @@ func (noopstatuswriter) Update(_ context.Context, _, _ string) error { return ni
 func seededStaples(t *testing.T, params *generatorParams) staplesService {
 	t.Helper()
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
+	io := IO(cacheStore)
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -994,7 +994,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 	dismissed := ai.Recipe{Title: "Dismissed Dinner", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Saved = []ai.Recipe{alreadySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
 	params.PreviousMenuPlanResponseID = "resp-menu-old"
@@ -1034,8 +1034,8 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	retried := ai.Recipe{Title: "Better Dinner", Description: "Improved", ResponseID: "resp-retried"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1124,8 +1124,8 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 	retried := ai.Recipe{Title: "Better Dinner", Description: "Improved", ResponseID: "resp-retried"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1182,8 +1182,8 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough", ResponseID: "resp-stable"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1222,8 +1222,8 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1243,7 +1243,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	initial := ai.Recipe{Title: "Needs Work Dinner", Description: "First pass", ResponseID: "resp-first-pass"}
 	retried := ai.Recipe{Title: "Ready Dinner", Description: "Second pass", ResponseID: "resp-second-pass"}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it vegetarian"
 	params.Saved = []ai.Recipe{alreadySaved}
 	params.Dismissed = []ai.Recipe{dismissed}
@@ -1327,7 +1327,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 	firstPass := ai.Recipe{Title: "First Pass Dinner", Description: "Needs work", ResponseID: "resp-first-pass"}
 	retried := ai.Recipe{Title: "Second Pass Dinner", Description: "Improved", ResponseID: "resp-second-pass"}
 
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Instructions = "make it fresher"
 	params.Dismissed = []ai.Recipe{dismissed}
 	params.PreviousMenuPlanResponseID = "resp-menu-original"
@@ -1382,8 +1382,8 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 	retriedChicken := ai.Recipe{Title: "Bright Lemon Chicken Pasta", Description: "Improved", ResponseID: "resp-retried-chicken"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1441,8 +1441,8 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	retried := ai.Recipe{Title: "Second Try", Description: "Still low", ResponseID: "resp-two"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	io := IO(cacheStore, func(string) string { return "" })
-	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+	io := IO(cacheStore)
+	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	if err := io.SaveIngredients(t.Context(), params.LocationHash(), []ai.InputIngredient{{ProductID: "chicken-1", Description: "Chicken"}}); err != nil {
 		t.Fatalf("failed to seed ingredients cache: %v", err)
 	}
@@ -1501,7 +1501,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 	t.Parallel()
 	for _, replacement := range []bool{false, true} {
 		t.Run(map[bool]string{false: "initial", true: "replacement"}[replacement], func(t *testing.T) {
-			params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now(), "")
+			params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 			if replacement {
 				params.PreviousMenuPlanResponseID = "previous-menu"
 			}
@@ -1509,7 +1509,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			revised := ai.Recipe{Title: "Revised dinner", ResponseID: "revised-response"}
 			store := cache.NewInMemoryCache()
 			progress := status.NewStore(store)
-			saver := IO(store, func(string) string { return "" })
+			saver := IO(store)
 			require.NoError(t, progress.Start(t.Context(), params.Hash(), ""))
 			critiquer := &captureCritiqueService{fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
 				if recipe.Title == initial.Title {

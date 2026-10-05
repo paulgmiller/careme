@@ -12,7 +12,7 @@ import (
 func TestFormatMail_ValidHTML(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	var w bytes.Buffer
 	recipeHash := list.Recipes[0].ComputeHash()
 	if err := FormatMail(p, list, "https://careme.cooking", "https://careme.cooking/unsubscribe", &w); err != nil {

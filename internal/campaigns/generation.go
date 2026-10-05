@@ -40,14 +40,13 @@ type recipeStore interface {
 
 // Service runs advertised recipe generation independently of the web server.
 type Service struct {
-	locations        advertisedLocationStore
-	generator        recipeGenerator
-	store            recipeStore
-	statuses         *status.Store
-	images           recipes.ImageStore
-	imageGenerator   recipes.ImageGen
-	wait             func()
-	staplesSignature func(string) string
+	locations      advertisedLocationStore
+	generator      recipeGenerator
+	store          recipeStore
+	statuses       *status.Store
+	images         recipes.ImageStore
+	imageGenerator recipes.ImageGen
+	wait           func()
 }
 
 func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Service, error) {
@@ -75,7 +74,7 @@ func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Servi
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))
 	critiquer := critique.NewManager(cfg, c, httpClient)
 	statuses := status.NewStore(c)
-	store := recipes.IO(c, providers.StaplesSignature)
+	store := recipes.IO(c)
 	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
@@ -83,7 +82,6 @@ func NewService(cfg *config.Config, providers locations.ProviderFactory) (*Servi
 	return &Service{
 		locations: locationStore, generator: generator, store: store,
 		statuses: statuses, images: recipes.NewImageStore(imageCache), imageGenerator: client, wait: critiquer.Wait,
-		staplesSignature: providers.StaplesSignature,
 	}, nil
 }
 
@@ -109,7 +107,7 @@ func (s *Service) generateLocation(ctx context.Context, locationID string) error
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
 	}
-	if err := s.generate(ctx, recipes.DefaultParams(loc, date, s.staplesSignature(loc.ID))); err != nil {
+	if err := s.generate(ctx, recipes.DefaultParams(loc, date)); err != nil {
 		return fmt.Errorf("generate campaign for %s: %w", locationID, err)
 	}
 	return nil

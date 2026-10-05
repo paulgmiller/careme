@@ -23,7 +23,7 @@ import (
 func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t)
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	hash := p.Hash()
 	statuses := s.generationStatuses.(*status.Store)
@@ -160,7 +160,7 @@ func TestShoppingProgressKeepsSavedRecipesDuringReplacement(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t)
 	saved := ai.Recipe{Title: "Already added", Instructions: []string{"Cook."}}
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	p.Saved = []ai.Recipe{saved}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.generationStatuses.Start(t.Context(), p.Hash(), ""))
@@ -204,7 +204,7 @@ func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
 	recipe := ai.Recipe{Title: "Padded hash recipe", Instructions: []string{"Cook."}}
 	hash := recipe.ComputeHash()
 	require.True(t, strings.HasSuffix(hash, "=="), "regression requires a padded hash")
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	rr := httptest.NewRecorder()
 	formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, true, recipeSelection{}, rr)
 	require.Equal(t, http.StatusOK, rr.Code)
@@ -217,7 +217,7 @@ func TestShoppingRecipeDOMIDsExcludeHashPadding(t *testing.T) {
 
 func TestShoppingProgressOrdersCardsBySlotHash(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	first := ai.Recipe{Title: "First ready recipe"}
 	last := ai.Recipe{Title: "Last ready recipe"}
 	saved := ai.Recipe{Title: "Previously saved recipe"}

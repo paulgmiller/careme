@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"careme/internal/cache"
-	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 )
 
@@ -74,7 +73,7 @@ func purgeInvalidShoppingLists(ctx context.Context, c purgeCache, apply bool, ou
 	hashes := normalizeShoppingListHashes(keys)
 	stats.Found = len(hashes)
 
-	rio := recipes.IO(c, (providerregistry.SignatureFactory{}).StaplesSignature)
+	rio := recipes.IO(c)
 	for _, hash := range hashes {
 		_, err := rio.FromCache(ctx, hash)
 		if err == nil {

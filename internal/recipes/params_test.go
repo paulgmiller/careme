@@ -45,7 +45,7 @@ func TestParseGenerationForm_DefaultDateUsesStoreCoordinates(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=farmersmarket_1", nil)
-	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location}, func(string) string { return "" })
+	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T)
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian&help=Save%20two%20meals", nil)
-	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location}, func(string) string { return "" })
+	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T)
 	}
 
 	reqWithoutHelp := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian", nil)
-	pWithoutHelp, err := ParseGenerationForm(context.Background(), reqWithoutHelp, staticLocationLookup{location: location}, func(string) string { return "" })
+	pWithoutHelp, err := ParseGenerationForm(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm without help returned error: %v", err)
 	}

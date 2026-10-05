@@ -54,16 +54,11 @@ type ingredientEmbedder interface {
 	EmbedIngredients(context.Context, []string) ([]ai.IngredientEmbedding, error)
 }
 
-type signatureFactory interface {
-	StaplesSignature(string) string
-}
-
 type planService struct {
-	planner    menuPlanner
-	staples    staplesService
-	pantry     pantryService
-	embedder   ingredientEmbedder
-	signatures signatureFactory
+	planner  menuPlanner
+	staples  staplesService
+	pantry   pantryService
+	embedder ingredientEmbedder
 }
 
 type storeMenuPlan struct {
@@ -167,10 +162,9 @@ func newCache(cfg *config.Config) (cache.ListCache, error) {
 func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers providerregistry.Factory) (planService, error) {
 	if cfg.Mocks.Enable {
 		return planService{
-			planner:    mockMenuPlanner{},
-			staples:    mockStaplesService{},
-			pantry:     mockPantryService{},
-			signatures: providers,
+			planner: mockMenuPlanner{},
+			staples: mockStaplesService{},
+			pantry:  mockPantryService{},
 		}, nil
 	}
 
@@ -182,16 +176,15 @@ func newPlanService(cfg *config.Config, cacheStore cache.ListCache, providers pr
 	}
 	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 	return planService{
-		planner:    ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
-		staples:    staples,
-		pantry:     staples,
-		embedder:   ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
-		signatures: providers,
+		planner:  ai.NewClient(cfg.AI, httpClient, prompts.NewCacheRecorder(cacheStore)),
+		staples:  staples,
+		pantry:   staples,
+		embedder: ai.NewIngredientEmbedder(cfg.AI.APIKey, httpClient),
 	}, nil
 }
 
 func makeMenuPlans(ctx context.Context, service planService, store locations.Location, date time.Time, instructions string, count, plans int) ([]ai.RecipePlan, error) {
-	params := recipes.DefaultParams(&store, date, service.signatures.StaplesSignature(store.ID))
+	params := recipes.DefaultParams(&store, date)
 	params.Instructions = instructions
 
 	ingredients, err := service.staples.FetchStaples(ctx, params)

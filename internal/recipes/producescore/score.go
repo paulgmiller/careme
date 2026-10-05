@@ -22,12 +22,11 @@ type ingredientCache interface {
 }
 
 type CachedProduceScorer struct {
-	cache     ingredientCache
-	signature func(string) string
+	cache ingredientCache
 }
 
-func NewCachedProduceScorer(c ingredientCache, signature func(string) string) *CachedProduceScorer {
-	return &CachedProduceScorer{cache: c, signature: signature}
+func NewCachedProduceScorer(c ingredientCache) *CachedProduceScorer {
+	return &CachedProduceScorer{cache: c}
 }
 
 func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtypes.Location) *int {
@@ -38,9 +37,9 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtype
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, s.signature(loc.ID)))
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, locations.StaplesSignature(loc.ID)))
 		if err == nil {
-			score := ScoreIngredients(ingredients)
+			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score
 		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -54,8 +53,7 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtype
 	return nil
 }
 
-// ScoreIngredients sums grades above the cutoff and scales the total by 100.
-func ScoreIngredients(ingredients []ai.InputIngredient) int {
+func sumIngredientGradesAboveCutoff(ingredients []ai.InputIngredient) int {
 	score := 0
 	for _, ingredient := range ingredients {
 		if ingredient.Grade == nil || ingredient.Grade.Score <= IngredientGradeCutoff {

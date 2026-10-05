@@ -4,10 +4,8 @@ import (
 	"careme/internal/cache"
 )
 
-// ProviderFactory is implemented at the application boundary where provider
-// packages can be imported without pulling them into location consumers.
+// ProviderFactory assembles location and staples providers at the application boundary.
 type ProviderFactory interface {
 	NewLocations(cache.ListCache, CentroidByZip) (Store, error)
 	NewStaplesBackends() ([]StaplesBackend, error)
-	StaplesSignature(string) string
 }

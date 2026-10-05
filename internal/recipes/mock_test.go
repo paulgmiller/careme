@@ -13,9 +13,9 @@ import (
 func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
-	m := NewMockGenerator(IO(cacheStore, func(string) string { return "" }), critique.NewMock(cacheStore), noopstatuswriter{})
+	m := NewMockGenerator(IO(cacheStore), critique.NewMock(cacheStore), noopstatuswriter{})
 	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
-	params := DefaultParams(loc, time.Now(), "")
+	params := DefaultParams(loc, time.Now())
 
 	result, err := m.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -51,9 +51,9 @@ func TestMockGenerateRecipes_Returns3Recipes(t *testing.T) {
 func TestMockGenerateRecipes_ReturnsRandomRecipes(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
-	m := NewMockGenerator(IO(cacheStore, func(string) string { return "" }), critique.NewMock(cacheStore), noopstatuswriter{})
+	m := NewMockGenerator(IO(cacheStore), critique.NewMock(cacheStore), noopstatuswriter{})
 	loc := &locations.Location{ID: "70000002", Name: "Test Location", Address: "123 Test St", State: "TS"}
-	params := DefaultParams(loc, time.Now(), "")
+	params := DefaultParams(loc, time.Now())
 
 	// Generate recipes multiple times and check that we get different combinations
 	// With 20 recipes choosing 3, it's very unlikely to get the same 3 in the same order multiple times
@@ -103,9 +103,9 @@ func TestMockGenerateRecipes_Has20UniqueRecipes(t *testing.T) {
 func TestMockGenerateRecipes_SavesReturnedRecipes(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, func(string) string { return "" })
+	rio := IO(cacheStore)
 	m := NewMockGenerator(rio, critique.NewMock(cacheStore), noopstatuswriter{})
-	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now())
 
 	result, err := m.GenerateRecipes(t.Context(), params)
 	if err != nil {
@@ -128,10 +128,10 @@ func TestMockGenerateRecipes_SavesReturnedRecipes(t *testing.T) {
 func TestMockGenerateRecipes_SavesRubberstampCritiques(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(t.TempDir())
-	rio := IO(cacheStore, func(string) string { return "" })
+	rio := IO(cacheStore)
 	critiqueStore := critique.NewStore(cacheStore)
 	m := NewMockGenerator(rio, critique.NewMock(cacheStore), noopstatuswriter{})
-	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now(), "")
+	params := DefaultParams(&locations.Location{ID: "70000002", Name: "Test Location", State: "TS"}, time.Now())
 
 	result, err := m.GenerateRecipes(t.Context(), params)
 	if err != nil {

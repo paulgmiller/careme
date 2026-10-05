@@ -128,11 +128,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		if cachable {
 			if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
 				// could relook up on error here.
-				loc, err := backfillLocationCoordinates(cachedLoc, l.zipCentroids)
-				if err != nil {
-					return nil, err
-				}
-				return loc, nil
+				return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
 			}
 		}
 

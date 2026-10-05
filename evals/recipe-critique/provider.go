@@ -75,7 +75,7 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open recipe cache: %w", err)
 	}
-	return runEval(context.Background(), testCase, recipes.IO(cacheStore, nil), critiquer)
+	return runEval(context.Background(), testCase, recipes.IO(cacheStore), critiquer)
 }
 
 func decodeEvalCase(body []byte) (evalCase, error) {

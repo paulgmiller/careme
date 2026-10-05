@@ -75,9 +75,9 @@ func runServer(cfg *config.Config, addr string) error {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	// TODO  make the mock more transparent?
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
-	providers := providerregistry.NewFactory(cfg)
 
 	centroids := locations.LoadCentroids()
+	providers := providerregistry.NewFactory(cfg)
 	locationStorage, err := providers.NewLocations(cache, centroids)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
@@ -89,7 +89,7 @@ func runServer(cfg *config.Config, addr string) error {
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache, providers.StaplesSignature), mc, status.NewStore(cache))
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 
@@ -106,9 +106,9 @@ func runServer(cfg *config.Config, addr string) error {
 			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
 		staples := recipes.NewCachedStaplesService(backends, cache, grader)
-		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples, providers.StaplesSignature), 6.*time.Hour)
+		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache, providers.StaplesSignature))
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -119,7 +119,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache, providers.StaplesSignature), providers.StaplesSignature))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -133,10 +133,10 @@ func runServer(cfg *config.Config, addr string) error {
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
-	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage, providers.StaplesSignature)
+	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, providers.StaplesSignature)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
@@ -146,12 +146,12 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
-	recipeIO := recipes.IO(cache, providers.StaplesSignature)
+	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
 	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/mealplan/{hash}", recipes.AdminMealPlanPage(recipeIO))
-	ingredientsHandler := ingredients.NewHandler(cache, providers.StaplesSignature)
+	ingredientsHandler := ingredients.NewHandler(cache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
 	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(cache), recipeIO))

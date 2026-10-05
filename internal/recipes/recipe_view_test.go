@@ -17,7 +17,7 @@ import (
 func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	recipe := ai.Recipe{
 		Title:       "Pepper Pasta",
 		Description: "A quick pasta dinner.",
@@ -55,7 +55,7 @@ func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
 
 func TestRecipeStepIllustrationControlsAndIngredients(t *testing.T) {
 	loc := locations.Location{ID: "store", Name: "Store"}
-	params := DefaultParams(&loc, time.Now(), "")
+	params := DefaultParams(&loc, time.Now())
 	recipe := ai.Recipe{Title: "Soup", Ingredients: []ai.Ingredient{{Name: "Carrot", Quantity: "2"}}, Instructions: []string{"Chop carrots.", "Simmer carrots."}}
 	hash := recipe.ComputeHash()
 	for _, signedIn := range []bool{false, true} {
@@ -89,7 +89,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 		ID: "70000001", Name: "Store", Address: "1 Main St", ZipCode: "98101",
 		Lat: &lat, Lon: &lon,
 	}
-	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC), "")
+	p := DefaultParams(&loc, time.Date(2026, time.January, 25, 0, 0, 0, 0, time.UTC))
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	recipe.OriginHash = p.Hash()
@@ -228,7 +228,7 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
@@ -270,7 +270,7 @@ func TestFormatRecipeHTML_HidesQuestionInputWhenSignedOut(t *testing.T) {
 func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
@@ -300,7 +300,7 @@ func TestFormatRecipeHTML_ShowsRecipeCritiqueScore(t *testing.T) {
 func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
@@ -330,7 +330,7 @@ func TestFormatRecipeHTML_ShowsProminentWarningForLowCritiqueScore(t *testing.T)
 func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"
 	w := httptest.NewRecorder()
@@ -375,7 +375,7 @@ func TestFormatRecipeHTML_RendersCachedWineRecommendation(t *testing.T) {
 func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	recipe := ai.Recipe{
 		Title:        "Market Greens",
@@ -420,7 +420,7 @@ func TestFormatRecipeHTML_AllowsIngredientWithoutPrice(t *testing.T) {
 func TestFormatRecipeHTML_RendersRecipeImage(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	p := DefaultParams(&loc, time.Now(), "")
+	p := DefaultParams(&loc, time.Now())
 	w := httptest.NewRecorder()
 	recipe := list.Recipes[0]
 	recipe.ResponseID = "resp-123"

@@ -150,7 +150,7 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 
 func NewCachedStaplesService(backends []locations.StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
 	provider := NewStaplesProvider(backends)
-	rio := IO(c, nil)
+	rio := IO(c)
 	return &cachedStaplesService{
 		provider: provider,
 		cache:    rio,
@@ -292,13 +292,12 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 }
 
 type StaplesWatchdog struct {
-	locations        locationByID
-	staples          staplesFetcher
-	staplesSignature func(string) string
+	locations locationByID
+	staples   staplesFetcher
 }
 
-func NewStaplesWatchdog(locations locationByID, staples staplesFetcher, staplesSignature func(string) string) *StaplesWatchdog {
-	return &StaplesWatchdog{locations: locations, staples: staples, staplesSignature: staplesSignature}
+func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *StaplesWatchdog {
+	return &StaplesWatchdog{locations: locations, staples: staples}
 }
 
 func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
@@ -311,7 +310,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 		if err != nil {
 			return 0, err
 		}
-		_, err = w.staples.FetchStaples(ctx, DefaultParams(store, date, w.staplesSignature(store.ID)))
+		_, err = w.staples.FetchStaples(ctx, DefaultParams(store, date))
 		return 0, err
 	})
 	return err

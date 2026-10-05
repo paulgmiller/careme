@@ -339,7 +339,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam == "" {
 		// FormValue also reads URL query parameters, so links such as
 		// /recipes?location=<id> can be redirected to their canonical hash URL.
-		p, err := ParseGenerationForm(ctx, r, s.locServer, s.staplesSignature)
+		p, err := ParseGenerationForm(ctx, r, s.locServer)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 			return
@@ -460,7 +460,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := ParseGenerationForm(ctx, r, s.locServer, s.staplesSignature)
+	p, err := ParseGenerationForm(ctx, r, s.locServer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid form parameters: %v", err), http.StatusBadRequest)
 		return

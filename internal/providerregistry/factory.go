@@ -5,10 +5,7 @@ import (
 	"careme/internal/locations"
 )
 
-type Factory struct {
-	SignatureFactory
-	config *config.Config
-}
+type Factory struct{ config *config.Config }
 
 func NewFactory(cfg *config.Config) Factory { return Factory{config: cfg} }
 

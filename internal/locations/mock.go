@@ -49,8 +49,7 @@ func (m mock) GetLocationByID(ctx context.Context, locationID string) (*Location
 }
 
 func (m mock) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]Location, error) {
-	locations := lo.Values(fakes)
-	return locations, nil
+	return lo.Values(fakes), nil
 }
 
 func (mock) HasInventory(locationID string) bool {

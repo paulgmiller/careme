@@ -19,12 +19,12 @@ import (
 
 func TestInitialCritiqueFailureLeavesSlotDraft(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	c := cache.NewInMemoryCache()
 	progress := status.NewStore(c)
 	require.NoError(t, progress.Start(t.Context(), p.Hash(), ""))
 	client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{{Title: "Draft", ResponseID: "response"}}}}}
-	g := newTestGenerator(t, client, &captureCritiqueService{err: errors.New("review unavailable")}, seededStaples(t, p), progress, IO(c, func(string) string { return "" }))
+	g := newTestGenerator(t, client, &captureCritiqueService{err: errors.New("review unavailable")}, seededStaples(t, p), progress, IO(c))
 	result, err := g.GenerateRecipes(t.Context(), p)
 	require.ErrorContains(t, err, "review unavailable")
 	assert.Nil(t, result)
@@ -37,7 +37,7 @@ func TestInitialCritiqueFailureLeavesSlotDraft(t *testing.T) {
 func TestDraftCardHasDetailsButNoLinksOrAdd(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t)
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	progress := s.generationStatuses.(*status.Store)
 	require.NoError(t, progress.Start(t.Context(), p.Hash(), "Reviewing"))
@@ -87,7 +87,7 @@ func TestRegeneratedSlotReadyBeforeBackgroundCritiqueCompletes(t *testing.T) {
 	t.Parallel()
 	for _, replacement := range []bool{false, true} {
 		t.Run(map[bool]string{false: "initial", true: "replacement"}[replacement], func(t *testing.T) {
-			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now(), "")
+			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			if replacement {
 				p.PreviousMenuPlanResponseID = "previous-menu"
 			}
@@ -97,7 +97,7 @@ func TestRegeneratedSlotReadyBeforeBackgroundCritiqueCompletes(t *testing.T) {
 			revised := ai.Recipe{Title: "Revised dinner", ResponseID: "revision"}
 			client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{{Title: "Draft", ResponseID: "response"}}}}, regenerateResponses: []*ai.Recipe{&revised}}
 			critiquer := &deferredSecondCritique{}
-			g := newTestGenerator(t, client, critiquer, seededStaples(t, p), progress, IO(c, func(string) string { return "" }))
+			g := newTestGenerator(t, client, critiquer, seededStaples(t, p), progress, IO(c))
 			result, err := g.GenerateRecipes(t.Context(), p)
 			require.NoError(t, err)
 			require.Len(t, result.Recipes, 1)

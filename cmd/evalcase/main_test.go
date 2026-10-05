@@ -8,7 +8,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
-	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/assert"
@@ -62,13 +61,12 @@ func seedEvalCaseStore(t *testing.T) (evalCaseStore, string) {
 	t.Helper()
 
 	cacheStore := cache.NewInMemoryCache()
-	signatures := providerregistry.SignatureFactory{}
-	store := recipes.IO(cacheStore, signatures.StaplesSignature)
+	store := recipes.IO(cacheStore)
 	params := recipes.DefaultParams(&locations.Location{
 		ID:    "70001001",
 		Name:  "Test Store",
 		State: "WA",
-	}, time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC), signatures.StaplesSignature("70001001"))
+	}, time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC))
 	hash := params.Hash()
 	require.NoError(t, store.SaveParams(t.Context(), params))
 	require.NoError(t, store.SaveShoppingList(t.Context(), &ai.ShoppingList{

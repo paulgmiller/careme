@@ -95,7 +95,6 @@ type mailer struct {
 	publicOrigin       string
 	wait               func()
 	unsubscribeFactory users.UnsubscribeTokenFactory
-	staplesSignature   func(string) string
 }
 
 // TODO share some of this with web.go? good for mocking?
@@ -122,7 +121,7 @@ func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore, providers.StaplesSignature))
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -152,7 +151,6 @@ func NewMailer(cfg *config.Config, providers locations.ProviderFactory) (*mailer
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
 		wait:               mc.Wait,
 		unsubscribeFactory: users.NewUnsubscribeTokenFactory(*cfg),
-		staplesSignature:   providers.StaplesSignature,
 	}, nil
 }
 
@@ -261,7 +259,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 	if err != nil {
 		return nil, fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
 	}
-	return recipes.DefaultParams(l, date, m.staplesSignature(l.ID)), nil
+	return recipes.DefaultParams(l, date), nil
 }
 
 func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
@@ -271,7 +269,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
-	rio := recipes.IO(m.cache, m.staplesSignature)
+	rio := recipes.IO(m.cache)
 	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
 	paramsHash := p.Hash()

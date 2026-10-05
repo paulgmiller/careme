@@ -18,7 +18,7 @@ func TestAdminMenuPromptJSON(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	require.NoError(t, recipes.IO(cacheStore, func(string) string { return "" }).SaveShoppingList(t.Context(), &ai.ShoppingList{
+	require.NoError(t, recipes.IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Plan: &ai.MenuPlan{ResponseID: "resp-menu-123"},
 	}, "menu-hash"))
 	require.NoError(t, NewCacheRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
@@ -55,7 +55,7 @@ func TestAdminRecipePromptJSON(t *testing.T) {
 		ResponseID: "resp-recipe-123",
 	}
 	recipeHash := recipe.ComputeHash()
-	require.NoError(t, recipes.IO(cacheStore, func(string) string { return "" }).SaveRecipe(t.Context(), recipe))
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), recipe))
 	require.NoError(t, NewCacheRecorder(cacheStore).RecordPrompt(t.Context(), &ai.PromptRecord{
 		ResponseID:   "resp-recipe-123",
 		Model:        "gpt-recipe",
@@ -90,7 +90,7 @@ func TestAdminRecipePromptJSONPrependsParentPromptInputs(t *testing.T) {
 		ResponseID: "resp-child",
 	}
 	recipeHash := recipe.ComputeHash()
-	require.NoError(t, recipes.IO(cacheStore, func(string) string { return "" }).SaveRecipe(t.Context(), recipe))
+	require.NoError(t, recipes.IO(cacheStore).SaveRecipe(t.Context(), recipe))
 
 	recorder := NewCacheRecorder(cacheStore)
 	require.NoError(t, recorder.RecordPrompt(t.Context(), &ai.PromptRecord{
@@ -135,7 +135,7 @@ func TestAdminMenuPromptJSONMissingPrompt(t *testing.T) {
 	t.Parallel()
 
 	cacheStore := cache.NewFileCache(t.TempDir())
-	require.NoError(t, recipes.IO(cacheStore, func(string) string { return "" }).SaveShoppingList(t.Context(), &ai.ShoppingList{
+	require.NoError(t, recipes.IO(cacheStore).SaveShoppingList(t.Context(), &ai.ShoppingList{
 		Plan: &ai.MenuPlan{ResponseID: "resp-missing"},
 	}, "menu-hash"))
 

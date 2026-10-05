@@ -69,8 +69,7 @@ func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 	c := cache.NewInMemoryCache()
 	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
 	return &Service{
-		staplesSignature: func(string) string { return "" },
-		locations:        advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c, func(string) string { return "" }),
+		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
 		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
 	}, g, images
 }
@@ -140,7 +139,7 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {
 	s, g, _ := testService()
 	s.store = failingCampaignStore{s.store}
-	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now(), "")
+	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now())
 	require.ErrorContains(t, s.generate(t.Context(), p), "cache unavailable")
 	assert.Empty(t, g.params)
 }

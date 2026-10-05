@@ -12,7 +12,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/locations/geo"
-	"careme/internal/providerregistry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,7 +84,7 @@ func (p *countingMenuPlanner) CreateMenuPlan(_ context.Context, _ *locations.Loc
 func TestMakeMenuPlansCount(t *testing.T) {
 	for _, count := range []int{1, 4} {
 		planner := &countingMenuPlanner{}
-		service := planService{planner: planner, staples: mockStaplesService{}, pantry: mockPantryService{}, signatures: providerregistry.SignatureFactory{}}
+		service := planService{planner: planner, staples: mockStaplesService{}, pantry: mockPantryService{}}
 		plans, err := makeMenuPlans(t.Context(), service, locations.Location{ID: "70500874"}, time.Now(), "", 3, count)
 		require.NoError(t, err)
 		assert.Equal(t, int32(count), planner.calls.Load())

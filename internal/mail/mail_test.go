@@ -220,8 +220,7 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	fc := newFakeMailCache(t)
 	location := testMailLocation()
 	m := &mailer{
-		staplesSignature: func(string) string { return "" },
-		cache:            fc,
+		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
@@ -249,9 +248,8 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 
 func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
 	m := &mailer{
-		staplesSignature: func(string) string { return "" },
-		imageGenerator:   fakeMailImageGenerator{err: errors.New("image service unavailable")},
-		imageStore:       recipes.NewImageStore(cache.NewInMemoryCache()),
+		imageGenerator: fakeMailImageGenerator{err: errors.New("image service unavailable")},
+		imageStore:     recipes.NewImageStore(cache.NewInMemoryCache()),
 	}
 
 	err := m.prepareRecipeImages(context.Background(), []ai.Recipe{{Title: "Test Recipe"}})
@@ -271,10 +269,9 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 	location := testMailLocation()
 	client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
 	m := &mailer{
-		staplesSignature: func(string) string { return "" },
-		cache:            fc,
-		locServer:        &fakeMailLocServer{location: location},
-		client:           client,
+		cache:     fc,
+		locServer: &fakeMailLocServer{location: location},
+		client:    client,
 	}
 	configureFakeMailImages(m)
 
@@ -282,7 +279,7 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 		ID:            "user-1",
 		Email:         []string{"u1@example.com"},
 		FavoriteStore: "123",
-	}, recipes.DefaultParams(location, time.Now(), ""))
+	}, recipes.DefaultParams(location, time.Now()))
 	if err == nil {
 		t.Fatal("expected empty shopping list error")
 	}
@@ -301,7 +298,6 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 	generationErr := errors.New("plan exploded")
 	generationStatuses := &fakeGenerationStatusStore{}
 	m := &mailer{
-		staplesSignature:   func(string) string { return "" },
 		cache:              fc,
 		generator:          &capturingMailGenerator{err: generationErr},
 		generationStatuses: generationStatuses,
@@ -309,7 +305,7 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 
 	err := m.deliverEmail(context.Background(), utypes.User{
 		ID: "user-1",
-	}, recipes.DefaultParams(location, time.Now(), ""))
+	}, recipes.DefaultParams(location, time.Now()))
 	if !errors.Is(err, generationErr) {
 		t.Fatalf("expected generation error, got %v", err)
 	}
@@ -323,12 +319,12 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 
 func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	t.Run("not opted in", func(t *testing.T) {
-		m := &mailer{staplesSignature: func(string) string { return "" }}
+		m := &mailer{}
 		m.sendEmail(context.Background(), utypes.User{ID: "user-1"})
 	})
 
 	t.Run("no favorite store", func(t *testing.T) {
-		m := &mailer{staplesSignature: func(string) string { return "" }}
+		m := &mailer{}
 		m.sendEmail(context.Background(), utypes.User{
 			ID:        "user-1",
 			MailOptIn: true,
@@ -346,10 +342,9 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 		fc := newFakeMailCache(t)
 		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
 		m := &mailer{
-			staplesSignature: func(string) string { return "" },
-			cache:            fc,
-			locServer:        &fakeMailLocServer{location: location},
-			client:           client,
+			cache:     fc,
+			locServer: &fakeMailLocServer{location: location},
+			client:    client,
 		}
 		m.sendEmail(context.Background(), utypes.User{
 			ID:            "user-1",
@@ -369,14 +364,13 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 
 	t.Run("already sent", func(t *testing.T) {
 		fc := newFakeMailCache(t)
-		paramsHash := recipes.DefaultParams(location, today, "").Hash()
+		paramsHash := recipes.DefaultParams(location, today).Hash()
 		fc.data[sentMailKey("user-1", paramsHash)] = "already sent"
 		client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
 		m := &mailer{
-			staplesSignature: func(string) string { return "" },
-			cache:            fc,
-			locServer:        &fakeMailLocServer{location: location},
-			client:           client,
+			cache:     fc,
+			locServer: &fakeMailLocServer{location: location},
+			client:    client,
 		}
 		m.sendEmail(context.Background(), utypes.User{
 			ID:            "user-1",
@@ -402,8 +396,7 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
 	m := &mailer{
-		staplesSignature: func(string) string { return "" },
-		cache:            fc,
+		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
@@ -495,7 +488,6 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	generator := &capturingMailGenerator{}
 	generationStatuses := &fakeGenerationStatusStore{}
 	m := &mailer{
-		staplesSignature:   func(string) string { return "" },
 		cache:              fc,
 		generationStatuses: generationStatuses,
 		locServer: &fakeMailLocServer{
@@ -555,9 +547,8 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 	}}
 	waited := false
 	m := &mailer{
-		staplesSignature: func(string) string { return "" },
-		cache:            fc,
-		userStorage:      store,
+		cache:       fc,
+		userStorage: store,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
@@ -656,7 +647,6 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
 	m := &mailer{
-		staplesSignature:   func(string) string { return "" },
 		cache:              fc,
 		generationStatuses: generationStatuses,
 		generator:          g,
@@ -679,7 +669,7 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 				Title: "salad",
 			},
 		},
-	}, recipes.DefaultParams(location, time.Now(), ""))
+	}, recipes.DefaultParams(location, time.Now()))
 	require.NoError(t, err)
 	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
 	assert.Contains(t, g.params.Directive, "Always meat")

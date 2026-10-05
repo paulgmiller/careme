@@ -46,14 +46,14 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
 	if cfg.generator == nil {
-		cfg.generator = NewMockGenerator(IO(cfg.cache, func(string) string { return "" }), critique.NewMock(cfg.cache), noopstatuswriter{})
+		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache), noopstatuswriter{})
 	}
 
 	if cfg.imagegen == nil {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, func(string) string { return "" })
+	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}

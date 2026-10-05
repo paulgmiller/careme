@@ -17,10 +17,9 @@ import (
 )
 
 type Server struct {
-	cache            cache.ListCache
-	publicOrigin     string
-	locations        locationLookup
-	staplesSignature func(string) string
+	cache        cache.ListCache
+	publicOrigin string
+	locations    locationLookup
 }
 
 type locationLookup interface {
@@ -37,12 +36,11 @@ Sitemap: %s/sitemap.xml
 `
 )
 
-func New(c cache.ListCache, publicOrigin string, locations locationLookup, staplesSignature func(string) string) *Server {
+func New(c cache.ListCache, publicOrigin string, locations locationLookup) *Server {
 	return &Server{
-		cache:            c,
-		publicOrigin:     publicOrigin,
-		locations:        locations,
-		staplesSignature: staplesSignature,
+		cache:        c,
+		publicOrigin: publicOrigin,
+		locations:    locations,
 	}
 }
 
@@ -122,9 +120,9 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 			continue
 		}
 
-		p := recipes.DefaultParams(loc, date, s.staplesSignature(loc.ID))
+		p := recipes.DefaultParams(loc, date)
 
-		io := recipes.IO(s.cache, s.staplesSignature)
+		io := recipes.IO(s.cache)
 		// could be slow if iwe have lots of campaigns
 		exists, err := io.ParamsExist(ctx, p)
 		if err != nil {

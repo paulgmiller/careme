@@ -12,7 +12,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
-	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 
 	"github.com/paulgmiller/kage/pkg/kage"
@@ -51,7 +50,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := writeEvalCases(context.Background(), os.Stdout, recipes.IO(cacheStore, (providerregistry.SignatureFactory{}).StaplesSignature), options.Hash); err != nil {
+	if err := writeEvalCases(context.Background(), os.Stdout, recipes.IO(cacheStore), options.Hash); err != nil {
 		log.Fatal(err)
 	}
 }
