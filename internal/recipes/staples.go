@@ -8,42 +8,28 @@ import (
 	"hash/fnv"
 	"io"
 	"log/slog"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/brightdata"
 	"careme/internal/cache"
-	"careme/internal/config"
-	"careme/internal/farmersmarket"
-	"careme/internal/heb"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
-	"careme/internal/providers/albertsons"
-	"careme/internal/providers/aldi"
-	"careme/internal/providers/kroger"
-	"careme/internal/providers/mnfoodclub"
-	"careme/internal/providers/publix"
-	"careme/internal/providers/smithbrothersfarms"
-	"careme/internal/providers/walmart"
-	"careme/internal/providers/wholefoods"
 
 	"github.com/samber/lo"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type identityProvider interface {
-	IsID(locationID string) bool
+// StaplesBackend is the provider contract consumed by recipe sourcing.
+type StaplesBackend interface {
+	IsID(string) bool
 	Signature() string
+	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
+	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
 }
 
-type backendStaplesProvider interface {
-	identityProvider
-	staplesProvider
-}
+type backendStaplesProvider = StaplesBackend
 
 type routingStaplesProvider struct {
 	backends []backendStaplesProvider
@@ -53,15 +39,10 @@ type dedupingStaplesProvider struct {
 	provider staplesProvider
 }
 
-func NewStaplesProvider(cfg *config.Config) (staplesProvider, error) {
-	backends, err := defaultStaplesBackends(cfg)
-	if err != nil {
-		return nil, err
-	}
-
+func NewStaplesProvider(backends []StaplesBackend) staplesProvider {
 	return dedupingStaplesProvider{provider: routingStaplesProvider{
 		backends: backends,
-	}}, nil
+	}}
 }
 
 func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -175,17 +156,14 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 	return deduped, nil
 }
 
-func NewCachedStaplesService(cfg *config.Config, c cache.Cache, grader grader) (*cachedStaplesService, error) {
-	provider, err := NewStaplesProvider(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create staples provider: %w", err)
-	}
+func NewCachedStaplesService(backends []StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
+	provider := NewStaplesProvider(backends)
 	rio := IO(c)
 	return &cachedStaplesService{
 		provider: provider,
 		cache:    rio,
 		grader:   grader,
-	}, nil
+	}
 }
 
 func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error) {
@@ -366,61 +344,4 @@ func (p routingStaplesProvider) providerForLocation(locationID string) (backendS
 		}
 	}
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
-}
-
-// should we pass in a wrapper/roundtripper
-func defaultStaplesBackends(cfg *config.Config) ([]backendStaplesProvider, error) {
-	// should we do this per request so we get new proxies per user? https://github.com/paulgmiller/careme/issues/443
-	brightdataClient, err := brightdata.NewProxyAwareHTTPClient(cfg.BrightDataProxy)
-	if err != nil {
-		return nil, fmt.Errorf("create bright data proxy-aware client: %w", err)
-	}
-	brightdataClient.Transport = otelhttp.NewTransport(brightdataClient.Transport)
-
-	// only returns an err because it ensures a cache for reese84 tokens.
-	albertsonsProvider, err := albertsons.NewStaplesProvider(cfg.Albertsons, brightdataClient)
-	if err != nil {
-		return nil, fmt.Errorf("create albertsons staples provider: %w", err)
-	}
-
-	publixProvider, err := publix.NewStaplesProvider(cfg.Publix, brightdataClient)
-	if err != nil {
-		return nil, fmt.Errorf("create publix staples provider: %w", err)
-	}
-
-	hebProvider, err := heb.NewStaplesProvider(brightdataClient)
-	if err != nil {
-		return nil, fmt.Errorf("create heb staples provider: %w", err)
-	}
-	aldiProvider, err := aldi.NewStaplesProvider(brightdataClient)
-	if err != nil {
-		return nil, fmt.Errorf("create ALDI staples provider: %w", err)
-	}
-
-	// Kroger is a public API integration, not a scraper. Keep it off Bright Data;
-	// retries are added in the Kroger client.
-	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
-	if err != nil {
-		return nil, fmt.Errorf("create kroger staples provider: %w", err)
-	}
-
-	farmersMarketProvider, err := farmersmarket.NewStaplesProvider()
-	if err != nil {
-		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
-	}
-
-	return []backendStaplesProvider{
-		albertsonsProvider,
-		hebProvider,
-		aldiProvider,
-		krogerBackend,
-		publixProvider,
-		farmersMarketProvider,
-		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(brightdataClient)),
-		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
-		// actowiz.NewStaplesProvider(),
-		walmart.NewStaplesProvider(),
-		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
-	}, nil
 }

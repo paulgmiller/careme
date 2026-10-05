@@ -20,6 +20,7 @@ import (
 	"careme/internal/locations/geo"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/producescore"
 
@@ -75,15 +76,22 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	providers := providerregistry.NewFactory(cfg)
+	centroids := locations.LoadCentroids()
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
+	}
+	locationStorage, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)})
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		log.Fatalf("failed to create staples service: %v", err)
+		log.Fatalf("failed to create staples backends: %v", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 
 	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {

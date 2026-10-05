@@ -87,7 +87,7 @@ func (g *generatorParams) Hash() string {
 
 // so far just excludes instructions. Can exclude people and other things
 func (g *generatorParams) LocationHash() string {
-	return cachekey.ForStore(g.Location.ID, g.Date)
+	return cachekey.ForStore(g.Location.ID, g.Date, cachekey.StaplesSignature(g.Location.ID))
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {

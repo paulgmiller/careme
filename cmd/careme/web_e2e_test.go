@@ -19,6 +19,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
@@ -241,7 +242,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 	userStorage := users.NewStorage(cacheStore)
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cacheStore, centroids)
+	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
+	if err != nil {
+		t.Fatalf("failed to create location server: %v", err)
+	}
+	locationStorage, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}

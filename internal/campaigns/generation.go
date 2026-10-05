@@ -49,7 +49,12 @@ type Service struct {
 	wait           func()
 }
 
-func NewService(cfg *config.Config) (*Service, error) {
+type providerFactory interface {
+	NewLocationBackends(locations.CentroidByZip) ([]locations.LocationBackend, error)
+	NewStaplesBackends() ([]recipes.StaplesBackend, error)
+}
+
+func NewService(cfg *config.Config, providers providerFactory) (*Service, error) {
 	c, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign cache: %w", err)
@@ -58,16 +63,22 @@ func NewService(cfg *config.Config) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create campaign image cache: %w", err)
 	}
-	locationStore, err := locations.New(cfg, c, locations.LoadCentroids())
+	centroids := locations.LoadCentroids()
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return nil, fmt.Errorf("create campaign locations: %w", err)
+	}
+	locationStore, err := locations.New(c, centroids, locationBackends)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign locations: %w", err)
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	grader := ingredientgrading.NewManager(cfg, c, httpClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, c, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return nil, fmt.Errorf("create campaign staples: %w", err)
+		return nil, fmt.Errorf("create campaign staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, c, grader)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))

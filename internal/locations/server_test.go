@@ -62,7 +62,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -104,7 +104,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -130,7 +130,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", true)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -464,7 +464,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 	client2.setListResponse("10001", locations)
 
 	scoreLookup := &recordingProduceScoreLookup{scores: scores}
-	storage := newTestLocationServerWithBackends([]locationBackend{client, client2})
+	storage := newTestLocationServerWithBackends([]LocationBackend{client, client2})
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
 
 	mux := http.NewServeMux()

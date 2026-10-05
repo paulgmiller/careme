@@ -1,4 +1,4 @@
-package locations
+package providerregistry
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/locations"
 	"careme/internal/providers/albertsons"
 )
 
@@ -48,30 +49,27 @@ func TestNewAddsAlbertsonsBackendWhenEnabled(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CacheStoreSummary returned error: %v", err)
 	}
-	if err := albertsons.RebuildLocationIndex(context.Background(), listCache, LoadCentroids()); err != nil {
+	if err := albertsons.RebuildLocationIndex(context.Background(), listCache, locations.LoadCentroids()); err != nil {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := New(&config.Config{
+	backends, err := NewFactory(&config.Config{
 		Albertsons: config.AlbertsonsConfig{Enable: true},
-	}, cacheStore, LoadCentroids())
+	}).NewLocationBackends(locations.LoadCentroids())
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
 	}
 
-	locStorage, ok := storage.(*locationStorage)
-	if !ok {
-		t.Fatalf("expected *locationStorage, got %T", storage)
+	storage, err := locations.New(cacheStore, locations.LoadCentroids(), backends)
+	if err != nil {
+		t.Fatalf("locations.New returned error: %v", err)
 	}
 
-	var found bool
-	for _, backend := range locStorage.clients {
-		if _, ok := backend.(*albertsons.LocationBackend); ok {
-			found = true
-			break
-		}
+	got, err := storage.GetLocationByID(context.Background(), "safeway_1444")
+	if err != nil {
+		t.Fatalf("GetLocationByID returned error: %v", err)
 	}
-	if !found {
-		t.Fatalf("expected Albertsons backend to be registered")
+	if got == nil {
+		t.Fatal("expected provider location")
 	}
 }

@@ -23,9 +23,9 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 		t.Fatalf("expected equal hashes for same day with different hours: got %s and %s", h1, h2)
 	}
 
-	// make sure we're intentional about breaking hash
+	// Preserve the hash produced by the registered staples provider.
 	if h1 != "wrxx3dmHzBA" {
-		t.Fatalf("expected hash to be stable and equal to JjKXkKjKKpE, got %s", h1)
+		t.Fatalf("expected hash to be stable and equal to wrxx3dmHzBA, got %s", h1)
 	}
 
 	legacyHash, ok := legacyRecipeHash(h1)
