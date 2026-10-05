@@ -23,7 +23,7 @@ func mockCockroachCache(t *testing.T) (*CockroachCache, sqlmock.Sqlmock) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close(); require.NoError(t, mock.ExpectationsWereMet()) })
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS \"recipes\"").WillReturnResult(sqlmock.NewResult(0, 0))
-	c, err := NewCockroachCache(context.Background(), db, "recipes")
+	c, err := NewCockroachCache(context.Background(), db, "recipes", CockroachCacheOptions{})
 	require.NoError(t, err)
 	return c, mock
 }
@@ -156,7 +156,7 @@ func TestCockroachCacheInitializationFailure(t *testing.T) {
 		require.NoError(t, db.Close())
 	}()
 	mock.ExpectExec("CREATE TABLE").WillReturnError(io.ErrUnexpectedEOF)
-	c, err := NewCockroachCache(context.Background(), db, "recipes")
+	c, err := NewCockroachCache(context.Background(), db, "recipes", CockroachCacheOptions{})
 	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	require.Nil(t, c)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -177,7 +177,7 @@ func TestCockroachCacheContainerTable(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = db.Close(); require.NoError(t, mock.ExpectationsWereMet()) })
 			mock.ExpectExec(regexp.QuoteMeta(`CREATE TABLE IF NOT EXISTS ` + tc.table + ` ( key STRING PRIMARY KEY, value BYTES NOT NULL )`)).WillReturnResult(sqlmock.NewResult(0, 0))
-			c, err := NewCockroachCache(context.Background(), db, tc.container)
+			c, err := NewCockroachCache(context.Background(), db, tc.container, CockroachCacheOptions{})
 			require.NoError(t, err)
 			mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO `+tc.table+` (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING`)).WithArgs("key", []byte("value")).WillReturnResult(sqlmock.NewResult(0, 1))
 			require.NoError(t, c.Put(context.Background(), "key", "value", IfNoneMatch()))
@@ -195,11 +195,77 @@ func TestCockroachCacheInvalidContainer(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = db.Close(); require.NoError(t, mock.ExpectationsWereMet()) })
-			c, err := NewCockroachCache(context.Background(), db, container)
+			c, err := NewCockroachCache(context.Background(), db, container, CockroachCacheOptions{})
 			require.Error(t, err)
 			require.Nil(t, c)
 		})
 	}
+}
+
+func TestCockroachCacheJSONB(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close(); require.NoError(t, mock.ExpectationsWereMet()) })
+	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS "recipes" .*value JSONB NOT NULL`).WillReturnResult(sqlmock.NewResult(0, 0))
+	c, err := NewCockroachCache(t.Context(), db, "recipes", CockroachCacheOptions{JSONB: true})
+	require.NoError(t, err)
+	for _, condition := range []PutOptions{Unconditional(), IfNoneMatch()} {
+		conflict := "DO UPDATE SET value = excluded.value"
+		if condition.Condition == PutIfNoneMatch {
+			conflict = "DO NOTHING"
+		}
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO "recipes" (key, value) VALUES ($1, $2::JSONB) ON CONFLICT (key) `+conflict)).WithArgs("a", `{"title":"Soup"}`).WillReturnResult(sqlmock.NewResult(0, 1))
+		require.NoError(t, c.Put(t.Context(), "a", `{"title":"Soup"}`, condition))
+	}
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT value::STRING FROM "recipes" WHERE key = $1`)).WithArgs("a").WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(`{"title": "Soup"}`))
+	r, err := c.Get(t.Context(), "a")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, r.Close()) }()
+	value, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"title":"Soup"}`, string(value))
+}
+
+func TestCockroachCacheJSONBIntegration(t *testing.T) {
+	url := os.Getenv("COCKROACH_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("COCKROACH_TEST_DATABASE_URL is not set")
+	}
+	db, err := sql.Open("pgx", url)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	ctx := context.Background()
+	container := "json-test-" + uuid.NewString()
+	c, err := NewCockroachCache(ctx, db, container, CockroachCacheOptions{JSONB: true})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := db.ExecContext(ctx, `DROP TABLE `+pgx.Identifier{container}.Sanitize())
+		require.NoError(t, err)
+	})
+	for _, value := range []string{`{"title":"Soup","servings":2}`, `null`, `[1,2]`, `"text"`} {
+		require.NoError(t, c.PutReader(ctx, "a", strings.NewReader(value), Unconditional()))
+		r, err := c.Get(ctx, "a")
+		require.NoError(t, err)
+		got, err := io.ReadAll(r)
+		require.NoError(t, err)
+		require.NoError(t, r.Close())
+		require.JSONEq(t, value, string(got))
+	}
+	require.ErrorIs(t, c.Put(ctx, "a", `{}`, IfNoneMatch()), ErrAlreadyExists)
+	require.Error(t, c.Put(ctx, "a", "not JSON", Unconditional()))
+	r, err := c.Get(ctx, "a")
+	require.NoError(t, err)
+	got, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+	require.JSONEq(t, `"text"`, string(got))
+	require.NoError(t, c.Put(ctx, "b", `{}`, IfNoneMatch()))
+	keys, err := c.List(ctx, "", "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "b"}, keys)
+	require.NoError(t, c.Delete(ctx, "a"))
+	_, err = c.Get(ctx, "a")
+	require.ErrorIs(t, err, ErrNotFound)
 }
 
 // Set COCKROACH_TEST_DATABASE_URL to a disposable database to exercise real SQL.
@@ -213,7 +279,7 @@ func TestCockroachCacheIntegration(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	ctx := context.Background()
 	container := "cache-test-" + uuid.NewString()
-	c, err := NewCockroachCache(ctx, db, container)
+	c, err := NewCockroachCache(ctx, db, container, CockroachCacheOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS `+pgx.Identifier{container}.Sanitize()+`, `+pgx.Identifier{container + "-other"}.Sanitize())

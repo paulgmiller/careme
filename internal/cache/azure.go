@@ -161,7 +161,7 @@ func EnsureCache(container string) (ListCache, error) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		c, err := NewCockroachCache(ctx, db, container)
+		c, err := NewCockroachCache(ctx, db, container, CockroachCacheOptions{})
 		if err != nil {
 			_ = db.Close()
 			return nil, err
