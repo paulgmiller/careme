@@ -16,6 +16,8 @@ import (
 	"careme/internal/providers/wholefoods"
 )
 
+// this is pretty hacky but if we don't do this we have to pass something to every recipes.IO
+// so it can hash params correctly. Open to better methods.
 func init() {
 	cachekey.RegisterStaplesSignature(StaplesSignature)
 }

@@ -27,7 +27,10 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// NewLocationBackends initializes enabled location providers in routing order.
+const locationInitializationTimeout = time.Minute
+
+// NewLocationBackends initializes enabled location providers in routing order
+// with a bounded startup timeout.
 func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locations.LocationBackend, error) {
 	cfg := f.config
 	if cfg.Mocks.Enable {
@@ -65,12 +68,15 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 			return farmersmarket.NewContainerLocationBackend()
 		},
 	}
-	return initializeLocationBackends(context.Background(), factories)
+	return initializeLocationBackends(factories, locationInitializationTimeout)
 }
 
 type locationBackendFactory func(context.Context) (locations.LocationBackend, error)
 
-func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locations.LocationBackend, error) {
+func initializeLocationBackends(factories []locationBackendFactory, timeout time.Duration) ([]locations.LocationBackend, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	results, err := parallelism.MapWithErrors(factories, func(factory locationBackendFactory) (locations.LocationBackend, error) {
 		start := time.Now()
 		backend, err := factory(ctx)
