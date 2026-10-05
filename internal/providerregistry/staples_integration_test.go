@@ -1,4 +1,4 @@
-package providerregistry
+package providerregistry_test
 
 import (
 	"bytes"

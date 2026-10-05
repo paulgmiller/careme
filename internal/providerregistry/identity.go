@@ -1,10 +1,11 @@
-package locations
+package providerregistry
 
 import (
 	"testing"
 
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/kroger"
@@ -14,6 +15,10 @@ import (
 	"careme/internal/providers/walmart"
 	"careme/internal/providers/wholefoods"
 )
+
+func init() {
+	cachekey.RegisterStaplesSignature(StaplesSignature)
+}
 
 type staplesIdentity interface {
 	IsID(string) bool
