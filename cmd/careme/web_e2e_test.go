@@ -237,12 +237,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to create templates %v", err)
 	}
 
+	providerFactory := providerregistry.NewFactory(cfg)
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore, providerregistry.NewFactory(cfg).StaplesSignature), critique.NewMock(cacheStore), status.NewStore(cacheStore))
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore, providerFactory.StaplesSignature), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
-	locationStorage, err := providerregistry.NewFactory(cfg).NewLocations(cacheStore, centroids)
+	locationStorage, err := providerFactory.NewLocations(cacheStore, centroids)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -258,7 +259,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, providerregistry.NewFactory(cfg).StaplesSignature).Register(appRoutes)
+	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, providerFactory.StaplesSignature).Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
