@@ -93,14 +93,27 @@ func main() {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore, providers.StaplesSignature), providers.StaplesSignature), providers.StaplesSignature)
+	scorer := scoreService{inventory: locationStorage, staples: staples, signatures: providers}
+	rows, err := scorer.scoreLocations(ctx, locs, limit)
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
 	}
 }
 
-type inventoryLookup func(string) bool
+type inventoryLookup interface {
+	HasInventory(string) bool
+}
+
+type signatureFactory interface {
+	StaplesSignature(string) string
+}
+
+type scoreService struct {
+	inventory  inventoryLookup
+	staples    staplesFetcher
+	signatures signatureFactory
+}
 
 type coordinateLocationLookup interface {
 	GetLocationByID(ctx context.Context, locationID string) (*locations.Location, error)
@@ -130,20 +143,16 @@ func locationsToScore(ctx context.Context, lookup coordinateLocationLookup, zip 
 	return lookup.GetLocationsByCoordinates(ctx, coordinates)
 }
 
-func scoreLocations(
+func (s scoreService) scoreLocations(
 	ctx context.Context,
 	locs []locations.Location,
 	limit int,
-	hasInventory inventoryLookup,
-	staples staplesFetcher,
-	scorer *producescore.CachedProduceScorer,
-	staplesSignature func(string) string,
 ) ([]scoreRow, error) {
 	selected := topLocations(locs, limit)
 	return parallelism.MapWithErrors(selected, func(loc locations.Location) (scoreRow, error) {
 		row := scoreRow{
 			Location:        loc,
-			SupportsStaples: hasInventory(loc.ID),
+			SupportsStaples: s.inventory.HasInventory(loc.ID),
 		}
 		if !row.SupportsStaples {
 			return row, nil
@@ -154,13 +163,13 @@ func scoreLocations(
 			return row, err
 		}
 
-		ingredients, err := staples.FetchStaples(ctx, recipes.DefaultParams(&loc, date, staplesSignature(loc.ID)))
+		ingredients, err := s.staples.FetchStaples(ctx, recipes.DefaultParams(&loc, date, s.signatures.StaplesSignature(loc.ID)))
 		if err != nil {
 			return row, err
 		}
 
 		row.IngredientCount = len(ingredients)
-		row.ProduceScore = scorer.ProduceScore(ctx, loc)
+		row.ProduceScore = new(producescore.ScoreIngredients(ingredients))
 		return row, nil
 	})
 }

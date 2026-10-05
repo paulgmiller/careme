@@ -3,17 +3,86 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
+	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/locations/geo"
+	"careme/internal/providerregistry"
+	"careme/internal/recipes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeInventory bool
+
+func (f fakeInventory) HasInventory(string) bool { return bool(f) }
+
+type fakeScoreStaples struct {
+	params      *recipes.GeneratorParams
+	ingredients []ai.InputIngredient
+	err         error
+}
+
+func (f *fakeScoreStaples) FetchStaples(_ context.Context, params *recipes.GeneratorParams) ([]ai.InputIngredient, error) {
+	f.params = params
+	return f.ingredients, f.err
+}
+
+func TestScoreLocations(t *testing.T) {
+	fetchError := errors.New("fetch staples failed")
+	for _, test := range []struct {
+		name      string
+		supported bool
+		err       error
+	}{
+		{name: "scores fetched ingredients", supported: true},
+		{name: "skips unsupported stores"},
+		{name: "reports fetch failure", supported: true, err: fetchError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ingredients := []ai.InputIngredient{{Grade: &ai.IngredientGrade{Score: 6}}, {}}
+			for range 12 {
+				ingredients = append(ingredients, ai.InputIngredient{Grade: &ai.IngredientGrade{Score: 10}})
+			}
+			staples := &fakeScoreStaples{ingredients: ingredients, err: test.err}
+			signatures := providerregistry.SignatureFactory{}
+			scorer := scoreService{inventory: fakeInventory(test.supported), staples: staples, signatures: signatures}
+			locs := []locations.Location{
+				{ID: "70500874", ZipCode: "98101", Lat: new(47.61), Lon: new(-122.33)},
+				{ID: "70500010", ZipCode: "98101", Lat: new(47.61), Lon: new(-122.33)},
+			}
+
+			rows, err := scorer.scoreLocations(t.Context(), locs, 1)
+			if test.supported {
+				require.NotNil(t, staples.params)
+				assert.Equal(t, locs[0].ID, staples.params.Location.ID)
+				assert.Equal(t, signatures.StaplesSignature(locs[0].ID), staples.params.StaplesSignature)
+			} else {
+				assert.Nil(t, staples.params)
+			}
+			if test.err != nil {
+				require.ErrorIs(t, err, test.err)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, test.supported, rows[0].SupportsStaples)
+			if test.supported {
+				assert.Equal(t, len(ingredients), rows[0].IngredientCount)
+				require.NotNil(t, rows[0].ProduceScore)
+				assert.Equal(t, 1, *rows[0].ProduceScore)
+			} else {
+				assert.Nil(t, rows[0].ProduceScore)
+			}
+		})
+	}
+}
 
 type fakeLocationLookup struct {
 	mu           sync.Mutex

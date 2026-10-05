@@ -81,7 +81,7 @@ func TestCachedProduceScorerStopsOnCanceledContext(t *testing.T) {
 	}
 }
 
-func TestSumIngredientGradesAboveCutoff(t *testing.T) {
+func TestScoreIngredients(t *testing.T) {
 	t.Parallel()
 	ingredients := append(repeatGradedIngredients(10, 10),
 		gradedIngredient(7),
@@ -90,7 +90,7 @@ func TestSumIngredientGradesAboveCutoff(t *testing.T) {
 		ai.InputIngredient{},
 	)
 
-	assert.Equal(t, 1, sumIngredientGradesAboveCutoff(ingredients))
+	assert.Equal(t, 1, ScoreIngredients(ingredients))
 }
 
 func testProduceScoreLocation() *locations.Location {
