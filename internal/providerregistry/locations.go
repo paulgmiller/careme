@@ -3,12 +3,17 @@ package providerregistry
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"time"
 
-	"careme/internal/cache"
+	"github.com/samber/lo"
+
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
 	"careme/internal/locations"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/parallelism"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/kroger"
@@ -22,17 +27,14 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// NewLocations assembles provider backends and delegates storage to locations.
-func (f Factory) NewLocations(c cache.ListCache, centroids locations.CentroidByZip) (locations.Store, error) {
+// NewLocationBackends initializes enabled location providers in routing order.
+func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locations.LocationBackend, error) {
 	cfg := f.config
-	if c == nil {
-		return nil, fmt.Errorf("cache is required")
-	}
 	if cfg.Mocks.Enable {
-		return locations.NewMock(), nil
+		return []locations.LocationBackend{locations.NewMock()}, nil
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	factories := []locations.LocationBackendFactory{
+	factories := []locationBackendFactory{
 		func(context.Context) (locations.LocationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
 		func(context.Context) (locations.LocationBackend, error) {
 			return smithbrothersfarms.NewLocationBackend(), nil
@@ -63,5 +65,26 @@ func (f Factory) NewLocations(c cache.ListCache, centroids locations.CentroidByZ
 			return farmersmarket.NewContainerLocationBackend()
 		},
 	}
-	return locations.New(c, centroids, factories)
+	return initializeLocationBackends(context.Background(), factories)
+}
+
+type locationBackendFactory func(context.Context) (locations.LocationBackend, error)
+
+func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locations.LocationBackend, error) {
+	results, err := parallelism.MapWithErrors(factories, func(factory locationBackendFactory) (locations.LocationBackend, error) {
+		start := time.Now()
+		backend, err := factory(ctx)
+		if err != nil {
+			if locationtypes.IsDisabledBackendError(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to initialize location backend %T: %w", backend, err)
+		}
+		slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
+		return backend, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lo.Compact(results), nil
 }

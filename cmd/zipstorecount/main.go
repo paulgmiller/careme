@@ -64,7 +64,11 @@ func main() {
 
 	centroids := locations.LoadCentroids()
 
-	client, err := providerregistry.NewFactory(cfg).NewLocations(cacheStore, centroids)
+	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
+	}
+	client, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}

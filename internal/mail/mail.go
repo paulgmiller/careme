@@ -98,7 +98,7 @@ type mailer struct {
 }
 
 type providerFactory interface {
-	NewLocations(cache.ListCache, locations.CentroidByZip) (locations.Store, error)
+	NewLocationBackends(locations.CentroidByZip) ([]locations.LocationBackend, error)
 	NewStaplesBackends() ([]recipes.StaplesBackend, error)
 }
 
@@ -133,7 +133,11 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := providers.NewLocations(cacheStore, centroids)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationserver, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}

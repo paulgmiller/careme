@@ -52,11 +52,16 @@ func TestNewAddsHEBBackendWhenEnabled(t *testing.T) {
 		t.Fatalf("RebuildLocationIndex returned error: %v", err)
 	}
 
-	storage, err := NewFactory(&config.Config{
+	backends, err := NewFactory(&config.Config{
 		HEB: config.HEBConfig{Enable: true},
-	}).NewLocations(cacheStore, locations.LoadCentroids())
+	}).NewLocationBackends(locations.LoadCentroids())
 	if err != nil {
 		t.Fatalf("New returned error: %v", err)
+	}
+
+	storage, err := locations.New(cacheStore, locations.LoadCentroids(), backends)
+	if err != nil {
+		t.Fatalf("locations.New returned error: %v", err)
 	}
 
 	got, err := storage.GetLocationByID(context.Background(), "heb_22")

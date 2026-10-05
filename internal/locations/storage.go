@@ -21,7 +21,7 @@ import (
 )
 
 type locationStorage struct {
-	clients      []locationBackend
+	clients      []LocationBackend
 	zipCentroids centroidByZip
 	cache        cache.ListCache
 }
@@ -36,7 +36,6 @@ type LocationBackend interface {
 	locationGetter
 	IsID(locationID string) bool
 }
-type locationBackend = LocationBackend
 
 // locationCachePolicy is optional; backends without it are cacheable.
 type locationCachePolicy interface {
@@ -44,12 +43,11 @@ type locationCachePolicy interface {
 }
 
 // name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
-type Store interface {
+type locationStore interface {
 	locationGetter
 	RequestStore(ctx context.Context, locationID string) error
 	RequestedStoreIDs(ctx context.Context) ([]string, error)
 }
-type locationStore = Store
 
 // Location is kept as an alias for compatibility with existing imports.
 type Location = locationtypes.Location
@@ -59,23 +57,14 @@ type CentroidByZip interface {
 }
 type centroidByZip = CentroidByZip
 
-type (
-	LocationBackendFactory func(context.Context) (LocationBackend, error)
-	locationBackendFactory = LocationBackendFactory
-)
-
 const (
 	locationCachePrefix = "location/"
 	storeRequestPrefix  = "location-store-requests/"
 )
 
-func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackendFactory) (Store, error) {
+func New(c cache.ListCache, centroids CentroidByZip, backends []LocationBackend) (*locationStorage, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
-	}
-	backends, err := initializeLocationBackends(context.Background(), factories)
-	if err != nil {
-		return nil, err
 	}
 
 	return &locationStorage{
@@ -85,34 +74,15 @@ func New(c cache.ListCache, centroids CentroidByZip, factories []LocationBackend
 	}, nil
 }
 
-func initializeLocationBackends(ctx context.Context, factories []locationBackendFactory) ([]locationBackend, error) {
-	results, err := parallelism.MapWithErrors(factories, func(factory locationBackendFactory) (locationBackend, error) {
-		start := time.Now()
-		backend, err := factory(ctx)
-		if err != nil {
-			if locationtypes.IsDisabledBackendError(err) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("failed to initialize location backend %t: %w", backend, err)
-		}
-		slog.InfoContext(ctx, "initialized location backend", "backend", fmt.Sprintf("%T", backend), "latencyMS", time.Since(start).Milliseconds())
-		return backend, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return lo.Compact(results), nil
-}
-
 func (l *locationStorage) HasInventory(locationID string) bool {
-	_, found := lo.Find(l.clients, func(backend locationBackend) bool {
+	_, found := lo.Find(l.clients, func(backend LocationBackend) bool {
 		return backend.IsID(locationID) && backend.HasInventory(locationID)
 	})
 	return found
 }
 
 // Backends without an explicit cache policy retain the default of caching locations.
-func cachable(backend locationBackend) bool {
+func cachable(backend LocationBackend) bool {
 	if policy, ok := backend.(locationCachePolicy); ok {
 		return policy.IsCacheable()
 	}
@@ -158,7 +128,7 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		return nil, err
 	}
 
-	allLocations, fetcherrors := parallelism.Flatten(l.clients, func(backend locationBackend) ([]*Location, error) {
+	allLocations, fetcherrors := parallelism.Flatten(l.clients, func(backend LocationBackend) ([]*Location, error) {
 		start := time.Now()
 		locations, err := backend.GetLocationsByCoordinates(ctx, coordinates)
 		if err != nil {

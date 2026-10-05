@@ -112,7 +112,11 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	centroids := locations.LoadCentroids()
 	providers := providerregistry.NewFactory(cfg)
-	locationStore, err := providers.NewLocations(cacheStore, centroids)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return fmt.Errorf("create location store: %w", err)
+	}
+	locationStore, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		return fmt.Errorf("create location store: %w", err)
 	}

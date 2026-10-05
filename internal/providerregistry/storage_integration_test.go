@@ -17,11 +17,12 @@ import (
 
 const locationCachePrefix = "location/"
 
-func newProviderLocationStore(t *testing.T, backend locations.LocationBackend, c cachepkg.ListCache) locations.Store {
+func newProviderLocationStore(t *testing.T, backend locations.LocationBackend, c cachepkg.ListCache) interface {
+	GetLocationByID(context.Context, string) (*locations.Location, error)
+	GetLocationsByCoordinates(context.Context, geo.Coordinate) ([]locations.Location, error)
+} {
 	t.Helper()
-	store, err := locations.New(c, locations.LoadCentroids(), []locations.LocationBackendFactory{
-		func(context.Context) (locations.LocationBackend, error) { return backend, nil },
-	})
+	store, err := locations.New(c, locations.LoadCentroids(), []locations.LocationBackend{backend})
 	require.NoError(t, err)
 	return store
 }

@@ -50,7 +50,7 @@ type Service struct {
 }
 
 type providerFactory interface {
-	NewLocations(cache.ListCache, locations.CentroidByZip) (locations.Store, error)
+	NewLocationBackends(locations.CentroidByZip) ([]locations.LocationBackend, error)
 	NewStaplesBackends() ([]recipes.StaplesBackend, error)
 }
 
@@ -63,7 +63,12 @@ func NewService(cfg *config.Config, providers providerFactory) (*Service, error)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign image cache: %w", err)
 	}
-	locationStore, err := providers.NewLocations(c, locations.LoadCentroids())
+	centroids := locations.LoadCentroids()
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return nil, fmt.Errorf("create campaign locations: %w", err)
+	}
+	locationStore, err := locations.New(c, centroids, locationBackends)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign locations: %w", err)
 	}

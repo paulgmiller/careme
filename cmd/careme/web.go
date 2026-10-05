@@ -78,7 +78,11 @@ func runServer(cfg *config.Config, addr string) error {
 
 	centroids := locations.LoadCentroids()
 	providers := providerregistry.NewFactory(cfg)
-	locationStorage, err := providers.NewLocations(cache, centroids)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationStorage, err := locations.New(cache, centroids, locationBackends)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
