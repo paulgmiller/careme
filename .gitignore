@@ -37,6 +37,6 @@ tailwind/node_modules/
 node_modules/
 
 # Cache directory and compiled binary
-cache/
+/cache/
 /careme
 bin/

@@ -118,6 +118,7 @@ Compatibility implications:
 ## Notes
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
+- `COCKROACH_DATABASE_URL` selects CockroachDB before Azure or local files. Each container has its own table named exactly after the container (for example, `recipes` or `recipe-images`), with a `key` primary key and opaque byte `value`. Table names are quoted SQL identifiers. Existing cache data, including the earlier shared `cache_entries` table, is not migrated. `List` returns sorted keys with the requested prefix removed and ignores its token, matching the other backends. `Get` buffers the entire value in memory before returning a reader; it does not stream from the database.
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
 - ALDI locations use a separate cache created via `cache.EnsureCache("aldi")`.
 - Albertsons-family locations use a separate cache created via `cache.EnsureCache("albertsons")`.
