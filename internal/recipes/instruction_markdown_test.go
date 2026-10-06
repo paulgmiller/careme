@@ -36,8 +36,7 @@ func TestRenderRecipeInstructionsRestrictsMarkdownConstructs(t *testing.T) {
 	assert.NotContains(t, html, "<script>")
 	assert.NotContains(t, strings.ToLower(html), "<a ")
 	assert.NotContains(t, strings.ToLower(html), "<img ")
-	assert.NotContains(t, strings.ToLower(html), "<strong>")
+	assert.Contains(t, html, "<strong>oil</strong>")
 	assert.Contains(t, html, "&lt;script&gt;alert('no')&lt;/script&gt;")
-	assert.Contains(t, html, "**oil**")
 	assert.Contains(t, html, "![tracking](https://example.test/pixel)")
 }

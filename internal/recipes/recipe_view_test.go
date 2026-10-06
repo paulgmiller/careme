@@ -12,6 +12,7 @@ import (
 	"careme/internal/static"
 	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRecipeViewsRenderInstructionMarkdownListWithinProse(t *testing.T) {
@@ -469,10 +470,12 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 		},
 	}
 
-	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(thread, true, ai.ResponseRef{
+	view, err := newRecipeThreadView(thread, true, ai.ResponseRef{
 		ID:             "conv123",
 		PromptCacheKey: "careme:store-day:v1:test",
-	}, "recipe123"))
+	}, "recipe123")
+	require.NoError(t, err)
+	renderHTML(w, templates.Recipe, "recipe_thread", view)
 	body := assertHTTPSuccess(t, w)
 
 	newerIndex := strings.Index(body, "newer question")
@@ -500,9 +503,49 @@ func TestFormatRecipeThreadHTML_SortsNewestFirst(t *testing.T) {
 func TestFormatRecipeThreadHTML_RendersEmptyContinuationFields(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
-	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(nil, true, ai.ResponseRef{}, "recipe123"))
+	view, err := newRecipeThreadView(nil, true, ai.ResponseRef{}, "recipe123")
+	require.NoError(t, err)
+	renderHTML(w, templates.Recipe, "recipe_thread", view)
 	body := assertHTTPSuccess(t, w)
 
 	assert.Contains(t, body, `name="response_id" value=""`)
 	assert.Contains(t, body, `name="prompt_cache_key" value=""`)
+}
+
+func TestRecipeAnswersRenderLimitedMarkdown(t *testing.T) {
+	t.Parallel()
+	thread := []RecipeThreadEntry{{
+		Question: "Can I use **rice**? <script>alert(1)</script>",
+		Answer:   "Use **1 cup dry basmati rice** and *rest for 5 minutes*.\n\n- 1½ cups water\n- ½ teaspoon turmeric\n\n1. Cook covered.\n2. Rest.\n\n<script>alert(1)</script> [link](https://example.test) ![image](https://example.test/pixel)",
+	}}
+	params := DefaultParams(&locations.Location{ID: "store"}, time.Now())
+	page, err := newRecipePageView(t.Context(), recipeViewInput{params: params, recipe: ai.Recipe{Title: "Rice"}, thread: thread})
+	require.NoError(t, err)
+	fragment, err := newRecipeThreadView(thread, true, ai.ResponseRef{}, "rice")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name     string
+		view     any
+		template string
+	}{
+		{"page", page, "recipe.html"},
+		{"fragment", fragment, "recipe_thread"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			renderHTML(w, templates.Recipe, tc.template, tc.view)
+			body := assertHTTPSuccess(t, w)
+			isValidHTML(t, body)
+			assert.Contains(t, body, "<strong>1 cup dry basmati rice</strong>")
+			assert.Contains(t, body, "<em>rest for 5 minutes</em>")
+			assert.Contains(t, body, "<ul>")
+			assert.Contains(t, body, "<ol>")
+			assert.Contains(t, body, "<li>1½ cups water</li>")
+			assert.Contains(t, body, "Can I use **rice**? &lt;script&gt;")
+			assert.Contains(t, body, "[link](https://example.test)")
+			assert.Contains(t, body, "![image](https://example.test/pixel)")
+			assert.Contains(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;")
+			assert.NotContains(t, body, `<a href="https://example.test"`)
+		})
+	}
 }

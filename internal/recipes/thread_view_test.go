@@ -24,7 +24,8 @@ func TestThreadViewsPreserveInputOrder(t *testing.T) {
 	assert.Equal(t, "new-response", latestThreadResponseID(thread))
 	assert.Equal(t, original, thread)
 
-	fragment := newRecipeThreadView(thread, true, ai.ResponseRef{ID: "new-response"}, "recipe-hash")
+	fragment, err := newRecipeThreadView(thread, true, ai.ResponseRef{ID: "new-response"}, "recipe-hash")
+	require.NoError(t, err)
 	params := DefaultParams(&locations.Location{ID: "store"}, older)
 	page, err := newRecipePageView(t.Context(), recipeViewInput{
 		params: params,
