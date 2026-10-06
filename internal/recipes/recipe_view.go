@@ -188,10 +188,6 @@ type recipeThreadEntryView struct {
 }
 
 func newRecipeThreadEntries(thread []RecipeThreadEntry) ([]recipeThreadEntryView, error) {
-	thread = slices.Clone(thread)
-	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
-		return j.CreatedAt.Compare(i.CreatedAt)
-	})
 	entries := make([]recipeThreadEntryView, len(thread))
 	for index, entry := range thread {
 		html, err := renderRecipeMarkdown(entry.Answer)
@@ -200,5 +196,8 @@ func newRecipeThreadEntries(thread []RecipeThreadEntry) ([]recipeThreadEntryView
 		}
 		entries[index] = recipeThreadEntryView{RecipeThreadEntry: entry, AnswerHTML: html}
 	}
+	slices.SortFunc(entries, func(i, j recipeThreadEntryView) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
 	return entries, nil
 }
