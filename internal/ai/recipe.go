@@ -305,7 +305,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	params := responses.ResponseNewParams{
 		Model:        c.model,
 		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
-		Instructions: openai.String("Answer the user's question about the recipe in plain text. Be concise and do not regenerate the full recipe or output JSON."),
+		Instructions: openai.String("Answer the user's question about the recipe. Use plain text paragraphs and, when helpful, only Markdown bullet lists (- ), numbered lists (1. ), bold (**text**), and italic (*text*). Put blank lines around lists and between paragraphs. Do not use headings, links, images, code, blockquotes, tables, HTML, or other Markdown. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{userWithCacheBreakpoint(question)},
 		},

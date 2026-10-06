@@ -310,10 +310,15 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	renderHTML(w, templates.Recipe, "recipe_thread", newRecipeThreadView(thread, true, ai.ResponseRef{
+	view, err := newRecipeThreadView(thread, true, ai.ResponseRef{
 		ID:             answer.ResponseID,
 		PromptCacheKey: promptCacheKey,
-	}, hash))
+	}, hash)
+	if err != nil {
+		http.Error(w, "failed to render question answers", http.StatusInternalServerError)
+		return
+	}
+	renderHTML(w, templates.Recipe, "recipe_thread", view)
 }
 
 func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Request) {

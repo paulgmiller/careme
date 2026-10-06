@@ -33,7 +33,7 @@ type recipePageView struct {
 	ResponseID              string
 	PromptCacheKey          string
 	WineRecommendation      *ai.WineSelection
-	Thread                  []RecipeThreadEntry
+	Thread                  []recipeThreadEntryView
 	Feedback                feedback.Feedback
 	RecipeHash              string
 	RecipeImage             recipeImageView
@@ -71,10 +71,10 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 	recipe := input.recipe
 	thread := input.thread
 
-	thread = slices.Clone(thread)
-	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
-		return j.CreatedAt.Compare(i.CreatedAt)
-	})
+	threadView, err := newRecipeThreadEntries(thread)
+	if err != nil {
+		return recipePageView{}, err
+	}
 	recipeHash := recipe.ComputeHash()
 	instructionsHTML, err := renderRecipeInstructions(recipe.Instructions)
 	if err != nil {
@@ -108,7 +108,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		ResponseID:              activeResponseID,
 		PromptCacheKey:          recipe.PromptCacheKey,
 		WineRecommendation:      input.wineRecommendation,
-		Thread:                  thread,
+		Thread:                  threadView,
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
 		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage},
@@ -143,24 +143,24 @@ type recipeThreadView struct {
 	ResponseID     string
 	PromptCacheKey string
 	RecipeHash     string
-	Thread         []RecipeThreadEntry
+	Thread         []recipeThreadEntryView
 	ServerSignedIn bool
 }
 
-func newRecipeThreadView(thread []RecipeThreadEntry, signedIn bool, response ai.ResponseRef, recipeHash string) recipeThreadView {
-	thread = slices.Clone(thread)
-	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
-		return j.CreatedAt.Compare(i.CreatedAt)
-	})
+func newRecipeThreadView(thread []RecipeThreadEntry, signedIn bool, response ai.ResponseRef, recipeHash string) (recipeThreadView, error) {
+	threadView, err := newRecipeThreadEntries(thread)
+	if err != nil {
+		return recipeThreadView{}, err
+	}
 	data := recipeThreadView{
 		ResponseID:     response.ID,
 		PromptCacheKey: response.PromptCacheKey,
 		RecipeHash:     recipeHash,
-		Thread:         thread,
+		Thread:         threadView,
 		ServerSignedIn: signedIn,
 	}
 
-	return data
+	return data, nil
 }
 
 type recipeSaveActionView struct {
@@ -180,4 +180,25 @@ func newRecipeSaveActionView(recipe ai.Recipe, originHash string, saved bool) re
 		ServerSignedIn: true,
 	}
 	return data
+}
+
+type recipeThreadEntryView struct {
+	RecipeThreadEntry
+	AnswerHTML template.HTML
+}
+
+func newRecipeThreadEntries(thread []RecipeThreadEntry) ([]recipeThreadEntryView, error) {
+	thread = slices.Clone(thread)
+	slices.SortFunc(thread, func(i, j RecipeThreadEntry) int {
+		return j.CreatedAt.Compare(i.CreatedAt)
+	})
+	entries := make([]recipeThreadEntryView, len(thread))
+	for index, entry := range thread {
+		html, err := renderRecipeMarkdown(entry.Answer)
+		if err != nil {
+			return nil, fmt.Errorf("render question answer %d: %w", index+1, err)
+		}
+		entries[index] = recipeThreadEntryView{RecipeThreadEntry: entry, AnswerHTML: html}
+	}
+	return entries, nil
 }

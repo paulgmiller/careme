@@ -446,6 +446,15 @@ func TestAskQuestionAddsExplicitCacheBreakpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AskQuestion returned error: %v", err)
 	}
+	var request struct {
+		Instructions string `json:"instructions"`
+	}
+	if err := json.Unmarshal([]byte(requestBody), &request); err != nil {
+		t.Fatal(err)
+	}
+	for _, format := range []string{"bullet lists (- )", "numbered lists (1. )", "bold (**text**)", "italic (*text*)", "Do not use headings, links, images, code, blockquotes, tables, HTML, or other Markdown"} {
+		assert.Contains(t, request.Instructions, format)
+	}
 	if answer.ResponseID != "resp-question" || answer.Answer != "Use half as much salt." {
 		t.Fatalf("unexpected answer: %+v", answer)
 	}
