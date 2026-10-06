@@ -48,6 +48,32 @@ func runServer(cfg *config.Config, addr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create cache: %w", err)
 	}
+	recipeCache := cache
+	userStorage := users.NewStorage(cache)
+	if databaseURL, ok := os.LookupEnv("COCKROACH_DATABASE_URL"); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		recipeStorage, err := recipes.NewCockroachStorage(ctx, databaseURL)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := recipeStorage.Close(); err != nil {
+				slog.Error("close recipe storage", "error", err)
+			}
+		}()
+		recipeCache = recipeStorage
+		userStorage, err = users.NewCockroachStorage(ctx, databaseURL)
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if err := userStorage.Close(); err != nil {
+			slog.Error("close user storage", "error", err)
+		}
+	}()
+	recipeIO := recipes.IO(recipeCache)
 	imageCache, err := cachepkg.EnsureCache(recipes.RecipeImagesContainer)
 	if err != nil {
 		return fmt.Errorf("failed to create recipe image cache: %w", err)
@@ -68,7 +94,6 @@ func runServer(cfg *config.Config, addr string) error {
 	static.Register(infraRoutes)
 	appredirect.Register(infraRoutes)
 
-	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
 	watchdogServer := watchdog.Server{}
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -86,26 +111,26 @@ func runServer(cfg *config.Config, addr string) error {
 	var marketExtractor farmersmarket.IngredientExtractor
 	var waiters []waiter
 	if cfg.Mocks.Enable {
-		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
+		mc := critique.NewMock(recipeCache)
+		generator = recipes.NewMockGenerator(recipeIO, mc, status.NewStore(recipeCache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 
 	} else {
-		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
+		critiquer := critique.NewManager(cfg, recipeCache, aiHTTPClient)
 		ro.add(critiquer)
 
 		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
+		staples, err := recipes.NewCachedStaplesService(cfg, recipeCache, grader)
 		if err != nil {
 			return fmt.Errorf("failed to create staples service: %w", err)
 		}
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
-		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
+		ss := status.NewStore(recipeCache)
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipeIO)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -116,7 +141,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipeIO))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -130,10 +155,10 @@ func runServer(cfg *config.Config, addr string) error {
 	farmersMarketHandler.Register(appRoutes)
 	waiters = append(waiters, farmersMarketHandler)
 
-	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
+	sitemapHandler := sitemap.New(recipeCache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, recipeCache, imageCache, authClient, imageGen)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
@@ -143,15 +168,14 @@ func runServer(cfg *config.Config, addr string) error {
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
 	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
-	recipeIO := recipes.IO(cache)
-	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
+	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(recipeCache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
 	adminMux.Handle("/prompt/recipe/{hash}", prompts.AdminRecipePromptJSON(cache))
 	adminMux.Handle("/mealplan/{hash}", recipes.AdminMealPlanPage(recipeIO))
-	ingredientsHandler := ingredients.NewHandler(cache)
+	ingredientsHandler := ingredients.NewHandler(recipeCache)
 	ingredientsHandler.Register(adminMux)
 	appRoutes.Handle("/admin/", admin.New(cfg, authClient).Enforce(http.StripPrefix("/admin", adminMux)))
-	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(cache), recipeIO))
+	appRoutes.Handle("/critiques/{hash}", critique.CritiquePage(critique.NewStore(recipeCache), recipeIO))
 
 	appRoutes.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

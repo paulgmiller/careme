@@ -11,24 +11,34 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// CockroachCache stores values in a table named after its container.
+// CockroachCache stores JSON documents in a table named after its container.
 // The caller owns the database connection and must close it when finished.
 type CockroachCache struct {
 	db    *sql.DB
 	table string
-	jsonb bool
-}
-
-type CockroachCacheOptions struct {
-	// JSONB stores validated JSON documents instead of opaque bytes. Get returns
-	// normalized JSON, which may change whitespace and object key ordering.
-	// This option must match the value column type of an existing table.
-	JSONB bool
 }
 
 var _ ListCache = (*CockroachCache)(nil)
+
+// OpenCockroachCache opens an owned SQL pool. Call Close when finished.
+func OpenCockroachCache(ctx context.Context, databaseURL, container string) (*CockroachCache, error) {
+	if databaseURL == "" {
+		return nil, fmt.Errorf("CockroachDB database URL must not be empty")
+	}
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("open CockroachDB cache connection: %w", err)
+	}
+	c, err := NewCockroachCache(ctx, db, container)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return c, nil
+}
 
 // Close closes the underlying pool. When sharing a caller-supplied db between
 // caches, close that db once after all caches have finished using it instead.
@@ -37,35 +47,28 @@ func (c *CockroachCache) Close() error {
 }
 
 // NewCockroachCache creates the cache table if necessary. db must use a
-// PostgreSQL-compatible driver connected to CockroachDB.
-func NewCockroachCache(ctx context.Context, db *sql.DB, container string, opts CockroachCacheOptions) (*CockroachCache, error) {
+// PostgreSQL-compatible driver connected to CockroachDB. Values must be valid JSON;
+// reads return normalized JSON. Existing BYTES tables are not converted.
+func NewCockroachCache(ctx context.Context, db *sql.DB, container string) (*CockroachCache, error) {
 	if container == "" || strings.ContainsRune(container, 0) {
 		return nil, fmt.Errorf("CockroachDB cache container must be nonempty and contain no NUL bytes")
 	}
 	table := pgx.Identifier{container}.Sanitize()
-	valueType := "BYTES"
-	if opts.JSONB {
-		valueType = "JSONB"
-	}
 	_, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS `+table+` (
 		key STRING PRIMARY KEY,
-		value `+valueType+` NOT NULL
+		value JSONB NOT NULL
 	)`)
 	if err != nil {
 		return nil, fmt.Errorf("create CockroachDB cache table: %w", err)
 	}
-	return &CockroachCache{db: db, table: table, jsonb: opts.JSONB}, nil
+	return &CockroachCache{db: db, table: table}, nil
 }
 
 // Get buffers the entire value in memory before returning a reader; it does not
 // stream bytes from CockroachDB.
 func (c *CockroachCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	var value []byte
-	column := "value"
-	if c.jsonb {
-		column = "value::STRING"
-	}
-	err := c.db.QueryRowContext(ctx, `SELECT `+column+` FROM `+c.table+` WHERE key = $1`, key).Scan(&value)
+	err := c.db.QueryRowContext(ctx, `SELECT value::STRING FROM `+c.table+` WHERE key = $1`, key).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -93,19 +96,13 @@ func (c *CockroachCache) PutReader(ctx context.Context, key string, reader io.Re
 	if err != nil {
 		return fmt.Errorf("read CockroachDB cache value: %w", err)
 	}
-	var databaseValue any = value
-	placeholder := "$2"
-	if c.jsonb {
-		databaseValue = string(value)
-		placeholder = "$2::JSONB"
-	}
-	query := `INSERT INTO ` + c.table + ` (key, value) VALUES ($1, ` + placeholder + `)`
+	query := `INSERT INTO ` + c.table + ` (key, value) VALUES ($1, $2::JSONB)`
 	if opts.Condition == PutIfNoneMatch {
 		query += ` ON CONFLICT (key) DO NOTHING`
 	} else {
 		query += ` ON CONFLICT (key) DO UPDATE SET value = excluded.value`
 	}
-	result, err := c.db.ExecContext(ctx, query, key, databaseValue)
+	result, err := c.db.ExecContext(ctx, query, key, string(value))
 	if err != nil {
 		return fmt.Errorf("put CockroachDB cache entry: %w", err)
 	}

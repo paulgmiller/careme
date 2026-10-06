@@ -2,21 +2,18 @@ package cache
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type BlobCache struct {
@@ -151,23 +148,6 @@ func MakeCache() (ListCache, error) {
 
 // take transport here?
 func EnsureCache(container string) (ListCache, error) {
-	if databaseURL, ok := os.LookupEnv("COCKROACH_DATABASE_URL"); ok {
-		if databaseURL == "" {
-			return nil, fmt.Errorf("COCKROACH_DATABASE_URL must not be empty")
-		}
-		db, err := sql.Open("pgx", databaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("open CockroachDB cache connection: %w", err)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		c, err := NewCockroachCache(ctx, db, container, CockroachCacheOptions{})
-		if err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-		return c, nil
-	}
 	_, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if ok {
 		slog.Debug("Using Azure Blob Storage for cache", "container", container)

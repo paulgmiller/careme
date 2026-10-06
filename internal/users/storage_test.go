@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -223,6 +224,15 @@ func TestFindOrCreateFromClerkCreatesUser(t *testing.T) {
 	if stored.ID != got.ID {
 		t.Fatalf("stored ID = %q, want %q", stored.ID, got.ID)
 	}
+	index, err := fc.Get(t.Context(), emailPrefix+got.Email[0])
+	require.NoError(t, err)
+	var indexedID string
+	require.NoError(t, json.NewDecoder(index).Decode(&indexedID))
+	require.NoError(t, index.Close())
+	require.Equal(t, got.ID, indexedID)
+	byEmail, err := storage.GetByEmail(got.Email[0])
+	require.NoError(t, err)
+	require.Equal(t, got.ID, byEmail.ID)
 }
 
 func TestFromRequestCreatesUserWithMockAuth(t *testing.T) {

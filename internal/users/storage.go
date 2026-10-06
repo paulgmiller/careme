@@ -22,6 +22,7 @@ import (
 
 type Storage struct {
 	cache cache.ListCache
+	owned io.Closer
 }
 
 var (
@@ -45,6 +46,23 @@ const (
 
 func NewStorage(c cache.ListCache) *Storage {
 	return &Storage{cache: c}
+}
+
+// NewCockroachStorage creates user storage that owns its SQL pool.
+func NewCockroachStorage(ctx context.Context, databaseURL string) (*Storage, error) {
+	c, err := cache.OpenCockroachCache(ctx, databaseURL, "users")
+	if err != nil {
+		return nil, fmt.Errorf("open user storage: %w", err)
+	}
+	return &Storage{cache: c, owned: c}, nil
+}
+
+// Close releases an owned pool. NewStorage borrows its cache and leaves it open.
+func (s *Storage) Close() error {
+	if s.owned != nil {
+		return s.owned.Close()
+	}
+	return nil
 }
 
 // obviously needs to be better
@@ -107,7 +125,15 @@ func (s *Storage) GetByEmail(email string) (*utypes.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read user ID: %w", err)
 	}
-	return s.GetByID(string(data))
+	userID := string(data)
+	// Existing blob/file indexes contain bare IDs. New indexes contain JSON
+	// strings so the same user storage can use a JSONB cache.
+	if strings.HasPrefix(strings.TrimSpace(userID), `"`) {
+		if err := json.Unmarshal(data, &userID); err != nil {
+			return nil, fmt.Errorf("failed to decode indexed user ID: %w", err)
+		}
+	}
+	return s.GetByID(userID)
 }
 
 type emailFetcher interface {
@@ -147,7 +173,11 @@ func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string,
 	if err := s.Update(&newUser); err != nil {
 		return nil, fmt.Errorf("failed to create new user: %w", err)
 	}
-	if err := s.cache.Put(context.TODO(), emailPrefix+newUser.Email[0], newUser.ID, cache.Unconditional()); err != nil {
+	indexedID, err := json.Marshal(newUser.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal indexed user ID: %w", err)
+	}
+	if err := s.cache.Put(ctx, emailPrefix+newUser.Email[0], string(indexedID), cache.Unconditional()); err != nil {
 		return nil, fmt.Errorf("failed to index new user by email: %w", err)
 	}
 	slog.InfoContext(ctx, "created new user", "id", clerkUserID, "email", primaryEmail)
