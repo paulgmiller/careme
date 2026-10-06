@@ -37,7 +37,8 @@ func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtype
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate))
+		// sublte dependency on providerregistry for StaplesSignature here.
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, cachekey.StaplesSignature(loc.ID)))
 		if err == nil {
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score

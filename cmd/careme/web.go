@@ -21,6 +21,7 @@ import (
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/producescore"
@@ -101,7 +102,12 @@ func runServer(cfg *config.Config, addr string) error {
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cache, centroids)
+	providers := providerregistry.NewFactory(cfg)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationStorage, err := locations.New(cache, centroids, locationBackends)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -124,10 +130,11 @@ func runServer(cfg *config.Config, addr string) error {
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, recipeCache, grader)
+		backends, err := providers.NewStaplesBackends()
 		if err != nil {
-			return fmt.Errorf("failed to create staples service: %w", err)
+			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
+		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(recipeCache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipeIO)

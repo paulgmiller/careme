@@ -97,8 +97,13 @@ type mailer struct {
 	unsubscribeFactory users.UnsubscribeTokenFactory
 }
 
+type providerFactory interface {
+	NewLocationBackends(locations.CentroidByZip) ([]locations.LocationBackend, error)
+	NewStaplesBackends() ([]recipes.StaplesBackend, error)
+}
+
 // TODO share some of this with web.go? good for mocking?
-func NewMailer(cfg *config.Config) (*mailer, error) {
+func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -112,10 +117,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, ig)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create staples service: %w", err)
+		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig)
 	generationStatuses := status.NewStore(cacheStore)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
@@ -127,7 +133,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := locations.New(cfg, cacheStore, centroids)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationserver, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
