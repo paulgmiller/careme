@@ -45,6 +45,7 @@ The application is configured via environment variables:
 - `ALBERTSONS_SEARCH_REESE84` - fallback Albertsons-family `reese84` cookie when cache is empty or stale
 - `BRIGHTDATA_BROWSER_WS_ENDPOINT` - Bright Data Browser API websocket endpoint for `cmd/reese84` and `cmd/publixabck`; may include embedded credentials
 - `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_PRIMARY_ACCOUNT_KEY` - enable Azure Blob-backed cache storage
+- `COCKROACH_DATABASE_URL` - PostgreSQL connection URL enabling CockroachDB recipe and user storage in the web server. It creates separate `recipes` and `users` tables with JSONB values and closes both pools at shutdown. The database must already exist, and the account needs table creation privileges. Use the cluster-provided TLS settings. Images and other caches, including CLI and mailer caches, continue to use Azure or local files via `EnsureCache`. Existing cache data and earlier BYTES tables are not migrated.
 
 For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry env vars. Grafana's docs provide generated values for `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`.
 
