@@ -66,6 +66,8 @@ type generator interface {
 
 type generationStatusStore interface {
 	Start(ctx context.Context, hash string, message string) error
+	Restart(ctx context.Context, hash string, message string) error
+	Load(ctx context.Context, hash string) (status.Status, error)
 	Fail(ctx context.Context, hash string, err error) error
 }
 
@@ -294,7 +296,19 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 			}
 		}
 		if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
-			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
+			if !errors.Is(err, cache.ErrAlreadyExists) {
+				return fmt.Errorf("start generation status %q: %w", paramsHash, err)
+			}
+			current, loadErr := m.generationStatuses.Load(ctx, paramsHash)
+			if loadErr != nil {
+				return fmt.Errorf("load generation status %q: %w", paramsHash, loadErr)
+			}
+			if current.Failed == "" {
+				return fmt.Errorf("generation %q is already running", paramsHash)
+			}
+			if restartErr := m.generationStatuses.Restart(ctx, paramsHash, ""); restartErr != nil {
+				return fmt.Errorf("restart generation status %q: %w", paramsHash, restartErr)
+			}
 		}
 
 		// can orphan recipes here with crash or shutdown. Params should have a start time

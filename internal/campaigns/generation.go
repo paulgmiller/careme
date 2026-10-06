@@ -131,7 +131,20 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	}
 	missing := errors.Is(err, cache.ErrNotFound)
 	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
-		return fmt.Errorf("start campaign status: %w", err)
+		if !errors.Is(err, cache.ErrAlreadyExists) {
+			return fmt.Errorf("start campaign status: %w", err)
+		}
+		current, loadErr := s.statuses.Load(ctx, hash)
+		if loadErr != nil {
+			return fmt.Errorf("load campaign status: %w", loadErr)
+		}
+		if current.Failed != "" {
+			if restartErr := s.statuses.Restart(ctx, hash, status.InitialMessage); restartErr != nil {
+				return fmt.Errorf("restart campaign status: %w", restartErr)
+			}
+		} else if missing {
+			return fmt.Errorf("campaign generation %s is already running", hash)
+		}
 	}
 
 	if !missing { // small chance someone got to this locationb before us?
