@@ -99,3 +99,71 @@ func TestCampaignRoutesOnlyAcceptGET(t *testing.T) {
 
 	require.Equal(t, http.StatusMethodNotAllowed, response.Code)
 }
+
+func TestWestlakeWholeFoodsRedirect(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
+
+	for _, query := range []string{"", "?location=other&help=Custom+note&utm_source=facebook"} {
+		t.Run(query, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/westlake_wf"+query, nil))
+
+			require.Equal(t, http.StatusFound, response.Code)
+			location, err := url.Parse(response.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, "/recipes", location.Path)
+			expectedQuery := url.Values{
+				"location":           {"wholefoods_10216"},
+				recipes.QueryArgHelp: {genericLocationHelp("Westlake Whole Foods")},
+			}
+			if query != "" {
+				expectedQuery.Set("utm_source", "facebook")
+			}
+			require.Equal(t, expectedQuery, location.Query())
+		})
+	}
+}
+
+func TestDeliveryCampaignRedirects(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
+
+	for _, campaign := range []struct {
+		slug       string
+		locationID string
+	}{
+		{"smithbrothersfarms", "smithbrothersfarms_delivery"},
+		{"mnfoodclub", "mnfoodclub_delivery"},
+	} {
+		t.Run(campaign.slug, func(t *testing.T) {
+			for _, query := range []string{"", "?location=other&utm_source=facebook&utm_campaign=delivery"} {
+				t.Run(query, func(t *testing.T) {
+					response := httptest.NewRecorder()
+					mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/"+campaign.slug+query, nil))
+
+					require.Equal(t, http.StatusFound, response.Code)
+					location, err := url.Parse(response.Header().Get("Location"))
+					require.NoError(t, err)
+					require.Equal(t, "/recipes", location.Path)
+					expectedQuery := url.Values{"location": {campaign.locationID}}
+					if query != "" {
+						expectedQuery.Set("utm_source", "facebook")
+						expectedQuery.Set("utm_campaign", "delivery")
+					}
+					require.Equal(t, expectedQuery, location.Query())
+				})
+			}
+		})
+	}
+}
+
+func TestRedmondWholeFoodsCampaignRemoved(t *testing.T) {
+	require.NotContains(t, AdvertisedRecipeLocations(), "redmond_wf")
+	mux := http.NewServeMux()
+	Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
+
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/redmond_wf", nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
+}
