@@ -116,13 +116,15 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 ### Human feedback snapshots
 
-The ingredient review app accepts a store ID at `/grader?location=<store-id>`.
+The ingredient review app requires a store ID at `/grader?location=<store-id>`.
+The locations page links to it from each produce score badge. It reviews cached
+ingredients only and skips ungraded items.
 Export its saved reviews to a local Promptfoo YAML test list:
 
 ```sh
 go run ./cmd/ingredientrevieweval > /tmp/ingredient-reviews.yaml
 # Optional: restrict to the store where reviews were recorded and/or a grade version.
-go run ./cmd/ingredientrevieweval -location=70100023 -cache-version=YOUR_CACHE_VERSION > /tmp/store-reviews.yaml
+go run ./cmd/ingredientrevieweval -location=70100023 -cache-version=catalog-v1 > /tmp/store-reviews.yaml
 ./task.sh evals EVAL=ingredient-grader -- --tests /tmp/ingredient-reviews.yaml --no-cache
 ```
 
@@ -138,10 +140,11 @@ one test with a single ingredient and provenance metadata (grade key, location I
 verdict, reviewed score, and review time). Saved grades and embeddings are removed
 before evaluation so the configured model grades fresh inputs.
 
-By default, export includes all saved reviews across grade versions. The optional
-`-cache-version` filter selects one baseline version; it does not choose the model
-being evaluated. Legacy reviews without a location remain available in unfiltered
-exports but do not match `-location`. Empty selections or malformed reviews fail
+By default, export includes all saved reviews. New reviews use `catalog-v1` keys
+based on ingredient identity and displayed score, independently of model cache
+versions. The optional `-cache-version` filter selects a review namespace, including
+legacy model-version namespaces; it does not choose the model being evaluated.
+Legacy reviews without a location remain available in unfiltered exports but do not match `-location`. Empty selections or malformed reviews fail
 export rather than producing a partial dataset. Keep exported snapshots local
 unless intentionally adding reviewed fixtures.
 

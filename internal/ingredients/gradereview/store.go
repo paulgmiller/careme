@@ -2,21 +2,20 @@ package gradereview
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/ingredients/grading"
 )
 
 const reviewCachePrefix = "ingredient_grade_reviews/"
 
-const prefixAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+// Catalog reviews identify the ingredient and displayed score, independently of
+// the grading manager or its model-specific cache version.
+const catalogReviewVersion = "catalog-v1"
 
 type Verdict string
 
@@ -41,116 +40,13 @@ type Candidate struct {
 	Ingredient ai.InputIngredient
 }
 
-type Store struct {
-	cache        cache.ListCache
-	cacheVersion string
+type Store struct{ cache cache.Cache }
 
-	mu          sync.Mutex
-	loaded      bool
-	gradeKeys   []string
-	gradeKeySet map[string]struct{}
-	prefix      func() (string, error)
-}
-
-func NewStore(c cache.ListCache, cacheVersion string) *Store {
+func NewStore(c cache.Cache) *Store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	if cacheVersion == "" {
-		panic("cache version must not be empty")
-	}
-	return &Store{cache: c, cacheVersion: cacheVersion, prefix: randomPrefix}
-}
-
-func (s *Store) Next(ctx context.Context) (*Candidate, error) {
-	if err := s.loadIndex(ctx); err != nil {
-		return nil, err
-	}
-
-	candidate, found, err := s.nextCandidate(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		s.mu.Lock()
-		s.loaded = false
-		s.mu.Unlock()
-		if err := s.loadIndex(ctx); err != nil {
-			return nil, err
-		}
-		candidate, found, err = s.nextCandidate(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if !found {
-		return candidate, nil
-	}
-	ingredient, err := s.loadIngredient(ctx, candidate.GradeKey)
-	if err != nil {
-		return nil, err
-	}
-	candidate.Ingredient = *ingredient
-	return candidate, nil
-}
-
-func (s *Store) nextCandidate(ctx context.Context) (*Candidate, bool, error) {
-	s.mu.Lock()
-	gradeKeys := append([]string(nil), s.gradeKeys...)
-	s.mu.Unlock()
-
-	var nextKey string
-	for _, key := range gradeKeys {
-		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
-		if err != nil {
-			return nil, false, fmt.Errorf("check ingredient grade review %q: %w", key, err)
-		}
-		if reviewed {
-			continue
-		}
-		if nextKey == "" {
-			nextKey = key
-		}
-	}
-	return &Candidate{
-		GradeKey: nextKey,
-	}, nextKey != "", nil
-}
-
-func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, reviewedAt time.Time) error {
-	if !verdict.Valid() {
-		return ErrInvalidVerdict
-	}
-	if err := s.loadIndex(ctx); err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	_, exists := s.gradeKeySet[gradeKey]
-	s.mu.Unlock()
-	if !exists {
-		return cache.ErrNotFound
-	}
-	alreadyReviewed, err := s.cache.Exists(ctx, reviewCachePrefix+gradeKey)
-	if err != nil {
-		return fmt.Errorf("check ingredient grade review %q: %w", gradeKey, err)
-	}
-	if alreadyReviewed {
-		return cache.ErrAlreadyExists
-	}
-
-	ingredient, err := s.loadIngredient(ctx, gradeKey)
-	if err != nil {
-		return err
-	}
-	review := Review{
-		GradeKey:   gradeKey,
-		Ingredient: *ingredient,
-		Verdict:    verdict,
-		ReviewedAt: reviewedAt.UTC(),
-	}
-	return s.saveReview(ctx, review)
+	return &Store{cache: c}
 }
 
 func (s *Store) saveReview(ctx context.Context, review Review) error {
@@ -164,45 +60,6 @@ func (s *Store) saveReview(ctx context.Context, review Review) error {
 	return nil
 }
 
-func (s *Store) loadIndex(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.loaded {
-		return nil
-	}
-
-	prefix, err := s.prefix()
-	if err != nil {
-		return fmt.Errorf("generate ingredient grade prefix: %w", err)
-	}
-	gradeKeyPrefix := s.cacheVersion + "/" + prefix
-	gradeKeys, err := s.cache.List(ctx, grading.CachePrefix()+gradeKeyPrefix, "")
-	if err != nil {
-		return fmt.Errorf("list ingredient grades: %w", err)
-	}
-	gradeKeySet := make(map[string]struct{}, len(gradeKeys))
-	for i, key := range gradeKeys {
-		key = gradeKeyPrefix + key
-		gradeKeys[i] = key
-		gradeKeySet[key] = struct{}{}
-	}
-	s.gradeKeys = gradeKeys
-	s.gradeKeySet = gradeKeySet
-	s.loaded = true
-	return nil
-}
-
-func randomPrefix() (string, error) {
-	var bytes [2]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", err
-	}
-	return string([]byte{
-		prefixAlphabet[int(bytes[0])%len(prefixAlphabet)],
-		prefixAlphabet[int(bytes[1])%len(prefixAlphabet)],
-	}), nil
-}
-
 func (v Verdict) Valid() bool {
 	switch v {
 	case VerdictTooHigh, VerdictCorrect, VerdictTooLow:
@@ -212,28 +69,12 @@ func (v Verdict) Valid() bool {
 	}
 }
 
-func (s *Store) loadIngredient(ctx context.Context, gradeKey string) (*ai.InputIngredient, error) {
-	reader, err := s.cache.Get(ctx, grading.CachePrefix()+gradeKey)
-	if err != nil {
-		return nil, fmt.Errorf("load ingredient grade %q: %w", gradeKey, err)
-	}
-	defer func() {
-		_ = reader.Close()
-	}()
-
-	var ingredient ai.InputIngredient
-	if err := json.NewDecoder(reader).Decode(&ingredient); err != nil {
-		return nil, fmt.Errorf("decode ingredient grade %q: %w", gradeKey, err)
-	}
-	if ingredient.Grade == nil {
-		return nil, fmt.Errorf("ingredient grade %q has no grade", gradeKey)
-	}
-	return &ingredient, nil
-}
-
 // NextFromCatalog selects an unreviewed ingredient from the chosen store only.
 func (s *Store) NextFromCatalog(ctx context.Context, ingredients []ai.InputIngredient) (*Candidate, error) {
 	for _, ingredient := range ingredients {
+		if ingredient.Grade == nil {
+			continue
+		}
 		key := s.catalogGradeKey(ingredient)
 		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
 		if err != nil {
@@ -241,9 +82,6 @@ func (s *Store) NextFromCatalog(ctx context.Context, ingredients []ai.InputIngre
 		}
 		if reviewed {
 			continue
-		}
-		if ingredient.Grade == nil {
-			return nil, fmt.Errorf("ingredient %q has no grade", ingredient.ProductID)
 		}
 		return &Candidate{GradeKey: key, Ingredient: ingredient}, nil
 	}
@@ -256,11 +94,8 @@ func (s *Store) SaveFromCatalog(ctx context.Context, locationID, gradeKey string
 		return ErrInvalidVerdict
 	}
 	for _, ingredient := range ingredients {
-		if s.catalogGradeKey(ingredient) != gradeKey {
+		if ingredient.Grade == nil || s.catalogGradeKey(ingredient) != gradeKey {
 			continue
-		}
-		if ingredient.Grade == nil {
-			return fmt.Errorf("ingredient %q has no grade", ingredient.ProductID)
 		}
 		ingredient.Embedding = nil
 		return s.saveReview(ctx, Review{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC(), LocationID: locationID})
@@ -269,5 +104,5 @@ func (s *Store) SaveFromCatalog(ctx context.Context, locationID, gradeKey string
 }
 
 func (s *Store) catalogGradeKey(ingredient ai.InputIngredient) string {
-	return s.cacheVersion + "/" + ai.NormalizeInputIngredient(ingredient).Hash()
+	return fmt.Sprintf("%s/%s/%d", catalogReviewVersion, ai.NormalizeInputIngredient(ingredient).Hash(), ingredient.Grade.Score)
 }
