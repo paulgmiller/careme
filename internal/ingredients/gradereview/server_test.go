@@ -132,7 +132,7 @@ func TestHandlerRejectsInvalidReview(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/grader/review", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	NewHandler(cacheStore, "version").ServeHTTP(response, request)
+	NewHandler(cacheStore, "version", Options{}).ServeHTTP(response, request)
 
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }

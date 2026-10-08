@@ -69,7 +69,18 @@ Run the small local review app with:
 go run ./cmd/ingredientreview
 ```
 
-Then open `http://127.0.0.1:8090/grader`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
+Then open `http://127.0.0.1:8090/grader?location=70100023`, replacing the ID with a supported store ID. The app loads that store’s ingredient catalog through the production cache and providers, fetching and grading missing ingredients as needed. It shows the store name, preserves the selection after each review, and records each grade as too high, correct, or too low. Store discovery is deferred; provide the ID in the URL for now.
+
+The app uses the normal configuration and provider credentials, including `AI_API_KEY`, with ingredient grading enabled. `INGREDIENT_GRADING_MODEL` selects the grading model. Opening `/grader` without a location keeps the random cached-grade review flow. Reviews are shared across stores by grade key: once reviewed, the same graded ingredient is skipped in other stores.
+
+Export human feedback as a reusable eval snapshot:
+
+```sh
+go run ./cmd/ingredientrevieweval > /tmp/ingredient-reviews.yaml
+./task.sh evals EVAL=ingredient-grader -- --tests /tmp/ingredient-reviews.yaml --no-cache
+```
+
+Optional exporter flags `-location=70100023` and `-cache-version=<version>` restrict the snapshot. Export requires cache access but makes no model calls. See [ingredient eval instructions](evals/README.md#human-feedback-snapshots) for scoring and provenance.
 
 
 ## Cache Key Layout

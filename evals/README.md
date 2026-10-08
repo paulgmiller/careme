@@ -114,6 +114,37 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 ## Ingredient grading
 
+### Human feedback snapshots
+
+The ingredient review app accepts a store ID at `/grader?location=<store-id>`.
+Export its saved reviews to a local Promptfoo YAML test list:
+
+```sh
+go run ./cmd/ingredientrevieweval > /tmp/ingredient-reviews.yaml
+# Optional: restrict to the store where reviews were recorded and/or a grade version.
+go run ./cmd/ingredientrevieweval -location=70100023 -cache-version=YOUR_CACHE_VERSION > /tmp/store-reviews.yaml
+./task.sh evals EVAL=ingredient-grader -- --tests /tmp/ingredient-reviews.yaml --no-cache
+```
+
+The `--tests` argument selects the exported snapshot for the existing ingredient
+suite. Set `INGREDIENT_GRADING_MODEL` to compare models against the same snapshot.
+The exporter uses the configured cache and makes no model calls; running the eval
+requires grading credentials and incurs normal API usage.
+
+For reviewed score S, **too high** accepts 0 through S, **too low** accepts S
+through 10, and **correct** accepts S−1 through S+1, clipped to 0–10. Bounds are
+inclusive, so the reviewed score itself passes every verdict. Each review becomes
+one test with a single ingredient and provenance metadata (grade key, location ID,
+verdict, reviewed score, and review time). Saved grades and embeddings are removed
+before evaluation so the configured model grades fresh inputs.
+
+By default, export includes all saved reviews across grade versions. The optional
+`-cache-version` filter selects one baseline version; it does not choose the model
+being evaluated. Legacy reviews without a location remain available in unfiltered
+exports but do not match `-location`. Empty selections or malformed reviews fail
+export rather than producing a partial dataset. Keep exported snapshots local
+unless intentionally adding reviewed fixtures.
+
 The [October 8 Decisions comparison](ingredient-grader/decisions-comparison-2026-10-08.md)
 compares live Decisions grading with the saved Luna baseline and a fresh Luna
 run, including accuracy, token-based API cost, and grading latency.

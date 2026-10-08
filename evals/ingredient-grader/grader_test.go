@@ -1,12 +1,17 @@
 package eval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
+	"careme/internal/ingredients/gradereview"
+	"gopkg.in/yaml.v3"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,4 +193,54 @@ func TestRunEvalRejectsContextThatCannotBeEncoded(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported type")
 	assert.Empty(t, grader.inputs)
+}
+
+func TestRunEvalExplicitZeroAndFreshInputs(t *testing.T) {
+	for _, score := range []int{0, 1} {
+		grader := &stubIngredientGrader{grades: []ai.InputIngredient{{ProductID: "one", Grade: &ai.IngredientGrade{Score: score, Reason: "Fresh result"}}}}
+		ctx := promptfooContextFromJSON(t, `{"vars":{"cases":[{"ingredient":{"id":"one","grade":{"score":0},"embeddings":[1,0]},"expect":{"max":0}}]}}`)
+		result, err := runEval(ctx, grader)
+		require.NoError(t, err)
+		if score == 0 {
+			assert.Equal(t, "PASS", result["output"])
+		} else {
+			assert.Contains(t, result["output"], "grade=1>0")
+		}
+		require.Len(t, grader.inputs, 1)
+		assert.Nil(t, grader.inputs[0].Grade)
+		assert.Nil(t, grader.inputs[0].Embedding)
+	}
+}
+
+func TestRunEvalRejectsInvalidBounds(t *testing.T) {
+	for _, bounds := range []string{`{"min":-1}`, `{"max":11}`, `{"min":8,"max":7}`, `{"max":-1}`, `{"min":11}`} {
+		grader := &stubIngredientGrader{}
+		ctx := promptfooContextFromJSON(t, `{"vars":{"cases":[{"ingredient":{"id":"one"},"expect":`+bounds+`}]}}`)
+		_, err := runEval(ctx, grader)
+		require.ErrorContains(t, err, "invalid score bounds")
+		assert.Empty(t, grader.inputs)
+	}
+}
+
+func TestExportedReviewsRunThroughProvider(t *testing.T) {
+	for _, verdict := range []gradereview.Verdict{gradereview.VerdictTooHigh, gradereview.VerdictCorrect, gradereview.VerdictTooLow} {
+		t.Run(string(verdict), func(t *testing.T) {
+			c := cache.NewInMemoryCache()
+			review := gradereview.Review{GradeKey: "version/key", Verdict: verdict, ReviewedAt: time.Now(), Ingredient: ai.InputIngredient{ProductID: "one", Description: "Asparagus", Grade: &ai.IngredientGrade{Score: 5, Reason: "baseline"}}}
+			body, err := json.Marshal(review)
+			require.NoError(t, err)
+			require.NoError(t, c.Put(t.Context(), "ingredient_grade_reviews/version/key", string(body), cache.Unconditional()))
+			var out bytes.Buffer
+			require.NoError(t, gradereview.WriteEvalCases(t.Context(), &out, c, gradereview.EvalOptions{}))
+			var tests []map[string]interface{}
+			require.NoError(t, yaml.Unmarshal(out.Bytes(), &tests))
+			require.Len(t, tests, 1)
+			// The reviewed score itself must pass every inclusive human expectation.
+			grader := &stubIngredientGrader{grades: []ai.InputIngredient{{ProductID: "one", Grade: &ai.IngredientGrade{Score: 5, Reason: "fresh grade"}}}}
+			result, err := runEval(tests[0], grader)
+			require.NoError(t, err)
+			assert.Equal(t, "PASS", result["output"])
+			assert.Nil(t, grader.inputs[0].Grade)
+		})
+	}
 }

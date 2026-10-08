@@ -1,23 +1,34 @@
 package gradereview
 
 import (
+	"context"
 	"errors"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/locations"
 )
 
 type Server struct {
-	store *Store
-	now   func() time.Time
+	store   *Store
+	catalog Catalog
+	now     func() time.Time
 }
 
-func NewHandler(c cache.ListCache, cacheVersion string) http.Handler {
-	return newHandler(NewStore(c, cacheVersion))
+type Catalog interface {
+	LoadCatalog(context.Context, string) (*locations.Location, []ai.InputIngredient, error)
+}
+
+type Options struct{ Catalog Catalog }
+
+func NewHandler(c cache.ListCache, cacheVersion string, options Options) http.Handler {
+	return handler(&Server{store: NewStore(c, cacheVersion), catalog: options.Catalog, now: time.Now})
 }
 
 func newHandler(store *Store) http.Handler {
@@ -25,6 +36,10 @@ func newHandler(store *Store) http.Handler {
 		store: store,
 		now:   time.Now,
 	}
+	return handler(server)
+}
+
+func handler(server *Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /grader", server.handleIndex)
 	mux.HandleFunc("GET /grader/", server.handleIndex)
@@ -33,7 +48,19 @@ func newHandler(store *Store) http.Handler {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	candidate, err := s.store.Next(r.Context())
+	locationID := strings.TrimSpace(r.URL.Query().Get("location"))
+	var candidate *Candidate
+	var location *locations.Location
+	var err error
+	if locationID == "" {
+		candidate, err = s.store.Next(r.Context())
+	} else {
+		var ingredients []ai.InputIngredient
+		location, ingredients, err = s.loadCatalog(r.Context(), locationID)
+		if err == nil {
+			candidate, err = s.store.NextFromCatalog(r.Context(), ingredients)
+		}
+	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to load ingredient grade for review", "error", err)
 		http.Error(w, "Could not load ingredient grades.", http.StatusInternalServerError)
@@ -41,7 +68,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pageTemplate.Execute(w, candidate); err != nil {
+	if err := pageTemplate.Execute(w, struct {
+		*Candidate
+		Location *locations.Location
+	}{candidate, location}); err != nil {
 		slog.ErrorContext(r.Context(), "failed to render ingredient grade review", "error", err)
 	}
 }
@@ -60,10 +90,24 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.store.Save(r.Context(), gradeKey, verdict, s.now())
+	locationID := strings.TrimSpace(r.PostFormValue("location"))
+	var err error
+	if locationID == "" {
+		err = s.store.Save(r.Context(), gradeKey, verdict, s.now())
+	} else {
+		var ingredients []ai.InputIngredient
+		_, ingredients, err = s.loadCatalog(r.Context(), locationID)
+		if err == nil {
+			err = s.store.SaveFromCatalog(r.Context(), locationID, gradeKey, ingredients, verdict, s.now())
+		}
+	}
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):
-		http.Redirect(w, r, "/grader", http.StatusSeeOther)
+		target := "/grader"
+		if locationID != "" {
+			target += "?" + url.Values{"location": {locationID}}.Encode()
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 	case errors.Is(err, cache.ErrNotFound):
 		http.Error(w, "Ingredient grade not found.", http.StatusNotFound)
 	case errors.Is(err, ErrInvalidVerdict):
@@ -72,6 +116,13 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "failed to save ingredient grade review", "error", err)
 		http.Error(w, "Could not save the review.", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) loadCatalog(ctx context.Context, locationID string) (*locations.Location, []ai.InputIngredient, error) {
+	if s.catalog == nil {
+		return nil, nil, errors.New("store catalog is not configured")
+	}
+	return s.catalog.LoadCatalog(ctx, locationID)
 }
 
 var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(template.FuncMap{
@@ -114,6 +165,7 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
   <main>
     <header>
       <h1>Ingredient grade check</h1>
+      {{if .Location}}<p>{{.Location.Name}} · {{.Location.ID}}</p>{{end}}
     </header>
     <section class="card">
       {{if .Ingredient.Grade}}
@@ -126,6 +178,7 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
         </div>
         <p class="question">How does this grade look?</p>
         <form method="post" action="/grader/review">
+          {{if .Location}}<input type="hidden" name="location" value="{{.Location.ID}}">{{end}}
           <input type="hidden" name="grade_key" value="{{.GradeKey}}">
           <div class="actions">
             <button class="high" type="submit" name="verdict" value="too_high">Too high</button>
@@ -135,8 +188,7 @@ var pageTemplate = template.Must(template.New("ingredient-grade-review").Funcs(t
         </form>
       {{else}}
         <div class="done">
-          <h2>No grades found</h2>
-          <p>Refresh to try another batch.</p>
+          {{if .Location}}<h2>All grades reviewed, chef</h2><p>You’ve reviewed every ingredient in this store’s catalog.</p>{{else}}<h2>No grades found</h2><p>Refresh to try another batch.</p>{{end}}
         </div>
       {{end}}
     </section>

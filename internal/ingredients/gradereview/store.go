@@ -33,6 +33,7 @@ type Review struct {
 	Ingredient ai.InputIngredient `json:"ingredient"`
 	Verdict    Verdict            `json:"verdict"`
 	ReviewedAt time.Time          `json:"reviewed_at"`
+	LocationID string             `json:"location_id,omitempty"`
 }
 
 type Candidate struct {
@@ -149,11 +150,15 @@ func (s *Store) Save(ctx context.Context, gradeKey string, verdict Verdict, revi
 		Verdict:    verdict,
 		ReviewedAt: reviewedAt.UTC(),
 	}
+	return s.saveReview(ctx, review)
+}
+
+func (s *Store) saveReview(ctx context.Context, review Review) error {
 	body, err := json.Marshal(review)
 	if err != nil {
 		return fmt.Errorf("encode ingredient grade review: %w", err)
 	}
-	if err := s.cache.Put(ctx, reviewCachePrefix+gradeKey, string(body), cache.IfNoneMatch()); err != nil {
+	if err := s.cache.Put(ctx, reviewCachePrefix+review.GradeKey, string(body), cache.IfNoneMatch()); err != nil {
 		return fmt.Errorf("save ingredient grade review: %w", err)
 	}
 	return nil
@@ -224,4 +229,45 @@ func (s *Store) loadIngredient(ctx context.Context, gradeKey string) (*ai.InputI
 		return nil, fmt.Errorf("ingredient grade %q has no grade", gradeKey)
 	}
 	return &ingredient, nil
+}
+
+// NextFromCatalog selects an unreviewed ingredient from the chosen store only.
+func (s *Store) NextFromCatalog(ctx context.Context, ingredients []ai.InputIngredient) (*Candidate, error) {
+	for _, ingredient := range ingredients {
+		key := s.catalogGradeKey(ingredient)
+		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
+		if err != nil {
+			return nil, fmt.Errorf("check ingredient grade review %q: %w", key, err)
+		}
+		if reviewed {
+			continue
+		}
+		if ingredient.Grade == nil {
+			return nil, fmt.Errorf("ingredient %q has no grade", ingredient.ProductID)
+		}
+		return &Candidate{GradeKey: key, Ingredient: ingredient}, nil
+	}
+	return &Candidate{}, nil
+}
+
+// SaveFromCatalog validates membership and persists the server-side snapshot.
+func (s *Store) SaveFromCatalog(ctx context.Context, locationID, gradeKey string, ingredients []ai.InputIngredient, verdict Verdict, reviewedAt time.Time) error {
+	if !verdict.Valid() {
+		return ErrInvalidVerdict
+	}
+	for _, ingredient := range ingredients {
+		if s.catalogGradeKey(ingredient) != gradeKey {
+			continue
+		}
+		if ingredient.Grade == nil {
+			return fmt.Errorf("ingredient %q has no grade", ingredient.ProductID)
+		}
+		ingredient.Embedding = nil
+		return s.saveReview(ctx, Review{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC(), LocationID: locationID})
+	}
+	return cache.ErrNotFound
+}
+
+func (s *Store) catalogGradeKey(ingredient ai.InputIngredient) string {
+	return s.cacheVersion + "/" + ai.NormalizeInputIngredient(ingredient).Hash()
 }
