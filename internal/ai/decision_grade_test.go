@@ -253,7 +253,7 @@ func TestDecisionGraderSkipsEmptyAndRejectsAlreadyGraded(t *testing.T) {
 
 func TestDecisionGradeCacheVersion(t *testing.T) {
 	grader := NewDecisionGrader("test-key", http.DefaultClient)
-	assert.Equal(t, IngredientGradeCacheVersion("decisions"), grader.CacheVersion())
+	assert.Equal(t, ingredientDecisionCacheVersion(), grader.CacheVersion())
 	assert.NotEqual(t, IngredientGradeCacheVersion("gpt-6-luna"), grader.CacheVersion())
 	before := grader.CacheVersion()
 	rubric, err := json.Marshal(ingredientGradeCriteria)

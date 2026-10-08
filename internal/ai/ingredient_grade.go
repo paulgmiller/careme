@@ -150,9 +150,6 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 // IngredientGradeCacheVersion returns the cache version for the current grading prompt and model.
 func IngredientGradeCacheVersion(model string) string {
 	model = strings.TrimSpace(model)
-	if model == DecisionsIngredientGrader {
-		return ingredientDecisionCacheVersion()
-	}
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}

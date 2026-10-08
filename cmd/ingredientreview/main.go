@@ -9,9 +9,10 @@ import (
 	"os"
 	"time"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/ingredients/gradereview"
+	"careme/internal/ingredients/grading"
 
 	"github.com/paulgmiller/kage/pkg/kage"
 )
@@ -37,9 +38,20 @@ func run(args []string) error {
 		return fmt.Errorf("create cache: %w", err)
 	}
 
+	// TODO: When review becomes store-specific, use cached store ingredients and
+	// their embedded grades instead of depending on the grading manager's cache version.
+	// Select the cached grader even when generation is currently disabled.
+	manager := grading.NewManager(&config.Config{
+		AI: config.AIConfig{APIKey: os.Getenv("AI_API_KEY")},
+		IngredientGrading: config.IngredientGradingConfig{
+			Enable: true,
+			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
+		},
+	}, cacheStore, http.DefaultClient)
+
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           gradereview.NewHandler(cacheStore, ai.IngredientGradeCacheVersion(os.Getenv("INGREDIENT_GRADING_MODEL"))),
+		Handler:           gradereview.NewHandler(cacheStore, manager.CacheVersion()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("Ingredient grade review app listening at http://%s", *addr)
