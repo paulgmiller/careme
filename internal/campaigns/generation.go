@@ -101,6 +101,9 @@ func (s *Service) RunOnce(ctx context.Context) error {
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
 	errs := lop.Map(lo.Values(AdvertisedRecipeLocations()), func(c campaign, _ int) error {
+		if !c.Generate {
+			return nil
+		}
 		return s.generateLocation(ctx, c.Location.ID)
 	})
 	return errors.Join(errs...)
