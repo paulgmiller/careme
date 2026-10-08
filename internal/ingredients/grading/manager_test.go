@@ -273,17 +273,23 @@ func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
 	client := &http.Client{Transport: embeddingTransport(func(req *http.Request) (*http.Response, error) {
 		calls++
 		assert.Equal(t, "/v1/decisions", req.URL.Path)
-		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[{"type":"score","name":"ingredient_score","score":7.6,"confidence":0.9,"probabilities":[]}],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[{"type":"score","name":"ingredient_score","score":7.6,"confidence":0.9,"probabilities":[{"value":7,"label":"8","probability":0.4},{"value":8,"label":"9","probability":0.6}]}],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
 	})}
+	wantProbabilities := []ai.IngredientGradeProbability{
+		{Value: 7, Label: "8", Probability: 0.4},
+		{Value: 8, Label: "9", Probability: 0.6},
+	}
 	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli"}
 	for range 2 {
 		graded, err := NewManager(cfg, cacheBackend, client).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
 		require.NoError(t, err)
 		require.Len(t, graded, 1)
 		assert.Equal(t, 9, graded[0].Grade.Score)
+		assert.Equal(t, wantProbabilities, graded[0].Grade.Probabilities)
 	}
 	assert.Equal(t, 1, calls)
 	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(ai.IngredientGradeCacheVersion("decisions")+"/"+ingredientHash(ingredient)))
 	require.NoError(t, err)
 	assert.Equal(t, 9, cached.Grade.Score)
+	assert.Equal(t, wantProbabilities, cached.Grade.Probabilities)
 }

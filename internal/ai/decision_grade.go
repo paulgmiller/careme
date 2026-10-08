@@ -59,7 +59,7 @@ func ingredientDecisionCacheVersion() string {
 	if err != nil {
 		panic(err)
 	}
-	return ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
+	return ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one/probabilities-v1")
 }
 
 func NewDecisionGrader(apiKey string, httpClient *http.Client) *decisionGrader {
@@ -137,7 +137,11 @@ func ingredientGradeFromDecision(answer openai.DecisionAnswerUnion) (*Ingredient
 			return nil, fmt.Errorf("score must be between 0 and 9")
 		}
 		level := int(math.Round(score.Score))
-		return &IngredientGrade{Score: level + 1, Reason: fmt.Sprintf("%s confidence:%f, score:%f, level:%d", ingredientGradeCriteria[level], score.Confidence, score.Score, level)}, nil
+		probabilities := make([]IngredientGradeProbability, len(score.Probabilities))
+		for i, probability := range score.Probabilities {
+			probabilities[i] = IngredientGradeProbability{Value: probability.Value, Label: probability.Label, Probability: probability.Probability}
+		}
+		return &IngredientGrade{Score: level + 1, Reason: fmt.Sprintf("%s confidence:%f, score:%f, level:%d", ingredientGradeCriteria[level], score.Confidence, score.Score, level), Probabilities: probabilities}, nil
 	case openai.DecisionAnswerRefusal:
 		return nil, fmt.Errorf("decision refused")
 	default:

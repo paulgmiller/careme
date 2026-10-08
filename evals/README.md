@@ -118,6 +118,9 @@ The [October 8 Decisions comparison](ingredient-grader/decisions-comparison-2026
 compares live Decisions grading with the saved Luna baseline and a fresh Luna
 run, including accuracy, token-based API cost, and grading latency.
 
+Decisions grades include per-level `probabilities` in the exported grade metadata,
+preserving the API's zero-based level value, label, and probability for diagnosis.
+
 The [October 1 JEV comparison](ingredient-grader/jev-comparison-2026-10-01.md)
 records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
 

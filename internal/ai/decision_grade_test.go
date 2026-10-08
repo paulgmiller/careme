@@ -73,6 +73,36 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 	}
 }
 
+func TestDecisionGraderPreservesProbabilities(t *testing.T) {
+	grader := NewDecisionGrader("test-key", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return decisionHTTPResponse(req, `[{"type":"score","name":"ingredient_score","score":2.55,"confidence":0.38,"probabilities":[{"value":0,"label":"1","probability":0.5},{"value":5,"label":"6","probability":0.45},{"value":6,"label":"7","probability":0.05}]}]`), nil
+	})})
+	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "chicken"}})
+	require.NoError(t, err)
+	require.Len(t, graded, 1)
+	assert.Equal(t, 4, graded[0].Grade.Score)
+	want := []IngredientGradeProbability{
+		{Value: 0, Label: "1", Probability: 0.5},
+		{Value: 5, Label: "6", Probability: 0.45},
+		{Value: 6, Label: "7", Probability: 0.05},
+	}
+	assert.Equal(t, want, graded[0].Grade.Probabilities)
+	// Cache records and eval exports serialize the same grade type.
+	data, err := json.Marshal(graded[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"value":0`)
+	var restored InputIngredient
+	require.NoError(t, json.Unmarshal(data, &restored))
+	assert.Equal(t, want, restored.Grade.Probabilities)
+	assert.Equal(t, graded[0].Grade, restored.Grade)
+	var legacy IngredientGrade
+	require.NoError(t, json.Unmarshal([]byte(`{"score":7,"reason":"Existing Responses grade"}`), &legacy))
+	assert.Nil(t, legacy.Probabilities)
+	legacyJSON, err := json.Marshal(legacy)
+	require.NoError(t, err)
+	assert.NotContains(t, string(legacyJSON), "probabilities")
+}
+
 func TestDecisionGraderRejectsFailedAnswers(t *testing.T) {
 	for _, tc := range []struct{ name, answers, want string }{
 		{"refusal", `[{"type":"refusal","name":"ingredient_score"}]`, "decision refused"},
@@ -235,6 +265,10 @@ func TestDecisionGradeCacheVersion(t *testing.T) {
 	assert.Equal(t, IngredientGradeCacheVersion("decisions"), grader.CacheVersion())
 	assert.NotEqual(t, IngredientGradeCacheVersion("gpt-6-luna"), grader.CacheVersion())
 	before := grader.CacheVersion()
+	rubric, err := json.Marshal(ingredientGradeCriteria)
+	require.NoError(t, err)
+	previous := ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
+	assert.NotEqual(t, previous, before, "cached grades without probabilities must be refreshed")
 	original := ingredientGradeCriteria[0]
 	t.Cleanup(func() { ingredientGradeCriteria[0] = original })
 	ingredientGradeCriteria[0] = "changed rubric"

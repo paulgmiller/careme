@@ -178,7 +178,11 @@ explicit model. Decisions grades use a separate cache version derived from the A
 version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
 review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
 Decisions sends independent per-ingredient requests with a shared limit of 64
-concurrent requests per grader instance. 
+concurrent requests per grader instance.
+Decisions grades also store the API's per-level probabilities, preserving each
+zero-based value, label, and probability. The `probabilities-v1` cache version
+suffix ensures older grades without distributions are refreshed. The rubric,
+score conversion, and Responses grade versions are unchanged.
 Wine pairing now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.
 
