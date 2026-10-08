@@ -160,7 +160,8 @@ on `ai.InputIngredient` (JSON `embeddings`), and their authoritative cache is
 include them. Prices, product IDs, brands, and grades are excluded from embedding
 input. Identical trimmed descriptions share an embedding across products/stores.
 
-Grade cache versions depend only on the grading model and prompt. Embedding keys
+Responses grade cache versions depend on the grading model and prompt; Decisions
+versions also include the rubric and score conversion. Embedding keys
 include the embedding model, dimensions, input format version, and SHA-256 of the
 trimmed description. Changing the grader reuses embeddings, while changing the
 embedding configuration leaves grades intact. Existing grades without vectors
@@ -173,7 +174,16 @@ The default ingredient grader changed from `gpt-5.6-luna` to `gpt-6-luna` on
 2026-09-29. This produces a different model-derived grade cache version in the
 existing `ingredient_grades/<cache_version>/` namespace; old grades and reviews
 remain under their original versions. `INGREDIENT_GRADING_MODEL` still selects an
-explicit model (including `jev`). Wine pairing now uses `gpt-6-luna`, while existing
+explicit model. Decisions grades use a separate cache version derived from the API
+version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
+review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
+Decisions sends independent per-ingredient requests with a shared limit of 64
+concurrent requests per grader instance.
+Decisions grades also store the API's per-level probabilities, preserving each
+zero-based value, label, and probability. The `probabilities-v1` cache version
+suffix ensures older grades without distributions are refreshed. The rubric,
+score conversion, and Responses grade versions are unchanged.
+Wine pairing now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.
 
 The ingredients CLI fetches the selected store's current staple catalog, reuses

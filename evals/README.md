@@ -114,6 +114,13 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 ## Ingredient grading
 
+The [October 8 Decisions comparison](ingredient-grader/decisions-comparison-2026-10-08.md)
+compares live Decisions grading with the saved Luna baseline and a fresh Luna
+run, including accuracy, token-based API cost, and grading latency.
+
+Decisions grades include per-level `probabilities` in the exported grade metadata,
+preserving the API's zero-based level value, label, and probability for diagnosis.
+
 The [October 1 JEV comparison](ingredient-grader/jev-comparison-2026-10-01.md)
 records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
 
@@ -131,7 +138,10 @@ Use the existing `INGREDIENT_GRADING_MODEL` configuration variable for both task
 and direct Promptfoo runs. Leave it unset to use the production default, currently
 `gpt-6-luna`. The provider has no separate model selector; `MODEL` is for the recipe
 and menu suites.
-Both OpenAI graders use `none` reasoning. The existing `jev` option is preserved.
+Both Responses graders use `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
+to evaluate the OpenAI Decisions grader that replaced the `jev` option. It sends
+one independent request per ingredient with up to 64 concurrent requests per
+grader instance, and converts the zero-based ten-level score to a 1–10 grade by rounding and adding one.
 OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
 
 Grading must be enabled (`INGREDIENT_GRADING_ENABLE` defaults to enabled); the eval
@@ -143,7 +153,10 @@ has a grade within its checked-in bounds. Incomplete, duplicate, or unexpected
 results fail explicitly. JSON exports retain grades, ingredient/pass counts, and
 `metadata.requestedModel` (empty means the production default); `latencyMs` measures
 grading including SDK retries, excluding configuration and Go startup. The suite
-defaults to concurrency sixteen and has no latency assertion or exported costs.
+defaults to concurrency sixteen and has no latency assertion. The eval captures billing
+metadata through its HTTP transport without retaining credentials or response
+outputs. Cost estimation supports the two Luna Responses models and GPT-6 Luna
+Decisions; unknown pricing or missing usage fails explicitly.
 
 Provider errors are returned as Go errors; Promptfoo's Go wrapper then exits
 nonzero. Score-bound failures remain completed evaluation results for assertions.

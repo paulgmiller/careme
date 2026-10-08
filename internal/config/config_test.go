@@ -165,7 +165,8 @@ func TestLoadValidatesIngredientGradingCredentials(t *testing.T) {
 		{"OpenAI grader without key", "gpt-6-luna", "1", "", true},
 		{"OpenAI grader with blank key", "gpt-6-luna", "1", " \t ", true},
 		{"OpenAI grader with key", "gpt-6-luna", "1", "test-key", false},
-		{"JEV without OpenAI key", "jev", "1", "", false},
+		{"Decisions without OpenAI key", "decisions", "1", "", true},
+		{"Decisions with OpenAI key", "decisions", "1", "test-key", false},
 		{"disabled grader without key", "gpt-6-luna", "false", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

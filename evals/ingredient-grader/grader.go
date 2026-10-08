@@ -54,7 +54,8 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]interface{})["requestedModel"] = cfg.IngredientGrading.Model
+	metadata := result["metadata"].(map[string]interface{})
+	metadata["requestedModel"] = cfg.IngredientGrading.Model
 	return result, nil
 }
 
