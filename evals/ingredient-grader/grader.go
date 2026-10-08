@@ -49,12 +49,22 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	}
 	// Every evaluation must grade fresh inputs, regardless of previously stored
 	// grades. Keep the production batching path.
-	grader := grading.NewManager(cfg, cache.NewInMemoryCache(), http.DefaultClient)
+	usage := &usageTransport{base: http.DefaultTransport}
+	grader := grading.NewManager(cfg, cache.NewInMemoryCache(), &http.Client{Transport: usage})
 	result, err := runEval(ctx, grader)
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]interface{})["requestedModel"] = cfg.IngredientGrading.Model
+	records, cost, err := usage.snapshot()
+	if err != nil {
+		return nil, fmt.Errorf("record ingredient eval cost: %w", err)
+	}
+	result["cost"] = cost
+	metadata := result["metadata"].(map[string]interface{})
+	metadata["requestedModel"] = cfg.IngredientGrading.Model
+	metadata["usage"] = records
+	metadata["estimatedCostUSD"] = cost
+	metadata["apiRequestCount"] = len(records)
 	return result, nil
 }
 

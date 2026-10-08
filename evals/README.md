@@ -114,6 +114,10 @@ The current suite evaluates critique structure, defect detection, suggested fixe
 
 ## Ingredient grading
 
+The [October 8 Decisions comparison](ingredient-grader/decisions-comparison-2026-10-08.md)
+compares live Decisions grading with the saved Luna baseline and a fresh Luna
+run, including accuracy, token-based API cost, and grading latency.
+
 The [October 1 JEV comparison](ingredient-grader/jev-comparison-2026-10-01.md)
 records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
 
@@ -146,7 +150,12 @@ has a grade within its checked-in bounds. Incomplete, duplicate, or unexpected
 results fail explicitly. JSON exports retain grades, ingredient/pass counts, and
 `metadata.requestedModel` (empty means the production default); `latencyMs` measures
 grading including SDK retries, excluding configuration and Go startup. The suite
-defaults to concurrency sixteen and has no latency assertion or exported costs.
+defaults to concurrency sixteen and has no latency assertion. Exports now include
+`cost` in USD and metadata `estimatedCostUSD`, `apiRequestCount`, and per-request
+`usage` with token counts and returned processing tier. The eval captures billing
+metadata through its HTTP transport without retaining credentials or response
+outputs. Cost estimation supports the two Luna Responses models and GPT-6 Luna
+Decisions; unknown pricing or missing usage fails explicitly.
 
 Provider errors are returned as Go errors; Promptfoo's Go wrapper then exits
 nonzero. Score-bound failures remain completed evaluation results for assertions.

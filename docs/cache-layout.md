@@ -174,17 +174,12 @@ The default ingredient grader changed from `gpt-5.6-luna` to `gpt-6-luna` on
 2026-09-29. This produces a different model-derived grade cache version in the
 existing `ingredient_grades/<cache_version>/` namespace; old grades and reviews
 remain under their original versions. `INGREDIENT_GRADING_MODEL` still selects an
-explicit model. The former `jev` option was replaced by `decisions` on
-2026-10-07. Decisions grades use a separate cache version derived from the API
+explicit model. Decisions grades use a separate cache version derived from the API
 version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
 review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
 Decisions sends independent per-ingredient requests with a shared limit of 64
-concurrent requests per grader instance. The temporary shared-input implementation
-was removed on 2026-10-08; restoring the original `decisions/v1/` salt and single-item
-instruction reuses the original independent Decisions grades and bypasses
-`decisions/batch-v2/` grades. Concurrency does not affect the grade cache version.
-Old JEV and Responses grades remain under their original versions. Wine pairing
-now uses `gpt-6-luna`, while existing
+concurrent requests per grader instance. 
+Wine pairing now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.
 
 The ingredients CLI fetches the selected store's current staple catalog, reuses
