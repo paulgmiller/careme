@@ -82,6 +82,11 @@ type shoppingListPageView struct {
 	AdminURL             string
 	FinalizedKroger      bool
 	KrogerCartAvailable  bool
+	KrogerCartError      string
+	KrogerCartURL        string
+	KrogerCartBrand      string
+	KrogerCartNotice     string
+	KrogerTransfer       *krogerTransfer
 }
 
 type shoppingListViewInput struct {
@@ -97,6 +102,7 @@ type shoppingListViewInput struct {
 	progress             shoppingProgress
 	useTodaysIngredients bool
 	krogerCartAvailable  bool
+	krogerCartError      string
 }
 
 func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
@@ -142,6 +148,9 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
+	if krogerCartNotice(input.krogerCartError) != "" {
+		data.KrogerCartError = input.krogerCartError
+	}
 	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
 	if len(recipeViews) > 0 {
 		data.Social = &templates.SocialPreview{

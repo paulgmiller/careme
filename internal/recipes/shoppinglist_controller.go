@@ -453,6 +453,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		pendingInstructions: instructions,
 		progress:            progress,
 		krogerCartAvailable: s.krogerCart != nil,
+		krogerCartError:     r.URL.Query().Get("kroger_error"),
 	})
 }
 

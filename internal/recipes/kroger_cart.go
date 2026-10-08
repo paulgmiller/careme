@@ -10,10 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -39,6 +39,7 @@ type krogerAuthState struct {
 type krogerTransfer struct {
 	Status      string          `json:"status"`
 	Added       int             `json:"added"`
+	Sent        []ai.Ingredient `json:"sent,omitempty"`
 	Gaps        []ai.Ingredient `json:"gaps,omitempty"`
 	Fingerprint string          `json:"fingerprint,omitempty"`
 }
@@ -149,21 +150,13 @@ func (s *server) handleKrogerCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	ingredients, _, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	_, _, err := s.finalizedKrogerIngredients(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
 		return
 	}
-	if result, err := s.loadCartTransfer(r.Context(), userID, hash); err == nil {
-		fingerprint, hashErr := shoppingQuantityFingerprint(ingredients)
-		if hashErr != nil {
-			http.Error(w, "Unable to check shopping list", http.StatusInternalServerError)
-			return
-		}
-		if result.Status == "complete" && result.Fingerprint != fingerprint {
-			result.Status = "changed"
-		}
-		s.showCartTransfer(w, result)
+	if _, err := s.loadCartTransfer(r.Context(), userID, hash); err == nil {
+		redirectKrogerShoppingList(w, r, hash, "")
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		http.Error(w, "Unable to check Kroger transfer", http.StatusInternalServerError)
@@ -200,6 +193,8 @@ func (s *server) startKrogerAuthorization(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) handleKrogerCallback(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	if s.krogerCart == nil {
 		http.NotFound(w, r)
 		return
@@ -225,39 +220,40 @@ func (s *server) handleKrogerCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Get("error") != "" {
-		http.Error(w, "Kroger connection was not approved", http.StatusBadRequest)
+		redirectKrogerShoppingList(w, r, state.Hash, "denied")
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		http.Error(w, "Kroger did not return a code", http.StatusBadRequest)
+		redirectKrogerShoppingList(w, r, state.Hash, "missing_code")
 		return
 	}
 	token, err := s.krogerCart.Exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
-		http.Error(w, "Unable to connect to Kroger", http.StatusBadGateway)
+		redirectKrogerShoppingList(w, r, state.Hash, "connect_failed")
 		return
 	}
 	if err := s.saveCartToken(r.Context(), userID, token); err != nil {
-		http.Error(w, "Unable to save Kroger connection", http.StatusInternalServerError)
+		redirectKrogerShoppingList(w, r, state.Hash, "save_failed")
 		return
 	}
 	s.performCartTransfer(w, r, userID, state.Hash, token)
 }
 
 func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, userID, hash string, token kroger.CartToken) {
-	ingredients, locationID, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	ingredients, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
 	if err != nil {
-		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
+		redirectKrogerShoppingList(w, r, hash, "list_unavailable")
 		return
 	}
 	list, err := s.mergedShoppingList(r.Context(), hash, ingredients)
 	if err != nil {
-		http.Error(w, "Unable to combine shopping quantities. Try again, chef.", http.StatusServiceUnavailable)
+		redirectKrogerShoppingList(w, r, hash, "combine_failed")
 		return
 	}
 	var cartItems []kroger.CartItem
+	var sent []ai.Ingredient
 	var gaps []ai.Ingredient
 	seenUPCs := make(map[string]bool)
 	for _, group := range list {
@@ -266,11 +262,11 @@ func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, use
 				gaps = append(gaps, *item)
 				continue
 			}
-			upc, err := s.krogerCart.ProductUPC(r.Context(), item.ProductID, locationID)
+			upc, err := s.krogerCart.ProductUPC(r.Context(), item.ProductID, location.ID)
 			if err != nil {
 				if !errors.Is(err, kroger.ErrProductUnavailable) {
 					slog.ErrorContext(r.Context(), "Kroger product lookup failed", "product_id", item.ProductID, "error", err)
-					http.Error(w, "Unable to check Kroger products. Try again, chef.", http.StatusServiceUnavailable)
+					redirectKrogerShoppingList(w, r, hash, "lookup_failed")
 					return
 				}
 				gaps = append(gaps, *item)
@@ -278,64 +274,92 @@ func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, use
 			}
 			if !seenUPCs[upc] {
 				cartItems = append(cartItems, kroger.CartItem{UPC: upc, Quantity: 1})
+				sent = append(sent, *item)
 				seenUPCs[upc] = true
 			}
 		}
 	}
 	if len(cartItems) == 0 {
-		s.showCartTransfer(w, krogerTransfer{Status: "no_matches", Gaps: gaps})
+		redirectKrogerShoppingList(w, r, hash, "no_matches")
 		return
 	}
 	fingerprint, err := shoppingQuantityFingerprint(ingredients)
 	if err != nil {
-		http.Error(w, "Unable to prepare shopping list", http.StatusInternalServerError)
+		redirectKrogerShoppingList(w, r, hash, "prepare_failed")
 		return
 	}
-	if err := s.saveCartTransfer(r.Context(), userID, hash, krogerTransfer{Status: "pending", Gaps: gaps}, cache.IfNoneMatch()); err != nil {
+	if err := s.saveCartTransfer(r.Context(), userID, hash, krogerTransfer{Status: "pending", Sent: sent, Gaps: gaps}, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
-			result, loadErr := s.loadCartTransfer(r.Context(), userID, hash)
+			_, loadErr := s.loadCartTransfer(r.Context(), userID, hash)
 			if loadErr == nil {
-				s.showCartTransfer(w, result)
+				redirectKrogerShoppingList(w, r, hash, "")
 				return
 			}
 		}
-		http.Error(w, "Unable to start Kroger transfer", http.StatusInternalServerError)
+		redirectKrogerShoppingList(w, r, hash, "start_failed")
 		return
 	}
 	if err := s.krogerCart.Add(r.Context(), token.AccessToken, cartItems); err != nil {
 		slog.ErrorContext(r.Context(), "Kroger cart transfer uncertain", "hash", hash, "error", err)
-		s.showCartTransfer(w, krogerTransfer{Status: "uncertain", Gaps: gaps})
+		if err := s.saveCartTransfer(r.Context(), userID, hash, krogerTransfer{Status: "uncertain", Sent: sent, Gaps: gaps}, cache.Unconditional()); err != nil {
+			redirectKrogerShoppingList(w, r, hash, "confirmation_failed")
+			return
+		}
+		redirectKrogerShoppingList(w, r, hash, "")
 		return
 	}
-	result := krogerTransfer{Status: "complete", Added: len(cartItems), Gaps: gaps, Fingerprint: fingerprint}
+	result := krogerTransfer{Status: "complete", Added: len(cartItems), Sent: sent, Gaps: gaps, Fingerprint: fingerprint}
 	if err := s.saveCartTransfer(r.Context(), userID, hash, result, cache.Unconditional()); err != nil {
-		http.Error(w, "Items sent to Kroger, but confirmation could not be saved. Check your Kroger cart.", http.StatusInternalServerError)
+		redirectKrogerShoppingList(w, r, hash, "confirmation_failed")
 		return
 	}
-	s.showCartTransfer(w, result)
+	redirectKrogerShoppingList(w, r, hash, "")
 }
 
-func (s *server) showCartTransfer(w http.ResponseWriter, result krogerTransfer) {
-	if result.Status == "complete" && len(result.Gaps) == 0 {
-		w.Header().Set("Location", krogerCartURL)
-		w.WriteHeader(http.StatusSeeOther)
-		return
+func redirectKrogerShoppingList(w http.ResponseWriter, r *http.Request, hash, errorCode string) {
+	query := url.Values{"h": {hash}}
+	if errorCode != "" {
+		query.Set("kroger_error", errorCode)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	view := struct {
-		Message string
-		Gaps    []ai.Ingredient
-		CartURL string
-	}{Gaps: result.Gaps, CartURL: krogerCartURL}
+	http.Redirect(w, r, "/recipes?"+query.Encode()+"#shopping-list-section", http.StatusSeeOther)
+}
+
+func krogerCartNotice(code string) string {
+	return map[string]string{
+		"no_matches":          "No products could be matched. Nothing was sent to Kroger.",
+		"denied":              "Kroger connection was not approved. Try again, chef.",
+		"missing_code":        "Kroger did not finish connecting your account. Try again, chef.",
+		"connect_failed":      "Unable to connect to Kroger. Try again, chef.",
+		"save_failed":         "Unable to save your Kroger connection. Try again, chef.",
+		"list_unavailable":    "Your shopping list could not be loaded. Try again, chef.",
+		"combine_failed":      "Could not combine your shopping quantities. Try again, chef.",
+		"lookup_failed":       "Could not check Kroger products. Nothing was sent. Try again, chef.",
+		"prepare_failed":      "Could not prepare your shopping list. Nothing was sent. Try again, chef.",
+		"start_failed":        "Could not start your Kroger transfer. Check your cart before trying again.",
+		"confirmation_failed": "Could not save the transfer result. Items may have been sent. Review your Kroger cart.",
+	}[code]
+}
+
+func (result krogerTransfer) Message() string {
 	switch result.Status {
 	case "complete":
-		view.Message = fmt.Sprintf("Added %d products to your Kroger cart. Add or adjust these items in Kroger:", result.Added)
+		if result.Added == 1 {
+			return "Sent 1 product to your cart."
+		}
+		return fmt.Sprintf("Sent %d products to your cart.", result.Added)
 	case "no_matches":
-		view.Message = "No products could be matched. Add these items in Kroger:"
+		return "No products could be matched. Nothing was sent to Kroger."
 	case "changed":
-		view.Message = "Your shopping list changed after Careme added it to Kroger. Review the new items in Kroger; Careme will not add the earlier items twice."
+		return "Your shopping list changed after it was sent to Kroger. Review your cart; the earlier items will not be sent twice."
 	default:
-		view.Message = "Careme could not confirm what Kroger added. Check your cart and add any missing items there."
+		return "Careme could not confirm what Kroger added. Review your cart before adding any missing items."
 	}
-	_ = template.Must(template.New("result").Parse(`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kroger cart</title><main style="max-width:42rem;margin:3rem auto;padding:1rem;font-family:sans-serif"><h1>Kroger cart</h1><p>{{.Message}}</p>{{if .Gaps}}<ul>{{range .Gaps}}<li>{{.Name}}{{if .Quantity}} — {{.Quantity}}{{end}}</li>{{end}}</ul>{{end}}<p><a href="{{.CartURL}}">Open Kroger cart</a></p></main></html>`)).Execute(w, view)
+}
+
+func krogerCartLink(locationName string) (string, string) {
+	name := strings.ToLower(strings.TrimSpace(locationName))
+	if name == "qfc" || strings.HasPrefix(name, "qfc ") || strings.HasPrefix(name, "qfc-") {
+		return "https://www.qfc.com/cart", "QFC"
+	}
+	return krogerCartURL, "Kroger"
 }

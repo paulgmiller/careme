@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/providers/kroger"
 
@@ -56,4 +57,36 @@ func TestFinalizedKrogerShoppingSectionShowsCartAction(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Add to Kroger cart")
 	assert.Contains(t, rr.Body.String(), "2 cloves")
+}
+
+func TestQFCTransferLinksToQFCCart(t *testing.T) {
+	s := newTestServer(t)
+	s.krogerCart = &kroger.CartClient{}
+	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger"}, time.Now())
+	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.saveCartTransfer(t.Context(), "mock-clerk-user-id", p.Hash(), krogerTransfer{Status: "complete", Added: 1, Sent: []ai.Ingredient{{Name: "Garlic"}}}, cache.Unconditional()))
+	page := renderKrogerShoppingSection(t, s, p.Hash(), "")
+	assert.Contains(t, page, `href="https://www.qfc.com/cart"`)
+	assert.Contains(t, page, "Review QFC cart")
+	assert.NotContains(t, page, "www.kroger.com/cart")
+}
+
+func TestKrogerCartLink(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		url   string
+		brand string
+	}{
+		{name: "QFC", url: "https://www.qfc.com/cart", brand: "QFC"},
+		{name: " QfC Bellevue ", url: "https://www.qfc.com/cart", brand: "QFC"},
+		{name: "QFC-Bellevue", url: "https://www.qfc.com/cart", brand: "QFC"},
+		{name: "Kroger on the Rhine", url: "https://www.kroger.com/cart", brand: "Kroger"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			url, brand := krogerCartLink(tc.name)
+			assert.Equal(t, tc.url, url)
+			assert.Equal(t, tc.brand, brand)
+		})
+	}
 }

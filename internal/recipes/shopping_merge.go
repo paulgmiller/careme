@@ -15,6 +15,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/templates"
 )
 
@@ -123,24 +124,24 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 	return list, nil
 }
 
-func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([]ai.Ingredient, string, error) {
+func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([]ai.Ingredient, *locations.Location, error) {
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	if p.Location == nil || !strings.EqualFold(p.Location.Chain, "Kroger") || len(p.Saved) == 0 {
-		return nil, "", fmt.Errorf("shopping list is not a finalized Kroger list")
+		return nil, nil, fmt.Errorf("shopping list is not a finalized Kroger list")
 	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
 		var wine *ai.WineSelection
 		wine, err = s.WineFromCache(ctx, recipe.ComputeHash())
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			return nil, "", fmt.Errorf("load wine: %w", err)
+			return nil, nil, fmt.Errorf("load wine: %w", err)
 		}
 		ingredients = append(ingredients, ingredientsForDisplay(recipe.Ingredients, wine)...)
 	}
-	return ingredients, p.Location.ID, nil
+	return ingredients, p.Location, nil
 }
 
 func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +149,8 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); err != nil {
+	userID, err := s.clerk.GetUserIDFromRequest(r)
+	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
 			http.Error(w, "Sign in to use the Kroger cart", http.StatusUnauthorized)
 		} else {
@@ -157,7 +159,7 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 		return
 	}
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	ingredients, _, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	ingredients, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
 		return
@@ -168,7 +170,34 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 		_, _ = w.Write([]byte(`<section id="shopping-list-section"><p>Could not combine your list. <button hx-get="/recipes/` + url.PathEscape(hash) + `/shopping-quantities" hx-target="#shopping-list-section" hx-swap="outerHTML">Try again, chef</button></p></section>`))
 		return
 	}
-	if err := templates.ShoppingList.ExecuteTemplate(w, "kroger_shopping_list_section", shoppingListPageView{Hash: hash, ShoppingList: list}); err != nil {
+	cartURL, cartBrand := krogerCartLink(location.Name)
+	view := shoppingListPageView{Hash: hash, ShoppingList: list, KrogerCartNotice: krogerCartNotice(r.URL.Query().Get("kroger_error")), KrogerCartURL: cartURL, KrogerCartBrand: cartBrand}
+	result, err := s.loadCartTransfer(r.Context(), userID, hash)
+	if err == nil {
+		fingerprint, hashErr := shoppingQuantityFingerprint(ingredients)
+		if hashErr != nil {
+			http.Error(w, "Unable to check shopping list", http.StatusInternalServerError)
+			return
+		}
+		if result.Status == "complete" && result.Fingerprint != fingerprint {
+			result.Status = "changed"
+		}
+		view.KrogerTransfer = &result
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		http.Error(w, "Unable to load Kroger transfer", http.StatusInternalServerError)
+		return
+	}
+	if view.KrogerTransfer == nil && r.URL.Query().Get("kroger_error") == "no_matches" {
+		gaps := make([]ai.Ingredient, 0)
+		for _, group := range list {
+			for _, item := range group.Items {
+				gaps = append(gaps, *item)
+			}
+		}
+		view.KrogerTransfer = &krogerTransfer{Status: "no_matches", Gaps: gaps}
+		view.KrogerCartNotice = ""
+	}
+	if err := templates.ShoppingList.ExecuteTemplate(w, "kroger_shopping_list_section", view); err != nil {
 		slog.ErrorContext(r.Context(), "render shopping quantities", "error", err)
 	}
 }
