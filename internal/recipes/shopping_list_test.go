@@ -211,3 +211,23 @@ func TestShoppingListForDisplay_KeepsDistinctSuffixesSeparate(t *testing.T) {
 		t.Fatalf("expected quantity %q, got %q", want, got)
 	}
 }
+
+func TestShoppingListForDisplayUsesProductIdentity(t *testing.T) {
+	items := []ai.Ingredient{
+		{ProductID: "first", Name: "Kroger Lemon", Quantity: "1"},
+		{ProductID: "second", Name: "Kroger Lemon", Quantity: "2"},
+		{ProductID: "first", Name: "Lemon", Quantity: "3"},
+		{Name: "Salt", Quantity: "1 tsp"},
+		{Name: "salt", Quantity: "2 tsp"},
+	}
+	groups := shoppingListForDisplay(items)
+	assert.Len(t, groups, 1)
+	assert.Equal(t, []*ai.Ingredient{
+		{ProductID: "first", Name: "Kroger Lemon", Quantity: "1, 3"},
+		{ProductID: "second", Name: "Kroger Lemon", Quantity: "2"},
+		{Name: "Salt", Quantity: "3 tsp"},
+	}, groups[0].Items)
+	quantityGroups := shoppingQuantityGroups(items)
+	assert.Len(t, quantityGroups, 3)
+	assert.Equal(t, []string{"1", "3"}, quantityGroups[0].Quantities)
+}

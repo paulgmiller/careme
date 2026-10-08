@@ -327,7 +327,12 @@
 
             {{template "shopping_finalize_controls" .}}
 
-            {{if .ShoppingList}}
+            {{if and .FinalizedKroger .KrogerCartAvailable}}
+            <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md"
+                     hx-get="/recipes/{{.Hash}}/shopping-quantities{{if .KrogerCartError}}?kroger_error={{.KrogerCartError}}{{end}}" hx-trigger="load" hx-swap="outerHTML">
+              <p class="text-sm text-ink-600">Combining your shopping quantities…</p>
+            </section>
+            {{else if .ShoppingList}}
             <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
               <details{{if .HasSavedRecipes}} open{{end}}>
                 <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
@@ -366,4 +371,56 @@
           </p>
           {{end}}
         </div>
+{{end}}
+
+{{define "kroger_shopping_list_section"}}
+<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
+  {{if .KrogerCartNotice}}<p role="alert" class="mt-4 text-sm text-ink-700">{{.KrogerCartNotice}}</p>{{end}}
+  {{with .KrogerTransfer}}
+  <div role="status" class="mt-4 rounded-lg bg-brand-50 p-4 text-sm text-ink-700">
+    <p class="font-semibold">{{.Message}}</p>
+    {{if .Sent}}
+    <h3 class="mt-3 font-semibold">{{if eq .Status "complete"}}Products sent{{else if eq .Status "changed"}}Previously sent products{{else}}Products submitted; result unconfirmed{{end}}</h3>
+    <ul class="mt-2 space-y-2">
+      {{range .Sent}}<li>{{.Name}} — 1 package</li>{{end}}
+    </ul>
+    {{end}}
+    {{if .Gaps}}
+    <h3 class="mt-3 font-semibold">Not sent to your cart</h3>
+    <ul class="mt-2 space-y-2">
+      {{range .Gaps}}<li>{{.Name}}{{if .Quantity}} — {{.Quantity}}{{end}}</li>{{end}}
+    </ul>
+    {{end}}
+  </div>
+  {{end}}
+  {{if or .KrogerTransfer .KrogerCartNotice}}
+  <p class="mt-4 text-sm text-ink-700">Review your store, amounts, and checkout in {{.KrogerCartBrand}}.</p>
+  <a href="{{.KrogerCartURL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600">Review {{.KrogerCartBrand}} cart (opens a new tab)</a>
+  {{end}}
+  <div class="mt-4 space-y-5 text-ink-700">
+    {{range .ShoppingList}}
+    <section>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+      <ul class="mt-2 space-y-2">
+        {{range .Items}}
+        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+          <span class="font-medium text-brand-700">{{.Name}}</span>
+          {{if .Quantity}}<span class="ml-2 text-ink-600">{{.Quantity}}</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+  </div>
+  {{if or (not .KrogerTransfer) (eq .KrogerTransfer.Status "no_matches")}}
+  <form method="POST" action="/recipes/{{.Hash}}/kroger-cart" class="mt-6"
+        onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Adding your list…';">
+    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">
+      Add to {{.KrogerCartBrand}} cart
+    </button>
+    <p class="mt-2 text-xs text-ink-600">Adds one package of each matched product. Review amounts, store, and checkout in {{.KrogerCartBrand}}.</p>
+  </form>
+  {{end}}
+</section>
 {{end}}

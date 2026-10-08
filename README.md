@@ -34,6 +34,7 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-3.1-pro-preview`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)

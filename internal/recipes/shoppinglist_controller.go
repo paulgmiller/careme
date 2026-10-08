@@ -33,6 +33,8 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
+	mux.HandleFunc("GET /recipes/{hash}/shopping-quantities", s.handleShoppingQuantities)
+	mux.HandleFunc("POST /recipes/{hash}/kroger-cart", s.handleKrogerCart)
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +452,8 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		helpMessage:         help,
 		pendingInstructions: instructions,
 		progress:            progress,
+		krogerCartAvailable: s.krogerCart != nil,
+		krogerCartError:     r.URL.Query().Get("kroger_error"),
 	})
 }
 

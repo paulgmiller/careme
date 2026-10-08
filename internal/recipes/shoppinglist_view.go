@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/providers/kroger"
 	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -80,6 +81,13 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
+	FinalizedKroger      bool
+	KrogerCartAvailable  bool
+	KrogerCartError      string
+	KrogerCartURL        string
+	KrogerCartBrand      string
+	KrogerCartNotice     string
+	KrogerTransfer       *krogerTransfer
 }
 
 type shoppingListViewInput struct {
@@ -94,6 +102,8 @@ type shoppingListViewInput struct {
 	pendingInstructions  string
 	progress             shoppingProgress
 	useTodaysIngredients bool
+	krogerCartAvailable  bool
+	krogerCartError      string
 }
 
 func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
@@ -134,9 +144,14 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
+		FinalizedKroger:      kroger.NewIdentityProvider().IsID(input.params.Location.ID) && len(input.params.Saved) > 0,
+		KrogerCartAvailable:  input.krogerCartAvailable && serverSignedIn,
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
+	if krogerCartNotice(input.krogerCartError) != "" {
+		data.KrogerCartError = input.krogerCartError
+	}
 	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
 	if len(recipeViews) > 0 {
 		data.Social = &templates.SocialPreview{

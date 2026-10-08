@@ -12,8 +12,29 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
+	_ = newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}, time.Now())
+	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
+		t.Run(code, func(t *testing.T) {
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash(), krogerCartAvailable: true, krogerCartError: code})
+			require.NoError(t, err)
+			var page bytes.Buffer
+			require.NoError(t, templates.ShoppingList.Execute(&page, view))
+			if code == "denied" {
+				assert.Contains(t, page.String(), "/shopping-quantities?kroger_error=denied")
+			} else {
+				assert.NotContains(t, page.String(), "alert(1)")
+			}
+		})
+	}
+}
 
 func TestFormatShoppingListHTML_ValidHTML(t *testing.T) {
 	t.Parallel()

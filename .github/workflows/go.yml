@@ -206,7 +206,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -217,14 +217,14 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ github.event_name != 'pull_request' }}
           # BuildKit removes .git from Git contexts by default. Go needs it
           # during the builder stage to populate its standard vcs.* settings.
           build-args: |
             CMD_PATH=${{ matrix.cmd_path }}
             BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
           tags: |
-            ${{ steps.vars.outputs.IMAGE }}:latest
+            ${{ github.event_name == 'push' && format('{0}:latest', steps.vars.outputs.IMAGE) || '' }}
             ${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.SHORT_SHA }}
 
   deploy-caremetest:
