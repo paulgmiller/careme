@@ -349,10 +349,9 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	}})
 	client.setHasInventory("12345678", true)
 	storage := newTestLocationServer(client)
+	score := 27
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{
-		scores: map[string]*int{
-			"12345678": new(27),
-		},
+		scores: map[string]*int{"12345678": &score},
 	})
 
 	mux := http.NewServeMux()
@@ -367,6 +366,15 @@ func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
 	}
 	if body := rr.Body.String(); !strings.Contains(body, "score 27") {
 		t.Fatalf("expected produce score badge, got %q", body)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `href="/grader?location=12345678"`) {
+		t.Fatalf("expected store-specific grade review link, got %q", body)
+	}
+	score = 0
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/locations?zip=10001", nil))
+	if body := rr.Body.String(); !strings.Contains(body, "score 0") || !strings.Contains(body, `href="/grader?location=12345678"`) {
+		t.Fatalf("expected zero-score review link, got %q", body)
 	}
 }
 

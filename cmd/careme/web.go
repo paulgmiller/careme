@@ -19,6 +19,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/ingredients"
+	"careme/internal/ingredients/gradereview"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/providerregistry"
@@ -126,6 +127,9 @@ func runServer(cfg *config.Config, addr string) error {
 	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
+	gradeReview := gradereview.NewHandler(cache, gradereview.NewCachedCatalog(locationStorage, recipes.IO(cache)))
+	appRoutes.Handle("/grader", gradeReview)
+	appRoutes.Handle("/grader/", gradeReview)
 
 	farmersMarketCache, err := cachepkg.EnsureCache(farmersmarket.Container)
 	if err != nil {

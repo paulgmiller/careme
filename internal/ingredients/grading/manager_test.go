@@ -20,41 +20,6 @@ import (
 
 const testIngredientGradeCacheVersion = "test-cache-version"
 
-func TestManagerCacheVersion(t *testing.T) {
-	client := &http.Client{Transport: embeddingTransport(func(req *http.Request) (*http.Response, error) {
-		t.Error("reading the manager cache version must not call the API")
-		return nil, fmt.Errorf("unexpected request")
-	})}
-	for _, tc := range []struct {
-		name string
-		cfg  *config.Config
-		want string
-	}{
-		{name: "nil config"},
-		{name: "disabled", cfg: &config.Config{}},
-		{
-			name: "default",
-			cfg:  &config.Config{IngredientGrading: config.IngredientGradingConfig{Enable: true}},
-			want: ai.NewIngredientGrader("", "", client).CacheVersion(),
-		},
-		{
-			name: "responses",
-			cfg:  &config.Config{IngredientGrading: config.IngredientGradingConfig{Enable: true, Model: "gpt-5.6-luna"}},
-			want: ai.NewIngredientGrader("", "gpt-5.6-luna", client).CacheVersion(),
-		},
-		{
-			name: "decisions",
-			cfg:  &config.Config{IngredientGrading: config.IngredientGradingConfig{Enable: true, Model: ai.DecisionsIngredientGrader}},
-			want: ai.NewDecisionGrader("", client).CacheVersion(),
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, NewManager(tc.cfg, cache.NewInMemoryCache(), client).CacheVersion())
-			assert.Equal(t, tc.want, NewEnrichingGrader(tc.cfg, cache.NewInMemoryCache(), client).CacheVersion())
-		})
-	}
-}
-
 type stubGradeBackend struct {
 	mu                sync.Mutex
 	calls             [][]ai.InputIngredient
@@ -312,7 +277,6 @@ func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[` + answer + `],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
 	})}
 	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli"}
-	manager := NewManager(cfg, cacheBackend, client)
 	for range 2 {
 		graded, err := NewManager(cfg, cacheBackend, client).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
 		require.NoError(t, err)
@@ -321,7 +285,7 @@ func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
 		assert.Equal(t, answer, graded[0].Grade.Reason)
 	}
 	assert.Equal(t, 1, calls)
-	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(manager.CacheVersion()+"/"+ingredientHash(ingredient)))
+	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(ai.NewDecisionGrader("", client).CacheVersion()+"/"+ingredientHash(ingredient)))
 	require.NoError(t, err)
 	assert.Equal(t, 9, cached.Grade.Score)
 	assert.Equal(t, answer, cached.Grade.Reason)

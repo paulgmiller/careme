@@ -20,13 +20,9 @@ const (
 
 type grader interface {
 	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
-	CacheVersion() string
 }
 
 type rubberstamp struct{}
-
-// Disabled grading does not write cached grades.
-func (r rubberstamp) CacheVersion() string { return "" }
 
 func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	results := make([]ai.InputIngredient, 0, len(ingredients))
@@ -106,8 +102,6 @@ type enrichingGrader struct {
 	grader     grader
 	embeddings *embeddings.Service
 }
-
-func (g *enrichingGrader) CacheVersion() string { return g.grader.CacheVersion() }
 
 func (g *enrichingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	graded, err := g.grader.GradeIngredients(ctx, ingredients)

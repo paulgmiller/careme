@@ -12,9 +12,9 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/ingredients/gradereview"
-	"careme/internal/ingredients/grading"
-
-	"github.com/paulgmiller/kage/pkg/kage"
+	"careme/internal/locations"
+	"careme/internal/providerregistry"
+	"careme/internal/recipes"
 )
 
 func main() {
@@ -29,8 +29,9 @@ func run(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if err := kage.Load(); err != nil {
-		return fmt.Errorf("load environment: %w", err)
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
 	}
 
 	cacheStore, err := cache.MakeCache()
@@ -38,20 +39,20 @@ func run(args []string) error {
 		return fmt.Errorf("create cache: %w", err)
 	}
 
-	// TODO: When review becomes store-specific, use cached store ingredients and
-	// their embedded grades instead of depending on the grading manager's cache version.
-	// Select the cached grader even when generation is currently disabled.
-	manager := grading.NewManager(&config.Config{
-		AI: config.AIConfig{APIKey: os.Getenv("AI_API_KEY")},
-		IngredientGrading: config.IngredientGradingConfig{
-			Enable: true,
-			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
-		},
-	}, cacheStore, http.DefaultClient)
-
+	factory := providerregistry.NewFactory(cfg)
+	centroids := locations.LoadCentroids()
+	locationBackends, err := factory.NewLocationBackends(centroids)
+	if err != nil {
+		return fmt.Errorf("create location backends: %w", err)
+	}
+	locationStore, err := locations.New(cacheStore, centroids, locationBackends)
+	if err != nil {
+		return fmt.Errorf("create location storage: %w", err)
+	}
+	catalog := gradereview.NewCachedCatalog(locationStore, recipes.IO(cacheStore))
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           gradereview.NewHandler(cacheStore, manager.CacheVersion()),
+		Handler:           gradereview.NewHandler(cacheStore, catalog),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("Ingredient grade review app listening at http://%s", *addr)

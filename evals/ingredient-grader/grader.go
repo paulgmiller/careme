@@ -16,8 +16,8 @@ import (
 )
 
 type expectation struct {
-	Min int `json:"min,omitempty"`
-	Max int `json:"max,omitempty"`
+	Min *int `json:"min,omitempty"`
+	Max *int `json:"max,omitempty"`
 }
 
 type promptfooContext struct {
@@ -76,12 +76,21 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 	expectations := map[string]expectation{}
 	for i, eval := range pf.Vars.Cases {
 		ing := eval.Ingredient
+		ing.Grade = nil
+		ing.Embedding = nil
 		if ing.ProductID == "" {
 			ing.ProductID = strconv.Itoa(i)
 		}
 
-		if eval.Expect.Max == 0 {
-			eval.Expect.Max = 10
+		if eval.Expect.Min == nil {
+			eval.Expect.Min = new(int)
+		}
+		if eval.Expect.Max == nil {
+			eval.Expect.Max = new(int)
+			*eval.Expect.Max = 10
+		}
+		if *eval.Expect.Min < 0 || *eval.Expect.Max > 10 || *eval.Expect.Min > *eval.Expect.Max {
+			return nil, fmt.Errorf("invalid score bounds for product id %q", ing.ProductID)
 		}
 		ings = append(ings, ing)
 		if _, exists := expectations[ing.ProductID]; exists {
@@ -108,20 +117,20 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 		}
 		seen[g.ProductID] = true
 		score := g.Grade.Score
-		if score > expect.Max {
+		if score > *expect.Max {
 			failures = append(failures, fmt.Sprintf("grade=%d>%d  desc=%s reason=%s\n",
 				score,
-				expect.Max,
+				*expect.Max,
 				g.Description,
 				g.Grade.Reason,
 			))
 			continue
 		}
 
-		if score < expect.Min {
+		if score < *expect.Min {
 			failures = append(failures, fmt.Sprintf("grade=%d<%d desc=%s reason=%s\n",
 				score,
-				expect.Min,
+				*expect.Min,
 				g.Description,
 				g.Grade.Reason,
 			))
