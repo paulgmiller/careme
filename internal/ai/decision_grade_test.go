@@ -1,13 +1,17 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,23 +42,23 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 				assert.Equal(t, gpt6Luna, body["model"])
 				assert.NotContains(t, body, "reasoning")
 				assert.NotContains(t, body, "text")
-				var input []map[string]any
+				var input map[string]any
 				if err := json.Unmarshal([]byte(body["input"].(string)), &input); !assert.NoError(t, err) {
 					return nil, err
 				}
-				assert.Equal(t, []map[string]any{{"index": float64(0), "brand": "Farm", "description": "Asparagus", "size": "1 lb"}}, input)
+				assert.Equal(t, map[string]any{"brand": "Farm", "description": "Asparagus", "size": "1 lb"}, input)
 				questions := body["questions"].([]any)
 				assert.Len(t, questions, 1)
 				question := questions[0].(map[string]any)
 				assert.Equal(t, "score", question["type"])
-				assert.Equal(t, "ingredient_0", question["name"])
+				assert.Equal(t, "ingredient_score", question["name"])
 				assert.Contains(t, question["instructions"], "Do not downgrade an ingredient just because it is uncommon")
 				assert.NotContains(t, question["instructions"], "Return JSON")
 				levels := question["levels"].([]any)
 				assert.Len(t, levels, 10)
 				assert.Equal(t, "1", levels[0].(map[string]any)["label"])
 				assert.Equal(t, "10", levels[9].(map[string]any)["label"])
-				return decisionHTTPResponse(req, fmt.Sprintf(`[{"type":"score","name":"ingredient_0","score":%f,"confidence":0.8,"probabilities":[]}]`, tc.score)), nil
+				return decisionHTTPResponse(req, fmt.Sprintf(`[{"type":"score","name":"ingredient_score","score":%f,"confidence":0.8,"probabilities":[]}]`, tc.score)), nil
 			})})
 			graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: " a ", Brand: " Farm ", Description: " Asparagus ", Size: " 1 lb ", PriceSale: new(float32(2)), Categories: []string{"Produce"}}})
 			require.NoError(t, err)
@@ -71,9 +75,9 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 
 func TestDecisionGraderRejectsFailedAnswers(t *testing.T) {
 	for _, tc := range []struct{ name, answers, want string }{
-		{"refusal", `[{"type":"refusal","name":"ingredient_0"}]`, "decision refused"},
-		{"missing", `[]`, "expected 1 answers"},
-		{"extra", `[{"type":"score","score":1},{"type":"score","score":2}]`, "expected 1 answers"},
+		{"refusal", `[{"type":"refusal","name":"ingredient_score"}]`, "decision refused"},
+		{"missing", `[]`, "expected one answer"},
+		{"extra", `[{"type":"score","score":1},{"type":"score","score":2}]`, "expected one answer"},
 		{"predicate", `[{"type":"predicate","probability":0.9}]`, "unexpected decision answer type"},
 		{"low", `[{"type":"score","score":-1}]`, "score must be between 0 and 9"},
 		{"high", `[{"type":"score","score":10}]`, "score must be between 0 and 9"},
@@ -90,21 +94,31 @@ func TestDecisionGraderRejectsFailedAnswers(t *testing.T) {
 	}
 }
 
-func TestDecisionGraderBatchFailsCompletely(t *testing.T) {
-	for _, tc := range []struct{ name, answers, want string }{
-		{"refused item", `[{"type":"score","score":8,"confidence":1},{"type":"refusal","name":"ingredient_1"}]`, "grade ingredient bad: decision refused"},
-		{"missing item", `[{"type":"score","score":8,"confidence":1}]`, "expected 2 answers"},
-		{"transport error", "", "grade ingredient batch"},
+func TestDecisionGraderFailsCompletelyOnIngredientError(t *testing.T) {
+	for _, tc := range []struct{ name, answer, want string }{
+		{"refusal", `[{"type":"refusal","name":"ingredient_score"}]`, "decision refused"},
+		{"missing answer", `[]`, "expected one answer"},
+		{"transport error", "", "transport failed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			grader := NewDecisionGrader("test-key", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				if tc.answers == "" {
-					return nil, fmt.Errorf("transport failed")
+				var body struct {
+					Input string `json:"input"`
 				}
-				return decisionHTTPResponse(req, tc.answers), nil
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+					return nil, err
+				}
+				if strings.Contains(body.Input, "bad") {
+					if tc.answer == "" {
+						return nil, fmt.Errorf("transport failed")
+					}
+					return decisionHTTPResponse(req, tc.answer), nil
+				}
+				return decisionHTTPResponse(req, `[{"type":"score","score":8,"confidence":1}]`), nil
 			})})
 			inputs := []InputIngredient{{ProductID: "good", Description: "good"}, {ProductID: "bad", Description: "bad"}}
 			graded, err := grader.GradeIngredients(t.Context(), inputs)
+			require.ErrorContains(t, err, "grade ingredient bad")
 			require.ErrorContains(t, err, tc.want)
 			assert.Nil(t, graded)
 			assert.Nil(t, inputs[0].Grade)
@@ -112,44 +126,94 @@ func TestDecisionGraderBatchFailsCompletely(t *testing.T) {
 	}
 }
 
-func TestDecisionGraderBatchesAllIngredientsInOneCall(t *testing.T) {
-	inputs := make([]InputIngredient, 65)
+func TestDecisionGraderParallelCallsRespectSharedLimit(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	inputs := make([]InputIngredient, 130)
 	for i := range inputs {
-		inputs[i] = InputIngredient{ProductID: fmt.Sprint(i), Description: fmt.Sprintf("Item %d", i)}
+		inputs[i] = InputIngredient{ProductID: fmt.Sprint(i), Description: fmt.Sprint(i)}
 	}
-	calls := 0
+	var calls, active, peak atomic.Int32
+	saturated := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
 	grader := NewDecisionGrader("test-key", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
+		calls.Add(1)
+		current := active.Add(1)
+		defer active.Add(-1)
+		for old := peak.Load(); current > old; old = peak.Load() {
+			if peak.CompareAndSwap(old, current) {
+				break
+			}
+		}
+		if current == 64 {
+			select {
+			case saturated <- struct{}{}:
+			default:
+			}
+		}
+		select {
+		case <-release:
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		}
 		var body struct {
 			Input     string                                `json:"input"`
 			Questions []struct{ Name, Instructions string } `json:"questions"`
 		}
-		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		var states []struct {
-			Index       int
-			Description string
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			return nil, err
 		}
-		require.NoError(t, json.Unmarshal([]byte(body.Input), &states))
-		require.Len(t, states, len(inputs))
-		require.Len(t, body.Questions, len(inputs))
-		answers := make([]string, len(inputs))
-		for i, question := range body.Questions {
-			assert.Equal(t, fmt.Sprintf("ingredient_%d", i), question.Name)
-			assert.Contains(t, question.Instructions, fmt.Sprintf("item at index %d", i))
-			assert.Equal(t, i, states[i].Index)
-			assert.Equal(t, inputs[i].Description, states[i].Description)
-			answers[i] = fmt.Sprintf(`{"type":"score","name":%q,"score":%d,"confidence":1}`, question.Name, i%10)
+		var state struct{ Description string }
+		if err := json.Unmarshal([]byte(body.Input), &state); err != nil {
+			return nil, err
 		}
-		return decisionHTTPResponse(req, "["+strings.Join(answers, ",")+"]"), nil
+		assert.Len(t, body.Questions, 1)
+		assert.Equal(t, "ingredient_score", body.Questions[0].Name)
+		assert.NotContains(t, body.Questions[0].Instructions, "index")
+		i, err := strconv.Atoi(state.Description)
+		if err != nil {
+			return nil, err
+		}
+		return decisionHTTPResponse(req, fmt.Sprintf(`[{"type":"score","name":"ingredient_score","score":%d,"confidence":1}]`, i%10)), nil
 	})})
-	graded, err := grader.GradeIngredients(t.Context(), inputs)
-	require.NoError(t, err)
-	assert.Equal(t, 1, calls)
-	require.Len(t, graded, len(inputs))
-	for i, item := range graded {
-		assert.Equal(t, inputs[i].ProductID, item.ProductID)
-		assert.Equal(t, i%10+1, item.Grade.Score)
+	type result struct {
+		items  []InputIngredient
+		err    error
+		offset int
 	}
+	done := make(chan result, 2)
+	for _, offset := range []int{0, 65} {
+		go func() {
+			items, err := grader.GradeIngredients(ctx, inputs[offset:offset+65])
+			done <- result{items, err, offset}
+		}()
+	}
+	select {
+	case <-saturated:
+	case <-time.After(10 * time.Second):
+		t.Fatal("grader did not reach 64 concurrent requests")
+	}
+	// Every active request is blocked, so no queued request can start yet.
+	assert.EqualValues(t, 64, active.Load())
+	unblock()
+	for range 2 {
+		select {
+		case r := <-done:
+			require.NoError(t, r.err)
+			require.Len(t, r.items, 65)
+			for i, item := range r.items {
+				assert.Equal(t, inputs[r.offset+i].ProductID, item.ProductID)
+				assert.Equal(t, (r.offset+i)%10+1, item.Grade.Score)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("grading did not finish")
+		}
+	}
+	assert.EqualValues(t, 130, calls.Load())
+	assert.EqualValues(t, 64, peak.Load())
 }
 
 func TestDecisionGraderSkipsEmptyAndRejectsAlreadyGraded(t *testing.T) {

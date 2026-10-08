@@ -178,9 +178,11 @@ explicit model. The former `jev` option was replaced by `decisions` on
 2026-10-07. Decisions grades use a separate cache version derived from the API
 version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
 review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
-On 2026-10-08, Decisions switched to a shared ingredient list with one indexed
-question per item in a single request. The `decisions/batch-v2/` version salt and
-new instruction invalidate the previous per-item Decisions grades.
+Decisions sends independent per-ingredient requests with a shared limit of 64
+concurrent requests per grader instance. The temporary shared-input implementation
+was removed on 2026-10-08; restoring the original `decisions/v1/` salt and single-item
+instruction reuses the original independent Decisions grades and bypasses
+`decisions/batch-v2/` grades. Concurrency does not affect the grade cache version.
 Old JEV and Responses grades remain under their original versions. Wine pairing
 now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.

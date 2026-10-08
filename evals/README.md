@@ -133,8 +133,8 @@ and direct Promptfoo runs. Leave it unset to use the production default, current
 and menu suites.
 Both Responses graders use `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
 to evaluate the OpenAI Decisions grader that replaced the `jev` option. It sends
-the full uncached ingredient list in one request with one indexed score question
-per item, and converts the zero-based ten-level score to a 1–10 grade by rounding and adding one.
+one independent request per ingredient with up to 64 concurrent requests per
+grader instance, and converts the zero-based ten-level score to a 1–10 grade by rounding and adding one.
 OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
 
 Grading must be enabled (`INGREDIENT_GRADING_ENABLE` defaults to enabled); the eval

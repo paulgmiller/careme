@@ -273,7 +273,7 @@ func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
 	client := &http.Client{Transport: embeddingTransport(func(req *http.Request) (*http.Response, error) {
 		calls++
 		assert.Equal(t, "/v1/decisions", req.URL.Path)
-		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[{"type":"score","name":"ingredient_0","score":7.6,"confidence":0.9,"probabilities":[]}],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[{"type":"score","name":"ingredient_score","score":7.6,"confidence":0.9,"probabilities":[]}],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
 	})}
 	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli"}
 	for range 2 {

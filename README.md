@@ -152,8 +152,8 @@ Ingredient grading and wine pairing default to `gpt-6-luna` with reasoning
 disabled. Set `INGREDIENT_GRADING_MODEL=decisions` to use the OpenAI Decisions API
 with `gpt-6-luna` instead of the former JEV integration. It uses the same ten-level
 rubric, rounding its zero-based score and adding one for a 1–10 ingredient grade,
-and requires `AI_API_KEY`. All uncached ingredients share one Decisions request,
-with one indexed score question per ingredient. Explicit model names select the
+and requires `AI_API_KEY`. Each uncached ingredient gets its own Decisions
+request, with up to 64 concurrent requests per grader instance. Explicit model names select the
 Responses grader; recipe generation and meal planning continue to use `gpt-6.1-sol`.
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
