@@ -23,6 +23,9 @@ import (
 type advertisedLocationStoreStub struct{}
 
 func (advertisedLocationStoreStub) GetLocationByID(_ context.Context, id string) (*locations.Location, error) {
+	if id == "smithbrothersfarms_delivery" || id == "mnfoodclub_delivery" {
+		return nil, errors.New("disabled campaign should not hydrate its location")
+	}
 	lat, lon := 47.61, -122.33
 	return &locations.Location{ID: id, Name: "Hydrated " + id, Address: id + " Market St", ZipCode: "98101", Lat: &lat, Lon: &lon}, nil
 }
@@ -74,15 +77,19 @@ func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 	}, g, images
 }
 
+var generatedCampaignLocationIDs = []string{"wholefoods_10216", "70100023", "70100658"}
+
 func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	s, g, images := testService()
 	waited := false
 	s.wait = func() { waited = true }
 	require.NoError(t, s.RunOnce(t.Context()))
 	require.True(t, waited)
-	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	require.Equal(t, len(g.params), images.calls)
+	var generatedIDs []string
 	for i, p := range g.params {
+		generatedIDs = append(generatedIDs, p.Location.ID)
 		assert.Equal(t, "Hydrated "+p.Location.ID, p.Location.Name)
 		session, ok := logsetup.SessionIDFromContext(g.contexts[i])
 		require.True(t, ok)
@@ -101,8 +108,9 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		require.NoError(t, body.Close())
 		assert.Equal(t, "campaign-image", string(data))
 	}
+	assert.ElementsMatch(t, generatedCampaignLocationIDs, generatedIDs)
 	require.NoError(t, s.RunOnce(t.Context()))
-	assert.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
 	assert.Equal(t, len(g.params), images.calls)
 }
 
@@ -110,7 +118,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	s, g, _ := testService()
 	g.err = errors.New("flex unavailable")
 	require.ErrorContains(t, s.RunOnce(t.Context()), "flex unavailable")
-	require.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
 		state, err := s.statuses.Load(t.Context(), p.Hash())
 		require.NoError(t, err)
@@ -118,7 +126,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	}
 	g.err = nil
 	require.NoError(t, s.RunOnce(t.Context()))
-	assert.Len(t, g.params, 2*len(AdvertisedRecipeLocations()))
+	assert.Len(t, g.params, 2*len(generatedCampaignLocationIDs))
 }
 
 func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
@@ -127,7 +135,7 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context()), "image unavailable")
 	images.err = nil
 	require.NoError(t, s.RunOnce(t.Context()))
-	assert.Len(t, g.params, len(AdvertisedRecipeLocations()))
+	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
 	assert.Equal(t, 2*len(g.params), images.calls)
 	for _, p := range g.params {
 		state, err := s.statuses.Load(t.Context(), p.Hash())

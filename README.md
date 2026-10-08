@@ -88,11 +88,11 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 ### Advertised recipe cronjob
 
-Run `careme -campaigns` to generate recipes and images for the advertised stores once. The job creates its own flex AI client and exits with an error if any store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true` once. Smith Brothers Farms and MNFoodClub generation is disabled for now while we consider a weekly schedule; their campaign redirects remain active. The job creates its own flex AI client and exits with an error if any enabled store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
 
 `deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
 
-Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run all advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
+Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run generation-enabled advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
 
 ```sh
 kubectl create job -n caremetest --from=cronjob/careme-advertised-recipes "careme-advertised-recipes-manual-$(date +%s)"

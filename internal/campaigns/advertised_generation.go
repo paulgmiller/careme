@@ -10,6 +10,7 @@ import (
 type campaign struct {
 	Location    locations.Location
 	HelpMessage string
+	Generate    bool
 }
 
 func genericLocationHelp(location string) string {
@@ -18,7 +19,7 @@ Want something different? Add a note below and choose Try again, chef.
 Add the recipes you like, hide the ones you don't, and we'll build your shopping list.`, location)
 }
 
-// AdvertisedRecipeLocations returns the campaigns we intentionally pre-generate and promote.
+// AdvertisedRecipeLocations returns promoted stores and whether to pre-generate their recipes.
 // should probably vagule align with StaplesWatchdogLocations() as why wouldn't we monitor
 // the most importnant stores
 func AdvertisedRecipeLocations() map[string]campaign {
@@ -33,12 +34,16 @@ func AdvertisedRecipeLocations() map[string]campaign {
 		"westlake_wf": {
 			Location:    locations.Location{ID: "wholefoods_10216"},
 			HelpMessage: genericLocationHelp("Westlake Whole Foods"),
+			Generate:    true,
 		},
+		// These delivery campaigns should probably only generate weekly.
 		"smithbrothersfarms": {
 			Location: locations.Location{ID: "smithbrothersfarms_delivery"},
+			Generate: false,
 		},
 		"mnfoodclub": {
 			Location: locations.Location{ID: "mnfoodclub_delivery"},
+			Generate: false,
 		},
 		/* Too close to fred meyers
 		bellevue_wf": {
@@ -48,10 +53,12 @@ func AdvertisedRecipeLocations() map[string]campaign {
 		"bellevue": {
 			Location:    locations.Location{ID: "70100023"},
 			HelpMessage: genericLocationHelp("Bellevue Fred Meyer"),
+			Generate:    true,
 		},
 		"issaquah": {
 			Location:    locations.Location{ID: "70100658"},
 			HelpMessage: genericLocationHelp("Issaquah Fred Meyer"),
+			Generate:    true,
 		},
 	}
 }
