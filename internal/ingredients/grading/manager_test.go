@@ -265,3 +265,25 @@ func TestManagerBackfillsEmbeddingWithoutRegrading(t *testing.T) {
 	require.NotEmpty(t, got[0].Embedding)
 	assert.Equal(t, 1, calls)
 }
+
+func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
+	cacheBackend := cache.NewInMemoryCache()
+	cfg := &config.Config{AI: config.AIConfig{APIKey: "test-key"}, IngredientGrading: config.IngredientGradingConfig{Enable: true, Model: "decisions"}}
+	calls := 0
+	client := &http.Client{Transport: embeddingTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		assert.Equal(t, "/v1/decisions", req.URL.Path)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[{"type":"score","name":"ingredient_score","score":7.6,"confidence":0.9,"probabilities":[]}],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
+	})}
+	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli"}
+	for range 2 {
+		graded, err := NewManager(cfg, cacheBackend, client).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+		require.NoError(t, err)
+		require.Len(t, graded, 1)
+		assert.Equal(t, 9, graded[0].Grade.Score)
+	}
+	assert.Equal(t, 1, calls)
+	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(ai.IngredientGradeCacheVersion("decisions")+"/"+ingredientHash(ingredient)))
+	require.NoError(t, err)
+	assert.Equal(t, 9, cached.Grade.Score)
+}

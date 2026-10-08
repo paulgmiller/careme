@@ -21,7 +21,7 @@ import (
 const defaultIngredientGradeModel = gpt6Luna
 
 // should we have category spefic grading prompts?
-const ingredientGradeSystemInstruction = `
+const ingredientGradeRubric = `
 You review grocery catalog items before they are shown to a home recipe generator.
 
 Score each item from 0 to 10 for usefulness as an ingredient in home-cooked recipes.
@@ -68,9 +68,9 @@ Scoring anchors:
 
 Important calibration:
 - Do not downgrade an ingredient just because it is uncommon. Rutabaga, collard greens, artichokes, yuca, pears, soup bones, and chicken livers are valid cooking ingredients.
-- Do downgrade items whose catalog wording implies they are mostly finished foods or snack formats.
+- Do downgrade items whose catalog wording implies they are mostly finished foods or snack formats.`
 
-Return JSON only. Preserve each input id/index exactly. Be concise.`
+const ingredientGradeSystemInstruction = ingredientGradeRubric + "\n\nReturn JSON only. Preserve each input id/index exactly. Be concise."
 
 type InputIngredient struct {
 	ProductID    string              `json:"id,omitempty"`
@@ -150,6 +150,9 @@ func ingredientGradeCacheVersion(model, systemInstruction string) string {
 // IngredientGradeCacheVersion returns the cache version for the current grading prompt and model.
 func IngredientGradeCacheVersion(model string) string {
 	model = strings.TrimSpace(model)
+	if model == DecisionsIngredientGrader {
+		return ingredientDecisionCacheVersion()
+	}
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}

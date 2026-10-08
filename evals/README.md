@@ -131,7 +131,10 @@ Use the existing `INGREDIENT_GRADING_MODEL` configuration variable for both task
 and direct Promptfoo runs. Leave it unset to use the production default, currently
 `gpt-6-luna`. The provider has no separate model selector; `MODEL` is for the recipe
 and menu suites.
-Both OpenAI graders use `none` reasoning. The existing `jev` option is preserved.
+Both Responses graders use `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
+to evaluate the OpenAI Decisions grader that replaced the `jev` option. It sends
+one request per ingredient with at most 16 concurrent requests and converts the
+zero-based ten-level score to a 1–10 grade by rounding and adding one.
 OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
 
 Grading must be enabled (`INGREDIENT_GRADING_ENABLE` defaults to enabled); the eval

@@ -49,10 +49,8 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 		return rubberstamp{}
 	}
 
-	if cfg.IngredientGrading.Model == "jev" {
-		jev := lo.Must(ai.NewJev())
-		return newCachingGrader(jev, NewStore(c))
-
+	if cfg.IngredientGrading.Model == ai.DecisionsIngredientGrader {
+		return newCachingGrader(ai.NewDecisionGrader(cfg.AI.APIKey, httpClient), NewStore(c))
 	}
 
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
