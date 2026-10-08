@@ -153,9 +153,7 @@ has a grade within its checked-in bounds. Incomplete, duplicate, or unexpected
 results fail explicitly. JSON exports retain grades, ingredient/pass counts, and
 `metadata.requestedModel` (empty means the production default); `latencyMs` measures
 grading including SDK retries, excluding configuration and Go startup. The suite
-defaults to concurrency sixteen and has no latency assertion. Exports now include
-`cost` in USD and metadata `estimatedCostUSD`, `apiRequestCount`, and per-request
-`usage` with token counts and returned processing tier. The eval captures billing
+defaults to concurrency sixteen and has no latency assertion. The eval captures billing
 metadata through its HTTP transport without retaining credentials or response
 outputs. Cost estimation supports the two Luna Responses models and GPT-6 Luna
 Decisions; unknown pricing or missing usage fails explicitly.

@@ -2,8 +2,11 @@ package ai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -12,6 +15,7 @@ import (
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/samber/lo"
 )
 
 const DecisionsIngredientGrader = "decisions"
@@ -21,8 +25,9 @@ const ingredientDecisionConcurrency = 64
 const ingredientDecisionInstruction = "Review this grocery catalog item using the rubric below.\n" + ingredientGradeRubric
 
 type decisionGrader struct {
-	oai   openai.Client
-	slots chan struct{}
+	oai    openai.Client
+	slots  chan struct{}
+	levels []openai.DecisionNewParamsQuestionScoreLevel
 }
 
 type ingredientGradeState struct {
@@ -55,11 +60,13 @@ var ingredientGradeCriteria = []string{
 }
 
 func ingredientDecisionCacheVersion() string {
-	rubric, err := json.Marshal(ingredientGradeCriteria)
-	if err != nil {
-		panic(err)
+	fnv := fnv.New128()
+	lo.Must(io.WriteString(fnv, "decisions/v1/"+gpt6Luna))
+	lo.Must(io.WriteString(fnv, ingredientDecisionInstruction))
+	for _, crit := range ingredientGradeCriteria {
+		lo.Must(io.WriteString(fnv, crit))
 	}
-	return ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one/probabilities-v1")
+	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func NewDecisionGrader(apiKey string, httpClient *http.Client) *decisionGrader {
@@ -67,7 +74,16 @@ func NewDecisionGrader(apiKey string, httpClient *http.Client) *decisionGrader {
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
-	return &decisionGrader{oai: openai.NewClient(opts...), slots: make(chan struct{}, ingredientDecisionConcurrency)}
+
+	levels := make([]openai.DecisionNewParamsQuestionScoreLevel, len(ingredientGradeCriteria))
+	for i, description := range ingredientGradeCriteria {
+		levels[i] = openai.DecisionNewParamsQuestionScoreLevel{Label: fmt.Sprint(i + 1), Description: openai.String(description)}
+	}
+	return &decisionGrader{
+		oai:    openai.NewClient(opts...),
+		slots:  make(chan struct{}, ingredientDecisionConcurrency),
+		levels: levels,
+	}
 }
 
 func (g *decisionGrader) CacheVersion() string { return ingredientDecisionCacheVersion() }
@@ -85,6 +101,7 @@ func (g *decisionGrader) GradeIngredients(ctx context.Context, ingredients []Inp
 		items[i] = item
 	}
 	graded, err := parallelism.MapWithErrors(items, func(item InputIngredient) (InputIngredient, error) {
+		// rip this out? what is the max concurrecny?
 		select {
 		case g.slots <- struct{}{}:
 			defer func() { <-g.slots }()
@@ -104,15 +121,11 @@ func (g *decisionGrader) gradeIngredient(ctx context.Context, item InputIngredie
 	if err != nil {
 		return InputIngredient{}, fmt.Errorf("marshal ingredient %s: %w", item.ProductID, err)
 	}
-	levels := make([]openai.DecisionNewParamsQuestionScoreLevel, len(ingredientGradeCriteria))
-	for i, description := range ingredientGradeCriteria {
-		levels[i] = openai.DecisionNewParamsQuestionScoreLevel{Label: fmt.Sprint(i + 1), Description: openai.String(description)}
-	}
 	decision, err := g.oai.Decisions.New(ctx, openai.DecisionNewParams{
 		Model: gpt6Luna,
 		Input: openai.DecisionNewParamsInputUnion{OfString: openai.String(string(input))},
 		Questions: []openai.DecisionNewParamsQuestionUnion{{OfScore: &openai.DecisionNewParamsQuestionScore{
-			Name: openai.String("ingredient_score"), Instructions: ingredientDecisionInstruction, Levels: levels,
+			Name: openai.String("ingredient_score"), Instructions: ingredientDecisionInstruction, Levels: g.levels,
 		}}},
 	})
 	if err != nil {
@@ -136,12 +149,11 @@ func ingredientGradeFromDecision(answer openai.DecisionAnswerUnion) (*Ingredient
 		if math.IsNaN(score.Score) || math.IsInf(score.Score, 0) || score.Score < 0 || score.Score > float64(len(ingredientGradeCriteria)-1) {
 			return nil, fmt.Errorf("score must be between 0 and 9")
 		}
-		level := int(math.Round(score.Score))
-		probabilities := make([]IngredientGradeProbability, len(score.Probabilities))
-		for i, probability := range score.Probabilities {
-			probabilities[i] = IngredientGradeProbability{Value: probability.Value, Label: probability.Label, Probability: probability.Probability}
-		}
-		return &IngredientGrade{Score: level + 1, Reason: fmt.Sprintf("%s confidence:%f, score:%f, level:%d", ingredientGradeCriteria[level], score.Confidence, score.Score, level), Probabilities: probabilities}, nil
+
+		return &IngredientGrade{
+			Score:  int(math.Round(score.Score)) + 1,
+			Reason: score.RawJSON(),
+		}, nil
 	case openai.DecisionAnswerRefusal:
 		return nil, fmt.Errorf("decision refused")
 	default:

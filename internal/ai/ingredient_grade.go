@@ -93,17 +93,8 @@ func (ii InputIngredient) PercentOff() float32 {
 }
 
 type IngredientGrade struct {
-	Score         int                          `json:"score"`
-	Reason        string                       `json:"reason"`
-	Probabilities []IngredientGradeProbability `json:"probabilities,omitempty"`
-}
-
-// IngredientGradeProbability preserves a Decisions level's zero-based value,
-// label, and probability as returned by the API.
-type IngredientGradeProbability struct {
-	Value       int64   `json:"value"`
-	Label       string  `json:"label"`
-	Probability float64 `json:"probability"`
+	Score  int    `json:"score"`
+	Reason string `json:"reason"`
 }
 
 func (i *IngredientGrade) GetScore() int {

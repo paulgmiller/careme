@@ -32,6 +32,7 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 		want  int
 	}{{0, 1}, {6.49, 7}, {6.5, 8}, {9, 10}} {
 		t.Run(fmt.Sprint(tc.score), func(t *testing.T) {
+			answer := fmt.Sprintf(`{"type":"score","name":"ingredient_score","score":%f,"confidence":0.8,"probabilities":[]}`, tc.score)
 			grader := NewDecisionGrader("test-key", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				assert.Equal(t, "/v1/decisions", req.URL.Path)
 				assert.Equal(t, "Bearer test-key", req.Header.Get("Authorization"))
@@ -58,49 +59,39 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 				assert.Len(t, levels, 10)
 				assert.Equal(t, "1", levels[0].(map[string]any)["label"])
 				assert.Equal(t, "10", levels[9].(map[string]any)["label"])
-				return decisionHTTPResponse(req, fmt.Sprintf(`[{"type":"score","name":"ingredient_score","score":%f,"confidence":0.8,"probabilities":[]}]`, tc.score)), nil
+				return decisionHTTPResponse(req, "["+answer+"]"), nil
 			})})
 			graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: " a ", Brand: " Farm ", Description: " Asparagus ", Size: " 1 lb ", PriceSale: new(float32(2)), Categories: []string{"Produce"}}})
 			require.NoError(t, err)
 			require.Len(t, graded, 1)
 			assert.Equal(t, "a", graded[0].ProductID)
 			assert.Equal(t, tc.want, graded[0].Grade.Score)
-			assert.Contains(t, graded[0].Grade.Reason, ingredientGradeCriteria[tc.want-1])
-			assert.Contains(t, graded[0].Grade.Reason, "confidence:0.800000")
+			assert.Equal(t, answer, graded[0].Grade.Reason)
 			assert.Equal(t, float32(2), *graded[0].PriceSale)
 			assert.Equal(t, []string{"Produce"}, graded[0].Categories)
 		})
 	}
 }
 
-func TestDecisionGraderPreservesProbabilities(t *testing.T) {
+func TestDecisionGraderPreservesProbabilitiesInReason(t *testing.T) {
+	const answer = `{"type":"score","name":"ingredient_score","score":2.55,"confidence":0.38,"probabilities":[{"value":0,"label":"1","probability":0.5},{"value":5,"label":"6","probability":0.45},{"value":6,"label":"7","probability":0.05}]}`
 	grader := NewDecisionGrader("test-key", &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return decisionHTTPResponse(req, `[{"type":"score","name":"ingredient_score","score":2.55,"confidence":0.38,"probabilities":[{"value":0,"label":"1","probability":0.5},{"value":5,"label":"6","probability":0.45},{"value":6,"label":"7","probability":0.05}]}]`), nil
+		return decisionHTTPResponse(req, "["+answer+"]"), nil
 	})})
 	graded, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "chicken"}})
 	require.NoError(t, err)
 	require.Len(t, graded, 1)
 	assert.Equal(t, 4, graded[0].Grade.Score)
-	want := []IngredientGradeProbability{
-		{Value: 0, Label: "1", Probability: 0.5},
-		{Value: 5, Label: "6", Probability: 0.45},
-		{Value: 6, Label: "7", Probability: 0.05},
-	}
-	assert.Equal(t, want, graded[0].Grade.Probabilities)
-	// Cache records and eval exports serialize the same grade type.
+	assert.Equal(t, answer, graded[0].Grade.Reason)
+
+	// Cache records and eval exports must preserve the full answer in reason.
 	data, err := json.Marshal(graded[0])
 	require.NoError(t, err)
-	assert.Contains(t, string(data), `"value":0`)
 	var restored InputIngredient
 	require.NoError(t, json.Unmarshal(data, &restored))
-	assert.Equal(t, want, restored.Grade.Probabilities)
+	require.NotNil(t, restored.Grade)
+	assert.Equal(t, answer, restored.Grade.Reason)
 	assert.Equal(t, graded[0].Grade, restored.Grade)
-	var legacy IngredientGrade
-	require.NoError(t, json.Unmarshal([]byte(`{"score":7,"reason":"Existing Responses grade"}`), &legacy))
-	assert.Nil(t, legacy.Probabilities)
-	legacyJSON, err := json.Marshal(legacy)
-	require.NoError(t, err)
-	assert.NotContains(t, string(legacyJSON), "probabilities")
 }
 
 func TestDecisionGraderRejectsFailedAnswers(t *testing.T) {
@@ -268,7 +259,7 @@ func TestDecisionGradeCacheVersion(t *testing.T) {
 	rubric, err := json.Marshal(ingredientGradeCriteria)
 	require.NoError(t, err)
 	previous := ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
-	assert.NotEqual(t, previous, before, "cached grades without probabilities must be refreshed")
+	assert.NotEqual(t, previous, before, "cached grades without the full decision answer in reason must be refreshed")
 	original := ingredientGradeCriteria[0]
 	t.Cleanup(func() { ingredientGradeCriteria[0] = original })
 	ingredientGradeCriteria[0] = "changed rubric"
