@@ -150,7 +150,7 @@ func (s *server) handleKrogerCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	_, _, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	_, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
 		return
@@ -177,10 +177,10 @@ func (s *server) handleKrogerCart(w http.ResponseWriter, r *http.Request) {
 		s.performCartTransfer(w, r, userID, hash, token)
 		return
 	}
-	s.startKrogerAuthorization(w, r, userID, hash)
+	s.startKrogerAuthorization(w, r, userID, hash, strings.ToLower(location.Chain))
 }
 
-func (s *server) startKrogerAuthorization(w http.ResponseWriter, r *http.Request, userID, hash string) {
+func (s *server) startKrogerAuthorization(w http.ResponseWriter, r *http.Request, userID, hash, banner string) {
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)
@@ -189,7 +189,7 @@ func (s *server) startKrogerAuthorization(w http.ResponseWriter, r *http.Request
 	state := krogerAuthState{Nonce: base64.RawURLEncoding.EncodeToString(nonce), Hash: hash, UserID: userID, IssuedAt: time.Now()}
 	body, _ := json.Marshal(state)
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Value: base64.RawURLEncoding.EncodeToString(body), Path: "/kroger/callback", MaxAge: 600, HttpOnly: true, Secure: strings.HasPrefix(s.cfg.ResolvedPublicOrigin(), "https://"), SameSite: http.SameSiteLaxMode})
-	http.Redirect(w, r, s.krogerCart.AuthorizationURL(state.Nonce), http.StatusSeeOther)
+	http.Redirect(w, r, s.krogerCart.AuthorizationURL(state.Nonce, banner), http.StatusSeeOther)
 }
 
 func (s *server) handleKrogerCallback(w http.ResponseWriter, r *http.Request) {
@@ -356,9 +356,8 @@ func (result krogerTransfer) Message() string {
 	}
 }
 
-func krogerCartLink(locationName string) (string, string) {
-	name := strings.ToLower(strings.TrimSpace(locationName))
-	if name == "qfc" || strings.HasPrefix(name, "qfc ") || strings.HasPrefix(name, "qfc-") {
+func krogerCartLink(chain string) (string, string) {
+	if strings.EqualFold(chain, "qfc") {
 		return "https://www.qfc.com/cart", "QFC"
 	}
 	return krogerCartURL, "Kroger"

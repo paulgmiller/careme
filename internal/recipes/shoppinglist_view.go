@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/providers/kroger"
 	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -143,7 +144,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
-		FinalizedKroger:      strings.EqualFold(input.params.Location.Chain, "Kroger") && len(input.params.Saved) > 0,
+		FinalizedKroger:      kroger.NewIdentityProvider().IsID(input.params.Location.ID) && len(input.params.Saved) > 0,
 		KrogerCartAvailable:  input.krogerCartAvailable && serverSignedIn,
 	}
 

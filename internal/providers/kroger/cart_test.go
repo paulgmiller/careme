@@ -53,10 +53,11 @@ func TestCartClientConnectLookupAndAdd(t *testing.T) {
 	manager.token = "catalog-token"
 	manager.expiresAt = time.Now().Add(time.Hour)
 	cart := CartClient{ClientID: "id", ClientSecret: "secret", RedirectURI: "https://careme.test/kroger/callback", HTTPClient: client, CatalogToken: manager}
-	parsed, err := url.Parse(cart.AuthorizationURL("nonce"))
+	parsed, err := url.Parse(cart.AuthorizationURL("nonce", "qfc"))
 	require.NoError(t, err)
 	assert.Equal(t, "cart.basic:write", parsed.Query().Get("scope"))
 	assert.Equal(t, "nonce", parsed.Query().Get("state"))
+	assert.Equal(t, "qfc", parsed.Query().Get("banner"))
 	token, err := cart.Exchange(context.Background(), "code")
 	require.NoError(t, err)
 	upc, err := cart.ProductUPC(context.Background(), "0001111060903", "01400943")

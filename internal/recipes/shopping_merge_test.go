@@ -59,10 +59,38 @@ func TestFinalizedKrogerShoppingSectionShowsCartAction(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "2 cloves")
 }
 
+func TestFinalizedKrogerIngredientsUsesProviderID(t *testing.T) {
+	for _, tc := range []struct {
+		id      string
+		chain   string
+		wantErr bool
+	}{
+		{id: "70500874", chain: "QFC"},
+		{id: "01400943", chain: "KROGER"},
+		{id: "70100123", chain: "FREDMEYER"},
+		{id: "walmart_123", chain: "Kroger", wantErr: true},
+	} {
+		t.Run(tc.id+tc.chain, func(t *testing.T) {
+			s := newTestServer(t)
+			p := DefaultParams(&locations.Location{ID: tc.id, Chain: tc.chain}, time.Now())
+			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			ingredients, location, err := s.finalizedKrogerIngredients(t.Context(), p.Hash())
+			if tc.wantErr {
+				require.ErrorContains(t, err, "not a finalized Kroger list")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.chain, location.Chain)
+			assert.Equal(t, p.Saved[0].Ingredients, ingredients)
+		})
+	}
+}
+
 func TestQFCTransferLinksToQFCCart(t *testing.T) {
 	s := newTestServer(t)
 	s.krogerCart = &kroger.CartClient{}
-	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70500874", Name: "Bellevue", Chain: "QFC"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.saveCartTransfer(t.Context(), "mock-clerk-user-id", p.Hash(), krogerTransfer{Status: "complete", Added: 1, Sent: []ai.Ingredient{{Name: "Garlic"}}}, cache.Unconditional()))
@@ -79,9 +107,8 @@ func TestKrogerCartLink(t *testing.T) {
 		brand string
 	}{
 		{name: "QFC", url: "https://www.qfc.com/cart", brand: "QFC"},
-		{name: " QfC Bellevue ", url: "https://www.qfc.com/cart", brand: "QFC"},
-		{name: "QFC-Bellevue", url: "https://www.qfc.com/cart", brand: "QFC"},
-		{name: "Kroger on the Rhine", url: "https://www.kroger.com/cart", brand: "Kroger"},
+		{name: "qfc", url: "https://www.qfc.com/cart", brand: "QFC"},
+		{name: "KROGER", url: "https://www.kroger.com/cart", brand: "Kroger"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			url, brand := krogerCartLink(tc.name)

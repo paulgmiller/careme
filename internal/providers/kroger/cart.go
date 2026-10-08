@@ -41,11 +41,12 @@ func (c *CartClient) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-func (c *CartClient) AuthorizationURL(state string) string {
+func (c *CartClient) AuthorizationURL(state, banner string) string {
 	query := url.Values{
 		"response_type": {"code"}, "client_id": {c.ClientID},
 		"redirect_uri": {c.RedirectURI}, "scope": {"cart.basic:write"}, "state": {state},
 	}
+	query.Set("banner", banner)
 	return krogerAPIOrigin + "/v1/connect/oauth2/authorize?" + query.Encode()
 }
 

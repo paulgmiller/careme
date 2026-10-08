@@ -16,6 +16,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/providers/kroger"
 	"careme/internal/templates"
 )
 
@@ -129,7 +130,7 @@ func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([
 	if err != nil {
 		return nil, nil, err
 	}
-	if p.Location == nil || !strings.EqualFold(p.Location.Chain, "Kroger") || len(p.Saved) == 0 {
+	if p.Location == nil || !kroger.NewIdentityProvider().IsID(p.Location.ID) || len(p.Saved) == 0 {
 		return nil, nil, fmt.Errorf("shopping list is not a finalized Kroger list")
 	}
 	ingredients := make([]ai.Ingredient, 0)
@@ -170,7 +171,7 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 		_, _ = w.Write([]byte(`<section id="shopping-list-section"><p>Could not combine your list. <button hx-get="/recipes/` + url.PathEscape(hash) + `/shopping-quantities" hx-target="#shopping-list-section" hx-swap="outerHTML">Try again, chef</button></p></section>`))
 		return
 	}
-	cartURL, cartBrand := krogerCartLink(location.Name)
+	cartURL, cartBrand := krogerCartLink(location.Chain)
 	view := shoppingListPageView{Hash: hash, ShoppingList: list, KrogerCartNotice: krogerCartNotice(r.URL.Query().Get("kroger_error")), KrogerCartURL: cartURL, KrogerCartBrand: cartBrand}
 	result, err := s.loadCartTransfer(r.Context(), userID, hash)
 	if err == nil {

@@ -29,6 +29,48 @@ func krogerTestResponse(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}
 }
 
+func TestKrogerCartAuthorizationUsesStoreBanner(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		chain  string
+		banner string
+	}{
+		{name: "Bellevue", chain: "QFC", banner: "qfc"},
+		{name: "QFC Bellevue", chain: "KROGER", banner: "kroger"},
+		{name: "Redmond", chain: "FREDMEYER", banner: "fredmeyer"},
+		{name: "Kroger on the Rhine", chain: "Kroger", banner: "kroger"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t)
+			s.krogerCart = &kroger.CartClient{ClientID: "client-id", RedirectURI: "https://careme.test/kroger/callback"}
+			p := DefaultParams(&locations.Location{ID: "70500874", Name: tc.name, Chain: tc.chain}, time.Now())
+			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/kroger-cart", nil)
+			req.SetPathValue("hash", p.Hash())
+			rr := httptest.NewRecorder()
+			s.handleKrogerCart(rr, req)
+			require.Equal(t, http.StatusSeeOther, rr.Code)
+			redirect, err := url.Parse(rr.Header().Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, "api.kroger.com", redirect.Host)
+			assert.Equal(t, "/v1/connect/oauth2/authorize", redirect.Path)
+			assert.Equal(t, tc.banner, redirect.Query().Get("banner"))
+			assert.Equal(t, "client-id", redirect.Query().Get("client_id"))
+			assert.Equal(t, s.krogerCart.RedirectURI, redirect.Query().Get("redirect_uri"))
+			assert.Equal(t, "cart.basic:write", redirect.Query().Get("scope"))
+			require.Len(t, rr.Result().Cookies(), 1)
+			body, err := base64.RawURLEncoding.DecodeString(rr.Result().Cookies()[0].Value)
+			require.NoError(t, err)
+			var state krogerAuthState
+			require.NoError(t, json.Unmarshal(body, &state))
+			assert.NotEmpty(t, state.Nonce)
+			assert.Equal(t, state.Nonce, redirect.Query().Get("state"))
+			assert.Equal(t, p.Hash(), state.Hash)
+		})
+	}
+}
+
 func TestKrogerCartTransferAndEncryptedConnection(t *testing.T) {
 	s := newTestServer(t)
 	key := make([]byte, 32)

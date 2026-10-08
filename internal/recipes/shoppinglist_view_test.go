@@ -19,7 +19,7 @@ import (
 
 func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
 	_ = newTestServer(t)
-	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
 		t.Run(code, func(t *testing.T) {

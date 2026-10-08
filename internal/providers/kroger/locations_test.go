@@ -2,13 +2,13 @@ package kroger
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
 	"careme/internal/locations/geo"
-	locationtypes "careme/internal/locations/types"
 	krogerlocations "careme/internal/providers/kroger/locations"
 
 	"github.com/stretchr/testify/assert"
@@ -52,16 +52,35 @@ func TestFloat32PtrToFloat64Ptr(t *testing.T) {
 	assert.Equal(t, 47.5, *got)
 }
 
-func TestChainNameIsCanonicalized(t *testing.T) {
+func TestLocationLookupsPreserveAPIChain(t *testing.T) {
 	t.Parallel()
 
-	loc := locationtypes.Location{
-		ID:      "70500874",
-		Name:    "QFC Bellevue",
-		Chain:   chainName,
-		Address: "10116 NE 8th St",
+	for _, chain := range []string{"QFC", "KROGER", "FREDMEYER"} {
+		t.Run(chain, func(t *testing.T) {
+			httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				location := fmt.Sprintf(`{"locationId":"70500874","name":"Bellevue","chain":%q}`, chain)
+				body := `{"data":` + location + `}`
+				if req.URL.Path == "/v1/locations" {
+					body = `{"data":[` + location + `]}`
+				} else {
+					assert.Equal(t, "/v1/locations/70500874", req.URL.Path)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+			})}
+			client, err := krogerlocations.NewClientWithResponses("https://example.test", krogerlocations.WithHTTPClient(httpClient))
+			require.NoError(t, err)
+			backend := &LocationBackend{client: client}
+			loc, err := backend.GetLocationByID(t.Context(), "70500874")
+			require.NoError(t, err)
+			assert.Equal(t, chain, loc.Chain)
+			assert.Equal(t, "Bellevue", loc.Name)
+			assert.Equal(t, "70500874", loc.ID)
+			locs, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.6097, Lon: -122.3331})
+			require.NoError(t, err)
+			require.Len(t, locs, 1)
+			assert.Equal(t, *loc, locs[0])
+		})
 	}
-	assert.Equal(t, "kroger", loc.Chain)
 }
 
 func TestGetLocationsByCoordinatesUsesKrogerCoordinateFilter(t *testing.T) {

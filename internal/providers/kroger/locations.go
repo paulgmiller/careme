@@ -12,8 +12,6 @@ import (
 	krogerlocations "careme/internal/providers/kroger/locations"
 )
 
-const chainName = "kroger"
-
 type LocationBackend struct {
 	client *krogerlocations.ClientWithResponses
 }
@@ -83,7 +81,7 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 		ZipCode: zipCode,
 		Lat:     lat,
 		Lon:     lon,
-		Chain:   chainName,
+		Chain:   stringValue(data.Chain),
 	}, nil
 }
 
@@ -127,7 +125,7 @@ func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordin
 			ZipCode: zipCode,
 			Lat:     lat,
 			Lon:     lon,
-			Chain:   chainName,
+			Chain:   stringValue(locationData.Chain),
 		})
 	}
 	return locations, nil
