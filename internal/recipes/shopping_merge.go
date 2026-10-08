@@ -133,6 +133,10 @@ func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([
 	if p.Location == nil || !kroger.NewIdentityProvider().IsID(p.Location.ID) || len(p.Saved) == 0 {
 		return nil, nil, fmt.Errorf("shopping list is not a finalized Kroger list")
 	}
+	location, err := s.locServer.GetLocationByID(ctx, p.Location.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load current Kroger location: %w", err)
+	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
 		var wine *ai.WineSelection
@@ -142,7 +146,7 @@ func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([
 		}
 		ingredients = append(ingredients, ingredientsForDisplay(recipe.Ingredients, wine)...)
 	}
-	return ingredients, p.Location, nil
+	return ingredients, location, nil
 }
 
 func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request) {

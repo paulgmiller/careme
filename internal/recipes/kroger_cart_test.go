@@ -45,6 +45,7 @@ func TestKrogerCartAuthorizationUsesStoreBanner(t *testing.T) {
 			s.krogerCart = &kroger.CartClient{ClientID: "client-id", RedirectURI: "https://careme.test/kroger/callback"}
 			p := DefaultParams(&locations.Location{ID: "70500874", Name: tc.name, Chain: tc.chain}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+			s.locServer = staticLocationLookup{location: p.Location}
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/kroger-cart", nil)
 			req.SetPathValue("hash", p.Hash())
@@ -114,6 +115,7 @@ func TestKrogerCartTransferAndEncryptedConnection(t *testing.T) {
 	s.krogerCart = &kroger.CartClient{ClientID: "id", ClientSecret: "secret", HTTPClient: httpClient, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", httpClient)}
 	p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Garlic dish", Ingredients: []ai.Ingredient{{ProductID: "0001111060903", Name: "Garlic", Quantity: "2 cloves"}, {Name: "Salt", Quantity: "1 tsp"}}}}
+	s.locServer = staticLocationLookup{location: p.Location}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	rr := httptest.NewRecorder()
 	s.performCartTransfer(rr, httptest.NewRequest(http.MethodPost, "/recipes/x/kroger-cart", nil), "mock-clerk-user-id", p.Hash(), token)
@@ -174,6 +176,7 @@ func TestKrogerCallback(t *testing.T) {
 			s.krogerCartKey = make([]byte, 32)
 			p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "garlic", Name: "Garlic", Quantity: "2 cloves"}}}}
+			s.locServer = staticLocationLookup{location: p.Location}
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			var exchanges, additions int
 			client := &http.Client{Transport: krogerTestTransport(func(req *http.Request) (*http.Response, error) {
@@ -281,6 +284,7 @@ func TestKrogerTransferReturnToShoppingList(t *testing.T) {
 			s := newTestServer(t)
 			p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "garlic", Name: "Garlic", Quantity: "2 cloves"}}}}
+			s.locServer = staticLocationLookup{location: p.Location}
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			cartCalls := 0
 			client := &http.Client{Transport: krogerTestTransport(func(req *http.Request) (*http.Response, error) {
@@ -337,6 +341,7 @@ func TestKrogerTransferFeedbackIsPrivate(t *testing.T) {
 	s.krogerCart = &kroger.CartClient{}
 	p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
+	s.locServer = staticLocationLookup{location: p.Location}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.saveCartTransfer(t.Context(), "another-user", p.Hash(), krogerTransfer{Status: "complete", Added: 10, Sent: []ai.Ingredient{{Name: "Private product"}}}, cache.Unconditional()))
 	page := renderKrogerShoppingSection(t, s, p.Hash(), "<script>alert(1)</script>")
