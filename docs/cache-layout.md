@@ -177,8 +177,11 @@ remain under their original versions. `INGREDIENT_GRADING_MODEL` still selects a
 explicit model. The former `jev` option was replaced by `decisions` on
 2026-10-07. Decisions grades use a separate cache version derived from the API
 version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
-review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`;
-old JEV and Responses grades remain under their original versions. Wine pairing
+review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
+On 2026-10-08, Decisions switched to a shared ingredient list with one indexed
+question per item in a single request. The `decisions/batch-v2/` version salt and
+new instruction invalidate the previous per-item Decisions grades.
+Old JEV and Responses grades remain under their original versions. Wine pairing
 now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.
 

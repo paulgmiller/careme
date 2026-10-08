@@ -7,9 +7,6 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
-	"strings"
-
-	"careme/internal/parallelism"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -17,14 +14,14 @@ import (
 
 const DecisionsIngredientGrader = "decisions"
 
-const ingredientDecisionInstruction = "Review this grocery catalog item using the rubric below.\n" + ingredientGradeRubric
+const ingredientDecisionInstruction = "Review only the grocery catalog item at index %d in the input list. Ignore all other items when assigning its score. Use the rubric below.\n" + ingredientGradeRubric
 
 type decisionGrader struct {
-	oai   openai.Client
-	slots chan struct{}
+	oai openai.Client
 }
 
 type ingredientGradeState struct {
+	Index       int    `json:"index"`
 	Brand       string `json:"brand,omitempty"`
 	Description string `json:"description,omitempty"`
 	Size        string `json:"size,omitempty"`
@@ -58,7 +55,7 @@ func ingredientDecisionCacheVersion() string {
 	if err != nil {
 		panic(err)
 	}
-	return ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
+	return ingredientGradeCacheVersion("decisions/batch-v2/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
 }
 
 func NewDecisionGrader(apiKey string, httpClient *http.Client) *decisionGrader {
@@ -66,7 +63,7 @@ func NewDecisionGrader(apiKey string, httpClient *http.Client) *decisionGrader {
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
-	return &decisionGrader{oai: openai.NewClient(opts...), slots: make(chan struct{}, 16)}
+	return &decisionGrader{oai: openai.NewClient(opts...)}
 }
 
 func (g *decisionGrader) CacheVersion() string { return ingredientDecisionCacheVersion() }
@@ -83,55 +80,60 @@ func (g *decisionGrader) GradeIngredients(ctx context.Context, ingredients []Inp
 		}
 		items[i] = item
 	}
-	graded, err := parallelism.MapWithErrors(items, func(item InputIngredient) (InputIngredient, error) {
-		select {
-		case g.slots <- struct{}{}:
-			defer func() { <-g.slots }()
-		case <-ctx.Done():
-			return InputIngredient{}, ctx.Err()
-		}
-		return g.gradeIngredient(ctx, item)
-	})
-	if err != nil {
-		return nil, err
+	states := make([]ingredientGradeState, len(items))
+	for i, item := range items {
+		states[i] = ingredientGradeState{Index: i, Brand: item.Brand, Description: item.Description, Size: item.Size}
 	}
-	return graded, nil
-}
-
-func (g *decisionGrader) gradeIngredient(ctx context.Context, item InputIngredient) (InputIngredient, error) {
-	input, err := json.Marshal(ingredientGradeState{Brand: item.Brand, Description: item.Description, Size: item.Size})
+	input, err := json.Marshal(states)
 	if err != nil {
-		return InputIngredient{}, fmt.Errorf("marshal ingredient %s: %w", item.ProductID, err)
+		return nil, fmt.Errorf("marshal ingredient grading batch: %w", err)
 	}
 	levels := make([]openai.DecisionNewParamsQuestionScoreLevel, len(ingredientGradeCriteria))
 	for i, description := range ingredientGradeCriteria {
 		levels[i] = openai.DecisionNewParamsQuestionScoreLevel{Label: fmt.Sprint(i + 1), Description: openai.String(description)}
 	}
+	questions := make([]openai.DecisionNewParamsQuestionUnion, len(items))
+	for i := range items {
+		questions[i] = openai.DecisionNewParamsQuestionUnion{OfScore: &openai.DecisionNewParamsQuestionScore{
+			Name:         openai.String(fmt.Sprintf("ingredient_%d", i)),
+			Instructions: fmt.Sprintf(ingredientDecisionInstruction, i),
+			Levels:       levels,
+		}}
+	}
 	decision, err := g.oai.Decisions.New(ctx, openai.DecisionNewParams{
-		Model: gpt6Luna,
-		Input: openai.DecisionNewParamsInputUnion{OfString: openai.String(string(input))},
-		Questions: []openai.DecisionNewParamsQuestionUnion{{OfScore: &openai.DecisionNewParamsQuestionScore{
-			Name: openai.String("ingredient_score"), Instructions: strings.TrimSpace(ingredientDecisionInstruction), Levels: levels,
-		}}},
+		Model:     gpt6Luna,
+		Input:     openai.DecisionNewParamsInputUnion{OfString: openai.String(string(input))},
+		Questions: questions,
 	})
 	if err != nil {
-		return InputIngredient{}, fmt.Errorf("grade ingredient %s: %w", item.ProductID, err)
+		return nil, fmt.Errorf("grade ingredient batch: %w", err)
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", gpt6Luna, "api", "decisions", "input", decision.Usage.InputTokens)
-	if len(decision.Answers) != 1 {
-		return InputIngredient{}, fmt.Errorf("grade ingredient %s: expected one answer, got %d", item.ProductID, len(decision.Answers))
+	if len(decision.Answers) != len(items) {
+		return nil, fmt.Errorf("grade ingredient batch: expected %d answers, got %d", len(items), len(decision.Answers))
 	}
-	switch answer := decision.Answers[0].AsAny().(type) {
-	case openai.DecisionAnswerScore:
-		if math.IsNaN(answer.Score) || math.IsInf(answer.Score, 0) || answer.Score < 0 || answer.Score > float64(len(ingredientGradeCriteria)-1) {
-			return InputIngredient{}, fmt.Errorf("grade ingredient %s: score must be between 0 and 9", item.ProductID)
+	// Decisions returns answers in question order.
+	for i, answer := range decision.Answers {
+		grade, err := ingredientGradeFromDecision(answer)
+		if err != nil {
+			return nil, fmt.Errorf("grade ingredient %s: %w", items[i].ProductID, err)
 		}
-		level := int(math.Round(answer.Score))
-		item.Grade = &IngredientGrade{Score: level + 1, Reason: fmt.Sprintf("%s confidence:%f, score:%f, level:%d", ingredientGradeCriteria[level], answer.Confidence, answer.Score, level)}
-	case openai.DecisionAnswerRefusal:
-		return InputIngredient{}, fmt.Errorf("grade ingredient %s: decision refused", item.ProductID)
-	default:
-		return InputIngredient{}, fmt.Errorf("grade ingredient %s: unexpected decision answer type %q", item.ProductID, decision.Answers[0].Type)
+		items[i].Grade = grade
 	}
-	return item, nil
+	return items, nil
+}
+
+func ingredientGradeFromDecision(answer openai.DecisionAnswerUnion) (*IngredientGrade, error) {
+	switch score := answer.AsAny().(type) {
+	case openai.DecisionAnswerScore:
+		if math.IsNaN(score.Score) || math.IsInf(score.Score, 0) || score.Score < 0 || score.Score > float64(len(ingredientGradeCriteria)-1) {
+			return nil, fmt.Errorf("score must be between 0 and 9")
+		}
+		level := int(math.Round(score.Score))
+		return &IngredientGrade{Score: level + 1, Reason: fmt.Sprintf("%s confidence:%f, score:%f, level:%d", ingredientGradeCriteria[level], score.Confidence, score.Score, level)}, nil
+	case openai.DecisionAnswerRefusal:
+		return nil, fmt.Errorf("decision refused")
+	default:
+		return nil, fmt.Errorf("unexpected decision answer type %q", answer.Type)
+	}
 }
