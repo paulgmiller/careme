@@ -36,7 +36,8 @@ defaultTest:
         if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
         return plan.plans.every((recipe) =>
-          available.has(recipe.anchor_ingredient.toLowerCase())
+          (available.has(recipe.anchor_ingredient.toLowerCase())
+            || (recipe.anchor_user_instruction && recipe.anchor_user_instruction === context.vars.instructions))
           && available.has(recipe.side_vegetable.toLowerCase()));
       metric: available-menu-ingredients
     - type: javascript
@@ -152,3 +153,46 @@ tests:
             recipe.recipe_instructions.some((instruction) =>
               /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
         metric: servings-preserved-in-every-recipe
+
+  - description: Explicitly requested halloumi can anchor dinner outside the catalog
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Use halloumi as the main ingredient.
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'halloumi'
+            && recipe.anchor_user_instruction === context.vars.instructions
+            && recipe.recipe_instructions.some((instruction) => /halloumi/i.test(instruction));
+        metric: requested-anchor-outside-catalog
+
+  - description: Avoiding halloumi does not authorize an unavailable anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Make it vegetarian and do not use halloumi.
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Extra Firm Tofu'
+            && recipe.anchor_user_instruction === '';
+        metric: unavailable-anchor-not-authorized-by-exclusion

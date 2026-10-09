@@ -85,7 +85,7 @@ func TestRunEvalReturnsMenuPlanJSON(t *testing.T) {
 	require.True(t, ok)
 	assert.IsType(t, int64(0), result["latencyMs"])
 	assert.JSONEq(t, `{
-		"plans":[{"cuisine":"Italian","anchor_ingredient":"Chicken Thighs","dish_format":"sheet-pan/roast","side_vegetable":"Broccoli","fancy":false,"recipe_instructions":null}],
+		"plans":[{"cuisine":"Italian","anchor_ingredient":"Chicken Thighs","anchor_user_instruction":"","dish_format":"sheet-pan/roast","side_vegetable":"Broccoli","fancy":false,"recipe_instructions":null}],
 		"chef_note_suggestion":"faster dinners"
 	}`, output)
 	assert.Equal(t, "store-1", planner.location.ID)
