@@ -327,37 +327,13 @@
 
             {{template "shopping_finalize_controls" .}}
 
-            {{if .ShoppingList}}
-            <section class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-              <details{{if .HasSavedRecipes}} open{{end}}>
-                <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
-                  Shopping list
-                </summary>
-                <div class="mt-4">
-                  <div class="space-y-5 text-ink-700">
-                    {{range .ShoppingList}}
-                    <section>
-                      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
-                      <ul class="mt-2 space-y-2">
-                        {{range .Items}}
-                        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                          <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
-                            <span class="font-medium text-brand-700">{{.Name}}</span>
-                            {{if .Quantity}}
-                            <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                            {{else}}
-                            <span class="hidden sm:block" aria-hidden="true"></span>
-                            {{end}}
-                          </div>
-                        </li>
-                        {{end}}
-                      </ul>
-                    </section>
-                    {{end}}
-                  </div>
-                </div>
-              </details>
+            {{if .Finalized}}
+            <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md"
+                     hx-get="/recipes/{{.Hash}}/shopping-quantities" hx-trigger="load" hx-swap="outerHTML">
+              <p class="text-sm text-ink-600">Combining your shopping quantities…</p>
             </section>
+            {{else if .ShoppingList}}
+            {{template "shopping_list_section" .}}
             {{end}}
           </div>
           {{if .AdminURL}}
@@ -366,4 +342,46 @@
           </p>
           {{end}}
         </div>
+{{end}}
+
+{{define "shopping_list_section"}}
+<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <details{{if .HasSavedRecipes}} open{{end}}>
+    <summary class="inline-flex cursor-pointer items-center justify-center rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
+      Shopping list
+    </summary>
+    <div class="mt-4">
+      <div class="space-y-5 text-ink-700">
+        {{range .ShoppingList}}
+        <section>
+          <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+          <ul class="mt-2 space-y-2">
+            {{range .Items}}
+            <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+              <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+                <span class="font-medium text-brand-700">{{.Name}}</span>
+                {{if .Quantity}}
+                <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+                {{else}}
+                <span class="hidden sm:block" aria-hidden="true"></span>
+                {{end}}
+              </div>
+            </li>
+            {{end}}
+          </ul>
+        </section>
+        {{end}}
+      </div>
+    </div>
+  </details>
+</section>
+
+{{end}}
+
+{{define "shopping_quantity_error"}}
+<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <p class="text-sm text-ink-600">Could not combine your list.
+    <button hx-get="/recipes/{{.Hash}}/shopping-quantities" hx-target="#shopping-list-section" hx-swap="outerHTML">Try again, chef</button>
+  </p>
+</section>
 {{end}}

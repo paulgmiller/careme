@@ -701,3 +701,22 @@ func TestShoppingDetailsPreservationFollowsRecipeContent(t *testing.T) {
 		})
 	}
 }
+
+func TestFinalizedShoppingListLoadsMergedQuantities(t *testing.T) {
+	_ = newTestServer(t)
+	for _, id := range []string{"01400943", "walmart_123"} {
+		t.Run(id, func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: id}, time.Now())
+			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash()})
+			if !assert.NoError(t, err) {
+				return
+			}
+			var page bytes.Buffer
+			assert.NoError(t, templates.ShoppingList.Execute(&page, view))
+			assert.Contains(t, page.String(), `hx-get="/recipes/`+p.Hash()+`/shopping-quantities"`)
+			assert.Contains(t, page.String(), "Combining your shopping quantities")
+			assert.NotContains(t, page.String(), "Add to Kroger cart")
+		})
+	}
+}

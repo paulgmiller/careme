@@ -75,6 +75,7 @@ type shoppingListPageView struct {
 	Recipes              []shoppingRecipeView
 	ShoppingList         []shoppingListGroup
 	HasSavedRecipes      bool
+	Finalized            bool
 	ServerSignedIn       bool
 	User                 *utypes.User
 	AuthReturnTo         string
@@ -129,6 +130,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Recipes:              recipeViews,
 		ShoppingList:         shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes:      hasSavedRecipes,
+		Finalized:            len(input.params.Saved) > 0,
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,

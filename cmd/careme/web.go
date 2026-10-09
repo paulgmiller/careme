@@ -90,18 +90,21 @@ func runServer(cfg *config.Config, addr string) error {
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
+	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
+		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
 	} else {
 		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(critiquer)
 
 		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
+		shoppingMerger = aiclient
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
@@ -140,7 +143,7 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
+	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 

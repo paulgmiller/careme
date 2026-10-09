@@ -33,6 +33,7 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
+	mux.HandleFunc("GET /recipes/{hash}/shopping-quantities", s.handleShoppingQuantities)
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
