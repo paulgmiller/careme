@@ -166,21 +166,21 @@ func TestAlignMenuPlanIngredientsRequestedAnchor(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		anchor       string
-		citation     string
+		direction    string
 		instructions []string
 		side         string
 		wantError    string
 	}{
-		{name: "explicit request", anchor: "halloumi", citation: "Use halloumi as the main ingredient.", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli"},
-		{name: "trimmed instruction", anchor: "halloumi", citation: "Use halloumi.", instructions: []string{"  Use halloumi.\n"}, side: "Broccoli"},
-		{name: "missing citation", anchor: "halloumi", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "invented citation", anchor: "halloumi", citation: "Use halloumi.", instructions: []string{"Make it vegetarian."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "partial citation", anchor: "halloumi", citation: "Use halloumi.", instructions: []string{"Use halloumi. Make it quick."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "empty anchor", citation: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "unavailable side", anchor: "halloumi", citation: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Spinach", wantError: "side_vegetable"},
+		{name: "explicit request", anchor: "halloumi", direction: "Use halloumi as the main ingredient.", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli"},
+		{name: "trimmed instruction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"  Use halloumi.\n"}, side: "Broccoli"},
+		{name: "missing direction", anchor: "halloumi", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli", wantError: "anchor_ingredient"},
+		{name: "invented direction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Make it vegetarian."}, side: "Broccoli", wantError: "anchor_ingredient"},
+		{name: "partial direction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Use halloumi. Make it quick."}, side: "Broccoli", wantError: "anchor_ingredient"},
+		{name: "empty anchor", direction: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Broccoli", wantError: "anchor_ingredient"},
+		{name: "unavailable side", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Spinach", wantError: "side_vegetable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan := &MenuPlan{Plans: []RecipePlan{{AnchorIngredient: tc.anchor, AnchorUserInstruction: tc.citation, SideVegetable: tc.side}}}
+			plan := &MenuPlan{Plans: []RecipePlan{{AnchorIngredient: tc.anchor, RecipeInstructions: []string{tc.direction}, SideVegetable: tc.side}}}
 			err := alignMenuPlanIngredients(plan, []InputIngredient{{Description: "Broccoli"}}, tc.instructions)
 			if tc.wantError != "" {
 				require.ErrorContains(t, err, tc.wantError)
@@ -212,20 +212,97 @@ func TestCreateMenuPlanPreservesRequestedAnchorOutsideCatalog(t *testing.T) {
 					if repairSide && len(requestBodies) == 1 {
 						side = "Spinach"
 					}
-					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", len(requestBodies)), fmt.Sprintf(`{"plans":[{"cuisine":"Greek","anchor_ingredient":%q,"anchor_user_instruction":%q,"dish_format":"main with sides","side_vegetable":%q,"fancy":false,"recipe_instructions":[%q]}]}`, tc.anchor, instruction, side, instruction)), nil
+					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", len(requestBodies)), fmt.Sprintf(`{"plans":[{"cuisine":"Greek","anchor_ingredient":%q,"dish_format":"main with sides","side_vegetable":%q,"fancy":false,"recipe_instructions":[%q]}]}`, tc.anchor, side, instruction)), nil
 				})}, nil)
 				got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{ProductID: "broccoli-id", Description: "Broccoli"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
 				require.NoError(t, err)
 				wantRequests := 1
 				if repairSide {
 					wantRequests = 2
-					assert.Contains(t, requestBodies[1], "Preserve explicitly requested anchors outside the TSV")
+					assert.Contains(t, requestBodies[1], "Preserve explicitly requested anchors and side vegetables outside the TSV")
 				}
 				assert.Len(t, requestBodies, wantRequests)
 				assert.Equal(t, tc.anchor, got.Plans[0].AnchorIngredient)
 				assert.Contains(t, got.Plans[0].Instructions(), "Anchor ingredient direction for this recipe: "+tc.anchor+".")
 				assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
 				assert.Contains(t, requestBodies[0], "when the user explicitly asks to use a specific ingredient")
+			})
+		}
+	}
+}
+
+func TestAlignMenuPlanIngredientsRequestedSide(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		side      string
+		direction string
+		wantError bool
+	}{
+		{name: "user-owned side", side: "broccoli", direction: "I have extra broccoli."},
+		{name: "missing direction", side: "broccoli", wantError: true},
+		{name: "invented direction", side: "broccoli", direction: "Use broccoli.", wantError: true},
+		{name: "partial direction", side: "broccoli", direction: "extra broccoli", wantError: true},
+		{name: "unrelated direction cannot authorize side", side: "broccoli", direction: "Use chicken.", wantError: true},
+		{name: "partial ingredient cannot authorize side", side: "brocc", direction: "I have extra broccoli.", wantError: true},
+		{name: "empty side", direction: "I have extra broccoli.", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := &MenuPlan{Plans: []RecipePlan{{AnchorIngredient: "Chicken", SideVegetable: tc.side, RecipeInstructions: []string{tc.direction}}}}
+			err := alignMenuPlanIngredients(plan, []InputIngredient{{Description: "Chicken"}}, []string{"I have extra broccoli.", "Use chicken."})
+			if tc.wantError {
+				require.ErrorContains(t, err, "side_vegetable")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCreateMenuPlanUserOwnedVegetableEitherRole(t *testing.T) {
+	const instruction = "I have extra broccoli."
+	for _, anchorRole := range []bool{false, true} {
+		for _, retry := range []bool{false, true} {
+			t.Run(fmt.Sprintf("anchor=%t/retry=%t", anchorRole, retry), func(t *testing.T) {
+				requests := 0
+				client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					requests++
+					plan := RecipePlan{AnchorIngredient: "Chicken", SideVegetable: "broccoli", RecipeInstructions: []string{instruction}}
+					if anchorRole {
+						plan.AnchorIngredient = "broccoli"
+						plan.SideVegetable = "Carrots"
+					}
+					if retry && requests == 1 {
+						if anchorRole {
+							plan.SideVegetable = "Spinach"
+						} else {
+							plan.AnchorIngredient = "Salmon"
+						}
+					}
+					body, err := io.ReadAll(req.Body)
+					require.NoError(t, err)
+					assert.Contains(t, string(body), "Decide which role best fits the dish")
+					if requests == 2 {
+						assert.Contains(t, string(body), "Preserve explicitly requested anchors and side vegetables outside the TSV")
+					}
+					output, err := json.Marshal(MenuPlan{Plans: []RecipePlan{plan}})
+					require.NoError(t, err)
+					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", requests), string(output)), nil
+				})}, nil)
+				got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{Description: "Chicken"}, {Description: "Carrots"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
+				require.NoError(t, err)
+				wantRequests := 1
+				if retry {
+					wantRequests = 2
+				}
+				assert.Equal(t, wantRequests, requests)
+				if anchorRole {
+					assert.Equal(t, "broccoli", got.Plans[0].AnchorIngredient)
+					assert.Contains(t, got.Plans[0].Instructions(), "Anchor ingredient direction for this recipe: broccoli.")
+				} else {
+					assert.Equal(t, "broccoli", got.Plans[0].SideVegetable)
+					assert.Contains(t, got.Plans[0].Instructions(), "Side vegetable direction for this recipe: broccoli.")
+				}
+				assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
 			})
 		}
 	}

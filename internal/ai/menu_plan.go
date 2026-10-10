@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	locationtypes "careme/internal/locations/types"
 
@@ -41,11 +42,9 @@ func (p MenuPlan) String() string {
 type RecipePlan struct {
 	Cuisine          string `json:"cuisine" yaml:"cuisine"`
 	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
-	// Exact user instruction authorizing an anchor outside the catalog; empty otherwise.
-	AnchorUserInstruction string `json:"anchor_user_instruction" yaml:"anchor_user_instruction,omitempty"`
-	DishFormat            string `json:"dish_format" yaml:"dish_format"`
-	SideVegetable         string `json:"side_vegetable" yaml:"side_vegetable"`
-	Fancy                 bool   `json:"fancy" yaml:"fancy"`
+	DishFormat       string `json:"dish_format" yaml:"dish_format"`
+	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
+	Fancy            bool   `json:"fancy" yaml:"fancy"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
 }
@@ -161,7 +160,7 @@ Return compact planning labels, not recipes. Use short phrases, generally under 
 Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
 Choose distinct dish formats across the menu when practical. Use this compact set of canonical formats: ` + strings.Join(dishFormatList, ", ") + `. Choose the dish format before deciding how to cook it. Vegetables may be incorporated into the main dish.
 Try and ensure variety across cuisines, anchor ingredients, dish formats, and side vegetables.
-Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead. Exception: when the user explicitly asks to use a specific ingredient or says they already have it (including leftovers or a recent purchase), you may choose it as anchor_ingredient even if it is absent from the TSV. For that exception, anchor_ingredient must contain only the ingredient name, preserving specific varieties; never put a sentence, ownership statement, or shopping source there. For example, "I have leftover duroc pork" gives anchor_ingredient "duroc pork", and "I got dover sole at Costco" gives anchor_ingredient "dover sole". Copy the entire user instruction that requests it verbatim into anchor_user_instruction and repeat the relevant direction in recipe_instructions. Otherwise set anchor_user_instruction to an empty string. A dietary preference, a request for protein, or a direction to avoid an ingredient does not authorize this exception. Side vegetables must still come from the TSV.
+Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead. Exception: when the user explicitly asks to use a specific ingredient or says they already have it (including leftovers or a recent purchase), you may choose it as anchor_ingredient or side_vegetable even if it is absent from the TSV. Decide which role best fits the dish unless the user specifies a role. For that exception, anchor_ingredient and side_vegetable must contain only the ingredient name, preserving specific varieties; never put a sentence, ownership statement, or shopping source there. For example, "I have leftover duroc pork" gives anchor_ingredient "duroc pork", and "I got dover sole at Costco" gives anchor_ingredient "dover sole". For "I have extra broccoli", use "broccoli" as either anchor_ingredient or side_vegetable, whichever suits the dish. Include the entire original user instruction verbatim in recipe_instructions for that recipe, preserving the ingredient name so the catalog exception can be validated. A dietary preference, a request for protein, or a direction to avoid an ingredient does not authorize this exception.
 Prioritize seasonal ingredients, sale value, practical weeknight cooking.
 Assign user directions to recipe_instructions only for the specific recipe plans where they belong. If a user direction applies to every dish, repeat it in every recipe plan's recipe_instructions. If the user mentions having a limited ingredient without asking for it in every dish, assign it to only one fitting recipe.
 Return one chef_note_suggestion: concise example feedback the cook could type before asking for a new menu. Tailor it to the planned dishes, available ingredients, seasonality, and likely tradeoffs. It must be 24 characters or fewer, fit in a mobile text box, and be a fragment, not a sentence. Good examples: "less spicy", "faster dinners", "more vegetables", "no seafood".
@@ -211,7 +210,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 }
 
 func (c *client) regenerateMenuPlanForIngredientMismatch(ctx context.Context, previous ResponseRef, saleIngredients []InputIngredient, instructions []string, validationErr error, count int) (*MenuPlan, error) {
-	feedback := fmt.Sprintf("The previous menu plan used an ingredient that was not available: %v. Regenerate the menu plan. Side vegetables and anchors not explicitly requested by the user must exactly match a Description value from the ingredient TSV already provided. Preserve explicitly requested anchors outside the TSV and copy their original user instruction verbatim into anchor_user_instruction.", validationErr)
+	feedback := fmt.Sprintf("The previous menu plan used an ingredient that was not available: %v. Regenerate the menu plan. Anchors and side vegetables not explicitly requested or already owned by the user must exactly match a Description value from the ingredient TSV already provided. Preserve explicitly requested anchors and side vegetables outside the TSV, including ingredients the user already has, and include their original user instruction verbatim in recipe_instructions for each affected recipe.", validationErr)
 	promptMessages := buildRegenerateMenuPlanMessages([]string{feedback}, count)
 	params := responses.ResponseNewParams{
 		Model:              c.model,
@@ -309,24 +308,35 @@ func alignMenuPlanIngredients(plan *MenuPlan, ingredients []InputIngredient, ins
 	}
 
 	for i, plan := range plan.Plans {
-		if err := alignMenuPlanIngredient(plan.AnchorIngredient, byDescription, "anchor_ingredient"); err != nil {
-			if strings.TrimSpace(plan.AnchorIngredient) == "" || !userInstructions[strings.TrimSpace(plan.AnchorUserInstruction)] {
-				return fmt.Errorf("plan %d: %w (no original user instruction authorizing this anchor)", i+1, err)
-			}
+		if err := alignMenuPlanIngredient(plan.AnchorIngredient, plan.RecipeInstructions, byDescription, userInstructions, "anchor_ingredient"); err != nil {
+			return fmt.Errorf("plan %d: %w", i+1, err)
 		}
-		if err := alignMenuPlanIngredient(plan.SideVegetable, byDescription, "side_vegetable"); err != nil {
+		if err := alignMenuPlanIngredient(plan.SideVegetable, plan.RecipeInstructions, byDescription, userInstructions, "side_vegetable"); err != nil {
 			return fmt.Errorf("plan %d: %w", i+1, err)
 		}
 	}
 	return nil
 }
 
-func alignMenuPlanIngredient(label string, ingredients map[string]bool, field string) error {
-	ok := ingredients[normalizeMenuIngredientName(label)]
-	if !ok {
-		return fmt.Errorf("%s %q is not an exact ingredient Description from the TSV", field, label)
+func alignMenuPlanIngredient(label string, recipeInstructions []string, ingredients, userInstructions map[string]bool, field string) error {
+	if ingredients[normalizeMenuIngredientName(label)] {
+		return nil
 	}
-	return nil
+	name := menuIngredientWords(label)
+	if name != "" {
+		for _, instruction := range recipeInstructions {
+			if userInstructions[strings.TrimSpace(instruction)] && strings.Contains(" "+menuIngredientWords(instruction)+" ", " "+name+" ") {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("%s %q is not an exact ingredient Description from the TSV (no original user instruction authorizing this ingredient)", field, label)
+}
+
+func menuIngredientWords(text string) string {
+	return strings.ToLower(strings.Join(strings.FieldsFunc(text, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	}), " "))
 }
 
 func normalizeMenuIngredientName(name string) string {

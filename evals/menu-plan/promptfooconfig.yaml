@@ -37,8 +37,9 @@ defaultTest:
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
         return plan.plans.every((recipe) =>
           (available.has(recipe.anchor_ingredient.toLowerCase())
-            || (recipe.anchor_user_instruction && recipe.anchor_user_instruction === context.vars.instructions))
-          && available.has(recipe.side_vegetable.toLowerCase()));
+            || recipe.recipe_instructions?.some((instruction) => instruction === context.vars.instructions && instruction.toLowerCase().includes(recipe.anchor_ingredient.toLowerCase())))
+          && (available.has(recipe.side_vegetable.toLowerCase())
+            || recipe.recipe_instructions?.some((instruction) => instruction === context.vars.instructions && instruction.toLowerCase().includes(recipe.side_vegetable.toLowerCase()))));
       metric: available-menu-ingredients
     - type: javascript
       value: |
@@ -172,7 +173,7 @@ tests:
         value: |
           const recipe = JSON.parse(output).plans[0];
           return recipe.anchor_ingredient.toLowerCase() === 'halloumi'
-            && recipe.anchor_user_instruction === context.vars.instructions
+            && recipe.recipe_instructions.includes(context.vars.instructions)
             && recipe.recipe_instructions.some((instruction) => /halloumi/i.test(instruction));
         metric: requested-anchor-outside-catalog
 
@@ -194,7 +195,7 @@ tests:
         value: |
           const recipe = JSON.parse(output).plans[0];
           return recipe.anchor_ingredient === 'Extra Firm Tofu'
-            && recipe.anchor_user_instruction === '';
+            && !recipe.recipe_instructions.some((instruction) => /^Use halloumi/i.test(instruction));
         metric: unavailable-anchor-not-authorized-by-exclusion
 
   - description: User-owned duroc pork retains only its ingredient name as the anchor
@@ -215,7 +216,7 @@ tests:
         value: |
           const recipe = JSON.parse(output).plans[0];
           return recipe.anchor_ingredient.toLowerCase() === 'duroc pork'
-            && recipe.anchor_user_instruction === context.vars.instructions;
+            && recipe.recipe_instructions.includes(context.vars.instructions);
         metric: user-owned-ingredient-name
 
   - description: User-owned dover sole retains only its ingredient name as the anchor
@@ -236,5 +237,28 @@ tests:
         value: |
           const recipe = JSON.parse(output).plans[0];
           return recipe.anchor_ingredient.toLowerCase() === 'dover sole'
-            && recipe.anchor_user_instruction === context.vars.instructions;
+            && recipe.recipe_instructions.includes(context.vars.instructions);
         metric: user-owned-ingredient-name
+
+  - description: Extra broccoli outside the catalog can be an anchor or a side
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra broccoli.
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: carrots
+          description: Carrots
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return (recipe.anchor_ingredient.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.includes(context.vars.instructions))
+            || (recipe.side_vegetable.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.includes(context.vars.instructions));
+        metric: user-owned-vegetable-either-role
