@@ -160,7 +160,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - Unless the user asks for vegetarian or vegan food, include a protein plus at least one vegetable and/or starch.
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
-- Pantry items are allowed when common and inexpensive.
+- Pantry items are allowed when common and inexpensive. Ingredients explicitly requested by the user are also allowed when absent from the TSV; leave their id empty and do not invent prices.
 - ` + saltSeasoningStandard + `
 - When doneness matters, recommend the doneness that best suits the dish and give one concise target or pull temperature, plus a brief rest when useful. Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer. Careme provides a separate temperature guide beside the recipe.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.

@@ -250,6 +250,7 @@ func TestSystemMessageRequiresPrepFirstAndTotalTiming(t *testing.T) {
 		"Do not use HTML or other Markdown.",
 		"later steps should refer to that component by name without restating its ingredients or their amounts",
 		"set id to the exact ProductId",
+		"Ingredients explicitly requested by the user are also allowed when absent from the TSV",
 		"Set quantity to the total amount needed across the entire recipe",
 		"Every time a step first uses an ingredient, including a pantry ingredient, state its exact amount in the prose or a bullet.",
 		"When an ingredient is divided among steps, the step amounts must add up to the total quantity in ingredients.",
