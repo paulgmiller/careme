@@ -196,3 +196,45 @@ tests:
           return recipe.anchor_ingredient === 'Extra Firm Tofu'
             && recipe.anchor_user_instruction === '';
         metric: unavailable-anchor-not-authorized-by-exclusion
+
+  - description: User-owned duroc pork retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have leftover duroc pork
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'duroc pork'
+            && recipe.anchor_user_instruction === context.vars.instructions;
+        metric: user-owned-ingredient-name
+
+  - description: User-owned dover sole retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I got dover sole at Costco
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'dover sole'
+            && recipe.anchor_user_instruction === context.vars.instructions;
+        metric: user-owned-ingredient-name

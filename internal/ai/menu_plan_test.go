@@ -192,32 +192,42 @@ func TestAlignMenuPlanIngredientsRequestedAnchor(t *testing.T) {
 }
 
 func TestCreateMenuPlanPreservesRequestedAnchorOutsideCatalog(t *testing.T) {
-	for _, repairSide := range []bool{false, true} {
-		t.Run(fmt.Sprintf("repairSide=%t", repairSide), func(t *testing.T) {
-			const instruction = "Use halloumi as the main ingredient."
-			var requestBodies []string
-			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				body, err := io.ReadAll(req.Body)
+	for _, tc := range []struct {
+		instruction string
+		anchor      string
+	}{
+		{instruction: "Use halloumi as the main ingredient.", anchor: "halloumi"},
+		{instruction: "I have leftover duroc pork", anchor: "duroc pork"},
+		{instruction: "I got dover sole at Costco", anchor: "dover sole"},
+	} {
+		for _, repairSide := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/repairSide=%t", tc.anchor, repairSide), func(t *testing.T) {
+				instruction := tc.instruction
+				var requestBodies []string
+				client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					body, err := io.ReadAll(req.Body)
+					require.NoError(t, err)
+					requestBodies = append(requestBodies, string(body))
+					side := "Broccoli"
+					if repairSide && len(requestBodies) == 1 {
+						side = "Spinach"
+					}
+					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", len(requestBodies)), fmt.Sprintf(`{"plans":[{"cuisine":"Greek","anchor_ingredient":%q,"anchor_user_instruction":%q,"dish_format":"main with sides","side_vegetable":%q,"fancy":false,"recipe_instructions":[%q]}]}`, tc.anchor, instruction, side, instruction)), nil
+				})}, nil)
+				got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{ProductID: "broccoli-id", Description: "Broccoli"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
 				require.NoError(t, err)
-				requestBodies = append(requestBodies, string(body))
-				side := "Broccoli"
-				if repairSide && len(requestBodies) == 1 {
-					side = "Spinach"
+				wantRequests := 1
+				if repairSide {
+					wantRequests = 2
+					assert.Contains(t, requestBodies[1], "Preserve explicitly requested anchors outside the TSV")
 				}
-				return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", len(requestBodies)), fmt.Sprintf(`{"plans":[{"cuisine":"Greek","anchor_ingredient":"halloumi","anchor_user_instruction":%q,"dish_format":"main with sides","side_vegetable":%q,"fancy":false,"recipe_instructions":[%q]}]}`, instruction, side, instruction)), nil
-			})}, nil)
-			got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{ProductID: "broccoli-id", Description: "Broccoli"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
-			require.NoError(t, err)
-			wantRequests := 1
-			if repairSide {
-				wantRequests = 2
-				assert.Contains(t, requestBodies[1], "Preserve explicitly requested anchors outside the TSV")
-			}
-			assert.Len(t, requestBodies, wantRequests)
-			assert.Equal(t, "halloumi", got.Plans[0].AnchorIngredient)
-			assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
-			assert.Contains(t, requestBodies[0], "when the user explicitly asks to use a specific ingredient")
-		})
+				assert.Len(t, requestBodies, wantRequests)
+				assert.Equal(t, tc.anchor, got.Plans[0].AnchorIngredient)
+				assert.Contains(t, got.Plans[0].Instructions(), "Anchor ingredient direction for this recipe: "+tc.anchor+".")
+				assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
+				assert.Contains(t, requestBodies[0], "when the user explicitly asks to use a specific ingredient")
+			})
+		}
 	}
 }
 
