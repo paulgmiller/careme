@@ -124,241 +124,52 @@ func TestRecipePlanInstructionsIncludesPlanSpecificUserDirections(t *testing.T) 
 	}
 }
 
-func TestAlignMenuPlanIngredientsAcceptsAvailableIngredientDescriptions(t *testing.T) {
-	plan := &MenuPlan{Plans: []RecipePlan{{
-		Cuisine:          "Italian",
-		AnchorIngredient: "wild caught shrimp",
-		DishFormat:       "pasta",
-		SideVegetable:    " broccolini ",
-	}}}
-	ingredients := []InputIngredient{
-		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
-		{ProductID: "0000000003277", Description: "Broccolini"},
-	}
-
-	err := alignMenuPlanIngredients(plan, ingredients, nil)
-	if err != nil {
-		t.Fatalf("alignMenuPlanIngredients returned error: %v", err)
-	}
-	got := plan.Plans[0]
-	if got.AnchorIngredient != "wild caught shrimp" {
-		t.Fatalf("expected anchor ingredient to be left unchanged, got %q", got.AnchorIngredient)
-	}
-	if got.SideVegetable != " broccolini " {
-		t.Fatalf("expected side vegetable to be left unchanged, got %q", got.SideVegetable)
-	}
-}
-
-func TestAlignMenuPlanIngredientsRejectsUnavailableIngredientNames(t *testing.T) {
-	plan := &MenuPlan{Plans: []RecipePlan{{
-		AnchorIngredient: "shrimp",
-	}}}
-	ingredients := []InputIngredient{{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"}}
-
-	err := alignMenuPlanIngredients(plan, ingredients, nil)
-
-	if err == nil || !strings.Contains(err.Error(), `anchor_ingredient "shrimp" is not an exact ingredient Description from the TSV`) {
-		t.Fatalf("expected unavailable ingredient name error, got %v", err)
-	}
-}
-
-func TestAlignMenuPlanIngredientsRequestedAnchor(t *testing.T) {
+func TestCreateMenuPlanPreservesModelIngredientChoices(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		anchor       string
-		direction    string
-		instructions []string
-		side         string
-		wantError    string
-	}{
-		{name: "explicit request", anchor: "halloumi", direction: "Use halloumi as the main ingredient.", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli"},
-		{name: "trimmed instruction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"  Use halloumi.\n"}, side: "Broccoli"},
-		{name: "missing direction", anchor: "halloumi", instructions: []string{"Use halloumi as the main ingredient."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "invented direction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Make it vegetarian."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "partial direction", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Use halloumi. Make it quick."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "empty anchor", direction: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Broccoli", wantError: "anchor_ingredient"},
-		{name: "unavailable side", anchor: "halloumi", direction: "Use halloumi.", instructions: []string{"Use halloumi."}, side: "Spinach", wantError: "side_vegetable"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			plan := &MenuPlan{Plans: []RecipePlan{{AnchorIngredient: tc.anchor, RecipeInstructions: []string{tc.direction}, SideVegetable: tc.side}}}
-			err := alignMenuPlanIngredients(plan, []InputIngredient{{Description: "Broccoli"}}, tc.instructions)
-			if tc.wantError != "" {
-				require.ErrorContains(t, err, tc.wantError)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestCreateMenuPlanPreservesRequestedAnchorOutsideCatalog(t *testing.T) {
-	for _, tc := range []struct {
+		name        string
 		instruction string
 		anchor      string
+		side        string
+		direction   string
 	}{
-		{instruction: "Use halloumi as the main ingredient.", anchor: "halloumi"},
-		{instruction: "I have leftover duroc pork", anchor: "duroc pork"},
-		{instruction: "I got dover sole at Costco", anchor: "dover sole"},
-	} {
-		for _, repairSide := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/repairSide=%t", tc.anchor, repairSide), func(t *testing.T) {
-				instruction := tc.instruction
-				var requestBodies []string
-				client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-					body, err := io.ReadAll(req.Body)
-					require.NoError(t, err)
-					requestBodies = append(requestBodies, string(body))
-					side := "Broccoli"
-					if repairSide && len(requestBodies) == 1 {
-						side = "Spinach"
-					}
-					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", len(requestBodies)), fmt.Sprintf(`{"plans":[{"cuisine":"Greek","anchor_ingredient":%q,"dish_format":"main with sides","side_vegetable":%q,"fancy":false,"recipe_instructions":[%q]}]}`, tc.anchor, side, instruction)), nil
-				})}, nil)
-				got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{ProductID: "broccoli-id", Description: "Broccoli"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
-				require.NoError(t, err)
-				wantRequests := 1
-				if repairSide {
-					wantRequests = 2
-					assert.Contains(t, requestBodies[1], "Preserve explicitly requested anchors and side vegetables outside the TSV")
-				}
-				assert.Len(t, requestBodies, wantRequests)
-				assert.Equal(t, tc.anchor, got.Plans[0].AnchorIngredient)
-				assert.Contains(t, got.Plans[0].Instructions(), "Anchor ingredient direction for this recipe: "+tc.anchor+".")
-				assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
-				assert.Contains(t, requestBodies[0], "when the user explicitly asks to use a specific ingredient")
-			})
-		}
-	}
-}
-
-func TestAlignMenuPlanIngredientsRequestedSide(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		side      string
-		direction string
-		wantError bool
-	}{
-		{name: "user-owned side", side: "broccoli", direction: "I have extra broccoli."},
-		{name: "missing direction", side: "broccoli", wantError: true},
-		{name: "invented direction", side: "broccoli", direction: "Use broccoli.", wantError: true},
-		{name: "partial direction", side: "broccoli", direction: "extra broccoli", wantError: true},
-		{name: "unrelated direction cannot authorize side", side: "broccoli", direction: "Use chicken.", wantError: true},
-		{name: "partial ingredient cannot authorize side", side: "brocc", direction: "I have extra broccoli.", wantError: true},
-		{name: "empty side", direction: "I have extra broccoli.", wantError: true},
+		{name: "user-requested anchor", instruction: "Use halloumi as the main ingredient.", anchor: "halloumi", side: "Broccoli", direction: "Use halloumi as the main ingredient."},
+		{name: "leftover anchor", instruction: "I have leftover duroc pork", anchor: "duroc pork", side: "Broccoli", direction: "Use the leftover duroc pork."},
+		{name: "purchased anchor", instruction: "I got dover sole at Costco", anchor: "dover sole", side: "Broccoli", direction: "Use the user's dover sole."},
+		{name: "user-owned vegetable as anchor", instruction: "I have extra broccoli.", anchor: "broccoli", side: "Carrots", direction: "Use the extra broccoli."},
+		{name: "user-owned vegetable as side", instruction: "I have extra broccoli.", anchor: "Chicken", side: "broccoli", direction: "Use the extra broccoli."},
+		{name: "corrected anchor spelling", instruction: "I have extra strawberies.", anchor: "strawberries", side: "Spinach", direction: "Use the extra strawberries in a salad."},
+		{name: "corrected side spelling", instruction: "I have extra brocoli.", anchor: "Chicken", side: "broccoli", direction: "Use the extra broccoli as a side."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			plan := &MenuPlan{Plans: []RecipePlan{{AnchorIngredient: "Chicken", SideVegetable: tc.side, RecipeInstructions: []string{tc.direction}}}}
-			err := alignMenuPlanIngredients(plan, []InputIngredient{{Description: "Chicken"}}, []string{"I have extra broccoli.", "Use chicken."})
-			if tc.wantError {
-				require.ErrorContains(t, err, "side_vegetable")
-			} else {
+			requests := 0
+			recorder := &capturePromptRecorder{}
+			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				requests++
+				require.Equal(t, 1, requests, "model ingredient choices should not trigger a retry")
+				body, err := io.ReadAll(req.Body)
 				require.NoError(t, err)
-			}
+				var params map[string]any
+				require.NoError(t, json.Unmarshal(body, &params))
+				assert.Contains(t, string(body), tc.instruction)
+				assert.Contains(t, string(body), "Correct obvious ingredient typos")
+				assert.Contains(t, string(body), "Decide which role best fits the dish")
+				assert.Equal(t, config.DefaultRecipeModel, params["model"])
+				assert.Contains(t, params["prompt_cache_key"], "careme:store-day:v1:")
+				assert.Equal(t, 2, strings.Count(string(body), `"prompt_cache_breakpoint":{"mode":"explicit"}`))
+				output, err := json.Marshal(MenuPlan{Plans: []RecipePlan{{AnchorIngredient: tc.anchor, SideVegetable: tc.side, RecipeInstructions: []string{tc.direction}}}})
+				require.NoError(t, err)
+				return menuPlanHTTPResponse(req, "resp-menu", string(output)), nil
+			})}, recorder)
+			got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{Description: "Chicken"}, {Description: "Carrots"}, {Description: "Spinach"}}, []string{tc.instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
+			require.NoError(t, err)
+			assert.Equal(t, 1, requests)
+			assert.Equal(t, tc.anchor, got.Plans[0].AnchorIngredient)
+			assert.Equal(t, tc.side, got.Plans[0].SideVegetable)
+			assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+tc.direction)
+			assert.Equal(t, "resp-menu", got.ResponseID)
+			require.NotNil(t, recorder.record)
+			assert.Equal(t, got.ResponseID, recorder.record.ResponseID)
 		})
-	}
-}
-
-func TestCreateMenuPlanUserOwnedVegetableEitherRole(t *testing.T) {
-	const instruction = "I have extra broccoli."
-	for _, anchorRole := range []bool{false, true} {
-		for _, retry := range []bool{false, true} {
-			t.Run(fmt.Sprintf("anchor=%t/retry=%t", anchorRole, retry), func(t *testing.T) {
-				requests := 0
-				client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-					requests++
-					plan := RecipePlan{AnchorIngredient: "Chicken", SideVegetable: "broccoli", RecipeInstructions: []string{instruction}}
-					if anchorRole {
-						plan.AnchorIngredient = "broccoli"
-						plan.SideVegetable = "Carrots"
-					}
-					if retry && requests == 1 {
-						if anchorRole {
-							plan.SideVegetable = "Spinach"
-						} else {
-							plan.AnchorIngredient = "Salmon"
-						}
-					}
-					body, err := io.ReadAll(req.Body)
-					require.NoError(t, err)
-					assert.Contains(t, string(body), "Decide which role best fits the dish")
-					if requests == 2 {
-						assert.Contains(t, string(body), "Preserve explicitly requested anchors and side vegetables outside the TSV")
-					}
-					output, err := json.Marshal(MenuPlan{Plans: []RecipePlan{plan}})
-					require.NoError(t, err)
-					return menuPlanHTTPResponse(req, fmt.Sprintf("resp-menu-%d", requests), string(output)), nil
-				})}, nil)
-				got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, []InputIngredient{{Description: "Chicken"}, {Description: "Carrots"}}, []string{instruction}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
-				require.NoError(t, err)
-				wantRequests := 1
-				if retry {
-					wantRequests = 2
-				}
-				assert.Equal(t, wantRequests, requests)
-				if anchorRole {
-					assert.Equal(t, "broccoli", got.Plans[0].AnchorIngredient)
-					assert.Contains(t, got.Plans[0].Instructions(), "Anchor ingredient direction for this recipe: broccoli.")
-				} else {
-					assert.Equal(t, "broccoli", got.Plans[0].SideVegetable)
-					assert.Contains(t, got.Plans[0].Instructions(), "Side vegetable direction for this recipe: broccoli.")
-				}
-				assert.Contains(t, got.Plans[0].Instructions(), "User direction for this recipe: "+instruction)
-			})
-		}
-	}
-}
-
-func TestCreateMenuPlanRegeneratesWhenPlanUsesUnavailableIngredient(t *testing.T) {
-	recorder := &capturePromptRecorder{}
-	var requestBodies []string
-	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
-		}
-		requestBodies = append(requestBodies, string(body))
-		responseID := "resp-menu-invalid"
-		sideVegetable := "broccoli rabe"
-		if len(requestBodies) == 2 {
-			responseID = "resp-menu-corrected"
-			sideVegetable = "Broccolini"
-		}
-		return menuPlanHTTPResponse(req, responseID, fmt.Sprintf(`{"plans":[{"cuisine":"Italian","anchor_ingredient":"Wild Caught Shrimp","dish_format":"pasta","side_vegetable":%q,"fancy":false}]}`, sideVegetable)), nil
-	})}, recorder)
-	ingredients := []InputIngredient{
-		{ProductID: "shrimp-id", Description: "Wild Caught Shrimp"},
-		{ProductID: "broccolini-id", Description: "Broccolini"},
-	}
-
-	got, err := client.CreateMenuPlan(t.Context(), &locationtypes.Location{State: "WA"}, ingredients, nil, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, 1)
-	if err != nil {
-		t.Fatalf("CreateMenuPlan returned error: %v", err)
-	}
-	if len(requestBodies) != 2 {
-		t.Fatalf("expected initial request and regeneration request, got %d", len(requestBodies))
-	}
-	for _, requestBody := range requestBodies {
-		assert.Contains(t, requestBody, `"model":"gpt-6.1-sol"`)
-		assert.Contains(t, requestBody, `"reasoning":{"effort":"medium"}`)
-		if !strings.Contains(requestBody, `"prompt_cache_key":"careme:store-day:v1:`) {
-			t.Fatalf("expected stable recipe prompt cache key: %s", requestBody)
-		}
-		if !strings.Contains(requestBody, `"prompt_cache_options":{"mode":"explicit","ttl":"30m"}`) {
-			t.Fatalf("expected explicit prompt cache mode: %s", requestBody)
-		}
-	}
-	if got := strings.Count(requestBodies[0], `"prompt_cache_breakpoint":{"mode":"explicit"}`); got != 2 {
-		t.Fatalf("expected ingredient and complete menu prompt cache breakpoints, got %d: %s", got, requestBodies[0])
-	}
-	assert.Equal(t, 1, strings.Count(requestBodies[1], `"prompt_cache_breakpoint":{"mode":"explicit"}`))
-	if !strings.Contains(requestBodies[1], `"previous_response_id":"resp-menu-invalid"`) {
-		t.Fatalf("expected regeneration to continue from invalid response: %s", requestBodies[1])
-	}
-	if !strings.Contains(requestBodies[1], "broccoli rabe") || !strings.Contains(requestBodies[1], "Description value from the ingredient TSV") {
-		t.Fatalf("expected regeneration feedback to describe ingredient mismatch: %s", requestBodies[1])
-	}
-	if got.ResponseID != "resp-menu-corrected" || got.Plans[0].SideVegetable != "Broccolini" {
-		t.Fatalf("unexpected regenerated menu plan: %#v", got)
 	}
 }
 
