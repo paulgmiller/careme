@@ -184,7 +184,7 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 
 func TestPantryCategoryNeighbors(t *testing.T) {
 	var pantry []ai.InputIngredient
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		pantry = append(pantry, ai.InputIngredient{Categories: []string{"spices"}, Embedding: ai.IngredientEmbedding{float64(i), 0}})
 	}
 	pantry = append(pantry, ai.InputIngredient{ProductID: "dairy", Categories: []string{"dairy", "international"}, Embedding: ai.IngredientEmbedding{10, 0}})

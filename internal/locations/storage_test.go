@@ -394,7 +394,7 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 				require.Len(t, got, 1)
 			}
 			found := false
-			for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+			for line := range strings.SplitSeq(strings.TrimSpace(logs.String()), "\n") {
 				var record map[string]any
 				require.NoError(t, json.Unmarshal([]byte(line), &record))
 				if record["msg"] == "error fetching locations from backend" {

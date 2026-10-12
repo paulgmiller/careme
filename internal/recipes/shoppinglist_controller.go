@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -409,9 +410,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		guest.EnsureShoppingListCount(w, r)
 	}
 	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
-	for hash, recipe := range progress.Finished {
-		finishedRecipes[hash] = recipe
-	}
+	maps.Copy(finishedRecipes, progress.Finished)
 	for _, recipe := range slist.Recipes {
 		finishedRecipes[recipe.ComputeHash()] = recipe
 	}
