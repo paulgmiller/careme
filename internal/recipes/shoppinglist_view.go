@@ -73,7 +73,6 @@ type shoppingListPageView struct {
 	HelpMessage          string
 	Hash                 string
 	Recipes              []shoppingRecipeView
-	ShoppingList         []shoppingListGroup
 	Purchases            []shoppingPurchaseGroup
 	HasSavedRecipes      bool
 	Finalized            bool
@@ -108,12 +107,10 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	if err != nil {
 		return shoppingListPageView{}, fmt.Errorf("recipe rendering error: %w", err)
 	}
-	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
 	for _, view := range recipeViews {
 		if view.Saved {
 			hasSavedRecipes = true
-			combinedIngredients = append(combinedIngredients, view.DisplayIngredients...)
 		}
 	}
 
@@ -129,7 +126,6 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		HelpMessage:          strings.TrimSpace(input.helpMessage),
 		Hash:                 input.hash,
 		Recipes:              recipeViews,
-		ShoppingList:         shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes:      hasSavedRecipes,
 		Finalized:            len(input.params.Saved) > 0,
 		ServerSignedIn:       serverSignedIn,

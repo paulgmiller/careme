@@ -20,15 +20,13 @@ type ShoppingQuantityMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
-// SimpleShoppingQuantityMerger is used by the local mock server.
+// SimpleShoppingQuantityMerger passes ingredients through for the local mock server.
 type SimpleShoppingQuantityMerger struct{}
 
 func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
-	result := make([]ai.ShoppingItem, 0)
-	for _, group := range shoppingListForDisplay(ingredients) {
-		for _, ingredient := range group.Items {
-			result = append(result, ai.ShoppingItem{ProductID: ingredient.ProductID, Name: ingredient.Name, Needed: ingredient.Quantity})
-		}
+	result := make([]ai.ShoppingItem, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		result = append(result, ai.ShoppingItem{ProductID: ingredient.ProductID, Name: ingredient.Name, Needed: ingredient.Quantity})
 	}
 	return result, nil
 }

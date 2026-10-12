@@ -182,16 +182,14 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	if strings.Contains(html, `<details class="space-y-4" open`) {
 		t.Error("saved recipe details should start collapsed")
 	}
-	if !strings.Contains(html, `<details open>`) {
-		t.Error("shopping list should start expanded when a recipe is saved")
+	if strings.Contains(html, `id="shopping-list-section"`) {
+		t.Error("shopping list should stay hidden until Build")
 	}
 	if strings.Contains(html, `id="finalize-help"`) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
-	finalizeIndex := strings.Index(html, `id="shopping-finalize-controls"`)
-	shoppingListIndex := strings.Index(html, `Shopping list`)
-	if finalizeIndex == -1 || shoppingListIndex == -1 || finalizeIndex > shoppingListIndex {
-		t.Error("build shopping list controls should render above the shopping list section")
+	if !strings.Contains(html, `id="shopping-finalize-controls"`) {
+		t.Error("build shopping list controls should render for saved recipes")
 	}
 }
 
