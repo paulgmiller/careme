@@ -144,7 +144,7 @@ func TestRunEvalJudgesGeneratedRecipeAndSeparatesLatency(t *testing.T) {
 	assert.Empty(t, judge.received.ResponseID)
 	assert.Empty(t, judge.received.OriginHash)
 	assert.Empty(t, judge.received.ParentHash)
-	metadata := result["metadata"].(map[string]interface{})
+	metadata := result["metadata"].(map[string]any)
 	assert.Equal(t, 8, metadata["critique"].(*ai.RecipeCritique).OverallScore)
 }
 
@@ -159,16 +159,16 @@ func TestDecodeOptionsModelSelection(t *testing.T) {
 	t.Setenv("RECIPE_EVAL_MODEL", "environment-model")
 	for _, tc := range []struct {
 		name    string
-		config  map[string]interface{}
+		config  map[string]any
 		want    string
 		wantErr bool
 	}{
 		{name: "environment", want: "environment-model"},
-		{name: "explicit", config: map[string]interface{}{"model": " candidate-model ", "judge_model": "judge"}, want: "candidate-model"},
-		{name: "invalid", config: map[string]interface{}{"model": 123}, wantErr: true},
+		{name: "explicit", config: map[string]any{"model": " candidate-model ", "judge_model": "judge"}, want: "candidate-model"},
+		{name: "invalid", config: map[string]any{"model": 123}, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			settings, err := decodeOptions(map[string]interface{}{"config": tc.config})
+			settings, err := decodeOptions(map[string]any{"config": tc.config})
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -184,15 +184,15 @@ func TestCheckedInCasesGenerateAndJudge(t *testing.T) {
 	require.NoError(t, err)
 	var suite struct {
 		Tests []struct {
-			Description string                 `yaml:"description"`
-			Vars        map[string]interface{} `yaml:"vars"`
+			Description string         `yaml:"description"`
+			Vars        map[string]any `yaml:"vars"`
 		} `yaml:"tests"`
 	}
 	require.NoError(t, yaml.Unmarshal(body, &suite))
 	require.Len(t, suite.Tests, 10)
 	for _, tc := range suite.Tests {
 		t.Run(tc.Description, func(t *testing.T) {
-			body, err := json.Marshal(map[string]interface{}{"vars": tc.Vars})
+			body, err := json.Marshal(map[string]any{"vars": tc.Vars})
 			require.NoError(t, err)
 			generator := &stubRecipeGenerator{recipe: &ai.Recipe{Title: "Generated"}}
 			_, err = runEval(body, generator, &stubCritiquer{})
@@ -217,7 +217,7 @@ func TestDecodeOptionsReasoningEffort(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("RECIPE_EVAL_REASONING_EFFORT", tc.env)
-			got, err := decodeOptions(map[string]interface{}{"config": map[string]interface{}{"reasoning_effort": tc.explicit}})
+			got, err := decodeOptions(map[string]any{"config": map[string]any{"reasoning_effort": tc.explicit}})
 			if tc.invalid {
 				require.ErrorContains(t, err, "invalid recipe reasoning effort")
 				return

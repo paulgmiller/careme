@@ -200,7 +200,7 @@ func TestMenuJudgeAPI(t *testing.T) {
 						Type       string
 						JSONSchema struct {
 							Strict bool
-							Schema map[string]interface{}
+							Schema map[string]any
 						} `json:"json_schema"`
 					} `json:"response_format"`
 				}
@@ -225,7 +225,7 @@ func TestMenuJudgeAPI(t *testing.T) {
 				assert.Equal(t, "json_schema", body.ResponseFormat.Type)
 				assert.True(t, body.ResponseFormat.JSONSchema.Strict)
 				assert.Contains(t, body.ResponseFormat.JSONSchema.Schema["properties"], "request_fidelity")
-				content, err := json.Marshal(map[string]interface{}{"model": "returned-judge", "choices": []interface{}{map[string]interface{}{"message": map[string]string{"role": "assistant", "content": tt.response}}}})
+				content, err := json.Marshal(map[string]any{"model": "returned-judge", "choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": tt.response}}}})
 				require.NoError(t, err)
 				if tt.response == "NO_CHOICES" {
 					content = []byte(`{"choices":[]}`)
@@ -265,7 +265,7 @@ func TestRunEvalJudgeHandoffAndFailure(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			metadata := result["metadata"].(map[string]interface{})
+			metadata := result["metadata"].(map[string]any)
 			assert.Equal(t, 9, metadata["critique"].(*menuCritique).RequestFidelity)
 			assert.IsType(t, int64(0), metadata["judgeLatencyMs"])
 		})

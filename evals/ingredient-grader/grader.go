@@ -35,11 +35,11 @@ type ingredientGrader interface {
 	GradeIngredients(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	return callAPI(ctx)
 }
 
-func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(ctx map[string]any) (map[string]any, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
@@ -54,12 +54,12 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	metadata := result["metadata"].(map[string]interface{})
+	metadata := result["metadata"].(map[string]any)
 	metadata["requestedModel"] = cfg.IngredientGrading.Model
 	return result, nil
 }
 
-func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]interface{}, error) {
+func runEval(ctx map[string]any, grader ingredientGrader) (map[string]any, error) {
 	var pf promptfooContext
 	b, err := json.Marshal(ctx)
 	if err != nil {
@@ -135,10 +135,10 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 	if len(failures) != 0 {
 		output = strings.Join(failures, "\n")
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"output":    output,
 		"latencyMs": latency.Milliseconds(),
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"grades":                grades,
 			"ingredientCount":       len(ings),
 			"passedIngredientCount": len(ings) - len(failures),

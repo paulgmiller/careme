@@ -92,7 +92,7 @@ func TestShoppingListSocialImage(t *testing.T) {
 			for _, marker := range []string{`property="og:image" content="`, `name="twitter:image" content="`} {
 				start := strings.Index(body.String(), marker)
 				require.NotEqual(t, -1, start)
-				value := strings.SplitN(body.String()[start+len(marker):], `"`, 2)[0]
+				value, _, _ := strings.Cut(body.String()[start+len(marker):], `"`)
 				require.True(t, strings.HasSuffix(value, tc.wantPath), "unexpected image URL: %s", value)
 			}
 		})

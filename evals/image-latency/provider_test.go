@@ -38,7 +38,7 @@ func TestRunEvalReportsImageStyle(t *testing.T) {
 			result, err := runEval(body, nil, measure)
 			require.NoError(t, err)
 			assert.Equal(t, 1, calls)
-			assert.Equal(t, map[string]interface{}{"output": string(style)}, result)
+			assert.Equal(t, map[string]any{"output": string(style)}, result)
 		})
 	}
 }

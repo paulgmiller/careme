@@ -23,9 +23,9 @@ func (s *stubIngredientGrader) GradeIngredients(_ context.Context, ingredients [
 	return s.grades, s.err
 }
 
-func promptfooContextFromJSON(t *testing.T, value string) map[string]interface{} {
+func promptfooContextFromJSON(t *testing.T, value string) map[string]any {
 	t.Helper()
-	var ctx map[string]interface{}
+	var ctx map[string]any
 	require.NoError(t, json.Unmarshal([]byte(value), &ctx))
 	return ctx
 }
@@ -36,7 +36,7 @@ func TestCallApiReturnsConfigurationError(t *testing.T) {
 	t.Setenv("INGREDIENT_GRADING_MODEL", "gpt-6-luna")
 	t.Setenv("AI_API_KEY", "")
 
-	result, err := CallApi("", nil, map[string]interface{}{})
+	result, err := CallApi("", nil, map[string]any{})
 
 	assert.Nil(t, result)
 	require.ErrorContains(t, err, "failed to load configuration: AI_API_KEY is required for ingredient grading")
@@ -47,7 +47,7 @@ func TestCallApiRejectsDisabledGrading(t *testing.T) {
 	t.Setenv("INGREDIENT_GRADING_ENABLE", "false")
 	t.Setenv("AI_API_KEY", "")
 
-	result, err := CallApi("", nil, map[string]interface{}{})
+	result, err := CallApi("", nil, map[string]any{})
 
 	assert.Nil(t, result)
 	require.EqualError(t, err, "ingredient grading eval requires INGREDIENT_GRADING_ENABLE to be enabled")
@@ -86,7 +86,7 @@ func TestRunEvalPassesScoresWithinInclusiveBounds(t *testing.T) {
 	result, err := runEval(ctx, grader)
 	require.NoError(t, err)
 	assert.Equal(t, "PASS", result["output"])
-	metadata := result["metadata"].(map[string]interface{})
+	metadata := result["metadata"].(map[string]any)
 	assert.Equal(t, 2, metadata["ingredientCount"])
 	assert.Equal(t, 2, metadata["passedIngredientCount"])
 	assert.Equal(t, grader.grades, metadata["grades"])
@@ -131,7 +131,7 @@ func TestRunEvalReportsScoresOutsideBounds(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, output, "grade=4<5 desc=Plain Lentils reason=scored too low")
 	assert.Contains(t, output, "grade=8>7  desc=Prepared Dip reason=scored too high")
-	assert.Equal(t, 0, result["metadata"].(map[string]interface{})["passedIngredientCount"])
+	assert.Equal(t, 0, result["metadata"].(map[string]any)["passedIngredientCount"])
 }
 
 func TestRunEvalReturnsGraderError(t *testing.T) {
@@ -180,7 +180,7 @@ func TestRunEvalRejectsEmptyOrDuplicateCases(t *testing.T) {
 
 func TestRunEvalRejectsContextThatCannotBeEncoded(t *testing.T) {
 	grader := &stubIngredientGrader{}
-	ctx := map[string]interface{}{"unsupported": make(chan struct{})}
+	ctx := map[string]any{"unsupported": make(chan struct{})}
 
 	result, err := runEval(ctx, grader)
 

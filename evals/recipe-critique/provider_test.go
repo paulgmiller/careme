@@ -89,7 +89,7 @@ func TestCritiqueRecipeReturnsModelError(t *testing.T) {
 func TestCallApiReturnsReadableProviderError(t *testing.T) {
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	result, err := CallApi("", nil, map[string]interface{}{})
+	result, err := CallApi("", nil, map[string]any{})
 	require.NoError(t, err)
 
 	message, ok := result["error"].(string)

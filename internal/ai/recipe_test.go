@@ -365,12 +365,12 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 			if recorder.record == nil || recorder.record.PreviousResponseID != "resp-menu-plan" {
 				t.Fatalf("expected prompt record parent response ID, got %#v", recorder.record)
 			}
-			var sent map[string]interface{}
+			var sent map[string]any
 			require.NoError(t, json.Unmarshal([]byte(requestBody), &sent))
 			if effort == "" {
-				assert.Equal(t, "medium", sent["reasoning"].(map[string]interface{})["effort"])
+				assert.Equal(t, "medium", sent["reasoning"].(map[string]any)["effort"])
 			} else {
-				assert.Equal(t, string(effort), sent["reasoning"].(map[string]interface{})["effort"])
+				assert.Equal(t, string(effort), sent["reasoning"].(map[string]any)["effort"])
 			}
 		})
 	}

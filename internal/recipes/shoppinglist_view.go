@@ -182,11 +182,9 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 	for index, slot := range progress.Slots {
 		if slot.RecipeHash == "" {
 			views = append(views, shoppingRecipeView{
-				Recipe: ai.Recipe{
-					Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
-					Description: "using " + slot.Plan.AnchorIngredient + " and " + slot.Plan.SideVegetable,
-				},
-				Hash: "pending-" + strconv.Itoa(index),
+				Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
+				Description: "using " + slot.Plan.AnchorIngredient + " and " + slot.Plan.SideVegetable,
+				Hash:        "pending-" + strconv.Itoa(index),
 			})
 		} else if err := appendRecipe(progress.Finished[slot.RecipeHash], slot.Reviewed); err != nil {
 			return nil, err
