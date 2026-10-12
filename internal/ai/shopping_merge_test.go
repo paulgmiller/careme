@@ -18,7 +18,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	ingredients := []Ingredient{{ProductID: "pork", Name: "Ground pork", Quantity: "8 oz"}, {ProductID: "pork", Name: "Ground pork", Quantity: "16 oz"}, {ProductID: "garlic", Name: "Garlic", Quantity: "3 cloves"}}
 	price := float32(6)
 	catalog := []InputIngredient{{ProductID: "pork", Description: "Ground pork", Size: "32 oz", AisleNumber: "Meat", PriceRegular: &price, Grade: &IngredientGrade{Score: 10}, Embedding: IngredientEmbedding{1, 2}}, {ProductID: "garlic", Description: "Garlic", Size: "1 bulb"}}
-	output := `{"items":[{"id":"pork","name":"Ground pork","quantity":"1 package"},{"id":"garlic","name":"Garlic","quantity":"3 cloves"}]}`
+	output := `{"items":[{"id":"pork","name":"Ground pork","quantity":"32 oz"},{"id":"garlic","name":"Garlic","quantity":"3 cloves"}]}`
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model        string `json:"model"`
@@ -62,7 +62,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	got, err := client.MergeShoppingQuantities(t.Context(), ingredients, catalog)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, Ingredient{ProductID: "pork", Name: "Ground pork", Quantity: "1 package"}, got[0])
+	assert.Equal(t, Ingredient{ProductID: "pork", Name: "Ground pork", Quantity: "32 oz"}, got[0])
 	assert.Equal(t, Ingredient{ProductID: "garlic", Name: "Garlic", Quantity: "3 cloves"}, got[1])
 	assert.NotNil(t, catalog[0].Grade)
 	assert.Equal(t, IngredientEmbedding{1, 2}, catalog[0].Embedding)
@@ -70,9 +70,9 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 
 func TestMergeShoppingPurchaseResults(t *testing.T) {
 	for _, tc := range []struct{ name, output, wantErr, quantity, product string }{
-		{name: "multiple packages", output: `{"items":[{"id":"pork","name":"Pork","quantity":"2 packages"}]}`, quantity: "2 packages", product: "pork"},
+		{name: "total amount across packages", output: `{"items":[{"id":"pork","name":"Pork","quantity":"64 oz"}]}`, quantity: "64 oz", product: "pork"},
 		{name: "unmatched", output: `{"items":[{"id":"","name":"Saffron","quantity":"1 pinch"}]}`, quantity: "1 pinch"},
-		{name: "unknown product", output: `{"items":[{"id":"invented","name":"Pork","quantity":"1 package"}]}`, wantErr: "unknown product"},
+		{name: "unknown product", output: `{"items":[{"id":"invented","name":"Pork","quantity":"32 oz"}]}`, wantErr: "unknown product"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) { return shoppingMergeHTTPResponse(req, tc.output), nil })}, nil)

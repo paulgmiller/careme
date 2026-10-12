@@ -16,7 +16,7 @@ import (
 	"careme/internal/templates"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v4/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v5/"
 
 type ShoppingQuantityMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.Ingredient, error)

@@ -29,7 +29,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `shopping_quantities/v4/` | JSON `[]ai.Ingredient` with shopping quantities keyed by finalized shopping-list hash, recipe ingredients, and purchasing catalog metadata, so later wine picks get a fresh merge | Shopping-list quantity endpoint | Finalized shopping lists |
+| `shopping_quantities/v5/` | JSON `[]ai.Ingredient` with total purchase amounts in catalog units keyed by finalized shopping-list hash, recipe ingredients, and purchasing catalog metadata, so later wine picks get a fresh merge | Shopping-list quantity endpoint | Finalized shopping lists |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -110,7 +110,7 @@ Recipe hashes are used by or stored in:
 
 Compatibility implications:
 
-- Shopping purchase recommendations use `shopping_quantities/v4/`. Legacy `v1` quantity maps, `v2` recipe amounts, and `v3` purchase records are not read. The catalog is filtered to recipe product IDs before merging and fingerprinting. The fingerprint covers recipe needs and matching catalog metadata, including sizes and prices; embeddings and grades are excluded. Cached staples, pantry, and per-recipe wine candidates are optional inputs from the saved plan’s store and date. Missing snapshots leave needs unresolved; other cache errors stop the request.
+- Shopping purchase recommendations use `shopping_quantities/v5/`. Legacy `v1` quantity maps, `v2` recipe amounts, `v3` purchase records, and `v4` package-count quantities are not read. The catalog is filtered to recipe product IDs before merging and fingerprinting. The fingerprint covers recipe needs and matching catalog metadata, including sizes and prices; embeddings and grades are excluded. Cached staples, pantry, and per-recipe wine candidates are optional inputs from the saved plan’s store and date. Missing snapshots leave needs unresolved; other cache errors stop the request.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.

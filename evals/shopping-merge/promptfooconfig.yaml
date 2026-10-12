@@ -1,4 +1,4 @@
-description: Onion and olive oil quantities from Careme shopping list p37vV7PPvys
+description: Shopping quantities from Careme list p37vV7PPvys and fixed-size rounding
 prompts:
   - shopping-merge-eval
 providers:
@@ -66,7 +66,7 @@ tests:
         product_id: "0000000004093"
         # This catalog does not explicitly identify whether loose produce is sold by weight.
         names: [jumbo yellow onion, jumbo yellow onions, yellow onion, yellow onions, onion, onions]
-        quantities: [1 package (1 lb), 1 package, 0.5 lb, 0.5 pounds, ½ pound, 1/2 lb, 8 oz, 8 ounces]
+        quantities: [1 lb, 1 pound, 16 oz, 16 ounces, 0.5 lb, 0.5 pounds, ½ pound, 1/2 lb, 8 oz, 8 ounces]
   - description: Divided oil is counted once; Unicode half tablespoon is added
     vars:
       ingredients:
@@ -78,3 +78,14 @@ tests:
         product_id: ""
         names: [olive oil]
         quantities: [4.5 tablespoons, 4½ tablespoons, 4 1/2 tablespoons, 4.5 tbsp, 4½ tbsp, 4 1/2 tbsp, 13.5 teaspoons, 13½ teaspoons, 13.5 tsp, 2.25 fl oz]
+  - description: Round a 40-ounce need to three 16-ounce portions and return the total weight
+    vars:
+      ingredients:
+        - { id: pork, name: Ground pork, quantity: 16 oz }
+        - { id: pork, name: Ground pork, quantity: 24 oz }
+      catalog:
+        - { id: pork, description: Ground pork 16 oz sealed tray, size: 16 oz }
+      expected:
+        product_id: pork
+        names: [ground pork]
+        quantities: [48 oz, 48 ounces]

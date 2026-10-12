@@ -171,7 +171,7 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "pork", Description: "Pork & herbs", Size: "32 oz", AisleNumber: "Meat"}}))
 	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
 		require.Len(t, catalog, 1)
-		return []ai.Ingredient{{ProductID: needs[0].ProductID, Name: needs[0].Name, Quantity: "1 package (32 oz)"}, needs[1]}, nil
+		return []ai.Ingredient{{ProductID: needs[0].ProductID, Name: needs[0].Name, Quantity: "32 oz"}, needs[1]}, nil
 	})
 	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
 	req.SetPathValue("hash", p.Hash())
@@ -181,7 +181,7 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	body := rr.Body.String()
 	assert.Contains(t, body, "Pork &amp; herbs")
 	assert.Contains(t, body, "32 oz")
-	assert.Contains(t, body, "1 package (32 oz)")
+	assert.Contains(t, body, "32 oz")
 	assert.NotContains(t, body, "Needed for recipes")
 	assert.NotContains(t, body, "24 oz")
 	assert.Contains(t, body, "Saffron")
@@ -211,7 +211,7 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 		calls++
 		require.Equal(t, []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}}, catalog)
 		require.Len(t, needs, 3, "send raw needs without deduplication")
-		return []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "1 package (1 lb)"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}, nil
+		return []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "1 lb"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}, nil
 	})
 	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}
 	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil", Size: "16 fl oz"}}
