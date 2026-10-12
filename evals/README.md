@@ -205,3 +205,16 @@ The 20-second latency assertion excludes judging. Judge scores can vary; calibra
 against human-reviewed good/bad menus before treating them as a quality benchmark.
 This provider does not export cost or token usage; Promptfoo totals are not a
 billing estimate.
+
+## Shopping quantity merge
+
+Run `./task.sh evals EVAL=shopping-merge -- --no-cache --output /tmp/shopping-merge-eval.json`.
+This tiny suite calls the production `MergeShoppingQuantities` path once for onion
+and once for olive oil from [shopping list p37vV7PPvys](https://careme.cooking/recipes?h=p37vV7PPvys).
+It expects one merged need: 8 ounces onion or 4½ tablespoons oil. A short allowlist
+accepts common equivalent quantity spellings; other formats need review.
+The onion case includes four supplied catalog products and expects the $0.89
+conventional onion over larger bags and the same-size organic option. Since the
+catalog has no explicit sold-by-weight flag, it accepts either a half-pound
+purchase or one 1 lb package. Olive oil uses an empty catalog and must remain
+unresolved for purchasing. Assertions are deterministic, with no judge call. Requires `AI_API_KEY` through the existing configuration.

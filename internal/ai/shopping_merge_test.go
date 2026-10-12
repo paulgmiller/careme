@@ -18,7 +18,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	ingredients := []Ingredient{{ProductID: "small", Name: "Ground pork", Quantity: "8 oz"}, {ProductID: "small", Name: "Ground pork", Quantity: "16 oz"}, {Name: "Garlic", Quantity: "3 cloves"}}
 	price := float32(6)
 	catalog := []InputIngredient{{ProductID: "large", Description: "Ground pork", Size: "32 oz", AisleNumber: "Meat", PriceRegular: &price, Grade: &IngredientGrade{Score: 10}, Embedding: IngredientEmbedding{1, 2}}, {ProductID: "garlic", Description: "Garlic", Size: "1 bulb"}}
-	output := `{"items":[{"needed":{"id":"small","name":"Ground pork","quantity":"24 oz","aisle_number":"","price":""},"product_id":"large","buy_quantity":"1 package"},{"needed":{"id":"","name":"Garlic","quantity":"3 cloves","aisle_number":"","price":""},"product_id":"garlic","buy_quantity":""}]}`
+	output := `{"items":[{"needed":{"id":"small","name":"Ground pork","quantity":"24 oz"},"product_id":"large","buy_quantity":"1 package"},{"needed":{"id":"","name":"Garlic","quantity":"3 cloves"},"product_id":"garlic","buy_quantity":""}]}`
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var body struct {
 			Model        string `json:"model"`
@@ -47,7 +47,9 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 		item := schemaObject(t, schemaObject(t, schemaProperties(t, schema)["items"])["items"])
 		assert.ElementsMatch(t, []string{"needed", "product_id", "buy_quantity"}, schemaRequired(t, item))
 		needed := schemaObject(t, schemaProperties(t, item)["needed"])
-		assert.ElementsMatch(t, []string{"id", "name", "quantity", "aisle_number", "price"}, schemaRequired(t, needed))
+		assert.ElementsMatch(t, []string{"id", "name", "quantity"}, schemaRequired(t, needed))
+		assert.NotContains(t, schemaProperties(t, needed), "aisle_number")
+		assert.NotContains(t, schemaProperties(t, needed), "price")
 		require.Len(t, body.Input, 1)
 		var input struct {
 			Ingredients []Ingredient      `json:"ingredients"`
