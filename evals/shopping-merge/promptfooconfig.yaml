@@ -1,0 +1,80 @@
+description: Onion and olive oil quantities from Careme shopping list p37vV7PPvys
+prompts:
+  - shopping-merge-eval
+providers:
+  - id: 'file://provider.go'
+    label: production-shopping-merge
+evaluateOptions:
+  maxConcurrency: 1
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      metric: shopping-amount
+      value: |
+        const items = JSON.parse(output);
+        if (items.length !== 1) return { pass: false, score: 0, reason: 'Expected one shopping item' };
+        const item = items[0];
+        const quantity = item.quantity.toLowerCase().trim().replace(/\s+/g, ' ');
+        const pass = context.vars.expected.quantities.includes(quantity)
+          && context.vars.expected.names.includes(item.name.toLowerCase())
+          && item.id === context.vars.expected.product_id;
+        return {
+          pass,
+          score: pass ? 1 : 0,
+          reason: `Shopping amount: ${item.name}, ${item.quantity}`,
+        };
+tests:
+  - description: Singular and plural onion names; half onion is an annotation of four ounces
+    vars:
+      ingredients:
+        - { id: "0000000004093", name: Jumbo Yellow Onion, quantity: 4 ounces }
+        - { id: "0000000004093", name: Jumbo Yellow Onions, quantity: '4 ounces, about ½ medium onion' }
+      catalog:
+        - id: "0000000004093"
+          number: "353"
+          brand: Fresh Onions
+          description: Jumbo Yellow Onions
+          size: 1 lb
+          regularPrice: 0.89
+          categories: [Produce]
+          grade: { score: 10, reason: 'Yellow onions are a foundational, widely useful cooking ingredient.' }
+        - id: "0001111060160"
+          number: "353"
+          brand: Simple Truth Organic
+          description: Simple Truth Organic® Yellow Onion 2 lb Bag
+          size: 2 lb
+          regularPrice: 3.29
+          categories: [Produce, Produce]
+          grade: { score: 10, reason: 'Yellow onions are a highly flexible foundational ingredient for home cooking.' }
+        - id: "0001111091682"
+          number: "353"
+          description: Kroger® Yellow Onion 3 lb Bag
+          size: 3 lb
+          regularPrice: 2.49
+          categories: [Produce, Produce]
+          grade: { score: 10, reason: 'Yellow onions are a foundational, highly versatile cooking ingredient.' }
+        - id: "0000000094093"
+          number: "353"
+          brand: Fresh Onions
+          description: Organic Jumbo Yellow Onions
+          size: 1 lb
+          regularPrice: 1.49
+          categories: [Natural & Organic, Produce]
+          grade: { score: 9, reason: 'Whole yellow onions are a highly versatile cooking staple.' }
+      expected:
+        product_id: "0000000004093"
+        # This catalog does not explicitly identify whether loose produce is sold by weight.
+        names: [jumbo yellow onion, jumbo yellow onions, yellow onion, yellow onions, onion, onions]
+        quantities: [1 package (1 lb), 1 package, 0.5 lb, 0.5 pounds, ½ pound, 1/2 lb, 8 oz, 8 ounces]
+  - description: Divided oil is counted once; Unicode half tablespoon is added
+    vars:
+      ingredients:
+        - { id: '', name: Olive oil, quantity: '2 tablespoons, divided' }
+        - { id: '', name: Olive oil, quantity: 1 tablespoon }
+        - { id: '', name: Olive oil, quantity: 1½ tablespoons }
+      catalog: []
+      expected:
+        product_id: ""
+        names: [olive oil]
+        quantities: [4.5 tablespoons, 4½ tablespoons, 4 1/2 tablespoons, 4.5 tbsp, 4½ tbsp, 4 1/2 tbsp, 13.5 teaspoons, 13½ teaspoons, 13.5 tsp, 2.25 fl oz]

@@ -178,28 +178,18 @@ func compareShoppingAisles(a, b string) int {
 	return cmp.Compare(a, b)
 }
 
-type shoppingPurchaseGroup struct {
-	Aisle string
-	Items []ai.ShoppingItem
-}
-
-func shoppingPurchaseAisle(item ai.ShoppingItem) string {
-	if item.Product != nil {
-		return strings.TrimSpace(item.Product.AisleNumber)
-	}
-	return strings.TrimSpace(item.Needed.AisleNumber)
-}
-
-func shoppingPurchasesForDisplay(items []ai.ShoppingItem) []shoppingPurchaseGroup {
+// The model already merged these items; only sort and group them for display.
+func shoppingPurchasesForDisplay(items []ai.Ingredient) []shoppingListGroup {
 	sorted := slices.Clone(items)
-	slices.SortStableFunc(sorted, func(a, b ai.ShoppingItem) int {
-		return compareShoppingAisles(shoppingPurchaseAisle(a), shoppingPurchaseAisle(b))
+	slices.SortStableFunc(sorted, func(a, b ai.Ingredient) int {
+		return compareShoppingAisles(strings.TrimSpace(a.AisleNumber), strings.TrimSpace(b.AisleNumber))
 	})
-	groups := make([]shoppingPurchaseGroup, 0)
-	for _, item := range sorted {
-		heading := shoppingAisleHeading(shoppingPurchaseAisle(item))
+	groups := make([]shoppingListGroup, 0)
+	for i := range sorted {
+		item := &sorted[i]
+		heading := shoppingAisleHeading(strings.TrimSpace(item.AisleNumber))
 		if len(groups) == 0 || groups[len(groups)-1].Aisle != heading {
-			groups = append(groups, shoppingPurchaseGroup{Aisle: heading})
+			groups = append(groups, shoppingListGroup{Aisle: heading})
 		}
 		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}

@@ -10,44 +10,48 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-// ShoppingItem keeps the recipe amount alongside an optional catalog purchase.
-// A nil Product or empty BuyQuantity means the recommendation is unresolved.
-type ShoppingItem struct {
-	Needed      Ingredient       `json:"needed"`
-	Product     *InputIngredient `json:"product"`
-	BuyQuantity string           `json:"buy_quantity"`
-}
-
-type shoppingPurchaseResponse struct {
-	Needed      Ingredient `json:"needed"`
-	ProductID   string     `json:"product_id"`
-	BuyQuantity string     `json:"buy_quantity"`
-}
-
 type shoppingIngredientsResponse struct {
-	Items []shoppingPurchaseResponse `json:"items"`
+	Items []Ingredient `json:"items"`
 }
 
-const shoppingPurchaseInstructions = `Combine the recipe ingredient amounts and recommend purchases using only the supplied store catalog.
-Merge equivalent ingredients without losing any recipe requirement. Keep different foods and incompatible forms distinct. Convert compatible units only when unambiguous; preserve distinct amounts when conversion is uncertain. Preserve the first recipe ingredient's id and name in needed.
-Choose an equivalent catalog product, including a different package size when useful, and set product_id to its exact catalog id. Never invent a product, size, price, or conversion. Select enough food with the least excess; break comparable ties using total purchase price, using sale prices when available and regular prices otherwise. Do not replace ingredients with substantively different foods.
-Set buy_quantity to a concise purchase amount such as "1 package", "2 packages", or "1.5 lb" for products sold by weight. Compute package counts from the combined needed amount and the catalog size. For example, if 24 oz is needed and the only matching package is 32 oz, buy 1 package. If sizes are 16 oz and 32 oz for a 24 oz need, both leave 8 oz excess; compare the price of two 16 oz packages with one 32 oz package. Never assume weight per clove, bunch, cup, or other ambiguous form.
-If no catalog product matches, use an empty product_id and buy_quantity and retain the combined needed amount. If a product matches but its size or a conversion is uncertain, select it and leave buy_quantity empty. Use an empty id for needs without a recipe product id. Return every merged need in items.`
+// MatchingShoppingCatalog keeps only products referenced by recipe ingredient IDs.
+func MatchingShoppingCatalog(ingredients []Ingredient, catalog []InputIngredient) []InputIngredient {
+	ids := make(map[string]bool, len(ingredients))
+	for _, ingredient := range ingredients {
+		if ingredient.ProductID != "" {
+			ids[ingredient.ProductID] = true
+		}
+	}
+	matched := make([]InputIngredient, 0)
+	for _, product := range catalog {
+		if ids[product.ProductID] {
+			matched = append(matched, product)
+		}
+	}
+	return matched
+}
 
-// MergeShoppingQuantities combines recipe needs and selects catalog purchases.
-func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingredient, catalog []InputIngredient) ([]ShoppingItem, error) {
+const shoppingPurchaseInstructions = `Merge the recipe ingredients into a shopping list using the supplied matching catalog.
+Combine entries with the same nonempty product id, and equivalent pantry foods without ids. Keep different product ids and incompatible forms distinct. Convert compatible units only when unambiguous; preserve distinct amounts when conversion is uncertain. Return each item's original id and first name; pantry items use an empty id.
+The output quantity is the amount to buy, not a separate recipe requirement. For matching catalog products, calculate enough packages from the combined recipe amount and package size. Use concise quantities such as "1 package (32 oz)", "2 packages (16 oz each)", or "1.5 lb" for products sold by weight. Never invent a product, size, or conversion. Never assume weight per clove, bunch, cup, or other ambiguous form.
+For pantry items, missing catalog products, or uncertain package conversions, return the combined recipe amount as quantity. Usage notes such as "divided" do not add quantities. Remove or update approximate count annotations when merging changes their amount. Return every item in items.`
+
+// MergeShoppingQuantities returns shopping amounts using a pre-matched catalog.
+func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingredient, catalog []InputIngredient) ([]Ingredient, error) {
 	if len(ingredients) == 0 {
-		return []ShoppingItem{}, nil
+		return []Ingredient{}, nil
 	}
 	products := make([]InputIngredient, len(catalog))
-	byID := make(map[string]InputIngredient, len(catalog))
+	ids := make(map[string]bool, len(ingredients))
+	for _, ingredient := range ingredients {
+		if ingredient.ProductID != "" {
+			ids[ingredient.ProductID] = true
+		}
+	}
 	for i, product := range catalog {
 		product.Grade = nil
 		product.Embedding = nil
 		products[i] = product
-		if product.ProductID != "" {
-			byID[product.ProductID] = product
-		}
 	}
 	input, err := json.Marshal(struct {
 		Ingredients []Ingredient      `json:"ingredients"`
@@ -76,19 +80,10 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 	if err := json.Unmarshal([]byte(resp.OutputText()), &merged); err != nil {
 		return nil, fmt.Errorf("decode shopping ingredients: %w", err)
 	}
-	items := make([]ShoppingItem, 0, len(merged.Items))
-	for _, recommendation := range merged.Items {
-		item := ShoppingItem{Needed: recommendation.Needed, BuyQuantity: recommendation.BuyQuantity}
-		if recommendation.ProductID != "" {
-			product, found := byID[recommendation.ProductID]
-			if !found {
-				return nil, fmt.Errorf("shopping purchase selected unknown product %q", recommendation.ProductID)
-			}
-			item.Product = &product
-		} else if recommendation.BuyQuantity != "" {
-			return nil, fmt.Errorf("shopping purchase quantity has no catalog product for %q", recommendation.Needed.Name)
+	for _, item := range merged.Items {
+		if item.ProductID != "" && !ids[item.ProductID] {
+			return nil, fmt.Errorf("shopping merge returned unknown product %q", item.ProductID)
 		}
-		items = append(items, item)
 	}
-	return items, nil
+	return merged.Items, nil
 }

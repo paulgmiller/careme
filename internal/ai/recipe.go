@@ -29,7 +29,7 @@ type Ingredient struct {
 	ProductID   string `json:"id"`
 	AisleNumber string `json:"aisle_number,omitempty" jsonschema:"-"`
 	Name        string `json:"name"`
-	Quantity    string `json:"quantity"` // amount used in the recipe, not the catalog package size
+	Quantity    string `json:"quantity"` // recipe amount, or purchase amount when returned by the shopping merger
 	Price       string `json:"price,omitempty" jsonschema:"-"`
 }
 

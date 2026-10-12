@@ -74,7 +74,6 @@ type shoppingListPageView struct {
 	Hash                 string
 	Recipes              []shoppingRecipeView
 	ShoppingList         []shoppingListGroup
-	Purchases            []shoppingPurchaseGroup
 	HasSavedRecipes      bool
 	Finalized            bool
 	ServerSignedIn       bool
