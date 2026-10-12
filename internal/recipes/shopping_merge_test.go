@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/locations"
 
 	"github.com/stretchr/testify/assert"
@@ -17,9 +18,9 @@ import (
 
 type countingShoppingMerger struct{ calls int }
 
-func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
+func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	m.calls++
-	return (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, ingredients)
+	return (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, ingredients, catalog)
 }
 
 func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
@@ -27,21 +28,21 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
 	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 cloves"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
-	first, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
+	first, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
-	second, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
+	second, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
-	assert.Equal(t, "3 cloves", first[0].Items[0].Quantity)
+	assert.Equal(t, "3 cloves", first[0].Items[0].Needed.Quantity)
 	assert.Equal(t, first, second)
-	_, err = s.mergedShoppingList(t.Context(), "final-hash", append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"}))
+	_, err = s.mergedShoppingList(t.Context(), "final-hash", append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"}), []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 2, merger.calls)
 	ingredients[0].Price = "$3"
-	updated, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
+	updated, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 3, merger.calls)
-	assert.Equal(t, "$3", updated[0].Items[0].Price)
+	assert.Equal(t, "$3", updated[0].Items[0].Needed.Price)
 }
 
 func TestFinalizedShoppingSection(t *testing.T) {
@@ -63,15 +64,15 @@ func TestFinalizedShoppingSection(t *testing.T) {
 	}
 }
 
-type shoppingMergerFunc func(context.Context, []ai.Ingredient) ([]ai.Ingredient, error)
+type shoppingMergerFunc func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 
-func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
-	return f(ctx, ingredients)
+func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+	return f(ctx, ingredients, catalog)
 }
 
 func TestShoppingQuantitiesRetriesMergeFailure(t *testing.T) {
 	s := newTestServer(t)
-	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient) ([]ai.Ingredient, error) {
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		return nil, errors.New("AI unavailable")
 	})
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
@@ -96,4 +97,110 @@ func TestShoppingQuantitiesRejectsUnfinalizedList(t *testing.T) {
 	rr := httptest.NewRecorder()
 	s.handleShoppingQuantities(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestShoppingPurchaseCacheTracksCatalogMetadata(t *testing.T) {
+	s := newTestServer(t)
+	merger := &countingShoppingMerger{}
+	s.shoppingMerger = merger
+	needs := []ai.Ingredient{{ProductID: "pork", Name: "Pork", Quantity: "24 oz"}}
+	price := float32(6)
+	catalog := []ai.InputIngredient{{ProductID: "pork", Description: "Pork", Size: "32 oz", PriceRegular: &price}}
+	first, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	require.NoError(t, err)
+	second, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+	assert.Equal(t, 1, merger.calls)
+	catalog[0].Size = "16 oz"
+	resized, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	require.NoError(t, err)
+	assert.Equal(t, 2, merger.calls)
+	assert.Equal(t, "16 oz", resized[0].Items[0].Product.Size)
+	sale := float32(3)
+	catalog[0].PriceSale = &sale
+	repriced, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	require.NoError(t, err)
+	assert.Equal(t, 3, merger.calls)
+	assert.Equal(t, &sale, repriced[0].Items[0].Product.PriceSale)
+	catalog[0].Grade = &ai.IngredientGrade{Score: 10}
+	catalog[0].Embedding = ai.IngredientEmbedding{1, 2}
+	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	require.NoError(t, err)
+	assert.Equal(t, 3, merger.calls, "non-purchasing metadata should not trigger a merge")
+}
+
+func TestCachedShoppingCatalogUsesSavedStoreAndDate(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC))
+	p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{"red"}}, {Title: "Second dinner", WineStyles: []string{"red"}}}
+	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "small", Description: "Pork", Size: "16 oz"}, {ProductID: "large", Description: "Pork", Size: "32 oz", Grade: &ai.IngredientGrade{Score: 10}, Embedding: ai.IngredientEmbedding{1}}}))
+	require.NoError(t, s.SaveIngredients(t.Context(), "pantry/query-categories-v1/"+p.LocationHash(), []ai.InputIngredient{{ProductID: "salt", Description: "Salt"}, {ProductID: "small", Description: "Pork", Size: "16 oz"}}))
+	require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey([]string{"red"}, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", Description: "Red wine", Size: "750 ml"}}))
+	got, err := s.cachedShoppingCatalog(t.Context(), p)
+	require.NoError(t, err)
+	require.Len(t, got, 4)
+	assert.Equal(t, []string{"small", "large", "salt", "wine"}, []string{got[0].ProductID, got[1].ProductID, got[2].ProductID, got[3].ProductID})
+	assert.Nil(t, got[1].Grade)
+	assert.Nil(t, got[1].Embedding)
+	other := *p
+	other.Date = p.Date.AddDate(0, 0, 1)
+	got, err = s.cachedShoppingCatalog(t.Context(), &other)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	other = *p
+	other.Location = &locations.Location{ID: "walmart_999"}
+	got, err = s.cachedShoppingCatalog(t.Context(), &other)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestShoppingCatalogCorruptionStopsMerge(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "24 oz"}}}}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.Cache.Put(t.Context(), ingredientsCachePrefix+p.LocationHash(), "invalid JSON", cache.Unconditional()))
+	_, _, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
+	require.ErrorContains(t, err, "load shopping catalog")
+}
+
+func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "small", Name: "Pork", Quantity: "24 oz"}, {Name: "Saffron", Quantity: "1 pinch"}}}}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "large", Description: "Pork & herbs", Size: "32 oz", AisleNumber: "Meat"}}))
+	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		require.Len(t, catalog, 1)
+		return []ai.ShoppingItem{{Needed: needs[0], Product: &catalog[0], BuyQuantity: "1 package"}, {Needed: needs[1]}}, nil
+	})
+	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
+	req.SetPathValue("hash", p.Hash())
+	rr := httptest.NewRecorder()
+	s.handleShoppingQuantities(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Contains(t, body, "Pork &amp; herbs")
+	assert.Contains(t, body, "32 oz")
+	assert.Contains(t, body, "Buy 1 package")
+	assert.Contains(t, body, "Needed for recipes: 24 oz")
+	assert.Contains(t, body, "Saffron")
+	assert.Contains(t, body, "1 pinch")
+	isValidHTML(t, body)
+}
+
+func TestFinalizedShoppingInputsIncludeWine(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+	p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{"red"}, Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "24 oz"}}}}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
+	require.NoError(t, s.SaveWine(t.Context(), p.Saved[0].ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine}}))
+	require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey([]string{"red"}, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", Description: "Red wine", Size: "750 ml"}}))
+	needs, catalog, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
+	require.NoError(t, err)
+	assert.Contains(t, needs, wine)
+	require.Len(t, catalog, 1)
+	assert.Equal(t, "wine", catalog[0].ProductID)
 }

@@ -177,3 +177,31 @@ func compareShoppingAisles(a, b string) int {
 	}
 	return cmp.Compare(a, b)
 }
+
+type shoppingPurchaseGroup struct {
+	Aisle string
+	Items []ai.ShoppingItem
+}
+
+func shoppingPurchaseAisle(item ai.ShoppingItem) string {
+	if item.Product != nil {
+		return strings.TrimSpace(item.Product.AisleNumber)
+	}
+	return strings.TrimSpace(item.Needed.AisleNumber)
+}
+
+func shoppingPurchasesForDisplay(items []ai.ShoppingItem) []shoppingPurchaseGroup {
+	sorted := slices.Clone(items)
+	slices.SortStableFunc(sorted, func(a, b ai.ShoppingItem) int {
+		return compareShoppingAisles(shoppingPurchaseAisle(a), shoppingPurchaseAisle(b))
+	})
+	groups := make([]shoppingPurchaseGroup, 0)
+	for _, item := range sorted {
+		heading := shoppingAisleHeading(shoppingPurchaseAisle(item))
+		if len(groups) == 0 || groups[len(groups)-1].Aisle != heading {
+			groups = append(groups, shoppingPurchaseGroup{Aisle: heading})
+		}
+		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
+	}
+	return groups
+}

@@ -16,27 +16,46 @@ import (
 	"careme/internal/templates"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v2/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v3/"
 
 type ShoppingQuantityMerger interface {
-	MergeShoppingQuantities(context.Context, []ai.Ingredient) ([]ai.Ingredient, error)
+	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
 // SimpleShoppingQuantityMerger is used by the local mock server.
 type SimpleShoppingQuantityMerger struct{}
 
-func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
-	result := make([]ai.Ingredient, 0)
+func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+	result := make([]ai.ShoppingItem, 0)
+	products := make(map[string]ai.InputIngredient)
+	for _, product := range catalog {
+		if product.ProductID != "" {
+			products[product.ProductID] = product
+		}
+	}
 	for _, group := range shoppingListForDisplay(ingredients) {
-		for _, item := range group.Items {
-			result = append(result, *item)
+		for _, needed := range group.Items {
+			item := ai.ShoppingItem{Needed: *needed}
+			if product, ok := products[needed.ProductID]; ok {
+				item.Product = &product
+			}
+			result = append(result, item)
 		}
 	}
 	return result, nil
 }
 
-func shoppingQuantityFingerprint(ingredients []ai.Ingredient) (string, error) {
-	ingredientBytes, err := json.Marshal(ingredients)
+func shoppingQuantityFingerprint(ingredients []ai.Ingredient, catalog []ai.InputIngredient) (string, error) {
+	products := make([]ai.InputIngredient, len(catalog))
+	for i, product := range catalog {
+		product.Grade = nil
+		product.Embedding = nil
+		products[i] = product
+	}
+	ingredientBytes, err := json.Marshal(struct {
+		Ingredients []ai.Ingredient      `json:"ingredients"`
+		Catalog     []ai.InputIngredient `json:"catalog"`
+	}{ingredients, products})
 	if err != nil {
 		return "", fmt.Errorf("marshal shopping ingredients: %w", err)
 	}
@@ -44,13 +63,13 @@ func shoppingQuantityFingerprint(ingredients []ai.Ingredient) (string, error) {
 	return hex.EncodeToString(fingerprint[:]), nil
 }
 
-func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient) ([]shoppingListGroup, error) {
-	fingerprint, err := shoppingQuantityFingerprint(ingredients)
+func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
+	fingerprint, err := shoppingQuantityFingerprint(ingredients, catalog)
 	if err != nil {
 		return nil, err
 	}
 	key := shoppingQuantityCachePrefix + hash + "/" + fingerprint
-	var merged []ai.Ingredient
+	var merged []ai.ShoppingItem
 	reader, err := s.Cache.Get(ctx, key)
 	switch {
 	case err == nil:
@@ -62,7 +81,7 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 		if s.shoppingMerger == nil {
 			return nil, fmt.Errorf("shopping quantity merger unavailable")
 		}
-		merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients)
+		merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
 		if err != nil {
 			return nil, err
 		}
@@ -86,38 +105,42 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 	default:
 		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
 	}
-	return shoppingListForDisplay(merged), nil
+	return shoppingPurchasesForDisplay(merged), nil
 }
 
-func (s *server) finalizedShoppingIngredients(ctx context.Context, hash string) ([]ai.Ingredient, error) {
+func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, error) {
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
-		return nil, fmt.Errorf("load finalized shopping list: %w", err)
+		return nil, nil, fmt.Errorf("load finalized shopping list: %w", err)
 	}
 	if len(p.Saved) == 0 {
-		return nil, fmt.Errorf("shopping list is not finalized")
+		return nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
 		wine, err := s.WineFromCache(ctx, recipe.ComputeHash())
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			return nil, fmt.Errorf("load wine: %w", err)
+			return nil, nil, fmt.Errorf("load wine: %w", err)
 		}
 		ingredients = append(ingredients, ingredientsForDisplay(recipe.Ingredients, wine)...)
 	}
-	return ingredients, nil
+	catalog, err := s.cachedShoppingCatalog(ctx, p)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ingredients, catalog, nil
 }
 
 func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request) {
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	ingredients, err := s.finalizedShoppingIngredients(r.Context(), hash)
+	ingredients, catalog, err := s.finalizedShoppingInputs(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
 		return
 	}
-	list, err := s.mergedShoppingList(r.Context(), hash, ingredients)
-	view := shoppingListPageView{Hash: hash, ShoppingList: list, HasSavedRecipes: true}
-	name := "shopping_list_section"
+	list, err := s.mergedShoppingList(r.Context(), hash, ingredients, catalog)
+	view := shoppingListPageView{Hash: hash, Purchases: list, HasSavedRecipes: true}
+	name := "shopping_purchase_section"
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to merge shopping quantities", "hash", hash, "error", err)
 		name = "shopping_quantity_error"
@@ -125,4 +148,40 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 	if err := templates.ShoppingList.ExecuteTemplate(w, name, view); err != nil {
 		slog.ErrorContext(r.Context(), "render shopping quantities", "error", err)
 	}
+}
+
+// Catalog snapshots are optional candidates. Missing snapshots leave needs unresolved.
+func (s *server) cachedShoppingCatalog(ctx context.Context, p *generatorParams) ([]ai.InputIngredient, error) {
+	keys := []string{p.LocationHash(), "pantry/query-categories-v1/" + p.LocationHash()}
+	for _, recipe := range p.Saved {
+		if styles := normalizedWineStyles(recipe.WineStyles); len(styles) > 0 {
+			keys = append(keys, wineStylesCacheKey(styles, p.Location.ID, p.Date))
+		}
+	}
+	products := make([]ai.InputIngredient, 0)
+	seenKeys := make(map[string]bool)
+	seenProducts := make(map[string]bool)
+	for _, key := range keys {
+		if seenKeys[key] {
+			continue
+		}
+		seenKeys[key] = true
+		candidates, err := s.IngredientsFromCache(ctx, key)
+		if errors.Is(err, cache.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load shopping catalog %s: %w", key, err)
+		}
+		for _, product := range candidates {
+			if product.ProductID == "" || seenProducts[product.ProductID] {
+				continue
+			}
+			seenProducts[product.ProductID] = true
+			product.Grade = nil
+			product.Embedding = nil
+			products = append(products, product)
+		}
+	}
+	return products, nil
 }

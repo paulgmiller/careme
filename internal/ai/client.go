@@ -24,6 +24,7 @@ type client struct {
 	recipeSchema          map[string]any
 	wineSchema            map[string]any
 	menuSchema            map[string]any
+	shoppingSchema        map[string]any
 	model                 openai.ResponsesModel
 	imageModel            openai.ImageModel
 	wineModel             string
@@ -66,6 +67,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
+		shoppingSchema: shoppingIngredientsJSONSchema(),
 		model:          model,
 		imageModel:     imageModel,
 		wineModel:      defaultWineModel,
