@@ -2,8 +2,6 @@ package recipes
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,31 +33,10 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 	return result, nil
 }
 
-func shoppingQuantityFingerprint(ingredients []ai.Ingredient, catalog []ai.InputIngredient) (string, error) {
-	products := make([]ai.InputIngredient, len(catalog))
-	for i, product := range catalog {
-		product.Grade = nil
-		product.Embedding = nil
-		products[i] = product
-	}
-	ingredientBytes, err := json.Marshal(struct {
-		Ingredients []ai.Ingredient      `json:"ingredients"`
-		Catalog     []ai.InputIngredient `json:"catalog"`
-	}{ingredients, products})
-	if err != nil {
-		return "", fmt.Errorf("marshal shopping ingredients: %w", err)
-	}
-	fingerprint := sha256.Sum256(ingredientBytes)
-	return hex.EncodeToString(fingerprint[:]), nil
-}
-
 func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
-	fingerprint, err := shoppingQuantityFingerprint(ingredients, catalog)
-	if err != nil {
-		return nil, err
-	}
-	key := shoppingQuantityCachePrefix + hash + "/" + fingerprint
+	// Keep the first successful merge as the finalized list's snapshot.
+	key := shoppingQuantityCachePrefix + hash
 	var merged []ai.ShoppingItem
 	reader, err := s.Cache.Get(ctx, key)
 	switch {

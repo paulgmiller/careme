@@ -35,13 +35,20 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	assert.Equal(t, 1, merger.calls)
 	assert.Equal(t, "3 cloves", first[0].Items[0].Needed)
 	assert.Equal(t, first, second)
-	_, err = s.mergedShoppingList(t.Context(), "final-hash", append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"}), []ai.InputIngredient{})
+	reader, err := s.Cache.Get(t.Context(), shoppingQuantityCachePrefix+"final-hash")
+	require.NoError(t, err, "store the merge directly under the finalized hash")
+	require.NoError(t, reader.Close())
+
+	updated := append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"})
+	cached, err := s.mergedShoppingList(t.Context(), "final-hash", updated, []ai.InputIngredient{})
 	require.NoError(t, err)
-	assert.Equal(t, 2, merger.calls)
-	ingredients[0].Price = "$3"
-	_, err = s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	assert.Equal(t, first, cached, "the finalized list retains its first successful merge")
+	assert.Equal(t, 1, merger.calls)
+
+	newList, err := s.mergedShoppingList(t.Context(), "different-final-hash", updated, []ai.InputIngredient{})
 	require.NoError(t, err)
-	assert.Equal(t, 3, merger.calls)
+	assert.Equal(t, 2, merger.calls, "a different finalized hash gets its own merge")
+	assert.NotEqual(t, first, newList)
 }
 
 func TestFinalizedShoppingSection(t *testing.T) {
@@ -98,7 +105,7 @@ func TestShoppingQuantitiesRejectsUnfinalizedList(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
-func TestShoppingPurchaseCacheTracksCatalogMetadata(t *testing.T) {
+func TestShoppingPurchaseCacheRetainsFinalizedSnapshot(t *testing.T) {
 	s := newTestServer(t)
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
@@ -114,17 +121,17 @@ func TestShoppingPurchaseCacheTracksCatalogMetadata(t *testing.T) {
 	catalog[0].Size = "16 oz"
 	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
-	assert.Equal(t, 2, merger.calls)
+	assert.Equal(t, 1, merger.calls)
 	sale := float32(3)
 	catalog[0].PriceSale = &sale
 	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
-	assert.Equal(t, 3, merger.calls)
+	assert.Equal(t, 1, merger.calls)
 	catalog[0].Grade = &ai.IngredientGrade{Score: 10}
 	catalog[0].Embedding = ai.IngredientEmbedding{1, 2}
 	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
-	assert.Equal(t, 3, merger.calls, "non-purchasing metadata should not trigger a merge")
+	assert.Equal(t, 1, merger.calls, "catalog changes should not regenerate the finalized snapshot")
 }
 
 func TestCachedShoppingCatalogUsesSavedStoreAndDate(t *testing.T) {
