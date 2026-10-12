@@ -227,7 +227,4 @@ func TestShoppingListForDisplayUsesProductIdentity(t *testing.T) {
 		{ProductID: "second", Name: "Kroger Lemon", Quantity: "2"},
 		{Name: "Salt", Quantity: "3 tsp"},
 	}, groups[0].Items)
-	quantityGroups := shoppingQuantityGroups(items)
-	assert.Len(t, quantityGroups, 3)
-	assert.Equal(t, []string{"1", "3"}, quantityGroups[0].Quantities)
 }

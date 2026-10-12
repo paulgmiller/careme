@@ -17,20 +17,16 @@ import (
 
 type countingShoppingMerger struct{ calls int }
 
-func (m *countingShoppingMerger) MergeShoppingQuantities(_ context.Context, groups []ai.ShoppingQuantityGroup) (map[string]string, error) {
+func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
 	m.calls++
-	result := make(map[string]string)
-	for _, group := range groups {
-		result[group.Key] = "3 cloves"
-	}
-	return result, nil
+	return (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, ingredients)
 }
 
 func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	s := newTestServer(t)
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
-	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 clove"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
+	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 cloves"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
 	first, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
 	require.NoError(t, err)
 	second, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
@@ -41,6 +37,11 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	_, err = s.mergedShoppingList(t.Context(), "final-hash", append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"}))
 	require.NoError(t, err)
 	assert.Equal(t, 2, merger.calls)
+	ingredients[0].Price = "$3"
+	updated, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients)
+	require.NoError(t, err)
+	assert.Equal(t, 3, merger.calls)
+	assert.Equal(t, "$3", updated[0].Items[0].Price)
 }
 
 func TestFinalizedShoppingSection(t *testing.T) {
@@ -62,15 +63,15 @@ func TestFinalizedShoppingSection(t *testing.T) {
 	}
 }
 
-type shoppingMergerFunc func(context.Context, []ai.ShoppingQuantityGroup) (map[string]string, error)
+type shoppingMergerFunc func(context.Context, []ai.Ingredient) ([]ai.Ingredient, error)
 
-func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, groups []ai.ShoppingQuantityGroup) (map[string]string, error) {
-	return f(ctx, groups)
+func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
+	return f(ctx, ingredients)
 }
 
 func TestShoppingQuantitiesRetriesMergeFailure(t *testing.T) {
 	s := newTestServer(t)
-	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.ShoppingQuantityGroup) (map[string]string, error) {
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient) ([]ai.Ingredient, error) {
 		return nil, errors.New("AI unavailable")
 	})
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
@@ -95,13 +96,4 @@ func TestShoppingQuantitiesRejectsUnfinalizedList(t *testing.T) {
 	rr := httptest.NewRecorder()
 	s.handleShoppingQuantities(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
-}
-
-func TestMergedShoppingListRequiresEveryQuantity(t *testing.T) {
-	s := newTestServer(t)
-	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.ShoppingQuantityGroup) (map[string]string, error) {
-		return map[string]string{}, nil
-	})
-	_, err := s.mergedShoppingList(t.Context(), "missing", []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}})
-	require.ErrorContains(t, err, "missing merged shopping quantity")
 }

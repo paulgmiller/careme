@@ -29,7 +29,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `shopping_quantities/v1/` | JSON merged quantities keyed by finalized shopping-list hash and ingredient-group fingerprint, so later wine picks get a fresh merge | Shopping-list quantity endpoint | Finalized shopping lists |
+| `shopping_quantities/v2/` | JSON `[]ai.Ingredient` with merged quantities keyed by finalized shopping-list hash and ingredient fingerprint, so later wine picks get a fresh merge | Shopping-list quantity endpoint | Finalized shopping lists |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -110,6 +110,7 @@ Recipe hashes are used by or stored in:
 
 Compatibility implications:
 
+- Shopping quantity merges use `shopping_quantities/v2/` to store ingredient lists instead of the legacy `v1` quantity maps. Legacy entries are not read. The fingerprint covers the full input ingredients, including metadata, so cached merged ingredients stay current.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.

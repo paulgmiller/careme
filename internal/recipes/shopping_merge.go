@@ -16,79 +16,57 @@ import (
 	"careme/internal/templates"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v1/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v2/"
 
 type ShoppingQuantityMerger interface {
-	MergeShoppingQuantities(context.Context, []ai.ShoppingQuantityGroup) (map[string]string, error)
+	MergeShoppingQuantities(context.Context, []ai.Ingredient) ([]ai.Ingredient, error)
 }
 
 // SimpleShoppingQuantityMerger is used by the local mock server.
 type SimpleShoppingQuantityMerger struct{}
 
-func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, groups []ai.ShoppingQuantityGroup) (map[string]string, error) {
-	result := make(map[string]string, len(groups))
-	for _, group := range groups {
-		quantity := ""
-		for _, amount := range group.Quantities {
-			quantity = mergeShoppingQuantities(quantity, amount)
+func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient) ([]ai.Ingredient, error) {
+	result := make([]ai.Ingredient, 0)
+	for _, group := range shoppingListForDisplay(ingredients) {
+		for _, item := range group.Items {
+			result = append(result, *item)
 		}
-		result[group.Key] = quantity
 	}
 	return result, nil
 }
 
-func shoppingQuantityGroups(ingredients []ai.Ingredient) []ai.ShoppingQuantityGroup {
-	groups := make([]ai.ShoppingQuantityGroup, 0)
-	indexes := make(map[string]int)
-	for _, item := range ingredients {
-		key := shoppingListKey(item)
-		if normalizeShoppingListName(item.Name) == "" {
-			continue
-		}
-		index, found := indexes[key]
-		if !found {
-			index = len(groups)
-			indexes[key] = index
-			groups = append(groups, ai.ShoppingQuantityGroup{Key: key, Name: item.Name})
-		}
-		groups[index].Quantities = append(groups[index].Quantities, strings.TrimSpace(item.Quantity))
-	}
-	return groups
-}
-
 func shoppingQuantityFingerprint(ingredients []ai.Ingredient) (string, error) {
-	groupBytes, err := json.Marshal(shoppingQuantityGroups(ingredients))
+	ingredientBytes, err := json.Marshal(ingredients)
 	if err != nil {
-		return "", fmt.Errorf("marshal shopping quantity groups: %w", err)
+		return "", fmt.Errorf("marshal shopping ingredients: %w", err)
 	}
-	fingerprint := sha256.Sum256(groupBytes)
+	fingerprint := sha256.Sum256(ingredientBytes)
 	return hex.EncodeToString(fingerprint[:]), nil
 }
 
 func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient) ([]shoppingListGroup, error) {
-	quantityGroups := shoppingQuantityGroups(ingredients)
 	fingerprint, err := shoppingQuantityFingerprint(ingredients)
 	if err != nil {
 		return nil, err
 	}
 	key := shoppingQuantityCachePrefix + hash + "/" + fingerprint
-	var amounts map[string]string
+	var merged []ai.Ingredient
 	reader, err := s.Cache.Get(ctx, key)
 	switch {
 	case err == nil:
 		defer func() { _ = reader.Close() }()
-		if err := json.NewDecoder(reader).Decode(&amounts); err != nil {
+		if err := json.NewDecoder(reader).Decode(&merged); err != nil {
 			return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 		}
 	case errors.Is(err, cache.ErrNotFound):
 		if s.shoppingMerger == nil {
 			return nil, fmt.Errorf("shopping quantity merger unavailable")
 		}
-		amounts, err = s.shoppingMerger.MergeShoppingQuantities(ctx, quantityGroups)
+		merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients)
 		if err != nil {
 			return nil, err
 		}
-		body, err := json.Marshal(amounts)
+		body, err := json.Marshal(merged)
 		if err != nil {
 			return nil, err
 		}
@@ -101,24 +79,14 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 				return nil, fmt.Errorf("load concurrent shopping merge: %w", err)
 			}
 			defer func() { _ = winner.Close() }()
-			if err := json.NewDecoder(winner).Decode(&amounts); err != nil {
+			if err := json.NewDecoder(winner).Decode(&merged); err != nil {
 				return nil, fmt.Errorf("decode concurrent shopping merge: %w", err)
 			}
 		}
 	default:
 		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
 	}
-	list := shoppingListForDisplay(ingredients)
-	for _, group := range list {
-		for _, item := range group.Items {
-			quantity, ok := amounts[shoppingListKey(*item)]
-			if !ok {
-				return nil, fmt.Errorf("missing merged shopping quantity for %q", item.Name)
-			}
-			item.Quantity = quantity
-		}
-	}
-	return list, nil
+	return shoppingListForDisplay(merged), nil
 }
 
 func (s *server) finalizedShoppingIngredients(ctx context.Context, hash string) ([]ai.Ingredient, error) {
