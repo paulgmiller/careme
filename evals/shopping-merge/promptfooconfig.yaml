@@ -15,14 +15,17 @@ defaultTest:
         const items = JSON.parse(output);
         if (items.length !== 1) return { pass: false, score: 0, reason: 'Expected one shopping item' };
         const item = items[0];
-        const quantity = item.quantity.toLowerCase().trim().replace(/\s+/g, ' ');
-        const pass = context.vars.expected.quantities.includes(quantity)
+        const quantity = item.needed.toLowerCase().trim().replace(/\s+/g, ' ');
+        const buyMatches = context.vars.expected.buy === null
+          ? item.buy === null
+          : typeof item.buy === "number" && context.vars.expected.buy.includes(item.buy);
+        const pass = buyMatches && context.vars.expected.quantities.includes(quantity)
           && context.vars.expected.names.includes(item.name.toLowerCase())
           && item.id === context.vars.expected.product_id;
         return {
           pass,
           score: pass ? 1 : 0,
-          reason: `Shopping amount: ${item.name}, ${item.quantity}`,
+          reason: `Shopping amount: ${item.name}, ${item.needed}`,
         };
 tests:
   - description: Singular and plural onion names; half onion is an annotation of four ounces
@@ -66,7 +69,8 @@ tests:
         product_id: "0000000004093"
         # This catalog does not explicitly identify whether loose produce is sold by weight.
         names: [jumbo yellow onion, jumbo yellow onions, yellow onion, yellow onions, onion, onions]
-        quantities: [1 lb, 1 pound, 16 oz, 16 ounces, 0.5 lb, 0.5 pounds, ½ pound, 1/2 lb, 8 oz, 8 ounces]
+        buy: [0.5, 1]
+        quantities: [8 oz, 8 ounces, 0.5 lb, 0.5 pounds]
   - description: Divided oil is counted once; Unicode half tablespoon is added
     vars:
       ingredients:
@@ -76,9 +80,10 @@ tests:
       catalog: []
       expected:
         product_id: ""
+        buy: null
         names: [olive oil]
         quantities: [4.5 tablespoons, 4½ tablespoons, 4 1/2 tablespoons, 4.5 tbsp, 4½ tbsp, 4 1/2 tbsp, 13.5 teaspoons, 13½ teaspoons, 13.5 tsp, 2.25 fl oz]
-  - description: Round a 40-ounce need to three 16-ounce portions and return the total weight
+  - description: Round a 40-ounce need to three 16-ounce portions and return the numeric multiple
     vars:
       ingredients:
         - { id: pork, name: Ground pork, quantity: 16 oz }
@@ -88,4 +93,5 @@ tests:
       expected:
         product_id: pork
         names: [ground pork]
-        quantities: [48 oz, 48 ounces]
+        buy: [3]
+        quantities: [40 oz, 40 ounces]

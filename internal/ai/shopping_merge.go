@@ -10,8 +10,17 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
+// ShoppingItem separates the recipe amount from a numeric multiple of catalog size.
+// Buy is nil for pantry items, missing sizes, and uncertain conversions.
+type ShoppingItem struct {
+	ProductID string   `json:"id"`
+	Name      string   `json:"name"`
+	Needed    string   `json:"needed"`
+	Buy       *float64 `json:"buy" jsonschema:"anyof_type=number;null"`
+}
+
 type shoppingIngredientsResponse struct {
-	Items []Ingredient `json:"items"`
+	Items []ShoppingItem `json:"items"`
 }
 
 // MatchingShoppingCatalog keeps only products referenced by recipe ingredient IDs.
@@ -31,18 +40,20 @@ func MatchingShoppingCatalog(ingredients []Ingredient, catalog []InputIngredient
 	return matched
 }
 
-const shoppingPurchaseInstructions = `Merge the recipe ingredients into a shopping list using the supplied matching catalog.
+const shoppingPurchaseInstructions = `Merge the recipe ingredients using the supplied matching catalog.
 Combine entries with the same nonempty product id, and equivalent pantry foods without ids. Keep different product ids and incompatible forms distinct. Convert compatible units only when unambiguous; preserve distinct amounts when conversion is uncertain. Return each item's original id and first name; pantry items use an empty id.
-The output quantity is the total amount to buy, expressed as a number with its unit, not a package count or a separate recipe requirement. For fixed-size catalog products, round up to the smallest whole multiple of the catalog size that covers the combined recipe amount and express the total in the catalog size's units. For example, 24 oz needed with a 32 oz size returns "32 oz"; 40 oz needed with a 16 oz size returns "48 oz". For count-based sizes use the total count, such as "12 eggs" for two 6-egg cartons. Do not include "package", "packages", "carton", or container counts in the output quantity.
-For products sold by weight, return the weight to buy itself, such as "0.5 lb" for an 8 oz need, without rounding to a package size. Only use this rule when the catalog indicates the product is sold by weight. Never invent a product, size, or conversion. Never assume weight per clove, bunch, cup, or other ambiguous form.
-For pantry items, missing catalog products, or uncertain package conversions, return the combined recipe amount as quantity. Usage notes such as "divided" do not add quantities. Remove or update approximate count annotations when merging changes their amount. Return every item in items.`
+needed is the combined recipe amount with units, before rounding for purchases. Usage notes such as "divided" do not add quantities. Remove or update approximate count annotations when merging changes their amount.
+buy is a JSON number giving the multiple of the matching catalog product's size to buy. It must have no units or words. For fixed-size products, round up to the smallest whole multiple that covers needed: 40 oz needed with a 16 oz size means needed="40 oz", buy=3; 24 oz needed with a 32 oz size means buy=1. For count-based sizes, 10 eggs needed with a 6-egg size means buy=2.
+For products sold by weight, buy may be fractional: 8 oz needed for a product priced per 1 lb means buy=0.5. Only use fractional buying when the catalog indicates sale by weight. Never invent a size or conversion; never assume weight per clove, bunch, or cup.
+Set buy to null for pantry items, missing catalog products, empty sizes, or uncertain conversions. Retain needed for all items. Return every item in items.`
 
 // MergeShoppingQuantities returns shopping amounts using a pre-matched catalog.
-func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingredient, catalog []InputIngredient) ([]Ingredient, error) {
+func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingredient, catalog []InputIngredient) ([]ShoppingItem, error) {
 	if len(ingredients) == 0 {
-		return []Ingredient{}, nil
+		return []ShoppingItem{}, nil
 	}
 	products := make([]InputIngredient, len(catalog))
+	byID := make(map[string]InputIngredient, len(catalog))
 	ids := make(map[string]bool, len(ingredients))
 	for _, ingredient := range ingredients {
 		if ingredient.ProductID != "" {
@@ -53,6 +64,7 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 		product.Grade = nil
 		product.Embedding = nil
 		products[i] = product
+		byID[product.ProductID] = product
 	}
 	input, err := json.Marshal(struct {
 		Ingredients []Ingredient      `json:"ingredients"`
@@ -84,6 +96,15 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 	for _, item := range merged.Items {
 		if item.ProductID != "" && !ids[item.ProductID] {
 			return nil, fmt.Errorf("shopping merge returned unknown product %q", item.ProductID)
+		}
+		if item.Buy != nil {
+			product, ok := byID[item.ProductID]
+			if item.ProductID == "" || !ok || product.Size == "" {
+				return nil, fmt.Errorf("shopping buy quantity requires a catalog product with size for %q", item.Name)
+			}
+			if *item.Buy <= 0 {
+				return nil, fmt.Errorf("shopping buy quantity must be positive for %q", item.Name)
+			}
 		}
 	}
 	return merged.Items, nil

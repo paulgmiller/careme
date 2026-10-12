@@ -17,9 +17,9 @@ type fakeMerger struct {
 	err     error
 }
 
-func (m *fakeMerger) MergeShoppingQuantities(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
+func (m *fakeMerger) MergeShoppingQuantities(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	m.needs, m.catalog = needs, catalog
-	return []ai.Ingredient{{Name: "Onion", Quantity: "8 ounces"}}, m.err
+	return []ai.ShoppingItem{{Name: "Onion", Needed: "8 ounces"}}, m.err
 }
 
 func TestRunEval(t *testing.T) {
@@ -30,7 +30,7 @@ func TestRunEval(t *testing.T) {
 	require.Len(t, m.needs, 2)
 	assert.Equal(t, "4 ounces, about ½ medium onion", m.needs[1].Quantity)
 	assert.Empty(t, m.catalog)
-	assert.JSONEq(t, `[{"id":"","name":"Onion","quantity":"8 ounces"}]`, result["output"].(string))
+	assert.JSONEq(t, `[{"id":"","name":"Onion","needed":"8 ounces","buy":null}]`, result["output"].(string))
 	m.err = errors.New("API unavailable")
 	result, err = runEval(ctx, m)
 	require.ErrorContains(t, err, "merge shopping ingredients: API unavailable")

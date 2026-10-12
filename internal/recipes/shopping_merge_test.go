@@ -18,7 +18,7 @@ import (
 
 type countingShoppingMerger struct{ calls int }
 
-func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
+func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	m.calls++
 	return (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, ingredients, catalog)
 }
@@ -33,16 +33,15 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	second, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
-	assert.Equal(t, "3 cloves", first[0].Items[0].Quantity)
+	assert.Equal(t, "3 cloves", first[0].Items[0].Needed)
 	assert.Equal(t, first, second)
 	_, err = s.mergedShoppingList(t.Context(), "final-hash", append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"}), []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 2, merger.calls)
 	ingredients[0].Price = "$3"
-	updated, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	_, err = s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
 	assert.Equal(t, 3, merger.calls)
-	assert.Equal(t, "$3", updated[0].Items[0].Price)
 }
 
 func TestFinalizedShoppingSection(t *testing.T) {
@@ -64,15 +63,15 @@ func TestFinalizedShoppingSection(t *testing.T) {
 	}
 }
 
-type shoppingMergerFunc func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.Ingredient, error)
+type shoppingMergerFunc func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 
-func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
+func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	return f(ctx, ingredients, catalog)
 }
 
 func TestShoppingQuantitiesRetriesMergeFailure(t *testing.T) {
 	s := newTestServer(t)
-	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.Ingredient, error) {
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		return nil, errors.New("AI unavailable")
 	})
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
@@ -169,9 +168,9 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "pork", Name: "Pork", Quantity: "24 oz"}, {Name: "Saffron", Quantity: "1 pinch"}}}}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "pork", Description: "Pork & herbs", Size: "32 oz", AisleNumber: "Meat"}}))
-	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
+	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		require.Len(t, catalog, 1)
-		return []ai.Ingredient{{ProductID: needs[0].ProductID, Name: needs[0].Name, Quantity: "32 oz"}, needs[1]}, nil
+		return []ai.ShoppingItem{{ProductID: needs[0].ProductID, Name: needs[0].Name, Needed: needs[0].Quantity, Buy: buyNumber(1)}, {Name: needs[1].Name, Needed: needs[1].Quantity}}, nil
 	})
 	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
 	req.SetPathValue("hash", p.Hash())
@@ -180,10 +179,9 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	assert.Contains(t, body, "Pork &amp; herbs")
-	assert.Contains(t, body, "32 oz")
-	assert.Contains(t, body, "32 oz")
+	assert.Contains(t, body, "Buy 1 × 32 oz")
 	assert.NotContains(t, body, "Needed for recipes")
-	assert.NotContains(t, body, "24 oz")
+	assert.Contains(t, body, "Needed: 24 oz")
 	assert.Contains(t, body, "Saffron")
 	assert.Contains(t, body, "1 pinch")
 	isValidHTML(t, body)
@@ -207,11 +205,11 @@ func TestFinalizedShoppingInputsIncludeWine(t *testing.T) {
 func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	s := newTestServer(t)
 	calls := 0
-	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
+	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		calls++
 		require.Equal(t, []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}}, catalog)
 		require.Len(t, needs, 3, "send raw needs without deduplication")
-		return []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "1 lb"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}, nil
+		return []ai.ShoppingItem{{ProductID: "onion", Name: "Onion", Needed: "8 oz", Buy: buyNumber(1)}, {Name: "Olive oil", Needed: "4½ tbsp"}}, nil
 	})
 	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}
 	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil", Size: "16 fl oz"}}
@@ -223,3 +221,5 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, calls, "unmatched catalog metadata does not invalidate the merge")
 }
+
+func buyNumber(n float64) *float64 { return &n }

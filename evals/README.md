@@ -211,11 +211,10 @@ billing estimate.
 Run `./task.sh evals EVAL=shopping-merge -- --no-cache --output /tmp/shopping-merge-eval.json`.
 This tiny suite calls the production `MergeShoppingQuantities` path for onion
 and olive oil from [shopping list p37vV7PPvys](https://careme.cooking/recipes?h=p37vV7PPvys).
-It expects one onion shopping amount (0.5 lb if sold by weight, otherwise 1 lb)
-and 4½ tablespoons oil. A third case checks that a 40 oz need rounds to 48 oz
-for fixed 16 oz trays, returning total weight rather than package count. A short
-allowlist accepts common equivalent quantity spellings; other formats need review. The onion fixture includes four catalog
-products, but only the recipe's exact product ID is sent to the model.
-Olive oil uses an empty catalog and retains its merged recipe amount.
-Assertions are deterministic, with no judge call. Requires `AI_API_KEY` through
-the existing configuration.
+It checks merged needed amounts of 8 ounces onion and 4½ tablespoons oil.
+The onion buy value is numeric: 0.5 if sold by weight, otherwise 1. Pantry oil
+has buy=null. A third case checks needed="40 oz" and buy=3 for fixed 16 oz trays.
+A short allowlist accepts common equivalent needed quantity spellings; other
+formats need review. The onion fixture includes four catalog products, but only
+the recipe's exact product ID is sent to the model. Assertions are deterministic,
+with no judge call. Requires `AI_API_KEY` through the existing configuration.

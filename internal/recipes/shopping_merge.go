@@ -16,20 +16,20 @@ import (
 	"careme/internal/templates"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v5/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v6/"
 
 type ShoppingQuantityMerger interface {
-	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.Ingredient, error)
+	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
 // SimpleShoppingQuantityMerger is used by the local mock server.
 type SimpleShoppingQuantityMerger struct{}
 
-func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.Ingredient, error) {
-	result := make([]ai.Ingredient, 0)
+func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+	result := make([]ai.ShoppingItem, 0)
 	for _, group := range shoppingListForDisplay(ingredients) {
 		for _, ingredient := range group.Items {
-			result = append(result, *ingredient)
+			result = append(result, ai.ShoppingItem{ProductID: ingredient.ProductID, Name: ingredient.Name, Needed: ingredient.Quantity})
 		}
 	}
 	return result, nil
@@ -53,14 +53,14 @@ func shoppingQuantityFingerprint(ingredients []ai.Ingredient, catalog []ai.Input
 	return hex.EncodeToString(fingerprint[:]), nil
 }
 
-func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]shoppingListGroup, error) {
+func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	fingerprint, err := shoppingQuantityFingerprint(ingredients, catalog)
 	if err != nil {
 		return nil, err
 	}
 	key := shoppingQuantityCachePrefix + hash + "/" + fingerprint
-	var merged []ai.Ingredient
+	var merged []ai.ShoppingItem
 	reader, err := s.Cache.Get(ctx, key)
 	switch {
 	case err == nil:
@@ -96,17 +96,7 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 	default:
 		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
 	}
-	products := make(map[string]ai.InputIngredient, len(catalog))
-	for _, product := range catalog {
-		products[product.ProductID] = product
-	}
-	for i := range merged {
-		if product, ok := products[merged[i].ProductID]; ok {
-			merged[i].Name = product.Description
-			merged[i].AisleNumber = product.AisleNumber
-		}
-	}
-	return shoppingPurchasesForDisplay(merged), nil
+	return shoppingPurchasesForDisplay(merged, catalog), nil
 }
 
 func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, error) {
@@ -140,8 +130,8 @@ func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request
 		return
 	}
 	list, err := s.mergedShoppingList(r.Context(), hash, ingredients, catalog)
-	view := shoppingListPageView{Hash: hash, ShoppingList: list, HasSavedRecipes: true}
-	name := "shopping_list_section"
+	view := shoppingListPageView{Hash: hash, Purchases: list, HasSavedRecipes: true}
+	name := "shopping_purchase_section"
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to merge shopping quantities", "hash", hash, "error", err)
 		name = "shopping_quantity_error"

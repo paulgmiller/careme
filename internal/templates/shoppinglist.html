@@ -385,3 +385,29 @@
   </p>
 </section>
 {{end}}
+
+{{define "shopping_purchase_section"}}
+<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
+  <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
+  <div class="mt-4 space-y-5 text-ink-700">
+    {{range .Purchases}}
+    <section>
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-ink-500">{{.Aisle}}</h3>
+      <ul class="mt-2 space-y-2">
+        {{range .Items}}
+        <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+          <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-3">
+            <div>
+              <span class="font-medium text-brand-700">{{.Name}}</span>
+              {{if .Buy}}<p class="mt-1 text-xs text-ink-600">Needed: {{.Needed}}</p>{{end}}
+            </div>
+            <span class="text-xs text-ink-600 sm:text-right sm:text-sm">{{if .Buy}}Buy {{.Buy}} × {{.Size}}{{else}}{{.Needed}}{{end}}</span>
+          </div>
+        </li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+  </div>
+</section>
+{{end}}
