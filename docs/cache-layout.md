@@ -1,8 +1,8 @@
 # Cache Layout
 
-MNFoodClub includes `catalog-size-v1` in its signature hash to bypass ingredient
-snapshots created before package sizes were mapped. HEB and Whole Foods keep their
-existing signatures, so cached catalogs gain size data when fetched again.
+MNFoodClub, HEB, and Whole Foods keep their existing signature schemes for size
+mapping changes. Size fields may be empty in older cached catalogs or when the
+source does not provide a size; cached catalogs gain size data when fetched again.
 Existing finalized shopping lists retain their original snapshots. Farmers market
 sizes are extracted on new photo uploads; existing photo inventories are not
 reanalyzed automatically.
