@@ -447,7 +447,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	recipeWG.Wait()
 
-	purchases, err := s.cachedShoppingPurchases(ctx, hashParam, p)
+	purchases, err := s.cachedShoppingPurchases(ctx, hashParam)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
 		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)

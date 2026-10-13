@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -106,7 +105,7 @@ func TestFinalizeRetriesMergeFailure(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.NotEmpty(t, rr.Header().Get("HX-Redirect"))
 	assert.Equal(t, 1, merger.calls)
-	_, err = s.cachedShoppingPurchases(t.Context(), p.Hash(), p)
+	_, err = s.cachedShoppingPurchases(t.Context(), p.Hash())
 	require.NoError(t, err)
 }
 
@@ -192,6 +191,8 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Header().Get("HX-Redirect"), p.Hash())
 
+	// The finalized list must remain usable without any catalog snapshots.
+	require.NoError(t, s.Cache.Put(t.Context(), ingredientsCachePrefix+p.LocationHash(), "invalid JSON", cache.Unconditional()))
 	// A page load must use the snapshot without another model call.
 	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		t.Fatal("page load must not invoke the merger")
@@ -253,10 +254,13 @@ func buyNumber(n float64) *float64 { return &n }
 
 func cachedShoppingItems(t *testing.T, s *server, hash string) []ai.ShoppingItem {
 	t.Helper()
-	reader, err := s.Cache.Get(t.Context(), shoppingQuantityCachePrefix+hash)
+	groups, err := s.cachedShoppingPurchases(t.Context(), hash)
 	require.NoError(t, err)
-	defer func() { _ = reader.Close() }()
 	var items []ai.ShoppingItem
-	require.NoError(t, json.NewDecoder(reader).Decode(&items))
+	for _, group := range groups {
+		for _, item := range group.Items {
+			items = append(items, item.ShoppingItem)
+		}
+	}
 	return items
 }

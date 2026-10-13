@@ -10,7 +10,7 @@ import (
 	"careme/internal/cache"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v6/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v7/"
 
 type ShoppingQuantityMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
@@ -31,11 +31,11 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
-	var merged []ai.ShoppingItem
+	var purchases []shoppingPurchaseGroup
 	reader, err := s.Cache.Get(ctx, key)
 	if err == nil {
 		defer func() { _ = reader.Close() }()
-		if err := json.NewDecoder(reader).Decode(&merged); err != nil {
+		if err := json.NewDecoder(reader).Decode(&purchases); err != nil {
 			return fmt.Errorf("decode merged shopping quantities: %w", err)
 		}
 		return nil
@@ -45,11 +45,12 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 		return fmt.Errorf("load merged shopping quantities: %w", err)
 	}
 
-	merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
+	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
 	if err != nil {
 		return err
 	}
-	body, err := json.Marshal(merged)
+	purchases = shoppingPurchasesForDisplay(merged, catalog)
+	body, err := json.Marshal(purchases)
 	if err != nil {
 		return err
 	}
@@ -62,7 +63,7 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 			return fmt.Errorf("load concurrent shopping merge: %w", err)
 		}
 		defer func() { _ = winner.Close() }()
-		if err := json.NewDecoder(winner).Decode(&merged); err != nil {
+		if err := json.NewDecoder(winner).Decode(&purchases); err != nil {
 			return fmt.Errorf("decode concurrent shopping merge: %w", err)
 		}
 	}
@@ -94,21 +95,17 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 }
 
 // Loading a page never invokes the model; Build creates this snapshot.
-func (s *server) cachedShoppingPurchases(ctx context.Context, hash string, p *generatorParams) ([]shoppingPurchaseGroup, error) {
+func (s *server) cachedShoppingPurchases(ctx context.Context, hash string) ([]shoppingPurchaseGroup, error) {
 	reader, err := s.Cache.Get(ctx, shoppingQuantityCachePrefix+hash)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = reader.Close() }()
-	var items []ai.ShoppingItem
-	if err := json.NewDecoder(reader).Decode(&items); err != nil {
+	var purchases []shoppingPurchaseGroup
+	if err := json.NewDecoder(reader).Decode(&purchases); err != nil {
 		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 	}
-	catalog, err := s.cachedShoppingCatalog(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-	return shoppingPurchasesForDisplay(items, catalog), nil
+	return purchases, nil
 }
 
 // Catalog snapshots are optional candidates. Missing snapshots leave needs unresolved.
