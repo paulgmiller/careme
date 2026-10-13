@@ -402,15 +402,7 @@ func TestHandleRecipes_GuestSeesSaveButtonButNotHideButton(t *testing.T) {
 	s.handleRecipes(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
-	var guestCookie *http.Cookie
-	for _, cookie := range rr.Result().Cookies() {
-		if cookie.Name == guest.ShoppingListCookieName {
-			guestCookie = cookie
-			break
-		}
-	}
-	require.NotNil(t, guestCookie)
-	require.Equal(t, "0", guestCookie.Value)
+	assert.Empty(t, rr.Result().Cookies(), "viewing recipes must not initialize the guest allowance")
 	body := rr.Body.String()
 	require.Contains(t, body, `hx-post="/recipe/`+recipe.ComputeHash()+`/save"`)
 	require.Contains(t, body, `Add`)
@@ -614,7 +606,7 @@ func TestHandleGenerate_GuestCanGenerateWhenUnderCookieLimit(t *testing.T) {
 	}
 }
 
-func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing(t *testing.T) {
+func TestHandleGenerate_GuestStartsAllowanceWhenShoppingListCookieMissing(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -636,18 +628,24 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenGuestShoppingListCookieMissing
 	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/"), rr.Header().Get("Location"))
+	target, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/recipes", target.Path)
+	require.NotEmpty(t, target.Query().Get(queryArgHash))
+	cookies := rr.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, guest.ShoppingListCookieName, cookies[0].Name)
+	assert.Equal(t, "1", cookies[0].Value)
 	select {
 	case <-generator.called:
-		t.Fatal("expected guest generation without guest shopping list cookie not to start")
-	default:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected first guest generation to start")
 	}
-	if _, err := s.ParamsFromCache(t.Context(), DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60))).Hash()); !errors.Is(err, cache.ErrNotFound) {
-		t.Fatalf("expected params not to be saved, got %v", err)
-	}
+	_, err = s.ParamsFromCache(t.Context(), target.Query().Get(queryArgHash))
+	require.NoError(t, err)
 }
 
-func TestHandleGenerate_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
+func TestHandleGenerate_GuestResetsAllowanceWhenCookieInvalid(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
@@ -670,11 +668,18 @@ func TestHandleGenerate_GuestRedirectsToSignInWhenCookieInvalid(t *testing.T) {
 	s.handleGenerate(rr, req)
 
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, "/"), rr.Header().Get("Location"))
+	target, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "/recipes", target.Path)
+	assert.NotEmpty(t, target.Query().Get(queryArgHash))
+	cookies := rr.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, guest.ShoppingListCookieName, cookies[0].Name)
+	assert.Equal(t, "1", cookies[0].Value)
 	select {
 	case <-generator.called:
-		t.Fatal("expected invalid guest cookie not to start generation")
-	default:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected guest generation to start after resetting invalid cookie")
 	}
 }
 
@@ -2521,26 +2526,41 @@ func TestHandleRegenerate_PreparationFailureReturnsInternalServerError(t *testin
 	require.Equal(t, "failed to prepare regeneration\n", rr.Body.String())
 }
 
-func TestHandleRegenerate_GuestRedirectsToSignInWhenCookieMissing(t *testing.T) {
+func TestHandleRegenerate_GuestStartsAllowanceWhenCookieMissing(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
+	generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestClerk(noSessionAuth{}),
+		withTestGenerator(generator),
 	)
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store"}, time.Now())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+		Recipes: []ai.Recipe{{Title: "Original dinner"}},
+	}, p.Hash()))
 
-	req := httptest.NewRequest(http.MethodPost, "/recipes/origin-hash/regenerate", nil)
-	req.SetPathValue("hash", "origin-hash")
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/regenerate", nil)
+	req.SetPathValue("hash", p.Hash())
 	rr := httptest.NewRecorder()
 
 	s.handleRegenerate(rr, req)
 
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
-	}
-	returnTo := shoppingListArgs(map[string]string{queryArgHash: "origin-hash"})
-	if got, want := rr.Header().Get("Location"), auth.AccountRequiredPath(auth.AccountRequiredGenerationLimit, returnTo); got != want {
-		t.Fatalf("expected redirect location %q, got %q", want, got)
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	target, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "/recipes", target.Path)
+	assert.NotEmpty(t, target.Query().Get(queryArgHash))
+	assert.NotEqual(t, p.Hash(), target.Query().Get(queryArgHash))
+	cookies := rr.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, guest.ShoppingListCookieName, cookies[0].Name)
+	assert.Equal(t, "1", cookies[0].Value)
+	select {
+	case <-generator.called:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected guest regeneration to start")
 	}
 }
 

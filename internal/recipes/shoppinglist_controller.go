@@ -351,9 +351,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
-				if currentUser == nil {
-					guest.EnsureShoppingListCount(w, r)
-				}
 				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
 				return
 			}
@@ -417,9 +414,6 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 			return
 		}
 		selection = selection.override(userSelection)
-	}
-	if !signedIn && !progress.Generating {
-		guest.EnsureShoppingListCount(w, r)
 	}
 	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
 	maps.Copy(finishedRecipes, progress.Finished)
