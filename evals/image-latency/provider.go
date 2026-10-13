@@ -27,30 +27,30 @@ type imageGenerator interface {
 
 type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
-		return map[string]interface{}{"error": fmt.Sprintf("failed to encode Promptfoo context: %v", err)}, nil
+		return map[string]any{"error": fmt.Sprintf("failed to encode Promptfoo context: %v", err)}, nil
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		return map[string]interface{}{"error": fmt.Sprintf("failed to load configuration: %v", err)}, nil
+		return map[string]any{"error": fmt.Sprintf("failed to load configuration: %v", err)}, nil
 	}
 	if strings.TrimSpace(cfg.AI.APIKey) == "" {
-		return map[string]interface{}{"error": "AI_API_KEY is required for image latency evals"}, nil
+		return map[string]any{"error": "AI_API_KEY is required for image latency evals"}, nil
 	}
 
 	generator := ai.NewClient(cfg.AI, http.DefaultClient, nil)
 	result, err := runEval(body, generator, measureImageLatency)
 	if err != nil {
 		// Preserve errors in Promptfoo's Go wrapper, which otherwise hides them.
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (map[string]interface{}, error) {
+func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (map[string]any, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return nil, fmt.Errorf("failed to decode Promptfoo context: %w", err)
@@ -69,7 +69,7 @@ func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (ma
 	if err != nil {
 		return nil, fmt.Errorf("measure %s latency: %w", pf.Vars.ImageStyle, err)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"output": string(pf.Vars.ImageStyle),
 	}, nil
 }

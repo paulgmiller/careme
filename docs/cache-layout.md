@@ -31,9 +31,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `shopping_quantities/v1/` | JSON merged quantities keyed by finalized shopping-list hash and ingredient-group fingerprint, so later wine picks get a fresh merge | Kroger shopping-list quantity endpoint | Finalized Kroger list and cart transfer |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger OAuth callback and refresh | Kroger cart transfer |
 | `kroger_cart_transfers/` | JSON transfer status, submitted product names, and skipped ingredients keyed by Careme user ID and finalized list hash | Kroger cart transfer | Duplicate prevention and shopping-list confirmation |
+| `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler and Kroger cart transfer |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -114,6 +114,7 @@ Recipe hashes are used by or stored in:
 
 Compatibility implications:
 
+- Shopping purchase recommendations use `shopping_quantities/v7/`. Older quantity records are not read. Build merges and caches quantities before finalizing and redirecting; product names, sizes, and aisle details are saved with the merged list so page loads only read the cached result and never reload ingredient catalogs. The first successful merge is stored directly under the finalized shopping-list hash, which includes the selected recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to recipe product IDs before merging. Only cached staples for the saved plan’s store and date supply product sizes for food merging. Pantry and wine candidate catalogs are not read. The first wine pick from each saved recipe bypasses the merger and is appended unchanged to the cached list under Wine, with no buy calculation. Missing catalog snapshots leave needs unresolved; other cache errors stop the request.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.
@@ -149,7 +150,6 @@ Compatibility implications:
 - `internal/ingredients/cachekey.ForStore` owns the staple ingredient hash suffix, shared by recipe params and cached produce scoring. It uses raw URL-safe Base64 of FNV-64a over location ID, the supplied store date (`YYYY-MM-DD`), and backend staple signature, in that order. The `ingredients/` prefix and existing hashes are unchanged.
 - Live `mnfoodclub_*` store IDs use a backend signature computed as the lowercase hexadecimal SHA-256 hash of the ordered staple category URLs followed by the static produce share descriptions, joined with newlines (no trailing newline). The signature changes automatically when the URLs or static share inventory change. The catalog includes the first three pages of bestselling produce and meat plus one page each of pasta and seafood, and the static produce share ingredients. Each static entry includes its share name and carries a preassigned 10/10 grade; Small Seasonal collard greens are marked as a substitution. Wine candidates come from one page of the wines and wine alternatives category. They use the existing store-day `ingredients/` cache layout, with each full store ID retaining its own hash; there is no new container or prefix.
 - Kroger location entries use `location/kroger-v2/<store ID>`. This version invalidates legacy `location/<Kroger store ID>` entries so Kroger locations reload their API chain names. Legacy entries remain stored but are not read by Kroger lookups. Other providers retain their existing keys; Walmart relies on those entries because its backend does not support lookup by ID. Location snapshots inside saved recipe parameters are separate and retain their original values.
-
 - MNFoodClub delivery searches use the stable `mnfoodclub_delivery` ID with coordinates from the current search. All `mnfoodclub_*` IDs bypass reads and writes in the `location/` cache, including any previously cached search points. Lookup by ID resolves directly through the backend to its Blaine coordinates. Ingredient and recipe caches continue to use the stable store ID and backend staple signature.
 - Live `smithbrothersfarms_*` store IDs use the lowercase hexadecimal SHA-256 hash of the ordered produce, meat/poultry, organic harvest-box, and standard harvest-box URLs followed by the parser version (`v1`), joined with newlines with no trailing newline. They use the existing store-day `ingredients/` layout; no new cache container or key prefix is added. Box contents are fetched live on a cache miss and replace whole-box products. Synthetic ingredient IDs use `smithbrothersfarms_<box-slug>_<SHA-256 of bullet text>`, keeping the two boxes distinct and IDs stable across list reordering. Each box ingredient includes its box name and a preassigned 10/10 produce-share grade, with no individual price or quantity.
 - Smith Brothers Farms searches use the stable `smithbrothersfarms_delivery` ID with the current search coordinates in either approximate delivery box. All `smithbrothersfarms_*` IDs bypass reads and writes in `location/`. Lookup by the stable ID resolves to the Kent headquarters coordinates. Ingredient and recipe caches use the stable ID and backend signature; seasonal contents refresh on the next uncached store-day fetch.
@@ -167,7 +167,8 @@ on `ai.InputIngredient` (JSON `embeddings`), and their authoritative cache is
 include them. Prices, product IDs, brands, and grades are excluded from embedding
 input. Identical trimmed descriptions share an embedding across products/stores.
 
-Grade cache versions depend only on the grading model and prompt. Embedding keys
+Responses grade cache versions depend on the grading model and prompt; Decisions
+versions also include the rubric and score conversion. Embedding keys
 include the embedding model, dimensions, input format version, and SHA-256 of the
 trimmed description. Changing the grader reuses embeddings, while changing the
 embedding configuration leaves grades intact. Existing grades without vectors
@@ -180,7 +181,16 @@ The default ingredient grader changed from `gpt-5.6-luna` to `gpt-6-luna` on
 2026-09-29. This produces a different model-derived grade cache version in the
 existing `ingredient_grades/<cache_version>/` namespace; old grades and reviews
 remain under their original versions. `INGREDIENT_GRADING_MODEL` still selects an
-explicit model (including `jev`). Wine pairing now uses `gpt-6-luna`, while existing
+explicit model. Decisions grades use a separate cache version derived from the API
+version, `gpt-6-luna`, instruction, ten-level rubric, and score conversion. The
+review command uses the same version when `INGREDIENT_GRADING_MODEL=decisions`.
+Decisions sends independent per-ingredient requests with a shared limit of 64
+concurrent requests per grader instance.
+Decisions grades also store the API's per-level probabilities, preserving each
+zero-based value, label, and probability. The `probabilities-v1` cache version
+suffix ensures older grades without distributions are refreshed. The rubric,
+score conversion, and Responses grade versions are unchanged.
+Wine pairing now uses `gpt-6-luna`, while existing
 `wine_recommendations/<recipe_hash>` records remain valid and are reused.
 
 The ingredients CLI fetches the selected store's current staple catalog, reuses

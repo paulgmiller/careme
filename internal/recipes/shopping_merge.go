@@ -2,207 +2,88 @@ package recipes
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"net/url"
-	"strings"
 
 	"careme/internal/ai"
-	"careme/internal/auth"
 	"careme/internal/cache"
-	"careme/internal/locations"
-	"careme/internal/providers/kroger"
-	"careme/internal/templates"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v1/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v7/"
 
 type ShoppingQuantityMerger interface {
-	MergeShoppingQuantities(context.Context, []ai.ShoppingQuantityGroup) (map[string]string, error)
+	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
-// SimpleShoppingQuantityMerger is used by the local mock server.
+// SimpleShoppingQuantityMerger passes ingredients through for the local mock server.
 type SimpleShoppingQuantityMerger struct{}
 
-func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, groups []ai.ShoppingQuantityGroup) (map[string]string, error) {
-	result := make(map[string]string, len(groups))
-	for _, group := range groups {
-		quantity := ""
-		for _, amount := range group.Quantities {
-			quantity = mergeShoppingQuantities(quantity, amount)
-		}
-		result[group.Key] = quantity
+func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+	result := make([]ai.ShoppingItem, 0, len(ingredients))
+	for _, ingredient := range ingredients {
+		result = append(result, ai.ShoppingItem{ProductID: ingredient.ProductID, Name: ingredient.Name, Needed: ingredient.Quantity})
 	}
 	return result, nil
 }
 
-func shoppingQuantityGroups(ingredients []ai.Ingredient) []ai.ShoppingQuantityGroup {
-	groups := make([]ai.ShoppingQuantityGroup, 0)
-	indexes := make(map[string]int)
-	for _, item := range ingredients {
-		key := shoppingListKey(item)
-		if key == "name:" {
-			continue
-		}
-		index, found := indexes[key]
-		if !found {
-			index = len(groups)
-			indexes[key] = index
-			groups = append(groups, ai.ShoppingQuantityGroup{Key: key, Name: item.Name})
-		}
-		groups[index].Quantities = append(groups[index].Quantities, strings.TrimSpace(item.Quantity))
-	}
-	return groups
-}
-
-func shoppingQuantityFingerprint(ingredients []ai.Ingredient) (string, error) {
-	groupBytes, err := json.Marshal(shoppingQuantityGroups(ingredients))
+func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
+	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
+	// Keep the first successful merge as the finalized list's snapshot.
+	key := shoppingQuantityCachePrefix + hash
+	exists, err := s.Cache.Exists(ctx, key)
 	if err != nil {
-		return "", fmt.Errorf("marshal shopping quantity groups: %w", err)
+		return fmt.Errorf("check merged shopping quantities: %w", err)
 	}
-	fingerprint := sha256.Sum256(groupBytes)
-	return hex.EncodeToString(fingerprint[:]), nil
-}
+	if exists {
+		return nil
+	}
 
-func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient) ([]shoppingListGroup, error) {
-	quantityGroups := shoppingQuantityGroups(ingredients)
-	fingerprint, err := shoppingQuantityFingerprint(ingredients)
+	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	key := shoppingQuantityCachePrefix + hash + "/" + fingerprint
-	var amounts map[string]string
-	reader, err := s.Cache.Get(ctx, key)
-	switch {
-	case err == nil:
-		defer func() { _ = reader.Close() }()
-		if err := json.NewDecoder(reader).Decode(&amounts); err != nil {
-			return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
-		}
-	case errors.Is(err, cache.ErrNotFound):
-		if s.shoppingMerger == nil {
-			return nil, fmt.Errorf("shopping quantity merger unavailable")
-		}
-		amounts, err = s.shoppingMerger.MergeShoppingQuantities(ctx, quantityGroups)
-		if err != nil {
-			return nil, err
-		}
-		body, err := json.Marshal(amounts)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil {
-			if !errors.Is(err, cache.ErrAlreadyExists) {
-				return nil, fmt.Errorf("cache merged shopping quantities: %w", err)
-			}
-			winner, err := s.Cache.Get(ctx, key)
-			if err != nil {
-				return nil, fmt.Errorf("load concurrent shopping merge: %w", err)
-			}
-			defer func() { _ = winner.Close() }()
-			if err := json.NewDecoder(winner).Decode(&amounts); err != nil {
-				return nil, fmt.Errorf("decode concurrent shopping merge: %w", err)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
+	purchases := shoppingPurchasesForDisplay(merged, catalog)
+	body, err := json.Marshal(purchases)
+	if err != nil {
+		return err
 	}
-	list := shoppingListForDisplay(ingredients)
-	for _, group := range list {
-		for _, item := range group.Items {
-			quantity, ok := amounts[shoppingListKey(*item)]
-			if !ok {
-				return nil, fmt.Errorf("missing merged shopping quantity for %q", item.Name)
-			}
-			item.Quantity = quantity
-		}
+	if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		return fmt.Errorf("cache merged shopping quantities: %w", err)
 	}
-	return list, nil
+
+	return nil
 }
 
-func (s *server) finalizedKrogerIngredients(ctx context.Context, hash string) ([]ai.Ingredient, *locations.Location, error) {
+func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, error) {
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("load finalized shopping list: %w", err)
 	}
-	if p.Location == nil || !kroger.NewIdentityProvider().IsID(p.Location.ID) || len(p.Saved) == 0 {
-		return nil, nil, fmt.Errorf("shopping list is not a finalized Kroger list")
-	}
-	location, err := s.locServer.GetLocationByID(ctx, p.Location.ID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load current Kroger location: %w", err)
+	if len(p.Saved) == 0 {
+		return nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
-		var wine *ai.WineSelection
-		wine, err = s.WineFromCache(ctx, recipe.ComputeHash())
-		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			return nil, nil, fmt.Errorf("load wine: %w", err)
-		}
-		ingredients = append(ingredients, ingredientsForDisplay(recipe.Ingredients, wine)...)
+		ingredients = append(ingredients, recipe.Ingredients...)
 	}
-	return ingredients, location, nil
+	catalog, err := s.IngredientsFromCache(ctx, p.LocationHash())
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return nil, nil, fmt.Errorf("load shopping catalog: %w", err)
+	}
+	return ingredients, catalog, nil
 }
 
-func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request) {
-	if s.krogerCart == nil {
-		http.NotFound(w, r)
-		return
-	}
-	userID, err := s.clerk.GetUserIDFromRequest(r)
+// Loading a page never invokes the model; Build creates this snapshot.
+func (s *server) cachedShoppingPurchases(ctx context.Context, hash string) ([]shoppingPurchaseGroup, error) {
+	reader, err := s.Cache.Get(ctx, shoppingQuantityCachePrefix+hash)
 	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			http.Error(w, "Sign in to use the Kroger cart", http.StatusUnauthorized)
-		} else {
-			http.Error(w, "Unable to load account", http.StatusInternalServerError)
-		}
-		return
+		return nil, err
 	}
-	hash := strings.TrimSpace(r.PathValue("hash"))
-	ingredients, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
-	if err != nil {
-		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
-		return
+	defer func() { _ = reader.Close() }()
+	var purchases []shoppingPurchaseGroup
+	if err := json.NewDecoder(reader).Decode(&purchases); err != nil {
+		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 	}
-	list, err := s.mergedShoppingList(r.Context(), hash, ingredients)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to merge shopping quantities", "hash", hash, "error", err)
-		_, _ = w.Write([]byte(`<section id="shopping-list-section"><p>Could not combine your list. <button hx-get="/recipes/` + url.PathEscape(hash) + `/shopping-quantities" hx-target="#shopping-list-section" hx-swap="outerHTML">Try again, chef</button></p></section>`))
-		return
-	}
-	cartURL, cartBrand := krogerCartLink(location.Chain)
-	view := shoppingListPageView{Hash: hash, ShoppingList: list, KrogerCartNotice: krogerCartNotice(r.URL.Query().Get("kroger_error")), KrogerCartURL: cartURL, KrogerCartBrand: cartBrand}
-	result, err := s.loadCartTransfer(r.Context(), userID, hash)
-	if err == nil {
-		fingerprint, hashErr := shoppingQuantityFingerprint(ingredients)
-		if hashErr != nil {
-			http.Error(w, "Unable to check shopping list", http.StatusInternalServerError)
-			return
-		}
-		if result.Status == "complete" && result.Fingerprint != fingerprint {
-			result.Status = "changed"
-		}
-		view.KrogerTransfer = &result
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		http.Error(w, "Unable to load Kroger transfer", http.StatusInternalServerError)
-		return
-	}
-	if view.KrogerTransfer == nil && r.URL.Query().Get("kroger_error") == "no_matches" {
-		gaps := make([]ai.Ingredient, 0)
-		for _, group := range list {
-			for _, item := range group.Items {
-				gaps = append(gaps, *item)
-			}
-		}
-		view.KrogerTransfer = &krogerTransfer{Status: "no_matches", Gaps: gaps}
-		view.KrogerCartNotice = ""
-	}
-	if err := templates.ShoppingList.ExecuteTemplate(w, "kroger_shopping_list_section", view); err != nil {
-		slog.ErrorContext(r.Context(), "render shopping quantities", "error", err)
-	}
+	return purchases, nil
 }

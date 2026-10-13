@@ -24,6 +24,7 @@ type client struct {
 	recipeSchema          map[string]any
 	wineSchema            map[string]any
 	menuSchema            map[string]any
+	shoppingSchema        map[string]any
 	model                 openai.ResponsesModel
 	imageModel            openai.ImageModel
 	wineModel             string
@@ -47,12 +48,16 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
 	menuSchema := r.Reflect(&MenuPlan{})
 	menuSchemaJson, _ := json.Marshal(menuSchema)
+	shoppingSchema := r.Reflect(&shoppingIngredientsResponse{})
+	shoppingSchemaJSON, _ := json.Marshal(shoppingSchema)
 	var recipe map[string]any
 	_ = json.Unmarshal(recipeSchemaJSON, &recipe)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
 	var menu map[string]any
 	_ = json.Unmarshal(menuSchemaJson, &menu)
+	var shopping map[string]any
+	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
 	if httpClient != nil {
@@ -66,6 +71,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
+		shoppingSchema: shopping,
 		model:          model,
 		imageModel:     imageModel,
 		wineModel:      defaultWineModel,

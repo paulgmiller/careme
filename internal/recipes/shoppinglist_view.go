@@ -74,8 +74,9 @@ type shoppingListPageView struct {
 	HelpMessage          string
 	Hash                 string
 	Recipes              []shoppingRecipeView
-	ShoppingList         []shoppingListGroup
+	Purchases            []shoppingPurchaseGroup
 	HasSavedRecipes      bool
+	Finalized            bool
 	ServerSignedIn       bool
 	User                 *utypes.User
 	AuthReturnTo         string
@@ -83,7 +84,6 @@ type shoppingListPageView struct {
 	AdminURL             string
 	FinalizedKroger      bool
 	KrogerCartAvailable  bool
-	KrogerCartError      string
 	KrogerCartURL        string
 	KrogerCartBrand      string
 	KrogerCartNotice     string
@@ -91,6 +91,7 @@ type shoppingListPageView struct {
 }
 
 type shoppingListViewInput struct {
+	purchases            []shoppingPurchaseGroup
 	params               *generatorParams
 	list                 ai.ShoppingList
 	wineRecommendations  map[string]*ai.WineSelection
@@ -103,7 +104,6 @@ type shoppingListViewInput struct {
 	progress             shoppingProgress
 	useTodaysIngredients bool
 	krogerCartAvailable  bool
-	krogerCartError      string
 }
 
 func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
@@ -116,12 +116,10 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	if err != nil {
 		return shoppingListPageView{}, fmt.Errorf("recipe rendering error: %w", err)
 	}
-	combinedIngredients := make([]ai.Ingredient, 0)
 	hasSavedRecipes := false
 	for _, view := range recipeViews {
 		if view.Saved {
 			hasSavedRecipes = true
-			combinedIngredients = append(combinedIngredients, view.DisplayIngredients...)
 		}
 	}
 
@@ -137,21 +135,19 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		HelpMessage:          strings.TrimSpace(input.helpMessage),
 		Hash:                 input.hash,
 		Recipes:              recipeViews,
-		ShoppingList:         shoppingListForDisplay(combinedIngredients),
 		HasSavedRecipes:      hasSavedRecipes,
+		Finalized:            input.purchases != nil,
+		Purchases:            shoppingPurchasesWithWine(input.purchases, input.params.Saved, input.wineRecommendations),
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
-		FinalizedKroger:      kroger.NewIdentityProvider().IsID(input.params.Location.ID) && len(input.params.Saved) > 0,
+		FinalizedKroger:      kroger.NewIdentityProvider().IsID(input.params.Location.ID) && input.purchases != nil,
 		KrogerCartAvailable:  input.krogerCartAvailable && serverSignedIn,
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
-	if krogerCartNotice(input.krogerCartError) != "" {
-		data.KrogerCartError = input.krogerCartError
-	}
 	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
 	if len(recipeViews) > 0 {
 		data.Social = &templates.SocialPreview{
@@ -197,11 +193,9 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 	for index, slot := range progress.Slots {
 		if slot.RecipeHash == "" {
 			views = append(views, shoppingRecipeView{
-				Recipe: ai.Recipe{
-					Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
-					Description: "using " + slot.Plan.AnchorIngredient + " and " + slot.Plan.SideVegetable,
-				},
-				Hash: "pending-" + strconv.Itoa(index),
+				Title:       slot.Plan.Cuisine + "  " + slot.Plan.DishFormat,
+				Description: "using " + slot.Plan.AnchorIngredient + " and " + slot.Plan.SideVegetable,
+				Hash:        "pending-" + strconv.Itoa(index),
 			})
 		} else if err := appendRecipe(progress.Finished[slot.RecipeHash], slot.Reviewed); err != nil {
 			return nil, err

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -33,7 +34,6 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
-	mux.HandleFunc("GET /recipes/{hash}/shopping-quantities", s.handleShoppingQuantities)
 	mux.HandleFunc("POST /recipes/{hash}/kroger-cart", s.handleKrogerCart)
 }
 
@@ -164,6 +164,16 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for finalize", "hash", newHash, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
+		return
+	}
+
+	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, newHash)
+	if err == nil {
+		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog)
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
+		http.Error(w, "Could not build your shopping list. Try again, chef", http.StatusInternalServerError)
 		return
 	}
 
@@ -350,6 +360,15 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			// need directive to get to right hash
 			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 		}
+		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
+				return
+			}
+			slog.ErrorContext(ctx, "failed to check recipe parameters", "error", err)
+			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
+			return
+		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
@@ -407,13 +426,8 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		}
 		selection = selection.override(userSelection)
 	}
-	if !signedIn && !progress.Generating {
-		guest.EnsureShoppingListCount(w, r)
-	}
 	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
-	for hash, recipe := range progress.Finished {
-		finishedRecipes[hash] = recipe
-	}
+	maps.Copy(finishedRecipes, progress.Finished)
 	for _, recipe := range slist.Recipes {
 		finishedRecipes[recipe.ComputeHash()] = recipe
 	}
@@ -439,22 +453,43 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	recipeWG.Wait()
 
+	purchases, err := s.cachedShoppingPurchases(ctx, hashParam)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
+		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
+		return
+	}
+
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	writeShoppingListPage(ctx, w, shoppingListViewInput{
-		params:              p,
-		list:                *slist,
-		wineRecommendations: wines.Clone(),
-		recipeImages:        images.Clone(),
-		currentUser:         currentUser,
-		hash:                hashParam,
-		selection:           selection,
-		helpMessage:         help,
-		pendingInstructions: instructions,
-		progress:            progress,
-		krogerCartAvailable: s.krogerCart != nil,
-		krogerCartError:     r.URL.Query().Get("kroger_error"),
+	view, err := newShoppingListPageView(ctx, shoppingListViewInput{
+		params:               p,
+		purchases:            purchases,
+		list:                 *slist,
+		wineRecommendations:  wines.Clone(),
+		recipeImages:         images.Clone(),
+		currentUser:          currentUser,
+		hash:                 hashParam,
+		selection:            selection,
+		helpMessage:          help,
+		pendingInstructions:  instructions,
+		progress:             progress,
+		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
+		krogerCartAvailable:  s.krogerCart != nil,
 	})
+	if err == nil && view.FinalizedKroger && view.KrogerCartAvailable {
+		err = s.populateKrogerCartView(ctx, &view, currentUser.ID, r.URL.Query().Get("kroger_error"))
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
+		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
+		return
+	}
+	templateName := "shoppinglist.html"
+	if progress.Fragment {
+		templateName = "shopping_content"
+	}
+	renderHTML(w, templates.ShoppingList, templateName, view)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {

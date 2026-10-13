@@ -35,10 +35,10 @@ type menuPlanner interface {
 	CreateMenuPlan(context.Context, *locations.Location, []ai.InputIngredient, []string, time.Time, []string, int) (*ai.MenuPlan, error)
 }
 
-func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(options, ctx)
 	if err != nil {
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
@@ -50,7 +50,7 @@ type Settings struct {
 	} `json:"config"`
 }
 
-func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
@@ -83,7 +83,7 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]interface{})["requestedModel"] = cfg.AI.RecipeModel
+	result["metadata"].(map[string]any)["requestedModel"] = cfg.AI.RecipeModel
 	return result, nil
 }
 
@@ -97,7 +97,7 @@ func resolveModel(settings Settings, productionModel string) string {
 	return productionModel
 }
 
-func runEval(body []byte, planner menuPlanner, judge menuJudge) (map[string]interface{}, error) {
+func runEval(body []byte, planner menuPlanner, judge menuJudge) (map[string]any, error) {
 	testCase, err := decodeEvalCase(body)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func runEval(body []byte, planner menuPlanner, judge menuJudge) (map[string]inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode menu plan: %w", err)
 	}
-	return map[string]interface{}{"output": string(output), "latencyMs": latency.Milliseconds(), "metadata": map[string]interface{}{
+	return map[string]any{"output": string(output), "latencyMs": latency.Milliseconds(), "metadata": map[string]any{
 		"critique": critique, "judgeLatencyMs": judgeLatency.Milliseconds(),
 	}}, nil
 }

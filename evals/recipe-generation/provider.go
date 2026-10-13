@@ -39,16 +39,16 @@ type providerOptions struct {
 	} `json:"config"`
 }
 
-func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(options, ctx)
 	if err != nil {
 		// Preserve errors in Promptfoo's Go wrapper, which otherwise hides them.
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
@@ -79,13 +79,13 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if err != nil {
 		return nil, err
 	}
-	metadata := result["metadata"].(map[string]interface{})
+	metadata := result["metadata"].(map[string]any)
 	metadata["requestedModel"] = settings.Config.Model
 	metadata["requestedReasoningEffort"] = settings.Config.ReasoningEffort
 	return result, nil
 }
 
-func decodeOptions(options map[string]interface{}) (providerOptions, error) {
+func decodeOptions(options map[string]any) (providerOptions, error) {
 	var settings providerOptions
 	body, err := json.Marshal(options)
 	if err != nil {
@@ -110,7 +110,7 @@ func decodeOptions(options map[string]interface{}) (providerOptions, error) {
 	return settings, nil
 }
 
-func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map[string]interface{}, error) {
+func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map[string]any, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return nil, fmt.Errorf("failed to decode Promptfoo context: %w", err)
@@ -150,12 +150,12 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode recipe: %w", err)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"output": string(output),
 		// Promptfoo's cost column compares generation, like its latency column.
 		"cost":      generationCost,
 		"latencyMs": latency.Milliseconds(),
-		"metadata": map[string]interface{}{
+		"metadata": map[string]any{
 			"critique": critique,
 		},
 	}, nil

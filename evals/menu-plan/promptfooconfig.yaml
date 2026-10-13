@@ -35,9 +35,10 @@ defaultTest:
         const plan = JSON.parse(output);
         if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
+        const requested = new Set((context.vars.requested_ingredients ?? []).map((name) => name.toLowerCase()));
         return plan.plans.every((recipe) =>
-          available.has(recipe.anchor_ingredient.toLowerCase())
-          && available.has(recipe.side_vegetable.toLowerCase()));
+          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()))
+          && (available.has(recipe.side_vegetable.toLowerCase()) || requested.has(recipe.side_vegetable.toLowerCase())));
       metric: available-menu-ingredients
     - type: javascript
       value: |
@@ -152,3 +153,160 @@ tests:
             recipe.recipe_instructions.some((instruction) =>
               /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
         metric: servings-preserved-in-every-recipe
+
+  - description: Explicitly requested halloumi can anchor dinner outside the catalog
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Use halloumi as the main ingredient.
+      requested_ingredients: ["halloumi"]
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'halloumi'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]))
+            && recipe.recipe_instructions.some((instruction) => /halloumi/i.test(instruction));
+        metric: requested-anchor-outside-catalog
+
+  - description: Avoiding halloumi does not authorize an unavailable anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Make it vegetarian and do not use halloumi.
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Extra Firm Tofu'
+            && !recipe.recipe_instructions.some((instruction) => /^Use halloumi/i.test(instruction));
+        metric: unavailable-anchor-not-authorized-by-exclusion
+
+  - description: User-owned duroc pork retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have leftover duroc pork
+      requested_ingredients: ["duroc pork"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'duroc pork'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]));
+        metric: user-owned-ingredient-name
+
+  - description: User-owned dover sole retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I got dover sole at Costco
+      requested_ingredients: ["dover sole"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'dover sole'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]));
+        metric: user-owned-ingredient-name
+
+  - description: Extra broccoli outside the catalog can be an anchor or a side
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra broccoli.
+      requested_ingredients: ["broccoli"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: carrots
+          description: Carrots
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return (recipe.anchor_ingredient.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0])))
+            || (recipe.side_vegetable.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0])));
+        metric: user-owned-vegetable-either-role
+
+  - description: Correct a typo in user-owned strawberries outside the catalog
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra strawberies. Make a strawbery and spinach salad.
+      requested_ingredients: ["strawberries"]
+      ingredients:
+        - id: spinach
+          description: Baby Spinach
+        - id: cucumber
+          description: Cucumber
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'strawberries'
+            && recipe.recipe_instructions.some((instruction) => /strawberr/i.test(instruction));
+        metric: corrected-user-owned-anchor
+
+  - description: Correct a typo in user-owned broccoli used as a side
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra brocoli. Roast chicken with brocoli on the side.
+      requested_ingredients: ["broccoli"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: carrots
+          description: Carrots
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Chicken Thighs'
+            && recipe.side_vegetable.toLowerCase() === 'broccoli'
+            && recipe.recipe_instructions.some((instruction) => /broccoli/i.test(instruction));
+        metric: corrected-user-owned-side

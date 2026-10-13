@@ -5,8 +5,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/locations"
 	"careme/internal/providers/kroger"
 )
 
@@ -150,7 +153,7 @@ func (s *server) handleKrogerCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := strings.TrimSpace(r.PathValue("hash"))
-	_, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	_, location, err := s.finalizedKrogerPurchases(r.Context(), hash)
 	if err != nil {
 		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
 		return
@@ -242,14 +245,9 @@ func (s *server) handleKrogerCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, userID, hash string, token kroger.CartToken) {
-	ingredients, location, err := s.finalizedKrogerIngredients(r.Context(), hash)
+	list, location, err := s.finalizedKrogerPurchases(r.Context(), hash)
 	if err != nil {
 		redirectKrogerShoppingList(w, r, hash, "list_unavailable")
-		return
-	}
-	list, err := s.mergedShoppingList(r.Context(), hash, ingredients)
-	if err != nil {
-		redirectKrogerShoppingList(w, r, hash, "combine_failed")
 		return
 	}
 	var cartItems []kroger.CartItem
@@ -259,7 +257,7 @@ func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, use
 	for _, group := range list {
 		for _, item := range group.Items {
 			if item.ProductID == "" {
-				gaps = append(gaps, *item)
+				gaps = append(gaps, krogerPurchaseIngredient(item))
 				continue
 			}
 			upc, err := s.krogerCart.ProductUPC(r.Context(), item.ProductID, location.ID)
@@ -269,12 +267,12 @@ func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, use
 					redirectKrogerShoppingList(w, r, hash, "lookup_failed")
 					return
 				}
-				gaps = append(gaps, *item)
+				gaps = append(gaps, krogerPurchaseIngredient(item))
 				continue
 			}
 			if !seenUPCs[upc] {
 				cartItems = append(cartItems, kroger.CartItem{UPC: upc, Quantity: 1})
-				sent = append(sent, *item)
+				sent = append(sent, krogerPurchaseIngredient(item))
 				seenUPCs[upc] = true
 			}
 		}
@@ -283,7 +281,7 @@ func (s *server) performCartTransfer(w http.ResponseWriter, r *http.Request, use
 		redirectKrogerShoppingList(w, r, hash, "no_matches")
 		return
 	}
-	fingerprint, err := shoppingQuantityFingerprint(ingredients)
+	fingerprint, err := krogerPurchaseFingerprint(list)
 	if err != nil {
 		redirectKrogerShoppingList(w, r, hash, "prepare_failed")
 		return
@@ -332,7 +330,6 @@ func krogerCartNotice(code string) string {
 		"connect_failed":      "Unable to connect to Kroger. Try again, chef.",
 		"save_failed":         "Unable to save your Kroger connection. Try again, chef.",
 		"list_unavailable":    "Your shopping list could not be loaded. Try again, chef.",
-		"combine_failed":      "Could not combine your shopping quantities. Try again, chef.",
 		"lookup_failed":       "Could not check Kroger products. Nothing was sent. Try again, chef.",
 		"prepare_failed":      "Could not prepare your shopping list. Nothing was sent. Try again, chef.",
 		"start_failed":        "Could not start your Kroger transfer. Check your cart before trying again.",
@@ -361,4 +358,77 @@ func krogerCartLink(chain string) (string, string) {
 		return "https://www.qfc.com/cart", "QFC"
 	}
 	return krogerCartURL, "Kroger"
+}
+
+func (s *server) finalizedKrogerPurchases(ctx context.Context, hash string) ([]shoppingPurchaseGroup, *locations.Location, error) {
+	p, err := s.ParamsFromCache(ctx, hash)
+	if err != nil {
+		return nil, nil, err
+	}
+	if p.Location == nil || !kroger.NewIdentityProvider().IsID(p.Location.ID) || len(p.Saved) == 0 {
+		return nil, nil, fmt.Errorf("shopping list is not a finalized Kroger list")
+	}
+	location, err := s.locServer.GetLocationByID(ctx, p.Location.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load current Kroger location: %w", err)
+	}
+	purchases, err := s.cachedShoppingPurchases(ctx, hash)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load finalized shopping purchases: %w", err)
+	}
+	wines := make(map[string]*ai.WineSelection)
+	for _, recipe := range p.Saved {
+		wine, err := s.WineFromCache(ctx, recipe.ComputeHash())
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			return nil, nil, fmt.Errorf("load wine: %w", err)
+		}
+		wines[recipe.ComputeHash()] = wine
+	}
+	return shoppingPurchasesWithWine(purchases, p.Saved, wines), location, nil
+}
+
+func krogerPurchaseFingerprint(purchases []shoppingPurchaseGroup) (string, error) {
+	body, err := json.Marshal(purchases)
+	if err != nil {
+		return "", fmt.Errorf("marshal Kroger purchases: %w", err)
+	}
+	fingerprint := sha256.Sum256(body)
+	return hex.EncodeToString(fingerprint[:]), nil
+}
+
+func (s *server) populateKrogerCartView(ctx context.Context, view *shoppingListPageView, userID, errorCode string) error {
+	location, err := s.locServer.GetLocationByID(ctx, view.Location.ID)
+	if err != nil {
+		return err
+	}
+	view.KrogerCartURL, view.KrogerCartBrand = krogerCartLink(location.Chain)
+	view.KrogerCartNotice = krogerCartNotice(errorCode)
+	result, err := s.loadCartTransfer(ctx, userID, view.Hash)
+	if err == nil {
+		fingerprint, err := krogerPurchaseFingerprint(view.Purchases)
+		if err != nil {
+			return err
+		}
+		if result.Status == "complete" && result.Fingerprint != fingerprint {
+			result.Status = "changed"
+		}
+		view.KrogerTransfer = &result
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return fmt.Errorf("load Kroger transfer: %w", err)
+	}
+	if view.KrogerTransfer == nil && errorCode == "no_matches" {
+		gaps := make([]ai.Ingredient, 0)
+		for _, group := range view.Purchases {
+			for _, item := range group.Items {
+				gaps = append(gaps, krogerPurchaseIngredient(item))
+			}
+		}
+		view.KrogerTransfer = &krogerTransfer{Status: "no_matches", Gaps: gaps}
+		view.KrogerCartNotice = ""
+	}
+	return nil
+}
+
+func krogerPurchaseIngredient(item shoppingPurchaseItem) ai.Ingredient {
+	return ai.Ingredient{ProductID: item.ProductID, Name: item.Name, Quantity: item.Needed, AisleNumber: item.Aisle}
 }
