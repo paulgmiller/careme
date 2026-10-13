@@ -52,6 +52,80 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
 
+## Adding a provider
+
+Add a store integration in this sequence: **locations → staples → optional
+ordering**. These are separate interfaces so location discovery can work before
+a catalog is available, and recipe generation can work without ordering. Keep
+the implementations together in `internal/providers/<provider>` and share one
+location-ID namespace and `IsID` implementation across them.
+
+### 1. Add locations
+
+Implement `locations.LocationBackend`: `IsID`, `GetLocationByID`,
+`GetLocationsByCoordinates`, and `HasInventory`. Use stable location IDs and
+return the store or delivery-area details needed by location selection. Keep
+`HasInventory` false until the location has a supported recipe catalog.
+
+Register the backend in `providerregistry.Factory.NewLocationBackends` in
+`internal/providerregistry/locations.go`. Delivery providers can represent a
+service area instead of physical stores; Smith Brothers Farms and MNFoodClub
+are examples. Implement `IsCacheable() bool` when location results depend on the
+search point and should not use the default location cache.
+
+### 2. Add staples
+
+Implement `recipes.StaplesBackend`: `IsID`, `Signature`, `FetchStaples`, and
+`FetchWines`. Staples supply the ingredient catalog used to generate recipes;
+they do not add products to a cart. Return `ai.InputIngredient` entries with
+stable product IDs, descriptions, and available size, price, and aisle details.
+Wine lookup is part of the current interface; providers without it should return
+an explicit unsupported error. `FetchPantry` is an optional additional interface.
+
+Register the backend in `providerregistry.Factory.NewStaplesBackends` in
+`internal/providerregistry/staples.go`, and its identity in
+`internal/providerregistry/identity.go` so ingredient and recipe cache keys use
+the provider's `Signature`. Change that signature when catalog definitions or
+parsing rules require cached ingredients to be refreshed. Enable `HasInventory`
+for supported locations once staples are available.
+
+Also register the catalog namespace in `internal/providers/identity.go` so
+shopping-list product references retain their source provider, even when ordered
+through a different destination. Update [cache layout](docs/cache-layout.md) if
+cache keys or prefixes change.
+
+### 3. Optionally add ordering
+
+Implement `ordering.Provider`. Choose `CartTransfer` for adding products to a
+cart or `ShoppingListLink` for creating a shopping page. `Supports` and
+`Presentation` determine eligible lists and action copy. `Prepare` validates or
+resolves items without changing a cart or creating a page; `Submit` performs the
+handoff and returns its outcome and review URL. Keep credentials and account
+connection inside the adapter.
+
+Construct the adapter in `cmd/careme/web.go` and add it to `orderingProviders`.
+Register a callback only if account connection requires one. The shared route
+and shopping-list templates handle its action and result. Users review and
+complete checkout with the provider.
+
+Kroger is currently the only ordering adapter. Smith Brothers Farms and
+MNFoodClub have locations and staples, but no ordering adapter. A destination
+such as a future Instacart shopping-link adapter can accept lists sourced from
+other providers without supplying its own locations or staples.
+
+See [Ordering adapters](docs/ordering.md) for measurements, product references,
+duplicate prevention, link caching, and the intended Instacart mapping.
+
+### Verify the integration
+
+Test location lookup and service-area filtering, consistent ID routing, catalog
+request/response shapes, parsing failures, and cache signatures. For ordering,
+also test matching gaps, submission failures, duplicate prevention or link reuse,
+and rendered results. Use deterministic fixtures and explicit fake clients.
+
+Run `./task.sh verify-go -- -cover`; run `./task.sh verify-ui` and inspect the UI
+when templates change.
+
 ## Mail placement tests
 
 Send today's real recipe email through the production sender to test Gmail placement:
