@@ -165,9 +165,9 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, newHash)
+	ingredients, catalog, wines, err := s.finalizedShoppingInputs(ctx, newHash)
 	if err == nil {
-		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog)
+		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog, wines)
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
