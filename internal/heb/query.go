@@ -91,6 +91,7 @@ type Product struct {
 	SKUs                   []SKU             `json:"SKUs"`
 	ListPrice              *float32          `json:"-"`
 	SalePrice              *float32          `json:"-"`
+	Size                   string            `json:"-"`
 }
 
 type ProductLocation struct {
@@ -359,7 +360,7 @@ func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 			if strings.TrimSpace(product.ID) == "" {
 				continue
 			}
-			product.ListPrice, product.SalePrice = productPrices(product)
+			product.ListPrice, product.SalePrice, product.Size = productPricing(product)
 			products = append(products, product)
 		}
 	}
@@ -409,7 +410,7 @@ func (p categoryPageProps) total() int {
 	return 0
 }
 
-func productPrices(product Product) (*float32, *float32) {
+func productPricing(product Product) (*float32, *float32, string) {
 	for _, context := range []string{"CURBSIDE", "ONLINE", ""} {
 		for _, sku := range product.SKUs {
 			for _, price := range sku.ContextPrices {
@@ -419,12 +420,12 @@ func productPrices(product Product) (*float32, *float32) {
 				listPrice := displayPriceAmount(price.ListPrice)
 				salePrice := displayPriceAmount(price.SalePrice)
 				if listPrice != nil || salePrice != nil {
-					return listPrice, salePrice
+					return listPrice, salePrice, strings.TrimSpace(sku.CustomerFriendlySize)
 				}
 			}
 		}
 	}
-	return nil, nil
+	return nil, nil, ""
 }
 
 func displayPriceAmount(price *DisplayPrice) *float32 {

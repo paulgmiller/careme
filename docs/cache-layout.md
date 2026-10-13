@@ -1,5 +1,12 @@
 # Cache Layout
 
+MNFoodClub, HEB, and Whole Foods keep their existing signature schemes for size
+mapping changes. Size fields may be empty in older cached catalogs or when the
+source does not provide a size; cached catalogs gain size data when fetched again.
+Existing finalized shopping lists retain their original snapshots. Farmers market
+sizes are extracted on new photo uploads; existing photo inventories are not
+reanalyzed automatically.
+
 This project stores cache entries in:
 - Local filesystem under `cache/` (default app cache)
 - Local filesystem under `aldi/` (ALDI cache)
