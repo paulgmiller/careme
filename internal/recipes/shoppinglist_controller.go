@@ -257,7 +257,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		if errors.Is(err, cache.ErrNotFound) {
 			// Random or expired hashes can reach this public endpoint without indicating an app bug.
 			slog.InfoContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
-			http.Error(w, "shoppinglist not found", http.StatusNotFound)
+			renderMissingShoppingList(ctx, w, nil, "")
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load params", "hash", hash, "error", err)
@@ -348,6 +348,18 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		if currentUser != nil {
 			// need directive to get to right hash
 			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+		}
+		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				if currentUser == nil {
+					guest.EnsureShoppingListCount(w, r)
+				}
+				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
+				return
+			}
+			slog.ErrorContext(ctx, "failed to check recipe parameters", "error", err)
+			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
+			return
 		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
