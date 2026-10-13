@@ -27,7 +27,7 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 	return result, nil
 }
 
-func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
+func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
@@ -36,38 +36,38 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 	if err == nil {
 		defer func() { _ = reader.Close() }()
 		if err := json.NewDecoder(reader).Decode(&merged); err != nil {
-			return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
+			return fmt.Errorf("decode merged shopping quantities: %w", err)
 		}
-		return shoppingPurchasesForDisplay(merged, catalog), nil
+		return nil
 	}
 
 	if !errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
+		return fmt.Errorf("load merged shopping quantities: %w", err)
 	}
 
 	merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	body, err := json.Marshal(merged)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil {
 		if !errors.Is(err, cache.ErrAlreadyExists) {
-			return nil, fmt.Errorf("cache merged shopping quantities: %w", err)
+			return fmt.Errorf("cache merged shopping quantities: %w", err)
 		}
 		winner, err := s.Cache.Get(ctx, key)
 		if err != nil {
-			return nil, fmt.Errorf("load concurrent shopping merge: %w", err)
+			return fmt.Errorf("load concurrent shopping merge: %w", err)
 		}
 		defer func() { _ = winner.Close() }()
 		if err := json.NewDecoder(winner).Decode(&merged); err != nil {
-			return nil, fmt.Errorf("decode concurrent shopping merge: %w", err)
+			return fmt.Errorf("decode concurrent shopping merge: %w", err)
 		}
 	}
 
-	return shoppingPurchasesForDisplay(merged, catalog), nil
+	return nil
 }
 
 func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, error) {

@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -29,26 +30,30 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
 	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 cloves"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
-	first, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	err := s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
-	second, err := s.mergedShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	first := cachedShoppingItems(t, s, "final-hash")
+	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
+	second := cachedShoppingItems(t, s, "final-hash")
 	assert.Equal(t, 1, merger.calls)
-	assert.Equal(t, "1 cloves", first[0].Items[0].Needed)
-	assert.Len(t, first[0].Items, 2)
+	assert.Equal(t, "1 cloves", first[0].Needed)
+	assert.Len(t, first, 2)
 	assert.Equal(t, first, second)
 	reader, err := s.Cache.Get(t.Context(), shoppingQuantityCachePrefix+"final-hash")
 	require.NoError(t, err, "store the merge directly under the finalized hash")
 	require.NoError(t, reader.Close())
 
 	updated := append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"})
-	cached, err := s.mergedShoppingList(t.Context(), "final-hash", updated, []ai.InputIngredient{})
+	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", updated, []ai.InputIngredient{})
 	require.NoError(t, err)
+	cached := cachedShoppingItems(t, s, "final-hash")
 	assert.Equal(t, first, cached, "the finalized list retains its first successful merge")
 	assert.Equal(t, 1, merger.calls)
 
-	newList, err := s.mergedShoppingList(t.Context(), "different-final-hash", updated, []ai.InputIngredient{})
+	err = s.mergeAndCacheShoppingList(t.Context(), "different-final-hash", updated, []ai.InputIngredient{})
 	require.NoError(t, err)
+	newList := cachedShoppingItems(t, s, "different-final-hash")
 	assert.Equal(t, 2, merger.calls, "a different finalized hash gets its own merge")
 	assert.NotEqual(t, first, newList)
 }
@@ -112,24 +117,26 @@ func TestShoppingPurchaseCacheRetainsFinalizedSnapshot(t *testing.T) {
 	needs := []ai.Ingredient{{ProductID: "pork", Name: "Pork", Quantity: "24 oz"}}
 	price := float32(6)
 	catalog := []ai.InputIngredient{{ProductID: "pork", Description: "Pork", Size: "32 oz", PriceRegular: &price}}
-	first, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	err := s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
-	second, err := s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	first := cachedShoppingItems(t, s, "plan")
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
+	second := cachedShoppingItems(t, s, "plan")
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, merger.calls)
 	catalog[0].Size = "16 oz"
-	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
 	sale := float32(3)
 	catalog[0].PriceSale = &sale
-	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
 	catalog[0].Grade = &ai.IngredientGrade{Score: 10}
 	catalog[0].Embedding = ai.IngredientEmbedding{1, 2}
-	_, err = s.mergedShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls, "catalog changes should not regenerate the finalized snapshot")
 }
@@ -231,13 +238,25 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	})
 	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}
 	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil", Size: "16 fl oz"}}
-	first, err := s.mergedShoppingList(t.Context(), "filtered", needs, catalog)
+	err := s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog)
 	require.NoError(t, err)
+	first := cachedShoppingItems(t, s, "filtered")
 	catalog[1].Size = "3 lb"
-	second, err := s.mergedShoppingList(t.Context(), "filtered", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog)
 	require.NoError(t, err)
+	second := cachedShoppingItems(t, s, "filtered")
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, calls, "unmatched catalog metadata does not invalidate the merge")
 }
 
 func buyNumber(n float64) *float64 { return &n }
+
+func cachedShoppingItems(t *testing.T, s *server, hash string) []ai.ShoppingItem {
+	t.Helper()
+	reader, err := s.Cache.Get(t.Context(), shoppingQuantityCachePrefix+hash)
+	require.NoError(t, err)
+	defer func() { _ = reader.Close() }()
+	var items []ai.ShoppingItem
+	require.NoError(t, json.NewDecoder(reader).Decode(&items))
+	return items
+}
