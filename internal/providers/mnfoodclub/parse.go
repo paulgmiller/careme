@@ -50,6 +50,7 @@ func parseCard(card *html.Node, category string) (ai.InputIngredient, error) {
 	ingredient := ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID: attribute(idNode, "data-product-id"), Description: nodeText(title),
 		Brand: nodeText(brand), AisleNumber: category,
+		Size: ai.CatalogSizeFromDescription(nodeText(title)),
 	})
 	if ingredient.ProductID == "" || ingredient.Description == "" {
 		return ai.InputIngredient{}, fmt.Errorf("missing product ID or title")

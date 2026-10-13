@@ -103,7 +103,7 @@ func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84) 
 }
 
 func (p identityProvider) Signature() string {
-	return string(defaultHEBStaplesSignature)
+	return "catalog-size-v1:" + string(defaultHEBStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -188,6 +188,7 @@ func productToIngredient(product Product, category StapleCategory) ai.InputIngre
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    product.ID,
 		Description:  product.DisplayName,
+		Size:         product.Size,
 		Brand:        brand,
 		Categories:   categories,
 		AisleNumber:  location,

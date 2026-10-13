@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
@@ -18,12 +22,45 @@ func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal default staples: %v", err)
 	}
-	if got != string(want) {
+	if got != "catalog-size-v1:"+string(want) {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 
-	if got != string(want) {
+	if got != "catalog-size-v1:"+string(want) {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
+	}
+}
+
+func TestProductSizes(t *testing.T) {
+	for _, tc := range []struct{ name, uom, want string }{
+		{"Ground Beef, 16 Ounce", "", "16 Ounce"},
+		{"Beef Steak, 12 OZ", "each", "12 OZ"},
+		{"Ground Beef", " lb ", "1 lb (sold by weight)"},
+		{"Ground Beef", "1 lb", "1 lb (sold by weight)"},
+		{"Ground Beef", "KG", "1 KG (sold by weight)"},
+		{"Bananas", "each", ""},
+		{"Apples", "", ""},
+	} {
+		t.Run(tc.name+tc.uom, func(t *testing.T) {
+			got := productToIngredient(product{Name: tc.name, UOM: tc.uom}, "meat")
+			assert.Equal(t, tc.want, got.Size)
+			assert.Equal(t, tc.name, got.Description)
+		})
+	}
+}
+
+func TestBeefCatalogSizes(t *testing.T) {
+	body, err := os.ReadFile("beef.json")
+	require.NoError(t, err)
+	var catalog categoryResponse
+	require.NoError(t, json.Unmarshal(body, &catalog))
+	require.NotEmpty(t, catalog.Results)
+	for _, product := range catalog.Results {
+		ingredient := productToIngredient(product, "beef")
+		assert.NotEmpty(t, ingredient.Size, product.Name)
+		if product.UOM == "lb" {
+			assert.Equal(t, "1 lb (sold by weight)", ingredient.Size)
+		}
 	}
 }
 
@@ -83,6 +120,9 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	}
 
 	ingredient := got[0]
+	if ingredient.Size != "1 lb (sold by weight)" {
+		t.Fatalf("unexpected size: %q", ingredient.Size)
+	}
 	if ingredient.Description != "Organic Asparagus" {
 		t.Fatalf("unexpected description: %+v", ingredient.Description)
 	}

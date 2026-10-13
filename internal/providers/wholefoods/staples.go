@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"careme/internal/ai"
@@ -37,7 +38,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func (p identityProvider) Signature() string {
-	return string(defaultStaplesSignature)
+	return "catalog-size-v1:" + string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -127,25 +128,35 @@ func productToIngredient(product product, category string) ai.InputIngredient {
 		salePrice = &price
 	}
 
-	/* unit of measure is more around pricing than total size)
-	TODO how should we normalize prices per units here and in kroger.
-	var size *string
-	sizeText := strings.TrimSpace(strings.Join(compactStrings(product.UOM), " "))
-	if sizeText != "" {
-		size = &sizeText
-	}*/
-
 	hasher := fnv.New32a()
 	// dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
-		ProductID:   productId,
-		Brand:       strings.TrimSpace(product.Brand),
-		Description: strings.TrimSpace(product.Name),
-		// Size:         size,
+		ProductID:    productId,
+		Brand:        strings.TrimSpace(product.Brand),
+		Description:  strings.TrimSpace(product.Name),
+		Size:         productSize(product),
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		AisleNumber:  category, // not as good as an actual aisle but still lets us sort
 	})
+}
+
+var weightPriceUnit = regexp.MustCompile(`(?i)^(?:\d+(?:\.\d+)?\s*)?(?:lbs?|pounds?|oz|ounces?|kg|kilograms?|g|grams?)$`)
+
+func productSize(product product) string {
+	// UOM is the price basis, not a fixed package weight. Preserve that
+	// distinction so shopping merges can buy fractional weights.
+	uom := strings.TrimSpace(product.UOM)
+	if weightPriceUnit.MatchString(uom) {
+		if uom[0] < '0' || uom[0] > '9' {
+			uom = "1 " + uom
+		}
+		return uom + " (sold by weight)"
+	}
+	if uom != "" && !strings.EqualFold(uom, "each") {
+		return uom
+	}
+	return ai.CatalogSizeFromDescription(product.Name)
 }

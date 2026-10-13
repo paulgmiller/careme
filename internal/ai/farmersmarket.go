@@ -19,6 +19,7 @@ type farmersMarketIngredientItem struct {
 	Name  string   `json:"name" jsonschema:"required"`
 	Brand string   `json:"brand" jsonschema:"required"`
 	Price *float32 `json:"price" jsonschema:"required" jsonschema_extras:"type=number,type=null"`
+	Size  *string  `json:"size" jsonschema:"required" jsonschema_extras:"type=string,type=null"`
 }
 
 type farmersMarketIngredientResponse struct {
@@ -36,8 +37,9 @@ For each ingredient:
 - name: plain ingredient name, such as "heirloom tomatoes", "rainier cherries", or "fresh eggs".
 - brand: if a farm, stall, vendor, or store name is visible near that ingredient on a sign, label, tag, crate, tent, or package, use that visible name. If no clear source name is visible, use "Farmers market".
 - price: if signage visibly ties a price to that ingredient, return the best-effort numeric dollar price, such as 4.99 for "$4.99/lb" or 6 for "$6 per basket"; otherwise use null.
+- size: use only a visible package size, count, or price basis tied to that ingredient. Examples: "12 eggs", "16 oz", "1 basket", or "1 lb (sold by weight)" for "$4.99/lb". Preserve average-weight wording. If no size or selling unit is visible, use null. Do not infer weight from appearance or assume a weight per basket, bunch, or item.
 
-Do not invent prices, brands, farms, or ingredients that are not visible. Return JSON only.`
+Do not invent sizes, prices, brands, farms, or ingredients that are not visible. Return JSON only.`
 
 // url here can be public remote or data: url that bin64 encodes the image
 // https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
@@ -89,6 +91,9 @@ func (c *client) ExtractFarmersMarketIngredients(ctx context.Context, imageDataU
 			Description:  name,
 			PriceRegular: item.Price,
 		})
+		if item.Size != nil {
+			ingredient.Size = strings.TrimSpace(*item.Size)
+		}
 		ingredient.ProductID = "farmersmarket_item_" + ingredient.Hash()
 		ingredients = append(ingredients, ingredient)
 	}

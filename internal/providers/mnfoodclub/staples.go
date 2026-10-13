@@ -37,6 +37,7 @@ func (identityProvider) Signature() string {
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
+	signatureParts = append(signatureParts, "catalog-size-v1")
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
 }
 
