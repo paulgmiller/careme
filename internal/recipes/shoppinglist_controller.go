@@ -257,7 +257,7 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 		if errors.Is(err, cache.ErrNotFound) {
 			// Random or expired hashes can reach this public endpoint without indicating an app bug.
 			slog.InfoContext(ctx, "failed to load params for hash", "hash", hash, "error", err)
-			renderMissingShoppingList(ctx, w, nil, "")
+			http.Error(w, "shoppinglist not found", http.StatusNotFound)
 			return
 		}
 		slog.ErrorContext(ctx, "failed to load params", "hash", hash, "error", err)

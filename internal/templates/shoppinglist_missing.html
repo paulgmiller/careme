@@ -14,7 +14,6 @@
   <main class="relative z-10 grid min-h-screen place-items-center px-4 py-10">
     <section class="friendly-card w-full max-w-md border border-brand-100 bg-white/90 p-10 text-center shadow-xl">
       <h1 class="text-2xl font-semibold text-brand-700">{{.Title}}</h1>
-      {{if .Params}}
       <p class="mt-4 text-ink-600">We don't have a shopping list for {{.Params.Location.Name}} on {{.Params.Date.Format "January 2"}} yet. Want to generate one?</p>
       <p class="mt-2 text-sm text-ink-500">We'll create recipes using ingredients from your store and build your shopping list.</p>
       <form method="POST" action="/recipes{{if .Help}}?help={{.Help}}{{end}}" class="mt-6"
@@ -24,10 +23,6 @@
         <input type="hidden" name="instructions" value="{{.Params.Instructions}}" />
         <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-brand-400">Generate my shopping list</button>
       </form>
-      {{else}}
-      <p class="mt-4 text-ink-600">This shopping list is missing or has expired. Want to generate a new one?</p>
-      <a href="/locations" class="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Choose a store</a>
-      {{end}}
     </section>
   </main>
 </body>

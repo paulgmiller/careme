@@ -31,7 +31,7 @@ func TestMissingCampaignShoppingListOffersGeneration(t *testing.T) {
 			query := url.Values{"location": {location.ID}, "date": {"2026-07-29"}, "instructions": {"make it vegetarian"}, "help": {"Pick dinner & enjoy"}}
 			rr := httptest.NewRecorder()
 			s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?"+query.Encode(), nil))
-			require.Equal(t, http.StatusNotFound, rr.Code)
+			require.Equal(t, http.StatusOK, rr.Code)
 			assert.Contains(t, rr.Body.String(), location.Name)
 			assert.Contains(t, rr.Body.String(), "Want to generate one?")
 			assert.Contains(t, rr.Body.String(), "Generate my shopping list")
@@ -96,13 +96,12 @@ func TestMissingCampaignShoppingListOffersGeneration(t *testing.T) {
 	}
 }
 
-func TestExpiredShoppingListOffersStoreSelection(t *testing.T) {
+func TestExpiredShoppingListReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t, withTestClerk(auth.DefaultMock()))
 	rr := httptest.NewRecorder()
 	s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?h=expired", nil))
 	require.Equal(t, http.StatusNotFound, rr.Code)
-	assert.Contains(t, rr.Body.String(), "missing or has expired")
-	assert.Contains(t, rr.Body.String(), `href="/locations"`)
-	assert.NotContains(t, rr.Body.String(), `method="POST"`)
+	assert.Equal(t, "shoppinglist not found\n", rr.Body.String())
+	assert.Equal(t, "text/plain; charset=utf-8", rr.Header().Get("Content-Type"))
 }
