@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
-	"regexp"
 	"strings"
 
 	"careme/internal/ai"
@@ -136,27 +135,9 @@ func productToIngredient(product product, category string) ai.InputIngredient {
 		ProductID:    productId,
 		Brand:        strings.TrimSpace(product.Brand),
 		Description:  strings.TrimSpace(product.Name),
-		Size:         productSize(product),
+		Size:         strings.TrimSpace(product.UOM),
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		AisleNumber:  category, // not as good as an actual aisle but still lets us sort
 	})
-}
-
-var weightPriceUnit = regexp.MustCompile(`(?i)^(?:\d+(?:\.\d+)?\s*)?(?:lbs?|pounds?|oz|ounces?|kg|kilograms?|g|grams?)$`)
-
-func productSize(product product) string {
-	// UOM is the price basis, not a fixed package weight. Preserve that
-	// distinction so shopping merges can buy fractional weights.
-	uom := strings.TrimSpace(product.UOM)
-	if weightPriceUnit.MatchString(uom) {
-		if uom[0] < '0' || uom[0] > '9' {
-			uom = "1 " + uom
-		}
-		return uom + " (sold by weight)"
-	}
-	if uom != "" && !strings.EqualFold(uom, "each") {
-		return uom
-	}
-	return ai.CatalogSizeFromDescription(product.Name)
 }
