@@ -90,3 +90,25 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 	}
 	return groups
 }
+
+// Wine recommendations can arrive after finalization, so add them on each render.
+func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection) []shoppingPurchaseGroup {
+	if purchases == nil {
+		return nil
+	}
+	group := shoppingPurchaseGroup{Aisle: "Wine"}
+	for _, recipe := range recipes {
+		selection := recommendations[recipe.ComputeHash()]
+		if selection == nil || len(selection.Wines) == 0 {
+			continue
+		}
+		wine := selection.Wines[0] // Use the same first pick as the recipe card.
+		group.Items = append(group.Items, shoppingPurchaseItem{ShoppingItem: ai.ShoppingItem{
+			ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity,
+		}})
+	}
+	if len(group.Items) == 0 {
+		return purchases
+	}
+	return append(slices.Clone(purchases), group)
+}
