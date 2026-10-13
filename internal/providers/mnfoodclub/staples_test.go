@@ -71,7 +71,7 @@ func TestMNFoodClubFetchStaples(t *testing.T) {
 		client.calls = nil
 		got, err := provider.FetchStaples(t.Context(), id)
 		require.NoError(t, err)
-		require.Len(t, got, 40)
+		require.Len(t, got, 36)
 		assert.Equal(t, []ai.InputIngredient{produce, meat, pasta, seafood}, got[:4])
 		assert.Equal(t, produceShareIngredients(), got[4:])
 		assert.Equal(t, t.Context(), client.ctx)
