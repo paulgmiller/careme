@@ -129,7 +129,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Recipes:              recipeViews,
 		HasSavedRecipes:      hasSavedRecipes,
 		Finalized:            input.purchases != nil,
-		Purchases:            input.purchases,
+		Purchases:            shoppingPurchasesWithWine(input.purchases, input.params.Saved, input.wineRecommendations),
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,
