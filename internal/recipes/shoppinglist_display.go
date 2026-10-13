@@ -110,5 +110,5 @@ func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.R
 	if len(group.Items) == 0 {
 		return purchases
 	}
-	return append(slices.Clone(purchases), group)
+	return append(purchases, group)
 }

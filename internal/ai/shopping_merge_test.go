@@ -81,8 +81,8 @@ func TestMergeShoppingPurchaseResults(t *testing.T) {
 		{name: "pantry", output: `{"items":[{"id":"","name":"Saffron","needed":"1 pinch","buy":null}]}`},
 		{name: "uncertain conversion", output: `{"items":[{"id":"pork","name":"Pork","needed":"1 cup","buy":null}]}`, size: "16 oz"},
 		{name: "unknown product", output: `{"items":[{"id":"invented","name":"Pork","needed":"24 oz","buy":1}]}`, wantErr: "unknown product"},
-		{name: "pantry cannot buy", output: `{"items":[{"id":"","name":"Saffron","needed":"1 pinch","buy":1}]}`, wantErr: "requires a catalog product with size"},
-		{name: "missing size", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":1}]}`, wantErr: "requires a catalog product with size"},
+		{name: "pantry cannot buy", output: `{"items":[{"id":"","name":"Saffron","needed":"1 pinch","buy":1}]}`, wantErr: "requires a catalog product"},
+		{name: "missing size", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":1}]}`, buy: buyNumber(1)},
 		{name: "zero buy", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":0}]}`, size: "16 oz", wantErr: "must be positive"},
 		{name: "negative buy", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":-1}]}`, size: "16 oz", wantErr: "must be positive"},
 	} {

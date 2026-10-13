@@ -98,9 +98,11 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 			return nil, fmt.Errorf("shopping merge returned unknown product %q", item.ProductID)
 		}
 		if item.Buy != nil {
-			product, ok := byID[item.ProductID]
-			if item.ProductID == "" || !ok || product.Size == "" {
-				return nil, fmt.Errorf("shopping buy quantity requires a catalog product with size for %q", item.Name)
+			_, ok := byID[item.ProductID]
+			// TODO: Restore the product.Size == "" check after MNFoodClub / TC Farm,
+			// Whole Foods, HEB, and farmers market providers populate Size.
+			if item.ProductID == "" || !ok {
+				return nil, fmt.Errorf("shopping buy quantity requires a catalog product for %q", item.Name)
 			}
 			if *item.Buy <= 0 {
 				return nil, fmt.Errorf("shopping buy quantity must be positive for %q", item.Name)
