@@ -346,3 +346,84 @@ tests:
         value: |
           return new Set(JSON.parse(output).plans.map((recipe) => recipe.category)).size === 4;
         metric: all-four-meal-categories
+
+  - description: Category override — all meals fancy
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner fancy: richer flavors, indulgent ingredients, and slower cooking are welcome. Every meal should feel like a special occasion."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'fancy');
+        metric: all-meals-fancy
+
+  - description: Category override — all meals healthy
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner healthy: emphasize ancient or whole grains, plenty of vegetables, and lighter proteins and preparations."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'healthy');
+        metric: all-meals-healthy
+
+  - description: Category override — all meals different
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner different: explore lesser-known cuisines, regional dishes, and unfamiliar seasonings in every meal."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'different');
+        metric: all-meals-different

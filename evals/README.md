@@ -183,6 +183,25 @@ A format assertion requires every plan to use one of the canonical dish formats
 and requires three distinct formats for a three-dinner menu.
 A three-dinner case checks that a limited ingredient is assigned to exactly one
 recipe's `recipe_instructions`, while serving count reaches every recipe.
+Category override cases request three all-Fancy, all-Healthy, or all-Different
+meals and assert that every returned category matches, overriding category spread.
+The existing judge also checks whether the plans fit the requested direction.
+Run just these cases with repeated samples:
+
+```sh
+./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'Category override' --repeat 3 --output /tmp/careme-category-overrides.json
+```
+
+On 2026-10-13, `gpt-6.1-sol` with medium reasoning and concurrency four passed
+all nine category-override assertions (three samples per case, 27 meals total).
+The Gemini judge scored request fidelity 10/10 in every sample. Overall, five of
+nine samples passed every assertion: two Healthy samples failed quality because
+all three dishes repeated farro; one Fancy sample (21.014s) and one Different
+sample (20.426s) exceeded the 20-second latency budget. The other seven samples
+passed quality. Evaluation ID: `eval-dSy-2026-10-13T22:43:09`. This is evidence for
+initial-menu category overrides, not a reliability guarantee or a regeneration test.
+Generated menu bodies remain outside the repository.
+
 These keyword assertions check handoff coverage, not semantic correctness:
 a negated instruction could still match. The generated recipes are not evaluated
 by this suite.
