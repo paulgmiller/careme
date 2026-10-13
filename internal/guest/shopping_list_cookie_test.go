@@ -16,8 +16,10 @@ func TestUseShoppingList(t *testing.T) {
 		wantAllowed     bool
 		wantCookieValue string
 	}{
-		{name: "missing cookie"},
-		{name: "invalid cookie", cookieValue: "wat"},
+		{name: "missing cookie", wantAllowed: true, wantCookieValue: "1"},
+		{name: "negative count", cookieValue: "-1", wantAllowed: true, wantCookieValue: "1"},
+		{name: "invalid cookie", cookieValue: "wat", wantAllowed: true, wantCookieValue: "1"},
+		{name: "overflow count", cookieValue: "9999999999999999999999999", wantAllowed: true, wantCookieValue: "1"},
 		{name: "limit reached", cookieValue: "2"},
 		{name: "first use", cookieValue: "0", wantAllowed: true, wantCookieValue: "1"},
 		{name: "last use", cookieValue: "1", wantAllowed: true, wantCookieValue: "2"},
