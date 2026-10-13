@@ -23,9 +23,9 @@ func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
 		t.Run(code, func(t *testing.T) {
-			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash(), krogerCartAvailable: true})
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
-			view.KrogerCartNotice = krogerCartNotice(code)
+			view.OrderingActions = []orderingActionView{{Provider: "kroger", Brand: "QFC", Notice: krogerCartNotice(code)}}
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
 			if code == "denied" {

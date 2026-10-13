@@ -2,10 +2,8 @@ package recipes
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
-	"net/http"
 	"sync"
 	"time"
 
@@ -14,7 +12,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
-	"careme/internal/providers/kroger"
+	"careme/internal/ordering"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
@@ -67,8 +65,7 @@ type server struct {
 	clerk              auth.AuthClient
 	critiques          critiqueStore
 	shoppingMerger     ShoppingQuantityMerger
-	krogerCart         *kroger.CartClient
-	krogerCartKey      []byte
+	ordering           *ordering.Service
 }
 
 type critiqueStore interface {
@@ -77,7 +74,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, orders *ordering.Service) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
@@ -93,18 +90,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
 		shoppingMerger:     shoppingMerger,
-	}
-	if cfg.Kroger.CartTokenKey != "" {
-		if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-			return nil, fmt.Errorf("kroger cart requires client ID and secret")
-		}
-		key, err := base64.StdEncoding.DecodeString(cfg.Kroger.CartTokenKey)
-		if err != nil || len(key) != 32 {
-			return nil, fmt.Errorf("KROGER_CART_TOKEN_KEY must be a base64-encoded 32-byte key")
-		}
-		s.krogerCartKey = key
-		krogerHTTP := &http.Client{Timeout: 15 * time.Second}
-		s.krogerCart = &kroger.CartClient{ClientID: cfg.Kroger.ClientID, ClientSecret: cfg.Kroger.ClientSecret, RedirectURI: cfg.ResolvedPublicOrigin() + "/kroger/callback", HTTPClient: krogerHTTP, CatalogToken: kroger.NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, krogerHTTP)}
+		ordering:           orders,
 	}
 	return s, nil
 }
@@ -114,7 +100,6 @@ func (s *server) Register(mux routing.Registrar) {
 	s.registerShoppingListRoutes(mux)
 	// save/dimsiss
 	s.registerSelectionRoutes(mux)
-	mux.HandleFunc("GET /kroger/callback", s.handleKrogerCallback)
 }
 
 func (s *server) Wait() {

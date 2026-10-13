@@ -38,8 +38,9 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger OAuth callback and refresh | Kroger cart transfer |
-| `kroger_cart_transfers/` | JSON transfer status, submitted product names, and skipped ingredients keyed by Careme user ID and finalized list hash | Kroger cart transfer | Duplicate prevention and shopping-list confirmation |
+| `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger ordering adapter OAuth callback and refresh | Kroger ordering adapter preparation |
+| `kroger_cart_transfers/` | JSON transfer status, submitted product names, and skipped ingredients keyed by Careme user ID and finalized list hash | Shared ordering cart transfer | Duplicate prevention and shopping-list confirmation |
+| `ordering_transfers/` | JSON ordering results keyed by provider, user, and finalized-list hash for carts, or request-content fingerprint for shopping links | Shared ordering module | Duplicate prevention, link reuse, and shopping-list confirmation |
 | `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler and Kroger cart transfer |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
@@ -203,3 +204,10 @@ Wine pairing now uses `gpt-6-luna`, while existing
 The ingredients CLI fetches the selected store's current staple catalog, reuses
 cached grades and embeddings, embeds the query description, and ranks that
 catalog by cosine similarity. It does not search other stores or filter by grade.
+
+## Ordering handoffs
+
+- Kroger keeps `kroger_cart_tokens/<user ID>` and `kroger_cart_transfers/<user ID>/<finalized-list hash>`. Token encryption and associated user ID are unchanged. Existing transfer JSON is still readable; records without an outcome kind are cart results, and legacy Kroger submitted items represent one package each.
+- Other cart adapters use `ordering_transfers/<provider>/<user ID>/<finalized-list hash>` with escaped key components. The initial pending record uses a conditional create before any external cart write. Pending and uncertain results prevent repeat submissions; a changed shopping-list fingerprint is reported without changing the cart again.
+- Shopping-link adapters use `ordering_transfers/<provider>/<user ID>/<content fingerprint>`. The SHA-256 fingerprint includes title, link-back URL, source store, and all item data. Successful unexpired links are reused. Content changes or expiry allow new link creation, and failed creation does not reserve the list permanently.
+- Result records contain public handoff details only, never OAuth tokens or adapter-owned prepared data. Shopping-link results indicate a created page, not confirmed product matches or cart additions.

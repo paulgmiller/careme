@@ -45,7 +45,7 @@ func TestKrogerCartAuthorizationUsesStoreBanner(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestServer(t)
-			s.krogerCart = &kroger.CartClient{ClientID: "client-id", RedirectURI: "https://careme.test/kroger/callback"}
+			testKrogerAdapter(t, s).Client = &kroger.CartClient{ClientID: "client-id", RedirectURI: "https://careme.test/kroger/callback"}
 			p := DefaultParams(&locations.Location{ID: "70500874", Name: tc.name, Chain: tc.chain}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 			s.locServer = staticLocationLookup{location: p.Location}
@@ -62,7 +62,7 @@ func TestKrogerCartAuthorizationUsesStoreBanner(t *testing.T) {
 			assert.Equal(t, "/v1/connect/oauth2/authorize", redirect.Path)
 			assert.Equal(t, tc.banner, redirect.Query().Get("banner"))
 			assert.Equal(t, "client-id", redirect.Query().Get("client_id"))
-			assert.Equal(t, s.krogerCart.RedirectURI, redirect.Query().Get("redirect_uri"))
+			assert.Equal(t, testKrogerAdapter(t, s).Client.RedirectURI, redirect.Query().Get("redirect_uri"))
 			assert.Equal(t, "cart.basic:write", redirect.Query().Get("scope"))
 			require.Len(t, rr.Result().Cookies(), 1)
 			body, err := base64.RawURLEncoding.DecodeString(rr.Result().Cookies()[0].Value)
@@ -81,7 +81,7 @@ func TestKrogerCartTransferAndEncryptedConnection(t *testing.T) {
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
 	require.NoError(t, err)
-	s.krogerCartKey = key
+	setTestKrogerKey(t, s, key)
 	token := kroger.CartToken{AccessToken: "shopper-secret", RefreshToken: "refresh-secret", ExpiresAt: time.Now().Add(time.Hour)}
 	require.NoError(t, s.saveCartToken(t.Context(), "shopper", token))
 	loaded, err := s.loadCartToken(t.Context(), "shopper")
@@ -116,7 +116,7 @@ func TestKrogerCartTransferAndEncryptedConnection(t *testing.T) {
 			return nil, nil
 		}
 	})}
-	s.krogerCart = &kroger.CartClient{ClientID: "id", ClientSecret: "secret", HTTPClient: httpClient, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", httpClient)}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{ClientID: "id", ClientSecret: "secret", HTTPClient: httpClient, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", httpClient)}
 	p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Garlic dish", Ingredients: []ai.Ingredient{{ProductID: "0001111060903", Name: "Garlic", Quantity: "2 cloves"}, {Name: "Salt", Quantity: "1 tsp"}}}}
 	s.locServer = staticLocationLookup{location: p.Location}
@@ -182,7 +182,7 @@ func TestKrogerCallback(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestServer(t)
-			s.krogerCartKey = make([]byte, 32)
+			setTestKrogerKey(t, s, make([]byte, 32))
 			p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "garlic", Name: "Garlic", Quantity: "2 cloves"}}}}
 			s.locServer = staticLocationLookup{location: p.Location}
@@ -217,7 +217,7 @@ func TestKrogerCallback(t *testing.T) {
 					return nil, nil
 				}
 			})}
-			s.krogerCart = &kroger.CartClient{ClientID: "id", ClientSecret: "secret", RedirectURI: "https://test.careme.cooking/kroger/callback", HTTPClient: client, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", client)}
+			testKrogerAdapter(t, s).Client = &kroger.CartClient{ClientID: "id", ClientSecret: "secret", RedirectURI: "https://test.careme.cooking/kroger/callback", HTTPClient: client, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", client)}
 			state := krogerAuthState{Nonce: "nonce", Hash: p.Hash(), UserID: "mock-clerk-user-id", IssuedAt: time.Now()}
 			if tc.changeState != nil {
 				tc.changeState(&state)
@@ -329,7 +329,7 @@ func TestKrogerTransferReturnToShoppingList(t *testing.T) {
 					return nil, nil
 				}
 			})}
-			s.krogerCart = &kroger.CartClient{HTTPClient: client, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", client)}
+			testKrogerAdapter(t, s).Client = &kroger.CartClient{HTTPClient: client, CatalogToken: kroger.NewKrogerTokenManager("id", "secret", client)}
 			req := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/kroger-cart", nil)
 			rr := httptest.NewRecorder()
 			s.performCartTransfer(rr, req, "mock-clerk-user-id", p.Hash(), kroger.CartToken{AccessToken: "shopper"})
@@ -362,7 +362,7 @@ func TestKrogerTransferReturnToShoppingList(t *testing.T) {
 
 func TestKrogerTransferFeedbackIsPrivate(t *testing.T) {
 	s := newTestServer(t)
-	s.krogerCart = &kroger.CartClient{}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{}
 	p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	s.locServer = staticLocationLookup{location: p.Location}
@@ -409,7 +409,7 @@ func TestFinalizedKrogerPurchasesUsesProviderID(t *testing.T) {
 
 func TestQFCTransferLinksToQFCCart(t *testing.T) {
 	s := newTestServer(t)
-	s.krogerCart = &kroger.CartClient{}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{}
 	p := DefaultParams(&locations.Location{ID: "70500874", Name: "Bellevue", Chain: "QFC"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	s.locServer = staticLocationLookup{location: p.Location}
@@ -424,7 +424,7 @@ func TestQFCTransferLinksToQFCCart(t *testing.T) {
 
 func TestLegacyQFCPlanUsesCurrentChainForCartAndAuthorization(t *testing.T) {
 	s := newTestServer(t, withTestLocationServer(staticLocationLookup{location: &locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}}))
-	s.krogerCart = &kroger.CartClient{ClientID: "client", RedirectURI: "https://careme.test/kroger/callback"}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{ClientID: "client", RedirectURI: "https://careme.test/kroger/callback"}
 	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	require.NoError(t, s.SaveParams(t.Context(), p))
@@ -455,7 +455,7 @@ func TestKrogerCartRejectsFailedCurrentLocationLookup(t *testing.T) {
 		assert.Equal(t, "70500874", id)
 		return nil, lookupErr
 	})))
-	s.krogerCart = &kroger.CartClient{}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{}
 	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	require.NoError(t, s.SaveParams(t.Context(), p))
@@ -494,7 +494,7 @@ func TestKrogerCartLink(t *testing.T) {
 
 func TestKrogerTransferRequiresFinalizedPurchaseSnapshot(t *testing.T) {
 	s := newTestServer(t)
-	s.krogerCart = &kroger.CartClient{}
+	testKrogerAdapter(t, s).Client = &kroger.CartClient{}
 	p := DefaultParams(&locations.Location{ID: "01400943", Chain: "Kroger"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "garlic", Name: "Garlic", Quantity: "2 cloves"}}}}
 	s.locServer = staticLocationLookup{location: p.Location}

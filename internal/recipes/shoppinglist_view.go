@@ -9,7 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-	"careme/internal/providers/kroger"
+	"careme/internal/ordering"
 	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -82,12 +82,21 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
-	FinalizedKroger      bool
-	KrogerCartAvailable  bool
-	KrogerCartURL        string
-	KrogerCartBrand      string
-	KrogerCartNotice     string
-	KrogerTransfer       *krogerTransfer
+	OrderingActions      []orderingActionView
+}
+
+// orderingActionView describes a configured destination and its latest handoff result.
+type orderingActionView struct {
+	Provider    string
+	Brand       string
+	ActionURL   string
+	URL         string
+	Notice      string
+	Message     string
+	ActionLabel string
+	Description string
+	Result      *ordering.Result
+	CanSubmit   bool
 }
 
 type shoppingListViewInput struct {
@@ -103,7 +112,6 @@ type shoppingListViewInput struct {
 	pendingInstructions  string
 	progress             shoppingProgress
 	useTodaysIngredients bool
-	krogerCartAvailable  bool
 }
 
 func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (shoppingListPageView, error) {
@@ -143,8 +151,6 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		AuthReturnTo:         "/recipes?h=" + input.hash,
 		UseTodaysIngredients: input.useTodaysIngredients,
 		AdminURL:             "/admin/mealplan/" + input.hash,
-		FinalizedKroger:      kroger.NewIdentityProvider().IsID(input.params.Location.ID) && input.purchases != nil,
-		KrogerCartAvailable:  input.krogerCartAvailable && serverSignedIn,
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
