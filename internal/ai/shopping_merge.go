@@ -99,6 +99,10 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 		}
 		if item.Buy != nil {
 			product, ok := byID[item.ProductID]
+			// TODO: Reevaluate rejecting the entire list when the model returns buy
+			// without a catalog size (seen with "Pork mild Italian sausage").
+			// Buy is a multiple of that size; the prompt requires null when it is
+			// unavailable. Consider whether keeping Needed with Buy=nil is appropriate.
 			if item.ProductID == "" || !ok || product.Size == "" {
 				return nil, fmt.Errorf("shopping buy quantity requires a catalog product with size for %q", item.Name)
 			}

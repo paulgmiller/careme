@@ -47,13 +47,26 @@
     <button type="button"
             id="finalizeButton"
             {{if .HasSavedRecipes}}hx-post="/recipes/{{.Hash}}/finalize"
-            hx-swap="none"{{else}}disabled
+            hx-swap="none"
+            hx-disabled-elt="this"
+            hx-indicator="#shopping-finalize-status"
+            hx-on::before-request="document.getElementById('shopping-finalize-error').hidden = true"
+            hx-on::after-request="if (!event.detail.successful) document.getElementById('shopping-finalize-error').hidden = false"{{else}}disabled
             aria-disabled="true"
             aria-describedby="finalize-help"{{end}}
-            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
+            class="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold shadow-md transition focus:outline-none focus:ring-2 focus:ring-offset-2 {{if .HasSavedRecipes}}bg-action-green-500 text-white hover:bg-action-green-600 focus:ring-action-green-300 disabled:cursor-not-allowed disabled:opacity-70{{else}}cursor-not-allowed bg-gray-200 text-gray-500 shadow-none focus:ring-gray-300{{end}}">
       Build Shopping List
     </button>
   </span>
+  {{if .HasSavedRecipes}}
+  <span id="shopping-finalize-status" class="htmx-indicator inline-flex items-center gap-2 text-sm text-ink-600" role="status">
+    <span class="h-4 w-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true"></span>
+    Building shopping list…
+  </span>
+  <p id="shopping-finalize-error" hidden role="alert" class="text-sm text-action-red-700">
+    Could not build your shopping list. Try again, chef.
+  </p>
+  {{end}}
   {{template "shopping_list_share_button" .}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
