@@ -1,16 +1,19 @@
 package recipes
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
 	"github.com/stretchr/testify/assert"
@@ -29,10 +32,10 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
 	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 cloves"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
-	err := s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	err := s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{}, nil)
 	require.NoError(t, err)
 	first := cachedShoppingItems(t, s, "final-hash")
-	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{}, nil)
 	require.NoError(t, err)
 	second := cachedShoppingItems(t, s, "final-hash")
 	assert.Equal(t, 1, merger.calls)
@@ -44,13 +47,13 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	require.NoError(t, reader.Close())
 
 	updated := append(ingredients, ai.Ingredient{ProductID: "wine-id", Name: "Wine", Quantity: "1 bottle"})
-	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", updated, []ai.InputIngredient{})
+	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", updated, []ai.InputIngredient{}, nil)
 	require.NoError(t, err)
 	cached := cachedShoppingItems(t, s, "final-hash")
 	assert.Equal(t, first, cached, "the finalized list retains its first successful merge")
 	assert.Equal(t, 1, merger.calls)
 
-	err = s.mergeAndCacheShoppingList(t.Context(), "different-final-hash", updated, []ai.InputIngredient{})
+	err = s.mergeAndCacheShoppingList(t.Context(), "different-final-hash", updated, []ai.InputIngredient{}, nil)
 	require.NoError(t, err)
 	newList := cachedShoppingItems(t, s, "different-final-hash")
 	assert.Equal(t, 2, merger.calls, "a different finalized hash gets its own merge")
@@ -116,53 +119,54 @@ func TestShoppingPurchaseCacheRetainsFinalizedSnapshot(t *testing.T) {
 	needs := []ai.Ingredient{{ProductID: "pork", Name: "Pork", Quantity: "24 oz"}}
 	price := float32(6)
 	catalog := []ai.InputIngredient{{ProductID: "pork", Description: "Pork", Size: "32 oz", PriceRegular: &price}}
-	err := s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
+	err := s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog, nil)
 	require.NoError(t, err)
 	first := cachedShoppingItems(t, s, "plan")
-	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog, nil)
 	require.NoError(t, err)
 	second := cachedShoppingItems(t, s, "plan")
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, merger.calls)
 	catalog[0].Size = "16 oz"
-	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
 	sale := float32(3)
 	catalog[0].PriceSale = &sale
-	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls)
 	catalog[0].Grade = &ai.IngredientGrade{Score: 10}
 	catalog[0].Embedding = ai.IngredientEmbedding{1, 2}
-	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "plan", needs, catalog, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, merger.calls, "catalog changes should not regenerate the finalized snapshot")
 }
 
-func TestCachedShoppingCatalogUsesSavedStoreAndDate(t *testing.T) {
+func TestFinalizedShoppingInputsUseOnlyStaplesForSavedStoreAndDate(t *testing.T) {
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC))
-	p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{"red"}}, {Title: "Second dinner", WineStyles: []string{"red"}}}
-	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "small", Description: "Pork", Size: "16 oz"}, {ProductID: "large", Description: "Pork", Size: "32 oz", Grade: &ai.IngredientGrade{Score: 10}, Embedding: ai.IngredientEmbedding{1}}}))
-	require.NoError(t, s.SaveIngredients(t.Context(), "pantry/query-categories-v1/"+p.LocationHash(), []ai.InputIngredient{{ProductID: "salt", Description: "Salt"}, {ProductID: "small", Description: "Pork", Size: "16 oz"}}))
-	require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey([]string{"red"}, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", Description: "Red wine", Size: "750 ml"}}))
-	got, err := s.cachedShoppingCatalog(t.Context(), p)
+	p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{"red"}}}
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	staples := []ai.InputIngredient{{ProductID: "pork", Description: "Pork", Size: "16 oz"}}
+	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), staples))
+	// These unused catalogs must not be read, even if corrupt.
+	for _, key := range []string{"pantry/query-categories-v1/" + p.LocationHash(), wineStylesCacheKey([]string{"red"}, p.Location.ID, p.Date)} {
+		require.NoError(t, s.Cache.Put(t.Context(), ingredientsCachePrefix+key, "invalid JSON", cache.Unconditional()))
+	}
+	_, catalog, _, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.NoError(t, err)
-	require.Len(t, got, 4)
-	assert.Equal(t, []string{"small", "large", "salt", "wine"}, []string{got[0].ProductID, got[1].ProductID, got[2].ProductID, got[3].ProductID})
-	assert.Nil(t, got[1].Grade)
-	assert.Nil(t, got[1].Embedding)
-	other := *p
-	other.Date = p.Date.AddDate(0, 0, 1)
-	got, err = s.cachedShoppingCatalog(t.Context(), &other)
-	require.NoError(t, err)
-	assert.Empty(t, got)
-	other = *p
-	other.Location = &locations.Location{ID: "walmart_999"}
-	got, err = s.cachedShoppingCatalog(t.Context(), &other)
-	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Equal(t, staples, catalog)
+	otherDate := *p
+	otherDate.Date = p.Date.AddDate(0, 0, 1)
+	otherStore := *p
+	otherStore.Location = &locations.Location{ID: "walmart_999"}
+	for _, other := range []generatorParams{otherDate, otherStore} {
+		require.NoError(t, s.SaveParams(t.Context(), &other))
+		_, catalog, _, err = s.finalizedShoppingInputs(t.Context(), other.Hash())
+		require.NoError(t, err)
+		assert.Empty(t, catalog)
+	}
 }
 
 func TestShoppingCatalogCorruptionStopsMerge(t *testing.T) {
@@ -171,7 +175,7 @@ func TestShoppingCatalogCorruptionStopsMerge(t *testing.T) {
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "24 oz"}}}}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.Cache.Put(t.Context(), ingredientsCachePrefix+p.LocationHash(), "invalid JSON", cache.Unconditional()))
-	_, _, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
+	_, _, _, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.ErrorContains(t, err, "load shopping catalog")
 }
 
@@ -213,19 +217,45 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	isValidHTML(t, body)
 }
 
-func TestFinalizedShoppingInputsIncludeWine(t *testing.T) {
+func TestFinalizeAddsWinePicksWithoutMergingThem(t *testing.T) {
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
-	p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{"red"}, Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "24 oz"}}}}
+	p.Saved = []ai.Recipe{
+		{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "24 oz"}}},
+		{Title: "Second dinner", Ingredients: []ai.Ingredient{{Name: "Pork", Quantity: "16 oz"}}},
+	}
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	require.NoError(t, s.SaveWine(t.Context(), p.Saved[0].ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine}}))
-	require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey([]string{"red"}, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", Description: "Red wine", Size: "750 ml"}}))
-	needs, catalog, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
+	for _, recipe := range p.Saved {
+		require.NoError(t, s.SaveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine, {ProductID: "alternative", Name: "Other wine"}}}))
+	}
+	needs, catalog, wines, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.NoError(t, err)
-	assert.Contains(t, needs, wine)
-	require.Len(t, catalog, 1)
-	assert.Equal(t, "wine", catalog[0].ProductID)
+	assert.NotContains(t, needs, wine)
+	assert.Equal(t, []ai.Ingredient{wine, wine}, wines, "keep the first pick from each recipe unchanged")
+	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, got []ai.Ingredient, products []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		assert.Equal(t, needs, got)
+		assert.Empty(t, products)
+		return []ai.ShoppingItem{{Name: "Pork", Needed: "40 oz"}}, nil
+	})
+	require.NoError(t, s.mergeAndCacheShoppingList(t.Context(), p.Hash(), needs, catalog, wines))
+	groups, err := s.cachedShoppingPurchases(t.Context(), p.Hash())
+	require.NoError(t, err)
+	require.Len(t, groups, 2)
+	assert.Equal(t, "Wine", groups[1].Aisle)
+	require.Len(t, groups[1].Items, 2)
+	for _, item := range groups[1].Items {
+		assert.Equal(t, wine.ProductID, item.ProductID)
+		assert.Equal(t, wine.Name, item.Name)
+		assert.Equal(t, wine.Quantity, item.Needed)
+		assert.Nil(t, item.Buy)
+	}
+	var html bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&html, "shopping_purchase_section", shoppingListPageView{Purchases: groups}))
+	assert.Equal(t, 2, strings.Count(html.String(), "Red wine"))
+	assert.Equal(t, 2, strings.Count(html.String(), "1 bottle"))
+	assert.NotContains(t, html.String(), "Other wine")
+	isValidHTML(t, html.String())
 }
 
 func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
@@ -239,11 +269,11 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	})
 	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}
 	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil", Size: "16 fl oz"}}
-	err := s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog)
+	err := s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog, nil)
 	require.NoError(t, err)
 	first := cachedShoppingItems(t, s, "filtered")
 	catalog[1].Size = "3 lb"
-	err = s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog)
+	err = s.mergeAndCacheShoppingList(t.Context(), "filtered", needs, catalog, nil)
 	require.NoError(t, err)
 	second := cachedShoppingItems(t, s, "filtered")
 	assert.Equal(t, first, second)

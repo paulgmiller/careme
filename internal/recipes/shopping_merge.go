@@ -27,7 +27,7 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 	return result, nil
 }
 
-func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
+func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient, wines []ai.Ingredient) error {
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
@@ -50,6 +50,15 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 		return err
 	}
 	purchases = shoppingPurchasesForDisplay(merged, catalog)
+	if len(wines) > 0 {
+		group := shoppingPurchaseGroup{Aisle: "Wine"}
+		for _, wine := range wines {
+			group.Items = append(group.Items, shoppingPurchaseItem{ShoppingItem: ai.ShoppingItem{
+				ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity,
+			}})
+		}
+		purchases = append(purchases, group)
+	}
 	body, err := json.Marshal(purchases)
 	if err != nil {
 		return err
@@ -71,27 +80,29 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 	return nil
 }
 
-func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, error) {
+func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai.Ingredient, []ai.InputIngredient, []ai.Ingredient, error) {
 	p, err := s.ParamsFromCache(ctx, hash)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load finalized shopping list: %w", err)
+		return nil, nil, nil, fmt.Errorf("load finalized shopping list: %w", err)
 	}
 	if len(p.Saved) == 0 {
-		return nil, nil, fmt.Errorf("shopping list is not finalized")
+		return nil, nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
 	ingredients := make([]ai.Ingredient, 0)
+	var wines []ai.Ingredient
 	for _, recipe := range p.Saved {
+		ingredients = append(ingredients, recipe.Ingredients...)
 		wine, err := s.WineFromCache(ctx, recipe.ComputeHash())
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			return nil, nil, fmt.Errorf("load wine: %w", err)
+			return nil, nil, nil, fmt.Errorf("load wine: %w", err)
 		}
-		ingredients = append(ingredients, ingredientsForDisplay(recipe.Ingredients, wine)...)
+		wines = append(wines, ingredientsForDisplay(nil, wine)...)
 	}
-	catalog, err := s.cachedShoppingCatalog(ctx, p)
-	if err != nil {
-		return nil, nil, err
+	catalog, err := s.IngredientsFromCache(ctx, p.LocationHash())
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return nil, nil, nil, fmt.Errorf("load shopping catalog: %w", err)
 	}
-	return ingredients, catalog, nil
+	return ingredients, catalog, wines, nil
 }
 
 // Loading a page never invokes the model; Build creates this snapshot.
@@ -106,40 +117,4 @@ func (s *server) cachedShoppingPurchases(ctx context.Context, hash string) ([]sh
 		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 	}
 	return purchases, nil
-}
-
-// Catalog snapshots are optional candidates. Missing snapshots leave needs unresolved.
-func (s *server) cachedShoppingCatalog(ctx context.Context, p *generatorParams) ([]ai.InputIngredient, error) {
-	keys := []string{p.LocationHash(), "pantry/query-categories-v1/" + p.LocationHash()}
-	for _, recipe := range p.Saved {
-		if styles := normalizedWineStyles(recipe.WineStyles); len(styles) > 0 {
-			keys = append(keys, wineStylesCacheKey(styles, p.Location.ID, p.Date))
-		}
-	}
-	products := make([]ai.InputIngredient, 0)
-	seenKeys := make(map[string]bool)
-	seenProducts := make(map[string]bool)
-	for _, key := range keys {
-		if seenKeys[key] {
-			continue
-		}
-		seenKeys[key] = true
-		candidates, err := s.IngredientsFromCache(ctx, key)
-		if errors.Is(err, cache.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("load shopping catalog %s: %w", key, err)
-		}
-		for _, product := range candidates {
-			if product.ProductID == "" || seenProducts[product.ProductID] {
-				continue
-			}
-			seenProducts[product.ProductID] = true
-			product.Grade = nil
-			product.Embedding = nil
-			products = append(products, product)
-		}
-	}
-	return products, nil
 }
