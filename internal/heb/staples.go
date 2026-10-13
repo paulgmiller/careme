@@ -103,7 +103,7 @@ func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84) 
 }
 
 func (p identityProvider) Signature() string {
-	return "catalog-size-v1:" + string(defaultHEBStaplesSignature)
+	return string(defaultHEBStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {

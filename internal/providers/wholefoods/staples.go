@@ -37,7 +37,7 @@ func NewIdentityProvider() identityProvider {
 }
 
 func (p identityProvider) Signature() string {
-	return "catalog-size-v1:" + string(defaultStaplesSignature)
+	return string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {

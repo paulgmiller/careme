@@ -48,9 +48,9 @@ func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
 func TestForStorePreservesExistingHashes(t *testing.T) {
 	// Captured from generatorParams.LocationHash before extraction.
 	hashes := map[string]string{
-		"70500874": "y91ErIgebKw", "safeway_1142": "tCtsYBvO05c",
+		"70500874": "y91ErIgebKw", "safeway_1142": "tCtsYBvO05c", "heb_540": "CMClGf16aHw",
 		"aldi_F100": "2XFP-Eq4418", "publix_1847": "1ZjBLr7Mego", "farmersmarket_1": "g7OOZpxYEww",
-		"walmart_1": "WiU9sDZCk_E", "loc-123": "wrxx3dmHzBA",
+		"wholefoods_10216": "3NnJs9GPTj4", "walmart_1": "WiU9sDZCk_E", "loc-123": "wrxx3dmHzBA",
 	}
 	for id, want := range hashes {
 		t.Run(id, func(t *testing.T) {
@@ -63,20 +63,6 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 				assert.Equal(t, want, params.Hash())
 				assert.NotEqual(t, want, cachekey.ForStore(id, date.AddDate(0, 0, 1), signature))
 			}
-		})
-	}
-}
-
-func TestCatalogSizeSignaturesBypassOlderSnapshots(t *testing.T) {
-	for _, tc := range []struct{ id, oldHash, wantHash string }{
-		{"heb_540", "CMClGf16aHw", "D9NZryjLG0E"},
-		{"wholefoods_10216", "3NnJs9GPTj4", "pW34ZP229gM"},
-	} {
-		t.Run(tc.id, func(t *testing.T) {
-			date := time.Date(2025, 9, 17, 12, 0, 0, 0, time.UTC)
-			params := recipes.DefaultParams(&locations.Location{ID: tc.id}, date)
-			assert.Equal(t, tc.wantHash, params.LocationHash())
-			assert.NotEqual(t, tc.oldHash, params.LocationHash())
 		})
 	}
 }

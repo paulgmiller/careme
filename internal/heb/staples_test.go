@@ -23,7 +23,7 @@ func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal staple categories: %v", err)
 	}
-	if got != "catalog-size-v1:"+string(want) {
+	if got != string(want) {
 		t.Fatalf("unexpected signature: got %q want %q", got, want)
 	}
 }

@@ -1,10 +1,11 @@
 # Cache Layout
 
-HEB and Whole Foods staple signatures include `catalog-size-v1:`, and MNFoodClub
-includes `catalog-size-v1` in its signature hash. These versions bypass ingredient
-snapshots created before package sizes were mapped. Existing finalized shopping
-lists retain their original snapshots. Farmers market sizes are extracted on new
-photo uploads; existing photo inventories are not reanalyzed automatically.
+MNFoodClub includes `catalog-size-v1` in its signature hash to bypass ingredient
+snapshots created before package sizes were mapped. HEB and Whole Foods keep their
+existing signatures, so cached catalogs gain size data when fetched again.
+Existing finalized shopping lists retain their original snapshots. Farmers market
+sizes are extracted on new photo uploads; existing photo inventories are not
+reanalyzed automatically.
 
 This project stores cache entries in:
 - Local filesystem under `cache/` (default app cache)
