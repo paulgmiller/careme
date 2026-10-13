@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"careme/internal/auth"
-	"careme/internal/guest"
 	"careme/internal/httpx"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
@@ -66,8 +65,6 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
-			// give them a few free samples since they came in through locaitons
-			guest.EnsureShoppingListCount(w, r)
 		}
 
 		coordinates, err := l.searchCoordinates(r)

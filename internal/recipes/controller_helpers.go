@@ -104,6 +104,21 @@ func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 }
 
+func renderMissingShoppingList(ctx context.Context, w http.ResponseWriter, p *generatorParams, help string) {
+	data := struct {
+		templates.Page
+		Params *generatorParams
+		Help   string
+	}{templates.NewPage(ctx), p, help}
+	data.Title = "Let's get cooking"
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	if err := templates.MissingShoppingList.Execute(w, data); err != nil {
+		slog.ErrorContext(ctx, "missing shopping list template execute error", "error", err)
+	}
+}
+
 // redirectToHash keeps only query arguments explicitly named by the caller.
 func redirectToHash(w http.ResponseWriter, r *http.Request, hash string, argsToKeep ...string) {
 	args := url.Values{} // intentionally clear other args

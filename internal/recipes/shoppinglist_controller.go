@@ -359,6 +359,15 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			// need directive to get to right hash
 			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 		}
+		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
+				return
+			}
+			slog.ErrorContext(ctx, "failed to check recipe parameters", "error", err)
+			http.Error(w, "failed to load recipe parameters", http.StatusInternalServerError)
+			return
+		}
 		redirectToHash(w, r, p.Hash(), QueryArgHelp)
 		return
 	}
@@ -415,9 +424,6 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 			return
 		}
 		selection = selection.override(userSelection)
-	}
-	if !signedIn && !progress.Generating {
-		guest.EnsureShoppingListCount(w, r)
 	}
 	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
 	maps.Copy(finishedRecipes, progress.Finished)
