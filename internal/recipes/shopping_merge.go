@@ -31,25 +31,19 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
-	var purchases []shoppingPurchaseGroup
-	reader, err := s.Cache.Get(ctx, key)
-	if err == nil {
-		defer func() { _ = reader.Close() }()
-		if err := json.NewDecoder(reader).Decode(&purchases); err != nil {
-			return fmt.Errorf("decode merged shopping quantities: %w", err)
-		}
-		return nil
+	exists, err := s.Cache.Exists(ctx, key)
+	if err != nil {
+		return fmt.Errorf("check merged shopping quantities: %w", err)
 	}
-
-	if !errors.Is(err, cache.ErrNotFound) {
-		return fmt.Errorf("load merged shopping quantities: %w", err)
+	if exists {
+		return nil
 	}
 
 	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
 	if err != nil {
 		return err
 	}
-	purchases = shoppingPurchasesForDisplay(merged, catalog)
+	purchases := shoppingPurchasesForDisplay(merged, catalog)
 	if len(wines) > 0 {
 		group := shoppingPurchaseGroup{Aisle: "Wine"}
 		for _, wine := range wines {
@@ -63,18 +57,8 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 	if err != nil {
 		return err
 	}
-	if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil {
-		if !errors.Is(err, cache.ErrAlreadyExists) {
-			return fmt.Errorf("cache merged shopping quantities: %w", err)
-		}
-		winner, err := s.Cache.Get(ctx, key)
-		if err != nil {
-			return fmt.Errorf("load concurrent shopping merge: %w", err)
-		}
-		defer func() { _ = winner.Close() }()
-		if err := json.NewDecoder(winner).Decode(&purchases); err != nil {
-			return fmt.Errorf("decode concurrent shopping merge: %w", err)
-		}
+	if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
+		return fmt.Errorf("cache merged shopping quantities: %w", err)
 	}
 
 	return nil
