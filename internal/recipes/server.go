@@ -62,6 +62,7 @@ type server struct {
 	wg                 sync.WaitGroup
 	clerk              auth.AuthClient
 	critiques          critiqueStore
+	shoppingMerger     ShoppingQuantityMerger
 }
 
 type critiqueStore interface {
@@ -70,7 +71,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen) *server {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger) *server {
 	return &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),
@@ -82,6 +83,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		locServer:          locServer,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
+		shoppingMerger:     shoppingMerger,
 	}
 }
 

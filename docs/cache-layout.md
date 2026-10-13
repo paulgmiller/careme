@@ -29,6 +29,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
+| `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, sizes, and aisle details keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -109,6 +110,7 @@ Recipe hashes are used by or stored in:
 
 Compatibility implications:
 
+- Shopping purchase recommendations use `shopping_quantities/v7/`. Older quantity records are not read. Build merges and caches quantities before finalizing and redirecting; product names, sizes, and aisle details are saved with the merged list so page loads only read the cached result and never reload ingredient catalogs. The first successful merge is stored directly under the finalized shopping-list hash, which includes the selected recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to recipe product IDs before merging. Only cached staples for the saved plan’s store and date supply product sizes for food merging. Pantry and wine candidate catalogs are not read. The first wine pick from each saved recipe bypasses the merger and is appended unchanged to the cached list under Wine, with no buy calculation. Missing catalog snapshots leave needs unresolved; other cache errors stop the request.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.

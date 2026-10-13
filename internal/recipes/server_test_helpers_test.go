@@ -53,7 +53,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
+	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{})
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}
