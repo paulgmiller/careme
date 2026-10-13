@@ -2,6 +2,7 @@ package heb
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,10 +12,42 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func freshBuild(_ context.Context, _ string) (string, error) {
 	return "fresh-build", nil
+}
+
+func TestCategorySizeMatchesPricedSKU(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		skus []SKU
+		want string
+	}{
+		{"curbside preferred", []SKU{
+			{CustomerFriendlySize: "8 oz", ContextPrices: []ItemPrice{{Context: "ONLINE", ListPrice: &DisplayPrice{Amount: new(float32(4))}}}},
+			{CustomerFriendlySize: " 16 oz ", ContextPrices: []ItemPrice{{Context: "CURBSIDE", ListPrice: &DisplayPrice{Amount: new(float32(7))}}}},
+		}, "16 oz"},
+		{"average weight", []SKU{{CustomerFriendlySize: "Avg. 2.0 lbs", ContextPrices: []ItemPrice{{Context: "ONLINE", SalePrice: &DisplayPrice{Amount: new(float32(10))}}}}}, "Avg. 2.0 lbs"},
+		{"no SKUs", nil, ""},
+		{"unpriced SKU", []SKU{{CustomerFriendlySize: "8 oz"}}, ""},
+		{"priced SKU without size", []SKU{{ContextPrices: []ItemPrice{{Context: "CURBSIDE", ListPrice: &DisplayPrice{Amount: new(float32(4))}}}}}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var response categoryResponse
+			response.PageProps.Layout.VisualComponents = []categoryProductCollection{{Items: []Product{{TypeName: "Product", ID: "pork", SKUs: tc.skus}}}}
+			body, err := json.Marshal(response)
+			require.NoError(t, err)
+			page, err := decodeCategoryPagePayload(strings.NewReader(string(body)), 1)
+			require.NoError(t, err)
+			require.Len(t, page.Products, 1)
+			ingredient := productToIngredient(page.Products[0], StapleCategory{Name: "pork"})
+			assert.Equal(t, tc.want, ingredient.Size)
+		})
+	}
 }
 
 func TestCategoryPageBuildsExpectedRequest(t *testing.T) {

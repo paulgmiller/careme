@@ -127,23 +127,15 @@ func productToIngredient(product product, category string) ai.InputIngredient {
 		salePrice = &price
 	}
 
-	/* unit of measure is more around pricing than total size)
-	TODO how should we normalize prices per units here and in kroger.
-	var size *string
-	sizeText := strings.TrimSpace(strings.Join(compactStrings(product.UOM), " "))
-	if sizeText != "" {
-		size = &sizeText
-	}*/
-
 	hasher := fnv.New32a()
 	// dupes for different units of measure?
 	_ = lo.Must(hasher.Write([]byte(product.Slug)))
 	productId := base64.RawURLEncoding.EncodeToString(hasher.Sum(nil))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
-		ProductID:   productId,
-		Brand:       strings.TrimSpace(product.Brand),
-		Description: strings.TrimSpace(product.Name),
-		// Size:         size,
+		ProductID:    productId,
+		Brand:        strings.TrimSpace(product.Brand),
+		Description:  strings.TrimSpace(product.Name),
+		Size:         strings.TrimSpace(product.UOM),
 		PriceRegular: regularPrice,
 		PriceSale:    salePrice,
 		AisleNumber:  category, // not as good as an actual aisle but still lets us sort

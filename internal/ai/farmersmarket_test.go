@@ -14,7 +14,7 @@ import (
 )
 
 func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
-	client := NewClient(testAIConfig(config.DefaultRecipeModel), farmersMarketResponseClient(t), nil)
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), farmersMarketResponseClient(t, `{"ingredients":[{"name":"heirloom tomatoes","brand":"River Farm","price":4.99,"size":" 1 lb (sold by weight) "},{"name":"heirloom tomatoes","brand":"Hill Farm","price":null,"size":null}]}`), nil)
 
 	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
 
@@ -23,7 +23,8 @@ func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
 	assert.Equal(t, "heirloom tomatoes", got[0].Description)
 	assert.Equal(t, "River Farm", got[0].AisleNumber)
 	assert.Equal(t, "River Farm", got[0].Brand)
-	assert.Empty(t, got[0].Size)
+	assert.Equal(t, "1 lb (sold by weight)", got[0].Size)
+	assert.Empty(t, got[1].Size)
 	require.NotNil(t, got[0].PriceRegular)
 	assert.InDelta(t, 4.99, *got[0].PriceRegular, 0.001)
 	assert.Empty(t, got[0].Categories)
@@ -33,7 +34,7 @@ func TestExtractFarmersMarketIngredientsUsesVisiblePrice(t *testing.T) {
 	assert.NotEqual(t, got[0].ProductID, got[1].ProductID)
 }
 
-func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T) {
+func TestFarmersMarketIngredientSchemaIncludesVisibleSize(t *testing.T) {
 	schema := farmersMarketIngredientSchema()
 	properties := schemaProperties(t, schema)
 	ingredients := schemaObject(t, properties["ingredients"])
@@ -41,11 +42,39 @@ func TestFarmersMarketIngredientSchemaUsesPriceNotSizeOrCategories(t *testing.T)
 	itemProperties := schemaProperties(t, items)
 
 	assert.Contains(t, itemProperties, "price")
-	assert.NotContains(t, itemProperties, "size")
+	assert.Contains(t, itemProperties, "size")
+	assert.Contains(t, schemaRequired(t, items), "size")
+	sizeTypes := schemaObject(t, itemProperties["size"])["type"]
+	assert.ElementsMatch(t, []any{"string", "null"}, sizeTypes)
 	assert.NotContains(t, itemProperties, "categories")
 	assert.Contains(t, schemaRequired(t, items), "price")
 	assertSchemaAllowsNull(t, schemaObject(t, itemProperties["price"]))
 	assertNoOneOf(t, schema)
+}
+
+func TestExtractFarmersMarketIngredientSizes(t *testing.T) {
+	for _, tc := range []struct{ sizeJSON, want string }{
+		{`"12 eggs"`, "12 eggs"},
+		{`"1 basket"`, "1 basket"},
+		{`null`, ""},
+	} {
+		t.Run(tc.sizeJSON, func(t *testing.T) {
+			output := `{"ingredients":[{"name":"Produce","brand":"Farm","price":null,"size":` + tc.sizeJSON + `}]}`
+			client := NewClient(testAIConfig(config.DefaultRecipeModel), farmersMarketResponseClient(t, output), nil)
+			got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, tc.want, got[0].Size)
+			assert.Nil(t, got[0].PriceRegular, "a visible size does not imply a price")
+		})
+	}
+}
+
+func TestExtractFarmersMarketIngredientsRejectsInvalidSize(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), farmersMarketResponseClient(t, `{"ingredients":[{"name":"Eggs","brand":"Farm","price":6,"size":12}]}`), nil)
+	got, err := client.ExtractFarmersMarketIngredients(t.Context(), "data:image/jpeg;base64,abc")
+	require.ErrorContains(t, err, "parse farmers market ingredient response")
+	assert.Nil(t, got)
 }
 
 func assertSchemaAllowsNull(t *testing.T, schema map[string]any) {
@@ -71,7 +100,7 @@ func assertNoOneOf(t *testing.T, value any) {
 	}
 }
 
-func farmersMarketResponseClient(t *testing.T) *http.Client {
+func farmersMarketResponseClient(t *testing.T, output string) *http.Client {
 	t.Helper()
 	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
@@ -81,7 +110,8 @@ func farmersMarketResponseClient(t *testing.T) *http.Client {
 		require.NoError(t, err)
 		assert.Contains(t, string(body), "price")
 		assert.Contains(t, string(body), `"model":"`+gpt56Terra+`"`)
-		assert.NotContains(t, string(body), `"size"`)
+		assert.Contains(t, string(body), `"size"`)
+		assert.Contains(t, string(body), "Do not infer weight from appearance")
 		assert.NotContains(t, string(body), `"categories"`)
 
 		return &http.Response{
@@ -100,7 +130,7 @@ func farmersMarketResponseClient(t *testing.T) *http.Client {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"ingredients\":[{\"name\":\"heirloom tomatoes\",\"brand\":\"River Farm\",\"price\":4.99},{\"name\":\"heirloom tomatoes\",\"brand\":\"Hill Farm\",\"price\":null}]}",
+						"text": %q,
 						"annotations": []
 					}]
 				}],
@@ -111,7 +141,7 @@ func farmersMarketResponseClient(t *testing.T) *http.Client {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, farmersMarketIngredientModel))),
+			}`, farmersMarketIngredientModel, output))),
 			Request: req,
 		}, nil
 	})}

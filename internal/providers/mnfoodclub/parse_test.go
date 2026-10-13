@@ -19,11 +19,11 @@ func TestParseListings(t *testing.T) {
 	}{
 		{"produce", []ai.InputIngredient{
 			{ProductID: "951", Description: "Small Seasonal Box", Brand: "TC Farm", PriceRegular: pricePointer(26.99), AisleNumber: "Produce", Categories: []string{"Produce"}},
-			{ProductID: "194", Description: "Avocados - qty 3", Brand: "Organic Produce", PriceRegular: pricePointer(6.99), AisleNumber: "Produce", Categories: []string{"Produce"}},
+			{ProductID: "194", Description: "Avocados - qty 3", Size: "3 count", Brand: "Organic Produce", PriceRegular: pricePointer(6.99), AisleNumber: "Produce", Categories: []string{"Produce"}},
 		}},
 		{"meat", []ai.InputIngredient{
-			{ProductID: "2249", Description: "Ground Turkey - Ferndale - avg 1lb", Brand: "Ferndale Market", PriceRegular: pricePointer(5.39), AisleNumber: "Meat", Categories: []string{"Meat"}},
-			{ProductID: "543", Description: "Whole Ground Beef - avg 1.03lb", Brand: "TC Farm", PriceRegular: pricePointer(12.49), AisleNumber: "Meat", Categories: []string{"Meat"}},
+			{ProductID: "2249", Description: "Ground Turkey - Ferndale - avg 1lb", Size: "avg 1lb", Brand: "Ferndale Market", PriceRegular: pricePointer(5.39), AisleNumber: "Meat", Categories: []string{"Meat"}},
+			{ProductID: "543", Description: "Whole Ground Beef - avg 1.03lb", Size: "avg 1.03lb", Brand: "TC Farm", PriceRegular: pricePointer(12.49), AisleNumber: "Meat", Categories: []string{"Meat"}},
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -43,9 +43,9 @@ func TestParsePricesAndText(t *testing.T) {
 		regular string
 		want    ai.InputIngredient
 	}{
-		{"sale", "$1,200.00", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Brand: "Farm & Co", PriceRegular: pricePointer(1200), PriceSale: pricePointer(999.99)}},
-		{"blank hidden price", " \n ", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Brand: "Farm & Co", PriceRegular: pricePointer(999.99)}},
-		{"equal prices", "$999.99", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Brand: "Farm & Co", PriceRegular: pricePointer(999.99)}},
+		{"sale", "$1,200.00", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Size: "1lb", Brand: "Farm & Co", PriceRegular: pricePointer(1200), PriceSale: pricePointer(999.99)}},
+		{"blank hidden price", " \n ", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Size: "1lb", Brand: "Farm & Co", PriceRegular: pricePointer(999.99)}},
+		{"equal prices", "$999.99", ai.InputIngredient{ProductID: "42", Description: "Beef & Pork - 1lb", Size: "1lb", Brand: "Farm & Co", PriceRegular: pricePointer(999.99)}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			card := `<article class="card extra"><a data-product-id="42"></a><h4 class="card-title"><a> Beef &amp; <b>Pork</b> - 1lb </a></h4><p data-test-info-type="brandName">Farm &amp; Co</p><span data-product-price-without-tax>$999.99</span><span data-product-non-sale-price-without-tax>` + test.regular + `</span><span data-product-rrp-without-tax>$9999</span></article>`
@@ -67,6 +67,7 @@ func TestParseVariantPriceRange(t *testing.T) {
 	assert.Equal(t, "Boneless Turkey Breast - Ferndale - Select Size", got[0].Description)
 	assert.Equal(t, pricePointer(16.99), got[0].PriceRegular)
 	assert.Nil(t, got[0].PriceSale)
+	assert.Empty(t, got[0].Size, "variant listing has no single package size")
 }
 
 func TestParseFailures(t *testing.T) {

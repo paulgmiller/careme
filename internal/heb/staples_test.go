@@ -98,6 +98,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 				{
 					ID:                    "pork-1",
 					DisplayName:           "H-E-B Pork Shoulder Roast",
+					Size:                  "Avg. 2.0 lbs",
 					FullCategoryHierarchy: "Meat & seafood/Meat/Pork",
 					Brand:                 &Brand{Name: "H-E-B"},
 					ProductLocation:       &ProductLocation{Location: "Meat Market"},
@@ -134,6 +135,7 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	assertInputIngredient(t, got[0], ai.InputIngredient{
 		ProductID:    "pork-1",
 		Description:  "H-E-B Pork Shoulder Roast",
+		Size:         "Avg. 2.0 lbs",
 		Brand:        "H-E-B",
 		AisleNumber:  "Meat Market",
 		Categories:   []string{"Meat & seafood", "Meat", "Pork"},
@@ -232,6 +234,7 @@ func assertInputIngredient(t *testing.T, got, want ai.InputIngredient) {
 	t.Helper()
 	if got.ProductID != want.ProductID ||
 		got.Description != want.Description ||
+		got.Size != want.Size ||
 		got.Brand != want.Brand ||
 		got.AisleNumber != want.AisleNumber ||
 		!sameFloat32Ptr(got.PriceRegular, want.PriceRegular) ||

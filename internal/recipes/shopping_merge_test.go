@@ -215,6 +215,27 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	isValidHTML(t, body)
 }
 
+func TestShoppingPurchaseSectionPreservesCatalogSizes(t *testing.T) {
+	for _, size := range []string{"avg 1.03lb", "1 lb (sold by weight)", "24 ct", "12 eggs", "1 basket"} {
+		t.Run(size, func(t *testing.T) {
+			s := newTestServer(t)
+			p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "product", Name: "Ingredient", Quantity: "1 serving"}}}}
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			catalog := []ai.InputIngredient{{ProductID: "product", Description: "Ingredient", Size: size, AisleNumber: "Produce"}}
+			s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+				return []ai.ShoppingItem{{ProductID: "product", Name: "Ingredient", Needed: "1 serving", Buy: buyNumber(1)}}, nil
+			})
+			require.NoError(t, s.mergeAndCacheShoppingList(t.Context(), p.Hash(), p.Saved[0].Ingredients, catalog))
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+			s.renderShoppingList(rr, req, p, &ai.ShoppingList{Recipes: p.Saved}, nil, shoppingProgress{})
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Contains(t, rr.Body.String(), "Buy 1 × "+size)
+		})
+	}
+}
+
 func TestShoppingPageAppendsLateWinePicksWithoutMerging(t *testing.T) {
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
