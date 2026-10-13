@@ -8,8 +8,10 @@ by single samples. The previous text is restored for both stages; model and effo
 settings are unchanged. The menu stage was not measured by the recipe eval.
 
 The menu and recipe prompts in `internal/ai` define output contracts and constraints
-with minimal repetition. Recipe quality checks cover cross-field consistency. Menu ingredient labels retain full catalog descriptions;
-variety and fancy options yield to dietary, time, and equipment constraints.
+with minimal repetition. Recipe quality checks cover cross-field consistency.
+Menu ingredient labels retain full catalog descriptions. Meals spread across Healthy, Fancy, Local, and Different categories. Category variety
+and directions yield to explicit dietary, time, budget, and equipment constraints.
+Fancy meals may exceed the default one-hour limit; other meals retain it.
 Recipe expansion is scoped to the selected plan, including its assigned user
 directions. Both stages complete structured output without routine follow-up
 questions. Recipe checks cover ingredient usage and elapsed time with parallel work.

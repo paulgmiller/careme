@@ -67,7 +67,7 @@ tests:
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
             dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
-            fancy: false
+            category: different
             recipe_instructions:
               - Keep total time under 1 hour.
               - Serve 2 people.
@@ -99,7 +99,7 @@ tests:
             anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
             dish_format: main with sides
             side_vegetable: Cucumber
-            fancy: false
+            category: local
             recipe_instructions:
               - Use the grill; serve 2; finish within 1 hour.
               - Prioritize August WA produce.
@@ -140,7 +140,7 @@ tests:
             anchor_ingredient: Simple Truth® Natural Lamb Shoulder
             dish_format: main with sides
             side_vegetable: Carrots
-            fancy: false
+            category: fancy
             recipe_instructions:
               - Scale to serve 6.
               - Keep total time under 1 hour.
@@ -173,7 +173,7 @@ tests:
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
             dish_format: stir-fry
             side_vegetable: Bok Choy
-            fancy: false
+            category: different
             recipe_instructions:
               - Scale to serve 6.
               - Keep total time under 1 hour.
@@ -206,7 +206,7 @@ tests:
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Zucchini
-            fancy: false
+            category: local
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.
@@ -238,7 +238,7 @@ tests:
             anchor_ingredient: Jicama
             dish_format: salad
             side_vegetable: Cucumber Long Hot House English
-            fancy: false
+            category: healthy
             recipe_instructions:
               - Serve 2 as a BBQ side.
         chef_note_suggestion: more make-ahead sides
@@ -271,7 +271,7 @@ tests:
             anchor_ingredient: USDA Choice Beef Loin Tri Tip Roast - 2.5 Lb
             dish_format: main with sides
             side_vegetable: Yellow Crookneck Squash
-            fancy: false
+            category: different
             recipe_instructions:
               - Serve 3.
               - Keep this meal gluten-light.
@@ -300,7 +300,7 @@ tests:
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
-            fancy: true
+            category: fancy
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.
@@ -324,7 +324,7 @@ tests:
             anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
             dish_format: main with sides
             side_vegetable: Fresh Bagged Green Beans
-            fancy: false
+            category: fancy
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.
@@ -355,7 +355,7 @@ tests:
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Zucchini
-            fancy: false
+            category: local
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.

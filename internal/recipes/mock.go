@@ -435,8 +435,9 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}
 
 	plan := &ai.MenuPlan{}
+	categories := []ai.MealCategory{ai.MealCategoryHealthy, ai.MealCategoryFancy, ai.MealCategoryLocal, ai.MealCategoryDifferent}
 	for _, recipe := range selectedRecipes[:len(selectedRecipes)-len(p.Saved)] {
-		plan.Plans = append(plan.Plans, ai.RecipePlan{Cuisine: recipe.Title, AnchorIngredient: recipe.Ingredients[0].Name})
+		plan.Plans = append(plan.Plans, ai.RecipePlan{Cuisine: recipe.Title, AnchorIngredient: recipe.Ingredients[0].Name, Category: categories[len(plan.Plans)%len(categories)]})
 	}
 	if err := m.statuses.Plan(ctx, originHash, plan.Plans); err != nil {
 		return nil, err

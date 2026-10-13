@@ -627,6 +627,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:            "test",
 			AnchorIngredient:   "Brand New Dinner",
+			Category:           ai.MealCategoryLocal,
 			DishFormat:         "test",
 			RecipeInstructions: []string{"make it vegetarian"},
 		}}, ResponseID: "resp-menu-next"},
@@ -659,9 +660,11 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	wantRecipeInstructions := ai.RecipePlan{
 		Cuisine:            "test",
 		AnchorIngredient:   "Brand New Dinner",
+		Category:           ai.MealCategoryLocal,
 		DishFormat:         "test",
 		RecipeInstructions: []string{"make it vegetarian"},
 	}.Instructions()
+	assert.Contains(t, strings.Join(aiStub.instructions, "\n"), "Local: emphasize produce and proteins")
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
 		t.Fatalf("unexpected recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
 	}
@@ -814,8 +817,8 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 	aiStub := &captureGenerateAIClient{
 		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{aniseRecipe, plainRecipe}},
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, DishFormat: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
-			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, DishFormat: "test"},
+			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, DishFormat: "test", Category: ai.MealCategoryDifferent, RecipeInstructions: []string{"Use the user's anise in this recipe."}},
+			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, DishFormat: "test", Category: ai.MealCategoryHealthy},
 		}, ResponseID: "resp-menu-plan"},
 	}
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
@@ -832,6 +835,8 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 
 	aniseInstructions := instructionsForAnchor(t, aiStub.generateInstructions, aniseRecipe.Title)
 	plainInstructions := instructionsForAnchor(t, aiStub.generateInstructions, plainRecipe.Title)
+	assert.Contains(t, strings.Join(aniseInstructions, "\n"), "Different: emphasize lesser-known cuisines")
+	assert.Contains(t, strings.Join(plainInstructions, "\n"), "Healthy: emphasize ancient or whole grains")
 	assert.Contains(t, aniseInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
 	assert.NotContains(t, plainInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
 }

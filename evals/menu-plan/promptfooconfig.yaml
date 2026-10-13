@@ -61,6 +61,13 @@ defaultTest:
         return plans.length < 3 || new Set(planned).size >= 3;
       metric: canonical-dish-format-variety
 
+    - type: javascript
+      value: |
+        const plans = JSON.parse(output).plans;
+        const allowed = new Set(['healthy', 'fancy', 'local', 'different']);
+        return plans.every((recipe) => allowed.has(recipe.category) && !('fancy' in recipe));
+      metric: valid-meal-categories
+
 tests:
   - description: One quick seasonal chicken dinner
     vars:
@@ -147,6 +154,10 @@ tests:
           return recipes.filter((recipe) => recipe.recipe_instructions.some((instruction) =>
             /\bsaffron\b/i.test(instruction))).length === 1;
         metric: limited-ingredient-assigned-once
+      - type: javascript
+        value: |
+          return new Set(JSON.parse(output).plans.map((recipe) => recipe.category)).size === 3;
+        metric: three-distinct-meal-categories
       - type: javascript
         value: |
           return JSON.parse(output).plans.every((recipe) =>
@@ -310,3 +321,28 @@ tests:
             && recipe.side_vegetable.toLowerCase() === 'broccoli'
             && recipe.recipe_instructions.some((instruction) => /broccoli/i.test(instruction));
         metric: corrected-user-owned-side
+
+  - description: Four seasonal regional dinners cover every category
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 4
+      instructions: Plan four varied dinners.
+      ingredients:
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: chicken, description: Chicken Thighs, size: 1 lb}
+        - {id: tofu, description: Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+        - {id: beans, description: Green Beans, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          return new Set(JSON.parse(output).plans.map((recipe) => recipe.category)).size === 4;
+        metric: all-four-meal-categories

@@ -12,6 +12,7 @@ import (
 
 	locationtypes "careme/internal/locations/types"
 
+	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
@@ -38,12 +39,45 @@ func (p MenuPlan) String() string {
 	return sb.String()
 }
 
+// MealCategory is a recipe's primary direction within a varied menu.
+type MealCategory string
+
+const (
+	MealCategoryHealthy   MealCategory = "healthy"
+	MealCategoryFancy     MealCategory = "fancy"
+	MealCategoryLocal     MealCategory = "local"
+	MealCategoryDifferent MealCategory = "different"
+)
+
+func (MealCategory) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{Type: "string", Enum: []any{
+		string(MealCategoryHealthy), string(MealCategoryFancy), string(MealCategoryLocal), string(MealCategoryDifferent),
+	}}
+}
+
+func (c MealCategory) instruction() string {
+	switch c {
+	case MealCategoryHealthy:
+		return "Healthy: emphasize ancient or whole grains, more vegetables, lighter proteins and preparations."
+	case MealCategoryFancy:
+		return "Fancy: make this meal fancier with richer flavors, more indulgent, higher-calorie ingredients, greater expense, and slower cooking; it may exceed the default one-hour limit."
+	case MealCategoryLocal:
+		return "Local: emphasize produce and proteins associated with the user's region and current season, using available ingredients; do not claim verified local sourcing."
+	case MealCategoryDifferent:
+		return "Different: emphasize lesser-known cuisines, regional dishes, and less-familiar seasonings."
+	default:
+		return ""
+	}
+}
+
+const categoryDistributionMessage = "Spread meals across healthy, fancy, local, and different categories. For up to four meals, choose distinct categories that fit the ingredients and user requests; for larger menus, cover all four before repeating. Explicit user requests take priority over category variety."
+
 type RecipePlan struct {
-	Cuisine          string `json:"cuisine" yaml:"cuisine"`
-	AnchorIngredient string `json:"anchor_ingredient" yaml:"anchor_ingredient"`
-	DishFormat       string `json:"dish_format" yaml:"dish_format"`
-	SideVegetable    string `json:"side_vegetable" yaml:"side_vegetable"`
-	Fancy            bool   `json:"fancy" yaml:"fancy"`
+	Cuisine          string       `json:"cuisine" yaml:"cuisine"`
+	AnchorIngredient string       `json:"anchor_ingredient" yaml:"anchor_ingredient"`
+	DishFormat       string       `json:"dish_format" yaml:"dish_format"`
+	SideVegetable    string       `json:"side_vegetable" yaml:"side_vegetable"`
+	Category         MealCategory `json:"category" yaml:"category"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
 }
@@ -55,8 +89,8 @@ func (p RecipePlan) Instructions() []string {
 		fmt.Sprintf("Suggested dish format for this recipe: %s.", p.DishFormat),
 		fmt.Sprintf("Side vegetable direction for this recipe: %s.", p.SideVegetable),
 	}
-	if p.Fancy {
-		instructions = append(instructions, "This meal should be fancier, so it can be more expensive, longer, or richer.")
+	if direction := p.Category.instruction(); direction != "" {
+		instructions = append(instructions, direction+" Explicit user dietary, time, budget, and equipment constraints still apply.")
 	}
 	for _, instruction := range p.RecipeInstructions {
 		if trimmed := strings.TrimSpace(instruction); trimmed != "" {
@@ -155,8 +189,13 @@ func pickN(xs []string, n int) []string {
 var menuPlanSystemMessage = `
 You are a menu planner for independent recipe generators.
 
-Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, dish_format, and side_vegetable. Set fancy to true only for the richer/splurgier/time intensive option.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","fancy":false,"recipe_instructions":["Use the user's anise in this recipe."]}
+Return compact planning labels, not recipes. Use short phrases, generally under 5 words, for cuisine, anchor_ingredient, dish_format, and side_vegetable. Assign exactly one primary category to every recipe: healthy, fancy, local, or different.
+Healthy: emphasize ancient or whole grains, more vegetables, lighter proteins and preparations.
+Fancy: emphasize richer flavors, more indulgent, higher-calorie ingredients, greater expense, and slower cooking; it may exceed the default one-hour limit.
+Local: emphasize produce and proteins associated with the user's region and current season, using available ingredients; do not claim verified local sourcing.
+Different: emphasize lesser-known cuisines, regional dishes, and less-familiar seasonings.
+Explicit user dietary, time, budget, and equipment constraints take priority over category directions.
+Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","category":"healthy","recipe_instructions":["Use the user's anise in this recipe."]}
 Choose distinct dish formats across the menu when practical. Use this compact set of canonical formats: ` + strings.Join(dishFormatList, ", ") + `. Choose the dish format before deciding how to cook it. Vegetables may be incorporated into the main dish.
 Try and ensure variety across cuisines, anchor ingredients, dish formats, and side vegetables.
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead. Exception: when the user explicitly asks to use a specific ingredient or says they already have it (including leftovers or a recent purchase), you may choose it as anchor_ingredient or side_vegetable even if it is absent from the TSV. Decide which role best fits the dish unless the user specifies a role. For that exception, anchor_ingredient and side_vegetable must contain only the ingredient name, preserving specific varieties; never put a sentence, ownership statement, or shopping source there. For example, "I have leftover duroc pork" gives anchor_ingredient "duroc pork", and "I got dover sole at Costco" gives anchor_ingredient "dover sole". For "I have extra broccoli", use "broccoli" as either anchor_ingredient or side_vegetable, whichever suits the dish. Include the relevant user direction in recipe_instructions for that recipe. Correct obvious ingredient typos while preserving the user's intent; for example, "I have extra strawberies" refers to "strawberries". A dietary preference, a request for protein, or a direction to avoid an ingredient does not authorize this exception.
@@ -270,7 +309,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	messages = append(messages, userPromptMessage("For extra variety, loosely draw from one of these cuisine styles if it fits the ingredients: "+strings.Join(cuisines, ", ")))
 	// messages = append(messages, userPromptMessage("but don't overlook local cuisine"))
 
-	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
+	messages = append(messages, userPromptMessage(categoryDistributionMessage))
 
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
@@ -282,7 +321,7 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 	}
 
 	messages = append(messages, userPromptMessage("Default: cooking methods: oven, stove, grill, slow cooker"))
-	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour"))
+	messages = append(messages, userPromptMessage("Default: total recipe time, including prep and all timed steps, should stay under 1 hour for non-Fancy meals; Fancy meals may take longer unless the user specifies a time limit"))
 	messages = append(messages, userPromptMessage("Default: each recipe should serve 2 people."))
 	messages = append(messages, cleanInstructionMessages(instructions)...)
 	// Cache both the reusable ingredient prefix and the complete initial menu-plan
@@ -297,8 +336,7 @@ func buildRegenerateMenuPlanMessages(instructions []string, count int) []PromptM
 	messages = append(messages,
 		userPromptMessage(fmt.Sprintf("Build %d replacement recipe plan(s) by default. If the user's directions clearly ask for a different number of recipes, return that many plans instead. Keep the plan count between 1 and 6. Avoid passed-on recipe titles and close variants. Fit the user's feedback.", count)),
 	)
-	messages = append(messages, userPromptMessage("If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy."))
-	// messages = append(messages, userPromptMessage("Include one less-common cuisine direction."))
+	messages = append(messages, userPromptMessage(categoryDistributionMessage+" Consider saved meals and their categories from the existing conversation when choosing replacement categories."))
 
 	// Cache the expanded conversation for recipes and later menu regenerations.
 	messages[len(messages)-1].PromptCacheBreakpoint = true

@@ -48,6 +48,7 @@ const validRecipeContext = `{
 				"anchor_ingredient": "Chicken Thighs",
 				"dish_format": "sheet pan",
 				"side_vegetable": "Broccoli",
+ "category": "healthy",
 				"recipe_instructions": ["Keep dinner quick"]
 			}],
 			"response_id": "resp-menu",
@@ -81,6 +82,7 @@ func TestRunEvalGeneratesRecipeFromProvidedMenuPlan(t *testing.T) {
 		"Anchor ingredient direction for this recipe: Chicken Thighs.",
 		"Suggested dish format for this recipe: sheet pan.",
 		"Side vegetable direction for this recipe: Broccoli.",
+		"Healthy: emphasize ancient or whole grains, more vegetables, lighter proteins and preparations. Explicit user dietary, time, budget, and equipment constraints still apply.",
 		"User direction for this recipe: Keep dinner quick",
 	}, generator.recipeInstructions)
 }
