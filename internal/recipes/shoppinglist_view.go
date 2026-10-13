@@ -84,6 +84,7 @@ type shoppingListPageView struct {
 }
 
 type shoppingListViewInput struct {
+	purchases            []shoppingPurchaseGroup
 	params               *generatorParams
 	list                 ai.ShoppingList
 	wineRecommendations  map[string]*ai.WineSelection
@@ -127,7 +128,8 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Hash:                 input.hash,
 		Recipes:              recipeViews,
 		HasSavedRecipes:      hasSavedRecipes,
-		Finalized:            len(input.params.Saved) > 0,
+		Finalized:            input.purchases != nil,
+		Purchases:            input.purchases,
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,

@@ -328,10 +328,7 @@
             {{template "shopping_finalize_controls" .}}
 
             {{if .Finalized}}
-            <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md"
-                     hx-get="/recipes/{{.Hash}}/shopping-quantities" hx-trigger="load" hx-swap="outerHTML">
-              <p class="text-sm text-ink-600">Combining your shopping quantities…</p>
-            </section>
+            {{template "shopping_purchase_section" .}}
             {{end}}
           </div>
           {{if .AdminURL}}
@@ -340,14 +337,6 @@
           </p>
           {{end}}
         </div>
-{{end}}
-
-{{define "shopping_quantity_error"}}
-<section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
-  <p class="text-sm text-ink-600">Could not combine your list.
-    <button hx-get="/recipes/{{.Hash}}/shopping-quantities" hx-target="#shopping-list-section" hx-swap="outerHTML">Try again, chef</button>
-  </p>
-</section>
 {{end}}
 
 {{define "shopping_purchase_section"}}

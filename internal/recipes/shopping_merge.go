@@ -5,13 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"strings"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/templates"
 )
 
 const shoppingQuantityCachePrefix = "shopping_quantities/v6/"
@@ -37,40 +33,40 @@ func (s *server) mergedShoppingList(ctx context.Context, hash string, ingredient
 	key := shoppingQuantityCachePrefix + hash
 	var merged []ai.ShoppingItem
 	reader, err := s.Cache.Get(ctx, key)
-	switch {
-	case err == nil:
+	if err == nil {
 		defer func() { _ = reader.Close() }()
 		if err := json.NewDecoder(reader).Decode(&merged); err != nil {
 			return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 		}
-	case errors.Is(err, cache.ErrNotFound):
-		if s.shoppingMerger == nil {
-			return nil, fmt.Errorf("shopping quantity merger unavailable")
-		}
-		merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
-		if err != nil {
-			return nil, err
-		}
-		body, err := json.Marshal(merged)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil {
-			if !errors.Is(err, cache.ErrAlreadyExists) {
-				return nil, fmt.Errorf("cache merged shopping quantities: %w", err)
-			}
-			winner, err := s.Cache.Get(ctx, key)
-			if err != nil {
-				return nil, fmt.Errorf("load concurrent shopping merge: %w", err)
-			}
-			defer func() { _ = winner.Close() }()
-			if err := json.NewDecoder(winner).Decode(&merged); err != nil {
-				return nil, fmt.Errorf("decode concurrent shopping merge: %w", err)
-			}
-		}
-	default:
+		return shoppingPurchasesForDisplay(merged, catalog), nil
+	}
+
+	if !errors.Is(err, cache.ErrNotFound) {
 		return nil, fmt.Errorf("load merged shopping quantities: %w", err)
 	}
+
+	merged, err = s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
+	if err != nil {
+		return nil, err
+	}
+	body, err := json.Marshal(merged)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Cache.Put(ctx, key, string(body), cache.IfNoneMatch()); err != nil {
+		if !errors.Is(err, cache.ErrAlreadyExists) {
+			return nil, fmt.Errorf("cache merged shopping quantities: %w", err)
+		}
+		winner, err := s.Cache.Get(ctx, key)
+		if err != nil {
+			return nil, fmt.Errorf("load concurrent shopping merge: %w", err)
+		}
+		defer func() { _ = winner.Close() }()
+		if err := json.NewDecoder(winner).Decode(&merged); err != nil {
+			return nil, fmt.Errorf("decode concurrent shopping merge: %w", err)
+		}
+	}
+
 	return shoppingPurchasesForDisplay(merged, catalog), nil
 }
 
@@ -97,23 +93,22 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	return ingredients, catalog, nil
 }
 
-func (s *server) handleShoppingQuantities(w http.ResponseWriter, r *http.Request) {
-	hash := strings.TrimSpace(r.PathValue("hash"))
-	ingredients, catalog, err := s.finalizedShoppingInputs(r.Context(), hash)
+// Loading a page never invokes the model; Build creates this snapshot.
+func (s *server) cachedShoppingPurchases(ctx context.Context, hash string, p *generatorParams) ([]shoppingPurchaseGroup, error) {
+	reader, err := s.Cache.Get(ctx, shoppingQuantityCachePrefix+hash)
 	if err != nil {
-		http.Error(w, "Shopping list unavailable", http.StatusBadRequest)
-		return
+		return nil, err
 	}
-	list, err := s.mergedShoppingList(r.Context(), hash, ingredients, catalog)
-	view := shoppingListPageView{Hash: hash, Purchases: list, HasSavedRecipes: true}
-	name := "shopping_purchase_section"
+	defer func() { _ = reader.Close() }()
+	var items []ai.ShoppingItem
+	if err := json.NewDecoder(reader).Decode(&items); err != nil {
+		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
+	}
+	catalog, err := s.cachedShoppingCatalog(ctx, p)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to merge shopping quantities", "hash", hash, "error", err)
-		name = "shopping_quantity_error"
+		return nil, err
 	}
-	if err := templates.ShoppingList.ExecuteTemplate(w, name, view); err != nil {
-		slog.ErrorContext(r.Context(), "render shopping quantities", "error", err)
-	}
+	return shoppingPurchasesForDisplay(items, catalog), nil
 }
 
 // Catalog snapshots are optional candidates. Missing snapshots leave needs unresolved.

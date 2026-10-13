@@ -33,7 +33,6 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
-	mux.HandleFunc("GET /recipes/{hash}/shopping-quantities", s.handleShoppingQuantities)
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -163,6 +162,16 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save params for finalize", "hash", newHash, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
+		return
+	}
+
+	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, newHash)
+	if err == nil {
+		_, err = s.mergedShoppingList(ctx, newHash, ingredients, catalog)
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
+		http.Error(w, "Could not build your shopping list. Try again, chef", http.StatusInternalServerError)
 		return
 	}
 
@@ -438,10 +447,18 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	recipeWG.Wait()
 
+	purchases, err := s.cachedShoppingPurchases(ctx, hashParam, p)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
+		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
+		return
+	}
+
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
 	writeShoppingListPage(ctx, w, shoppingListViewInput{
 		params:              p,
+		purchases:           purchases,
 		list:                *slist,
 		wineRecommendations: wines.Clone(),
 		recipeImages:        images.Clone(),

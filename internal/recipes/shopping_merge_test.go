@@ -11,6 +11,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	utypes "careme/internal/users/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,59 +53,56 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	assert.NotEqual(t, first, newList)
 }
 
-func TestFinalizedShoppingSection(t *testing.T) {
-	for _, id := range []string{"01400943", "walmart_123", "mnfoodclub_delivery"} {
-		t.Run(id, func(t *testing.T) {
-			s := newTestServer(t)
-			p := DefaultParams(&locations.Location{ID: id}, time.Now())
-			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "garlic", Name: "Garlic", Quantity: "2 cloves"}, {ProductID: "garlic", Name: "Garlic", Quantity: "1 cloves"}}}}
-			require.NoError(t, s.SaveParams(t.Context(), p))
-			req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
-			req.SetPathValue("hash", p.Hash())
-			rr := httptest.NewRecorder()
-			s.handleShoppingQuantities(rr, req)
-			require.Equal(t, http.StatusOK, rr.Code)
-			assert.Contains(t, rr.Body.String(), "2 cloves")
-			assert.Contains(t, rr.Body.String(), "1 cloves")
-			assert.NotContains(t, rr.Body.String(), "cart")
-			isValidHTML(t, rr.Body.String())
-		})
-	}
-}
-
 type shoppingMergerFunc func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 
 func (f shoppingMergerFunc) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	return f(ctx, ingredients, catalog)
 }
 
-func TestShoppingQuantitiesRetriesMergeFailure(t *testing.T) {
+func prepareShoppingFinalize(t *testing.T, s *server, p *generatorParams, recipes ...ai.Recipe) string {
+	t.Helper()
+	p.Location.Name = "Store"
+	require.NoError(t, s.storage.Update(&utypes.User{ID: "mock-clerk-user-id", Email: []string{"chef@example.com"}, ShoppingDay: time.Saturday.String()}))
+	hash := p.Hash()
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	saveRecipesForOrigin(t, s, hash, recipes...)
+	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: recipes}, hash))
+	require.NoError(t, s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", hash, recipeSelection{SavedHashes: []string{recipes[0].ComputeHash()}}))
+	return hash
+}
+
+func finalizeShoppingRequest(s *server, hash string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/recipes/"+hash+"/finalize", nil)
+	req.Header.Set("HX-Request", "true")
+	req.SetPathValue("hash", hash)
+	rr := httptest.NewRecorder()
+	s.handleFinalize(rr, req)
+	return rr
+}
+
+func TestFinalizeRetriesMergeFailure(t *testing.T) {
 	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}
+	hash := prepareShoppingFinalize(t, s, p, recipe)
+	p.Saved = []ai.Recipe{recipe}
 	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		return nil, errors.New("AI unavailable")
 	})
-	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
-	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
-	require.NoError(t, s.SaveParams(t.Context(), p))
-	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
-	req.SetPathValue("hash", p.Hash())
-	rr := httptest.NewRecorder()
-	s.handleShoppingQuantities(rr, req)
-	assert.Equal(t, http.StatusOK, rr.Code)
+	rr := finalizeShoppingRequest(s, hash)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Try again, chef")
-	assert.Contains(t, rr.Body.String(), `/recipes/`+p.Hash()+`/shopping-quantities`)
-	assert.NotContains(t, rr.Body.String(), "1 clove")
-}
-
-func TestShoppingQuantitiesRejectsUnfinalizedList(t *testing.T) {
-	s := newTestServer(t)
-	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
-	require.NoError(t, s.SaveParams(t.Context(), p))
-	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
-	req.SetPathValue("hash", p.Hash())
-	rr := httptest.NewRecorder()
-	s.handleShoppingQuantities(rr, req)
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Empty(t, rr.Header().Get("HX-Redirect"))
+	_, err := s.FromCache(t.Context(), p.Hash())
+	require.ErrorIs(t, err, cache.ErrNotFound, "do not finalize a list without its merge")
+	merger := &countingShoppingMerger{}
+	s.shoppingMerger = merger
+	rr = finalizeShoppingRequest(s, hash)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.NotEmpty(t, rr.Header().Get("HX-Redirect"))
+	assert.Equal(t, 1, merger.calls)
+	_, err = s.cachedShoppingPurchases(t.Context(), p.Hash(), p)
+	require.NoError(t, err)
 }
 
 func TestShoppingPurchaseCacheRetainsFinalizedSnapshot(t *testing.T) {
@@ -181,10 +179,20 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 		require.Len(t, catalog, 1)
 		return []ai.ShoppingItem{{ProductID: needs[0].ProductID, Name: needs[0].Name, Needed: needs[0].Quantity, Buy: buyNumber(1)}, {Name: needs[1].Name, Needed: needs[1].Quantity}}, nil
 	})
-	req := httptest.NewRequest(http.MethodGet, "/recipes/"+p.Hash()+"/shopping-quantities", nil)
-	req.SetPathValue("hash", p.Hash())
-	rr := httptest.NewRecorder()
-	s.handleShoppingQuantities(rr, req)
+	originParams := DefaultParams(p.Location, p.Date)
+	hash := prepareShoppingFinalize(t, s, originParams, p.Saved...)
+	rr := finalizeShoppingRequest(s, hash)
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Header().Get("HX-Redirect"), p.Hash())
+
+	// A page load must use the snapshot without another model call.
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		t.Fatal("page load must not invoke the merger")
+		return nil, nil
+	})
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+	rr = httptest.NewRecorder()
+	s.renderShoppingList(rr, req, p, &ai.ShoppingList{Recipes: p.Saved}, nil, shoppingProgress{})
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	assert.Contains(t, body, "Pork &amp; herbs")
@@ -193,6 +201,7 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	assert.Contains(t, body, "Needed: 24 oz")
 	assert.Contains(t, body, "Saffron")
 	assert.Contains(t, body, "1 pinch")
+	assert.NotContains(t, body, "/shopping-quantities")
 	isValidHTML(t, body)
 }
 
