@@ -98,13 +98,11 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 			return nil, fmt.Errorf("shopping merge returned unknown product %q", item.ProductID)
 		}
 		if item.Buy != nil {
-			product, ok := byID[item.ProductID]
-			// TODO: Reevaluate rejecting the entire list when the model returns buy
-			// without a catalog size (seen with "Pork mild Italian sausage").
-			// Buy is a multiple of that size; the prompt requires null when it is
-			// unavailable. Consider whether keeping Needed with Buy=nil is appropriate.
-			if item.ProductID == "" || !ok || product.Size == "" {
-				return nil, fmt.Errorf("shopping buy quantity requires a catalog product with size for %q", item.Name)
+			_, ok := byID[item.ProductID]
+			// TODO: Restore the product.Size == "" check after MNFoodClub / TC Farm,
+			// Whole Foods, HEB, and farmers market providers populate Size.
+			if item.ProductID == "" || !ok {
+				return nil, fmt.Errorf("shopping buy quantity requires a catalog product for %q", item.Name)
 			}
 			if *item.Buy <= 0 {
 				return nil, fmt.Errorf("shopping buy quantity must be positive for %q", item.Name)
