@@ -7,7 +7,7 @@ import (
 )
 
 // produceShareIngredients is the static inventory transcribed from the supplied
-// share list. Share membership is part of each description and product ID.
+// October 12–17 share list. Share membership is part of each description and product ID.
 func produceShareIngredients() []ai.InputIngredient {
 	shares := []struct {
 		name          string
@@ -17,41 +17,40 @@ func produceShareIngredients() []ai.InputIngredient {
 		{
 			name: "Seasonal",
 			items: []string{
-				"Garlic", "Carrots", "Yellow Candy Onions", "Anaheim Peppers",
-				"French Breakfast Radish", "Arugula", "Red Cabbage",
-				"Yukon Gold Potatoes", "Cremini Mushrooms",
+				"Rutabaga", "Leeks", "Flat Leaf Parsley", "Watermelon Radish",
+				"Parsnips", "Pie Apples (2nds)",
 			},
 		},
 		{
 			name: "Small Seasonal",
 			items: []string{
-				"Garlic", "Carrots", "Yellow Candy Onions", "Anaheim Peppers",
-				"Koginut Squash", "Arugula", "French Breakfast Radish",
+				"Butternut Squash", "Yellow Onions", "Flat Leaf Parsley", "Garlic Chives",
+				"Parsnips", "Table Apples (1sts)",
 			},
-			substitutions: []string{"Collard Greens"},
 		},
 		{
 			name: "Low Carb",
 			items: []string{
-				"Celeriac", "Mini Cucumbers", "Heirloom Tomatoes", "Leeks", "Spaghetti Squash",
+				"Kohlrabi", "Asparagus", "Yellow Candy Onions", "Avocado", "Carmen Peppers",
 			},
+			substitutions: []string{"Cauliflower"},
 		},
 		{
 			name: "Staple",
 			items: []string{
-				"Dino Kale", "Gold Beets", "Watermelon Radishes", "Parsnips", "Red Cipollini Onions",
+				"Broccoli", "Russet Potatoes", "Red Beets", "Red Onions", "Koginut Squash",
 			},
 		},
 		{
 			name: "Fruit",
 			items: []string{
-				"Table Apples (1sts)", "Bartlett Pears", "Pomegranate", "Meyer Lemons", "Grapefruit",
+				"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Pineapple", "Red Grapes",
 			},
 		},
 		{
 			name: "Small Fruit",
 			items: []string{
-				"Table Apples (1sts)", "Bartlett Pears", "Pomegranate", "Grapefruit",
+				"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Red Grapes",
 			},
 		},
 	}
