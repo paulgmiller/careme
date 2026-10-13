@@ -166,6 +166,16 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ingredients, catalog, wines, err := s.finalizedShoppingInputs(ctx, newHash)
+	if err == nil {
+		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog, wines)
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
+		http.Error(w, "Could not build your shopping list. Try again, chef", http.StatusInternalServerError)
+		return
+	}
+
 	shoppingList := &ai.ShoppingList{
 		Recipes: p.Saved,
 		Plan:    currentList.Plan,
@@ -442,10 +452,18 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	recipeWG.Wait()
 
+	purchases, err := s.cachedShoppingPurchases(ctx, hashParam)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
+		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
+		return
+	}
+
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
 	writeShoppingListPage(ctx, w, shoppingListViewInput{
 		params:              p,
+		purchases:           purchases,
 		list:                *slist,
 		wineRecommendations: wines.Clone(),
 		recipeImages:        images.Clone(),

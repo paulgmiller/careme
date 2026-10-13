@@ -9,4 +9,5 @@ const (
 	aiCategoryWine              = "wine"
 	aiCategoryIngredientGrading = "ingredient_grading"
 	aiCategoryCritique          = "critique"
+	aiCategoryShoppingMerge     = "shopping_merge"
 )

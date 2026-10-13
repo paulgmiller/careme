@@ -1,0 +1,111 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
+)
+
+// ShoppingItem separates the recipe amount from a numeric multiple of catalog size.
+// Buy is nil for pantry items, missing sizes, and uncertain conversions.
+type ShoppingItem struct {
+	ProductID string   `json:"id"`
+	Name      string   `json:"name"`
+	Needed    string   `json:"needed"`
+	Buy       *float64 `json:"buy" jsonschema:"anyof_type=number;null"`
+}
+
+type shoppingIngredientsResponse struct {
+	Items []ShoppingItem `json:"items"`
+}
+
+// MatchingShoppingCatalog keeps only products referenced by recipe ingredient IDs.
+func MatchingShoppingCatalog(ingredients []Ingredient, catalog []InputIngredient) []InputIngredient {
+	ids := make(map[string]bool, len(ingredients))
+	for _, ingredient := range ingredients {
+		if ingredient.ProductID != "" {
+			ids[ingredient.ProductID] = true
+		}
+	}
+	matched := make([]InputIngredient, 0)
+	for _, product := range catalog {
+		if ids[product.ProductID] {
+			matched = append(matched, product)
+		}
+	}
+	return matched
+}
+
+const shoppingPurchaseInstructions = `Merge the recipe ingredients using the supplied matching catalog.
+Combine entries with the same nonempty product id, and equivalent pantry foods without ids. Keep different product ids and incompatible forms distinct. Convert compatible units only when unambiguous; preserve distinct amounts when conversion is uncertain. Return each item's original id and first name; pantry items use an empty id.
+needed is the combined recipe amount with units, before rounding for purchases. Usage notes such as "divided" do not add quantities. Remove or update approximate count annotations when merging changes their amount.
+buy is a JSON number giving the multiple of the matching catalog product's size to buy. It must have no units or words. For fixed-size products, round up to the smallest whole multiple that covers needed: 40 oz needed with a 16 oz size means needed="40 oz", buy=3; 24 oz needed with a 32 oz size means buy=1. For count-based sizes, 10 eggs needed with a 6-egg size means buy=2.
+For products sold by weight, buy may be fractional: 8 oz needed for a product priced per 1 lb means buy=0.5. Only use fractional buying when the catalog indicates sale by weight. Never invent a size or conversion; never assume weight per clove, bunch, or cup.
+Set buy to null for pantry items, missing catalog products, empty sizes, or uncertain conversions. Retain needed for all items. Return every item in items.`
+
+// MergeShoppingQuantities returns shopping amounts using a pre-matched catalog.
+func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingredient, catalog []InputIngredient) ([]ShoppingItem, error) {
+	if len(ingredients) == 0 {
+		return []ShoppingItem{}, nil
+	}
+	products := make([]InputIngredient, len(catalog))
+	byID := make(map[string]InputIngredient, len(catalog))
+	ids := make(map[string]bool, len(ingredients))
+	for _, ingredient := range ingredients {
+		if ingredient.ProductID != "" {
+			ids[ingredient.ProductID] = true
+		}
+	}
+	for i, product := range catalog {
+		product.Grade = nil
+		product.Embedding = nil
+		products[i] = product
+		byID[product.ProductID] = product
+	}
+	input, err := json.Marshal(struct {
+		Ingredients []Ingredient      `json:"ingredients"`
+		Catalog     []InputIngredient `json:"catalog"`
+	}{ingredients, products})
+	if err != nil {
+		return nil, fmt.Errorf("marshal shopping ingredients: %w", err)
+	}
+	text := scheme(c.shoppingSchema)
+	text.Format.OfJSONSchema.Name = "shopping_ingredients"
+	text.Format.OfJSONSchema.Strict = openai.Bool(true)
+	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+		Model:        gpt56Luna,
+		Reasoning:    noReasoning(),
+		ServiceTier:  c.serviceTier,
+		Instructions: openai.String(shoppingPurchaseInstructions),
+		Text:         text,
+		Input:        responses.ResponseNewParamsInputUnion{OfInputItemList: []responses.ResponseInputItemUnionParam{user(string(input))}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("merge shopping quantities: %w", err)
+	}
+
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryShoppingMerge, "model", gpt56Luna, responseUsageLogAttr(gpt56Luna, resp.Usage, string(resp.ServiceTier)))
+	var merged shoppingIngredientsResponse
+	if err := json.Unmarshal([]byte(resp.OutputText()), &merged); err != nil {
+		return nil, fmt.Errorf("decode shopping ingredients: %w", err)
+	}
+	for _, item := range merged.Items {
+		if item.ProductID != "" && !ids[item.ProductID] {
+			return nil, fmt.Errorf("shopping merge returned unknown product %q", item.ProductID)
+		}
+		if item.Buy != nil {
+			product, ok := byID[item.ProductID]
+			if item.ProductID == "" || !ok || product.Size == "" {
+				return nil, fmt.Errorf("shopping buy quantity requires a catalog product with size for %q", item.Name)
+			}
+			if *item.Buy <= 0 {
+				return nil, fmt.Errorf("shopping buy quantity must be positive for %q", item.Name)
+			}
+		}
+	}
+	return merged.Items, nil
+}

@@ -209,7 +209,7 @@ func TestFormatShoppingListHTML_ShowsCampaignHelpMessage(t *testing.T) {
 	assert.NotContains(t, html, "localStorage")
 }
 
-func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
+func TestFormatShoppingListHTML_HidesShoppingListBeforeBuild(t *testing.T) {
 	t.Parallel()
 	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
 	addedRecipe := ai.Recipe{
@@ -240,49 +240,13 @@ func TestFormatShoppingListHTML_ShoppingListUsesOnlyAddedRecipes(t *testing.T) {
 	if !strings.Contains(html, `<meta name="description" content="Recipes for Store on 2026-01-25: Added Bowl, Maybe Pasta." />`) {
 		t.Error("shopping list HTML should include all recipe titles, location, and date in the meta description")
 	}
-	if !strings.Contains(html, "Shopping list") {
-		t.Fatal("shopping list HTML should render the shopping list section when a recipe is added")
-	}
-	if got := strings.Count(html, "Added carrots"); got != 2 {
-		t.Fatalf("added recipe ingredient should render in recipe details and shopping list, got count %d", got)
+	assert.NotContains(t, html, `id="shopping-list-section"`)
+	assert.NotContains(t, html, "/shopping-quantities")
+	if got := strings.Count(html, "Added carrots"); got != 1 {
+		t.Fatalf("added recipe ingredient should render only in recipe details, got count %d", got)
 	}
 	if got := strings.Count(html, "Unadded noodles"); got != 1 {
 		t.Fatalf("unadded recipe ingredient should render only in recipe details, got count %d", got)
-	}
-}
-
-func TestFormatShoppingListHTML_GroupsShoppingListByAisle(t *testing.T) {
-	t.Parallel()
-	loc := locations.Location{ID: "70000001", Name: "Store", Address: "1 Main St"}
-	shoppingList := ai.ShoppingList{Recipes: []ai.Recipe{{
-		Title:       "Added Dinner",
-		Description: "Selected dinner",
-		Ingredients: []ai.Ingredient{
-			{Name: "Butter", Quantity: "2 tbsp", AisleNumber: "dairy-eggs"},
-			{Name: "Milk", Quantity: "1 cup", AisleNumber: "dairy-eggs"},
-			{Name: "Beans", Quantity: "1 can", AisleNumber: "2"},
-			{Name: "Salt", Quantity: "1 tsp"},
-		},
-		Instructions: []string{"Cook."},
-		Health:       "Balanced",
-		DrinkPairing: "Water",
-	}}}
-	p := DefaultParams(&loc, time.Now())
-	selection := recipeSelection{SavedHashes: []string{shoppingList.Recipes[0].ComputeHash()}}
-
-	w := httptest.NewRecorder()
-	formatShoppingListHTMLForTest(t.Context(), p, shoppingList, true, selection, w)
-	html := assertHTTPSuccess(t, w)
-
-	isValidHTML(t, html)
-	if got := strings.Count(html, ">Dairy &amp; eggs<"); got != 1 {
-		t.Fatalf("shopping list should render dairy aisle heading once, got %d", got)
-	}
-	if got := strings.Count(html, ">Aisle 2<"); got != 1 {
-		t.Fatalf("shopping list should render numeric aisle heading once, got %d", got)
-	}
-	if got := strings.Count(html, ">Other items<"); got != 1 {
-		t.Fatalf("shopping list should render missing aisle heading once, got %d", got)
 	}
 }
 
@@ -603,8 +567,8 @@ func TestFormatShoppingListHTMLForHash_RendersWineOnlyInDetails(t *testing.T) {
 	if strings.Contains(html, `aria-label="Choose wine"`) || strings.Contains(html, `/wine"`) || strings.Contains(html, `/wine?view=shopping`) {
 		t.Fatalf("shopping list should not include wine picker controls, body: %s", html)
 	}
-	if got := strings.Count(html, "Cellar Red"); got != 3 {
-		t.Fatalf("shopping list should show selected wine in ingredients, recommendation, and combined list; got count %d, body: %s", got, html)
+	if got := strings.Count(html, "Cellar Red"); got != 2 {
+		t.Fatalf("shopping list should show selected wine in ingredients and recommendation; got count %d, body: %s", got, html)
 	}
 	if got := strings.Count(html, "Second Bottle"); got != 1 {
 		t.Fatalf("shopping list should only add the second wine to recommendation; got count %d, body: %s", got, html)
@@ -698,6 +662,26 @@ func TestShoppingDetailsPreservationFollowsRecipeContent(t *testing.T) {
 			for _, instruction := range recipe.Instructions {
 				assert.Contains(t, body.String(), instruction)
 			}
+		})
+	}
+}
+
+func TestFinalizedShoppingListRendersMergedQuantities(t *testing.T) {
+	_ = newTestServer(t)
+	for _, id := range []string{"01400943", "walmart_123"} {
+		t.Run(id, func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: id}, time.Now())
+			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Garlic", Needed: "1 clove"}}}}}})
+			if !assert.NoError(t, err) {
+				return
+			}
+			var page bytes.Buffer
+			assert.NoError(t, templates.ShoppingList.Execute(&page, view))
+			assert.Contains(t, page.String(), `id="shopping-list-section"`)
+			assert.NotContains(t, page.String(), "/shopping-quantities")
+			assert.Contains(t, page.String(), "1 clove")
+			assert.NotContains(t, page.String(), "Add to Kroger cart")
 		})
 	}
 }
