@@ -27,16 +27,17 @@ type stubCritiquer struct {
 	critique *ai.RecipeCritique
 	err      error
 	recipe   ai.Recipe
+	cost     float64
 }
 
-func (s *stubCritiquer) CritiqueRecipe(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error) {
+func (s *stubCritiquer) CritiqueRecipeWithCost(_ context.Context, recipe ai.Recipe) (*ai.RecipeCritique, float64, error) {
 	s.recipe = recipe
-	return s.critique, s.err
+	return s.critique, s.cost, s.err
 }
 
 func TestRunEvalLoadsRecipeHashAndReturnsCritique(t *testing.T) {
 	loader := &stubLoader{recipe: &ai.Recipe{Title: "Hash supper"}}
-	critiquer := &stubCritiquer{critique: &ai.RecipeCritique{
+	critiquer := &stubCritiquer{cost: 0.0123, critique: &ai.RecipeCritique{
 		SchemaVersion: "recipe-critique-v1",
 		OverallScore:  8,
 		Summary:       "A useful recipe.",
@@ -49,6 +50,7 @@ func TestRunEvalLoadsRecipeHashAndReturnsCritique(t *testing.T) {
 	assert.Equal(t, "Hash supper", critiquer.recipe.Title)
 	assert.JSONEq(t, `{"schema_version":"recipe-critique-v1","overall_score":8,"summary":"A useful recipe.","strengths":null,"issues":null,"suggested_fixes":null,"critiqued_at":"0001-01-01T00:00:00Z"}`, result["output"].(string))
 	assert.IsType(t, int64(0), result["latencyMs"])
+	assert.Equal(t, 0.0123, result["cost"])
 }
 
 func TestRunEvalUsesInlineRecipeWithoutLoader(t *testing.T) {
