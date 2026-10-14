@@ -27,7 +27,7 @@ type evalCase struct {
 }
 
 type recipeCritiquer interface {
-	CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
+	CritiqueRecipeWithCost(context.Context, ai.Recipe) (*ai.RecipeCritique, float64, error)
 }
 
 type recipeLoader interface {
@@ -107,7 +107,7 @@ func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiq
 
 func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCritiquer) (map[string]any, error) {
 	start := time.Now()
-	critique, err := critiquer.CritiqueRecipe(ctx, recipe)
+	critique, cost, err := critiquer.CritiqueRecipeWithCost(ctx, recipe)
 	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
@@ -122,5 +122,6 @@ func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCriti
 	return map[string]any{
 		"output":    string(output),
 		"latencyMs": latency.Milliseconds(),
+		"cost":      cost,
 	}, nil
 }

@@ -102,6 +102,10 @@ Provider options and critique metadata assertions follow Promptfoo's [Go provide
 
 ## Recipe critique
 
+The [October 13 Argon comparison](recipe-critique/argon-comparison-2026-10-13.md)
+records fresh cost and latency results against Gemini 3.1, including assertion
+false positives found during review.
+
 `recipe-critique/promptfooconfig.yaml` runs the production recipe critique prompt and schema against hand-reviewed recipe fixtures. A case accepts either a complete `vars.recipe` object or a `vars.recipe_hash`, but not both. Hash cases read `recipe/<hash>` from the configured cache, so export the cache credentials before running Promptfoo when the recipe is not in the local file cache.
 
 Run just this suite from the repository root:
@@ -109,6 +113,20 @@ Run just this suite from the repository root:
 ```sh
 ./task.sh evals EVAL=recipe-critique
 ```
+
+Select a critique model using `OPENROUTER_CRITIQUE_MODEL`; omit it to use the
+production default, `google/gemini-4-argon`. For a fresh cost/latency comparison:
+
+```sh
+OPENROUTER_CRITIQUE_MODEL=google/gemini-3.1-pro-preview ./task.sh evals EVAL=recipe-critique -- --no-cache --repeat 3 --output /tmp/critique-gemini31.json
+OPENROUTER_CRITIQUE_MODEL=google/gemini-4-argon ./task.sh evals EVAL=recipe-critique -- --no-cache --repeat 3 --output /tmp/critique-argon.json
+```
+
+Promptfoo's `cost` column reports OpenRouter's successful-response `usage.cost`
+in USD. Missing or invalid provider cost fails explicitly. Failed calls and
+account billing adjustments are not included. The suite runs at concurrency one;
+three repeats over its two fixtures make six paid calls per model. Recipe and
+menu generation suites retain their pinned judges for comparable generation evals.
 
 The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
 
