@@ -35,6 +35,7 @@ func TestWriteEvalCasesWritesOneCasePerStoredRecipePlan(t *testing.T) {
 	assert.Equal(t, "Chicken Thighs", tests[0].Vars.MenuPlan.Plans[0].AnchorIngredient)
 	require.Len(t, tests[1].Vars.MenuPlan.Plans, 1)
 	assert.Equal(t, "Black Beans", tests[1].Vars.MenuPlan.Plans[0].AnchorIngredient)
+	assert.Equal(t, ai.MealCategoryFancy, tests[1].Vars.MenuPlan.Plans[0].Category)
 	assert.Contains(t, out.String(), "anchor_ingredient: Chicken Thighs")
 	assert.Contains(t, out.String(), "response_id: resp-menu-1")
 	assert.NotContains(t, out.String(), "anchoringredient")
@@ -73,7 +74,7 @@ func seedEvalCaseStore(t *testing.T) (evalCaseStore, string) {
 		Plan: &ai.MenuPlan{
 			Plans: []ai.RecipePlan{
 				{Cuisine: "Italian", AnchorIngredient: "Chicken Thighs", DishFormat: "sheet pan", SideVegetable: "Broccoli"},
-				{Cuisine: "Mexican", AnchorIngredient: "Black Beans", DishFormat: "simmer", SideVegetable: "Peppers", Fancy: true},
+				{Cuisine: "Mexican", AnchorIngredient: "Black Beans", DishFormat: "simmer", SideVegetable: "Peppers", Category: ai.MealCategoryFancy},
 			},
 			ChefNoteSuggestion: "faster dinners",
 			ResponseID:         "resp-menu-1",

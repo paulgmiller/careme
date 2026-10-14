@@ -324,9 +324,9 @@ type mockMenuPlanner struct{}
 
 func (mockMenuPlanner) CreateMenuPlan(context.Context, *locations.Location, []ai.InputIngredient, []string, time.Time, []string, int) (*ai.MenuPlan, error) {
 	return &ai.MenuPlan{Plans: []ai.RecipePlan{
-		{Cuisine: "Korean", AnchorIngredient: "chicken thighs", DishFormat: "sheet pan", SideVegetable: "bok choy"},
-		{Cuisine: "Mexican", AnchorIngredient: "black beans", DishFormat: "quick simmer", SideVegetable: "zucchini"},
-		{Cuisine: "Mediterranean", AnchorIngredient: "seasonal greens", DishFormat: "grain bowl", SideVegetable: "eggplant", Fancy: true},
+		{Cuisine: "Korean", AnchorIngredient: "chicken thighs", DishFormat: "sheet pan", SideVegetable: "bok choy", Category: ai.MealCategoryDifferent},
+		{Cuisine: "Mexican", AnchorIngredient: "black beans", DishFormat: "quick simmer", SideVegetable: "zucchini", Category: ai.MealCategoryHealthy},
+		{Cuisine: "Mediterranean", AnchorIngredient: "seasonal greens", DishFormat: "grain bowl", SideVegetable: "eggplant", Category: ai.MealCategoryFancy},
 	}}, nil
 }
 
@@ -420,15 +420,15 @@ func writeStoreMenuPlan(w io.Writer, number int, result storeMenuPlan) error {
 		return err
 	}
 	for i, plan := range result.Plan.Plans {
-		fancy := ""
-		if plan.Fancy {
-			fancy = " (fancier)"
+		category := ""
+		if plan.Category != "" {
+			category = fmt.Sprintf(" (%s)", plan.Category)
 		}
 		sideVegetable := ""
 		if strings.TrimSpace(plan.SideVegetable) != "" {
 			sideVegetable = fmt.Sprintf(", side veg: %s", plan.SideVegetable)
 		}
-		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.DishFormat, sideVegetable, fancy); err != nil {
+		if _, err := fmt.Fprintf(w, "   - %d: %s with %s, %s%s%s\n", i+1, plan.Cuisine, plan.AnchorIngredient, plan.DishFormat, sideVegetable, category); err != nil {
 			return err
 		}
 	}

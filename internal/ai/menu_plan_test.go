@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuildMenuPlanMessagesIncludesRecipeParentDefaults(t *testing.T) {
@@ -49,8 +50,8 @@ func TestBuildMenuPlanMessagesUsesRequestedCountAsDefault(t *testing.T) {
 	if !strings.Contains(body, "If the user's directions clearly ask for a different number of recipes, return that many plans instead") {
 		t.Fatalf("expected prompt to let user directions change the count: %s", body)
 	}
-	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
-		t.Fatalf("expected conditional fancy-plan requirement: %s", body)
+	if !strings.Contains(body, "Spread meals across healthy, fancy, local, and different categories.") {
+		t.Fatalf("expected category distribution requirement: %s", body)
 	}
 	if strings.Contains(body, "Include one less-common cuisine direction") {
 		t.Fatalf("did not expect less-common cuisine requirement for a two-plan request: %s", body)
@@ -173,7 +174,7 @@ func TestCreateMenuPlanPreservesModelIngredientChoices(t *testing.T) {
 	}
 }
 
-func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
+func TestBuildMenuPlanMessagesAddsCategoryDistribution(t *testing.T) {
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
 	location := &locationtypes.Location{State: "WA"}
 	date := time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC)
@@ -182,8 +183,8 @@ func TestBuildMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
 		t.Fatalf("buildMenuPlanMessages returned error: %v", err)
 	}
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
-		t.Fatalf("expected menu plan prompt to contain fancy requirement: %s", body)
+	if !strings.Contains(body, "Spread meals across healthy, fancy, local, and different categories.") {
+		t.Fatalf("expected menu plan prompt to contain category distribution requirement: %s", body)
 	}
 }
 
@@ -255,11 +256,11 @@ func TestBuildRegenerateMenuPlanMessagesUsesReplacementPrompt(t *testing.T) {
 	}
 }
 
-func TestBuildRegenerateMenuPlanMessagesAddsFancyRequirementForThreePlans(t *testing.T) {
+func TestBuildRegenerateMenuPlanMessagesAddsCategoryDistribution(t *testing.T) {
 	messages := buildRegenerateMenuPlanMessages(nil, 3)
 	body := mustJSON(t, messages)
-	if !strings.Contains(body, "If there are 3 or more total recipes, make sure one of the saved meals or those in the meal plan is fancy.") {
-		t.Fatalf("expected regenerate menu plan prompt to contain fancy requirement: %s", body)
+	if !strings.Contains(body, "Spread meals across healthy, fancy, local, and different categories.") {
+		t.Fatalf("expected regenerate menu plan prompt to contain category distribution requirement: %s", body)
 	}
 }
 
@@ -269,7 +270,7 @@ func TestRecipePlanInstructions(t *testing.T) {
 		AnchorIngredient: "tofu",
 		DishFormat:       "stir-fry",
 		SideVegetable:    "broccoli",
-		Fancy:            true,
+		Category:         MealCategoryFancy,
 	}
 	got := plan.Instructions()
 	if len(got) != 5 {
@@ -356,7 +357,7 @@ func menuPlanResponseClient(t *testing.T, responseID string) *http.Client {
 		if !strings.HasSuffix(req.URL.Path, "/responses") {
 			t.Fatalf("unexpected OpenAI request path: %s", req.URL.Path)
 		}
-		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","dish_format":"stir-fry","side_vegetable":"Broccoli","fancy":false}]}`), nil
+		return menuPlanHTTPResponse(req, responseID, `{"plans":[{"cuisine":"Korean","anchor_ingredient":"tofu","dish_format":"stir-fry","side_vegetable":"Broccoli","category":"healthy"}]}`), nil
 	})}
 }
 
@@ -407,6 +408,85 @@ func TestRecipePlanDishFormatJSON(t *testing.T) {
 			var plan RecipePlan
 			require.NoError(t, json.Unmarshal([]byte(tc.input), &plan))
 			assert.Equal(t, tc.want, plan.DishFormat)
+		})
+	}
+}
+
+func TestMealCategorySchemaAndSerialization(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	props := client.menuSchema["properties"].(map[string]any)["plans"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	assert.NotContains(t, props, "fancy")
+	assert.Equal(t, []any{"healthy", "fancy", "local", "different"}, props["category"].(map[string]any)["enum"])
+	for _, category := range []MealCategory{MealCategoryHealthy, MealCategoryFancy, MealCategoryLocal, MealCategoryDifferent} {
+		t.Run(string(category), func(t *testing.T) {
+			plan := RecipePlan{Category: category}
+			body, err := json.Marshal(plan)
+			require.NoError(t, err)
+			assert.Contains(t, string(body), `"category":"`+string(category)+`"`)
+			assert.NotContains(t, string(body), `"fancy":`)
+			var decoded RecipePlan
+			require.NoError(t, json.Unmarshal(body, &decoded))
+			assert.Equal(t, plan, decoded)
+			body, err = yaml.Marshal(plan)
+			require.NoError(t, err)
+			assert.Contains(t, string(body), "category: "+string(category))
+			require.NoError(t, yaml.Unmarshal(body, &decoded))
+			assert.Equal(t, plan, decoded)
+		})
+	}
+}
+
+func TestRecipePlanCategoryInstructions(t *testing.T) {
+	for _, tc := range []struct {
+		category MealCategory
+		phrases  []string
+	}{
+		{MealCategoryHealthy, []string{"ancient or whole grains", "more vegetables", "lighter proteins"}},
+		{MealCategoryFancy, []string{"richer flavors", "greater expense", "slower cooking", "may exceed the default one-hour limit"}},
+		{MealCategoryLocal, []string{"user's region", "current season", "available ingredients", "do not claim verified local sourcing"}},
+		{MealCategoryDifferent, []string{"lesser-known cuisines", "regional dishes", "less-familiar seasonings"}},
+	} {
+		t.Run(string(tc.category), func(t *testing.T) {
+			plan := RecipePlan{Category: tc.category, RecipeInstructions: []string{"Keep it under 30 minutes."}}
+			instructions := strings.Join(plan.Instructions(), "\n")
+			for _, phrase := range tc.phrases {
+				assert.Contains(t, instructions, phrase)
+			}
+			assert.Contains(t, instructions, "Explicit user dietary, time, budget, and equipment constraints still apply")
+			assert.Contains(t, instructions, "User direction for this recipe: Keep it under 30 minutes.")
+		})
+	}
+}
+
+func TestLegacyRecipePlansRemainReadable(t *testing.T) {
+	for _, fancy := range []bool{false, true} {
+		var plan RecipePlan
+		require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"cuisine":"French","fancy":%t}`, fancy)), &plan))
+		assert.Empty(t, plan.Category)
+		assert.Equal(t, "French", plan.Cuisine)
+		assert.Len(t, plan.Instructions(), 4)
+	}
+}
+
+func TestMenuCategoryDistributionForCounts(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	for _, count := range []int{1, 3, 4, 6} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			initial, err := client.buildMenuPlanMessages(&locationtypes.Location{State: "WA"}, nil, []string{"Make every meal healthy."}, time.Date(2026, time.May, 11, 0, 0, 0, 0, time.UTC), nil, count)
+			require.NoError(t, err)
+			replacement := buildRegenerateMenuPlanMessages([]string{"Saved: a local salmon dinner", "Make every meal healthy."}, count)
+			for _, messages := range [][]PromptMessage{initial, replacement} {
+				body := mustJSON(t, messages)
+				assert.Contains(t, body, "For up to four meals, choose distinct categories")
+				assert.Contains(t, body, "cover all four before repeating")
+				assert.Contains(t, body, "Explicit user requests take priority over category variety")
+				assert.Contains(t, body, "Make every meal healthy.")
+				assert.NotContains(t, body, "make sure one of the saved meals or those in the meal plan is fancy")
+			}
+			body := mustJSON(t, replacement)
+			assert.Contains(t, body, "Consider saved meals and their categories from the existing conversation")
+			assert.Contains(t, body, "Saved: a local salmon dinner")
+			assert.Contains(t, mustJSON(t, initial), "Fancy meals may take longer unless the user specifies a time limit")
 		})
 	}
 }

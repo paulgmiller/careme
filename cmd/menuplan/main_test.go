@@ -151,7 +151,7 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 			Date: time.Date(2026, time.May, 13, 0, 0, 0, 0, time.UTC),
 			Plan: &ai.MenuPlan{Plans: []ai.RecipePlan{
 				{Cuisine: "Korean", AnchorIngredient: "chicken thighs", DishFormat: "sheet pan", SideVegetable: "broccoli"},
-				{Cuisine: "Thai", AnchorIngredient: "rice noodles", DishFormat: "stir fry", SideVegetable: "snap peas", Fancy: true},
+				{Cuisine: "Thai", AnchorIngredient: "rice noodles", DishFormat: "stir fry", SideVegetable: "snap peas", Category: ai.MealCategoryFancy},
 			}},
 		},
 		{
@@ -171,7 +171,7 @@ func TestWriteMenuPlansHumanReadable(t *testing.T) {
 		"Date: 2026-05-13",
 		"Plan:",
 		"Korean with chicken thighs, sheet pan, side veg: broccoli",
-		"Thai with rice noodles, stir fry, side veg: snap peas (fancier)",
+		"Thai with rice noodles, stir fry, side veg: snap peas (fancy)",
 		"2. Safeway",
 		"Could not make a menu plan: staples unavailable",
 	} {
