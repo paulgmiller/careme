@@ -11,6 +11,8 @@ import (
 	"github.com/samber/lo"
 )
 
+// catalogProduct contains the product fields used for ingredient sourcing.
+// https://docs.bigcommerce.com/developer/api-reference/rest/admin/catalog/products/get-products
 type catalogProduct struct {
 	ID                int              `json:"id"`
 	Name              string           `json:"name"`
@@ -31,6 +33,8 @@ type catalogProduct struct {
 // flavors (classic vs BBQ pork mac and cheese), and configurable bundles. A bundle
 // can have hundreds of variants combining proteins, sides, dressings, and other
 // choices; variants do not necessarily represent different sizes.
+//
+// https://docs.bigcommerce.com/developer/api-reference/rest/admin/catalog/product-variants/get-product-variants
 type catalogVariant struct {
 	Price              *float32 `json:"price"`
 	CalculatedPrice    float32  `json:"calculated_price"`
@@ -38,11 +42,15 @@ type catalogVariant struct {
 	PurchasingDisabled bool     `json:"purchasing_disabled"`
 }
 
+// catalogCategory maps category IDs to their display names.
+// https://docs.bigcommerce.com/developer/api-reference/rest/admin/catalog/categories/get-categories
 type catalogCategory struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
+// catalogBrand maps brand IDs to their display names.
+// https://docs.bigcommerce.com/developer/api-reference/rest/admin/catalog/brands/get-brands
 type catalogBrand struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
@@ -107,6 +115,8 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 	}
 	// A variant's calculated price is the selling price, including inherited sales.
 	// Do not compare it with another variant's base price or the retail/MSRP field.
+	// Raising regular here is defensive: we have observed calculated prices above
+	// the parent product's price, but not confirmed above the variant's own price.
 	if current > regular {
 		regular = current
 	}
@@ -114,6 +124,8 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 		ProductID: strconv.Itoa(product.ID), Description: product.Name,
 		Size: catalogSizeFromDescription(product.Name), PriceRegular: &regular,
 	}
+	// PriceSale represents a discount for PercentOff(), rather than every selling
+	// price. Equal prices need no sale value; a higher value would give negative savings.
 	if current < regular {
 		ingredient.PriceSale = &current
 	}
