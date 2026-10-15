@@ -40,7 +40,7 @@ spec:
             - secretRef:
                 name: kroger
             - secretRef:
-                name: mnfoodclubsecret
+                name: mnfoodclub
             - secretRef:
                 name: storage
             - secretRef:
