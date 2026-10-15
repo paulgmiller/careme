@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"careme/internal/ai"
+
+	"github.com/samber/lo"
 )
 
 type catalogProduct struct {
@@ -47,14 +49,12 @@ type catalogBrand struct {
 }
 
 func mapCatalog(products []catalogProduct, categories []catalogCategory, brands []catalogBrand) ([]ai.InputIngredient, error) {
-	categoryMap := make(map[int]catalogCategory, len(categories))
-	for _, category := range categories {
-		categoryMap[category.ID] = category
-	}
-	brandMap := make(map[int]string, len(brands))
-	for _, brand := range brands {
-		brandMap[brand.ID] = brand.Name
-	}
+	categoryMap := lo.SliceToMap(categories, func(category catalogCategory) (int, catalogCategory) {
+		return category.ID, category
+	})
+	brandMap := lo.SliceToMap(brands, func(brand catalogBrand) (int, string) {
+		return brand.ID, brand.Name
+	})
 	var ingredients []ai.InputIngredient
 	for _, product := range products {
 		if !product.IsVisible || product.Availability != "available" || (product.InventoryTracking == "product" && product.InventoryLevel <= 0) {

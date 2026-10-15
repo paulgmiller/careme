@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"careme/internal/config"
 
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +38,10 @@ func testClient(t *testing.T, transport roundTripFunc) *Client {
 	t.Helper()
 	client, err := NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
 	require.NoError(t, err)
+	// Keep the production retry policy, but avoid real backoff delays in tests.
+	retries := client.httpClient.Transport.(*retryablehttp.RoundTripper).Client
+	retries.RetryWaitMin = 0
+	retries.RetryWaitMax = 0
 	return client
 }
 
@@ -165,7 +171,7 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 		{"transport", 0, nil, failure, "read failed"},
 		{"unauthorized", 401, strings.NewReader("private error body"), nil, "HTTP 401"},
 		{"forbidden", 403, strings.NewReader("private error body"), nil, "HTTP 403"},
-		{"server", 503, strings.NewReader("private error body"), nil, "HTTP 503"},
+		{"server", 503, strings.NewReader("private error body"), nil, "giving up after"},
 		{"json", 200, strings.NewReader("not JSON"), nil, "decode catalog response"},
 		{"body", 200, errorReader{failure}, nil, "read failed"},
 		{"pagination", 200, strings.NewReader(`{"data":[]}`), nil, "invalid pagination"},
@@ -190,7 +196,11 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 			assert.NotContains(t, err.Error(), "private error body")
 			assert.NotContains(t, err.Error(), "test-token")
 			assert.Nil(t, got)
-			assert.Equal(t, 2, calls)
+			wantCalls := 2
+			if test.err != nil || test.status == http.StatusServiceUnavailable {
+				wantCalls += retryablehttp.NewClient().RetryMax
+			}
+			assert.Equal(t, wantCalls, calls)
 			if body != nil {
 				assert.True(t, body.closed)
 			}
@@ -218,6 +228,8 @@ func TestRateLimitRetries(t *testing.T) {
 			var bodies []*trackedBody
 			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				calls++
+				assert.Equal(t, "test-token", req.Header.Get("X-Auth-Token"))
+				assert.Equal(t, "application/json", req.Header.Get("Accept"))
 				if succeed && calls == 3 {
 					return jsonPage(t, []catalogProduct{}, 1, 0), nil
 				}
@@ -229,15 +241,64 @@ func TestRateLimitRetries(t *testing.T) {
 			err := client.getPage(t.Context(), "https://api.bigcommerce.com/stores/test/v3/catalog/products", &page)
 			if succeed {
 				require.NoError(t, err)
+				assert.Equal(t, 3, calls)
 			} else {
-				require.ErrorContains(t, err, "HTTP 429")
+				require.ErrorContains(t, err, "giving up after")
+				assert.Equal(t, retryablehttp.NewClient().RetryMax+1, calls)
 			}
-			assert.Equal(t, 3, calls)
 			for _, body := range bodies {
 				assert.True(t, body.closed)
 			}
 		})
 	}
+}
+
+func TestCatalogBackoff(t *testing.T) {
+	for _, test := range []struct {
+		name, reset, retryAfter, standardRetryAfter string
+		want                                        time.Duration
+	}{
+		{name: "immediate", reset: "0"},
+		{name: "milliseconds", reset: "1500", want: 1500 * time.Millisecond},
+		{name: "honors reset beyond default maximum", reset: "60000", want: time.Minute},
+		{name: "custom retry after seconds", retryAfter: "15", want: 15 * time.Second},
+		{name: "reset is longer", reset: "2000", retryAfter: "1", want: 2 * time.Second},
+		{name: "custom retry after is longer", reset: "1000", retryAfter: "2", want: 2 * time.Second},
+		{name: "invalid reset with valid retry after", reset: "invalid", retryAfter: "2", want: 2 * time.Second},
+		{name: "valid reset with invalid retry after", reset: "1500", retryAfter: "invalid", want: 1500 * time.Millisecond},
+		{name: "missing", want: time.Second},
+		{name: "invalid", reset: "invalid", want: time.Second},
+		{name: "negative", reset: "-1", retryAfter: "-1", want: time.Second},
+		{name: "overflow", reset: "9223372036854775807", retryAfter: "9223372036854775807", want: time.Second},
+		{name: "standard retry after", standardRetryAfter: "3", want: 3 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			resp := &http.Response{StatusCode: 429, Header: http.Header{
+				"X-Rate-Limit-Time-Reset-Ms": []string{test.reset},
+				"X-Retry-After":              []string{test.retryAfter},
+				"Retry-After":                []string{test.standardRetryAfter},
+			}}
+			assert.Equal(t, test.want, catalogBackoff(time.Second, time.Second, 0, resp))
+		})
+	}
+	// Transport errors have no response; delegate their backoff to the library.
+	assert.Equal(t, 2*time.Second, catalogBackoff(time.Second, 30*time.Second, 1, nil))
+}
+
+func TestRateLimitCancellationDuringBackoff(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 25*time.Millisecond)
+	defer cancel()
+	calls := 0
+	body := &trackedBody{Reader: strings.NewReader("rate limited")}
+	client := testClient(t, func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: 429, Header: http.Header{"X-Rate-Limit-Time-Reset-Ms": []string{"60000"}}, Body: body}, nil
+	})
+	got, err := client.Fetch(ctx, AllCategories)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Nil(t, got)
+	assert.Equal(t, 1, calls)
+	assert.True(t, body.closed)
 }
 
 func TestFetchCancellation(t *testing.T) {

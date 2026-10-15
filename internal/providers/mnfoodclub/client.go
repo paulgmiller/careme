@@ -13,6 +13,9 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/httpretry"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // AllCategories selects the full catalog without a category filter.
@@ -29,7 +32,32 @@ func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*Client, e
 	if strings.TrimSpace(cfg.APIPath) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
 		return nil, fmt.Errorf("MNFoodClub requires MNFOODCLUB_API_PATH and MNFOODCLUB_ACCESS_TOKEN")
 	}
-	return &Client{config: cfg, httpClient: httpClient}, nil
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient = httpClient
+	retryClient.RequestLogHook = httpretry.LogRetry("mnfoodclub")
+	retryClient.Backoff = catalogBackoff
+	return &Client{config: cfg, httpClient: retryClient.StandardClient()}, nil
+}
+
+// catalogBackoff honors BigCommerce's X-Rate-Limit-Time-Reset-Ms (milliseconds)
+// and X-Retry-After (seconds), using the longer wait when both are present.
+// These differ from the standard Retry-After header handled by the library.
+// https://docs.bigcommerce.com/developer/docs/admin/catalog-and-inventory/data-migration/catalog/error-handling
+func catalogBackoff(min, max time.Duration, attempt int, resp *http.Response) time.Duration {
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+		reset, resetErr := time.ParseDuration(resp.Header.Get("X-Rate-Limit-Time-Reset-Ms") + "ms")
+		retryAfter, retryAfterErr := time.ParseDuration(resp.Header.Get("X-Retry-After") + "s")
+		if resetErr == nil && reset >= 0 {
+			if retryAfterErr == nil && retryAfter > reset {
+				return retryAfter
+			}
+			return reset
+		}
+		if retryAfterErr == nil && retryAfter >= 0 {
+			return retryAfter
+		}
+	}
+	return retryablehttp.DefaultBackoff(min, max, attempt, resp)
 }
 
 func (c *Client) catalogURL() (*url.URL, error) {
@@ -81,48 +109,24 @@ func catalogItems[T any](ctx context.Context, c *Client, base *url.URL, resource
 }
 
 func (c *Client) getPage(ctx context.Context, pageURL string, result any) error {
-	for attempt := 0; ; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
-		if err != nil {
-			return fmt.Errorf("create catalog request: %w", err)
-		}
-		req.Header.Set("X-Auth-Token", c.config.AccessToken)
-		req.Header.Set("Accept", "application/json")
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("fetch catalog: %w", err)
-		}
-		if resp.StatusCode == http.StatusTooManyRequests && attempt < 2 {
-			delay := time.Second
-			if ms, err := strconv.ParseInt(resp.Header.Get("X-Rate-Limit-Time-Reset-Ms"), 10, 64); err == nil && ms >= 0 {
-				// Parse as milliseconds without overflowing a time.Duration.
-				if ms > int64((1<<63-1)/time.Millisecond) {
-					_ = resp.Body.Close()
-					return fmt.Errorf("invalid BigCommerce rate limit reset interval")
-				}
-				delay = time.Duration(ms) * time.Millisecond
-			}
-			_ = resp.Body.Close()
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return ctx.Err()
-			case <-timer.C:
-			}
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			_ = resp.Body.Close()
-			return fmt.Errorf("HTTP %d", resp.StatusCode)
-		}
-		err = json.NewDecoder(resp.Body).Decode(result)
-		_ = resp.Body.Close()
-		if err != nil {
-			return fmt.Errorf("decode catalog response: %w", err)
-		}
-		return nil
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return fmt.Errorf("create catalog request: %w", err)
 	}
+	req.Header.Set("X-Auth-Token", c.config.AccessToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("fetch catalog: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+		return fmt.Errorf("decode catalog response: %w", err)
+	}
+	return nil
 }
 
 // Fetch returns every eligible product, optionally restricted to one category.
