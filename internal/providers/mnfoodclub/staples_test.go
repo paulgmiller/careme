@@ -54,7 +54,7 @@ func TestMNFoodClubFetchStaples(t *testing.T) {
 		assert.Equal(t, want, got[:len(want)])
 		assert.Equal(t, produceShareIngredients(), got[len(want):])
 		assert.Equal(t, t.Context(), client.ctx)
-		assert.Equal(t, []int{0}, client.calls)
+		assert.Equal(t, []int{AllCategories}, client.calls)
 	}
 }
 

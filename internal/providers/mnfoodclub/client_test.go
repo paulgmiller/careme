@@ -32,8 +32,11 @@ type errorReader struct{ err error }
 
 func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 
-func testClient(transport roundTripFunc) *Client {
-	return NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
+func testClient(t *testing.T, transport roundTripFunc) *Client {
+	t.Helper()
+	client, err := NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
+	require.NoError(t, err)
+	return client
 }
 
 func jsonPage(t *testing.T, data any, page, pages int) *http.Response {
@@ -44,11 +47,11 @@ func jsonPage(t *testing.T, data any, page, pages int) *http.Response {
 }
 
 func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
-	for _, category := range []int{0, 178} {
+	for _, category := range []int{AllCategories, 178} {
 		t.Run(fmt.Sprint(category), func(t *testing.T) {
 			var calls []string
 			var bodies []*trackedBody
-			client := testClient(func(req *http.Request) (*http.Response, error) {
+			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				assert.Equal(t, http.MethodGet, req.Method)
 				assert.Equal(t, t.Context(), req.Context())
 				assert.Equal(t, "test-token", req.Header.Get("X-Auth-Token"))
@@ -64,7 +67,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 					assert.Equal(t, "variants", req.URL.Query().Get("include"))
 					assert.Equal(t, "id", req.URL.Query().Get("sort"))
 					assert.Equal(t, "asc", req.URL.Query().Get("direction"))
-					if category == 0 {
+					if category == AllCategories {
 						assert.Empty(t, req.URL.Query().Get("categories:in"))
 					} else {
 						assert.Equal(t, "178", req.URL.Query().Get("categories:in"))
@@ -107,30 +110,46 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 }
 
 func TestCatalogConfiguration(t *testing.T) {
-	for _, path := range []string{"https://api.bigcommerce.com/stores/test/", "https://api.bigcommerce.com/stores/test/v2/", "https://api.bigcommerce.com/stores/test/v3"} {
-		client := NewClient(config.MNFoodClubConfig{APIPath: path, AccessToken: "token"}, &http.Client{})
-		got, err := client.catalogURL()
+	client, err := NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "token"}, &http.Client{})
+	require.NoError(t, err)
+	got, err := client.catalogURL()
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/catalog/", got.String())
+	for _, cfg := range []config.MNFoodClubConfig{
+		{APIPath: "https://api.bigcommerce.com/stores/test/", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores/test/v3", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores/test/v3//", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores//v3/", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores/test/v2/", AccessToken: "token"},
+		{APIPath: "://invalid", AccessToken: "token"},
+		{APIPath: "file:///stores/test", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/", AccessToken: "token"},
+		{APIPath: "https://user:password@api.bigcommerce.com/stores/test/v3/", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores/test/v3/?query=1", AccessToken: "token"},
+	} {
+		client, err := NewClient(cfg, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			t.Fatal("invalid configuration must not make requests")
+			return nil, nil
+		})})
 		require.NoError(t, err)
-		assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/catalog/", got.String())
+		got, err := client.Fetch(t.Context(), AllCategories)
+		require.Error(t, err)
+		assert.Nil(t, got)
+		assert.NotContains(t, err.Error(), "password")
 	}
+}
+
+func TestNewClientRequiresCredentials(t *testing.T) {
 	for _, cfg := range []config.MNFoodClubConfig{
 		{},
 		{APIPath: "https://api.bigcommerce.com/stores/test/v3"},
 		{AccessToken: "token"},
-		{APIPath: "://invalid", AccessToken: "token"},
-		{APIPath: "file:///stores/test", AccessToken: "token"},
-		{APIPath: "https://api.bigcommerce.com/", AccessToken: "token"},
-		{APIPath: "https://user:password@api.bigcommerce.com/stores/test", AccessToken: "token"},
-		{APIPath: "https://api.bigcommerce.com/stores/test?query=1", AccessToken: "token"},
+		{APIPath: " \t ", AccessToken: "token"},
+		{APIPath: "https://api.bigcommerce.com/stores/test/v3", AccessToken: " \n "},
 	} {
-		client := NewClient(cfg, &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-			t.Fatal("invalid configuration must not make requests")
-			return nil, nil
-		})})
-		got, err := client.Fetch(t.Context(), 0)
-		require.Error(t, err)
-		assert.Nil(t, got)
-		assert.NotContains(t, err.Error(), "password")
+		client, err := NewClient(cfg, &http.Client{})
+		require.ErrorContains(t, err, "MNFoodClub requires MNFOODCLUB_API_PATH and MNFOODCLUB_ACCESS_TOKEN")
+		assert.Nil(t, client)
 	}
 }
 
@@ -154,7 +173,7 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
 			var body *trackedBody
-			client := testClient(func(req *http.Request) (*http.Response, error) {
+			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				calls++
 				if calls == 1 {
 					return jsonPage(t, []catalogProduct{{ID: 1}}, 1, 2), nil
@@ -165,7 +184,7 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 				body = &trackedBody{Reader: test.body}
 				return &http.Response{StatusCode: test.status, Body: body}, nil
 			})
-			got, err := client.Fetch(t.Context(), 0)
+			got, err := client.Fetch(t.Context(), AllCategories)
 			require.ErrorContains(t, err, test.want)
 			assert.Contains(t, err.Error(), "products page 2")
 			assert.NotContains(t, err.Error(), "private error body")
@@ -179,13 +198,13 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 	}
 	for _, resource := range []string{"categories", "brands"} {
 		t.Run(resource, func(t *testing.T) {
-			client := testClient(func(req *http.Request) (*http.Response, error) {
+			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				if strings.HasSuffix(req.URL.Path, "/"+resource) {
 					return &http.Response{StatusCode: 503, Body: io.NopCloser(strings.NewReader("failed"))}, nil
 				}
 				return jsonPage(t, []catalogProduct{}, 1, 1), nil
 			})
-			got, err := client.Fetch(t.Context(), 0)
+			got, err := client.Fetch(t.Context(), AllCategories)
 			require.ErrorContains(t, err, resource+" page 1")
 			assert.Nil(t, got)
 		})
@@ -197,7 +216,7 @@ func TestRateLimitRetries(t *testing.T) {
 		t.Run(fmt.Sprint(succeed), func(t *testing.T) {
 			calls := 0
 			var bodies []*trackedBody
-			client := testClient(func(req *http.Request) (*http.Response, error) {
+			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				calls++
 				if succeed && calls == 3 {
 					return jsonPage(t, []catalogProduct{}, 1, 0), nil
@@ -226,14 +245,14 @@ func TestFetchCancellation(t *testing.T) {
 		t.Run(fmt.Sprint(rateLimited), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			client := testClient(func(req *http.Request) (*http.Response, error) {
+			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				cancel()
 				if !rateLimited {
 					return nil, req.Context().Err()
 				}
 				return &http.Response{StatusCode: 429, Header: http.Header{"X-Rate-Limit-Time-Reset-Ms": []string{"60000"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
 			})
-			got, err := client.Fetch(ctx, 0)
+			got, err := client.Fetch(ctx, AllCategories)
 			require.ErrorIs(t, err, context.Canceled)
 			assert.Nil(t, got)
 		})

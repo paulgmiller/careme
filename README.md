@@ -116,7 +116,7 @@ INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_de
 ```
 
 Set `MNFOODCLUB_API_PATH` to the supplied store API URL
-(`https://api.bigcommerce.com/stores/<store_hash>/v3/`) and
+(`https://api.bigcommerce.com/stores/<store_hash>/v3/`, including the trailing slash) and
 `MNFOODCLUB_ACCESS_TOKEN` to the store access token. The token needs Products
 read access; client ID, client secret, and account names are not used. These
 environment variables can later be supplied through kage or Kubernetes secrets.
@@ -134,7 +134,8 @@ and category names, and uses the lowest-priced purchasable variant for each
 product. Zero stock excludes items only when inventory tracking is enabled.
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.
-Missing credentials or failed API pages fail the import without partial results.
+Missing credentials fail client construction when the staples backends are
+assembled. Failed API pages fail the import without partial results.
 With grading disabled,
 the displayed 10/10 scores are placeholders, not quality assessments. Enable
 grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use

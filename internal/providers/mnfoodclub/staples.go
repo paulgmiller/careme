@@ -51,7 +51,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}
-	ingredients, err := p.client.Fetch(ctx, 0)
+	ingredients, err := p.client.Fetch(ctx, AllCategories)
 	if err != nil {
 		return nil, fmt.Errorf("fetch MNFoodClub staples: %w", err)
 	}
