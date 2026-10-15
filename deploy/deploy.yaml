@@ -40,6 +40,8 @@ spec:
             - secretRef:
                 name: kroger
             - secretRef:
+                name: mnfoodclubsecret
+            - secretRef:
                 name: storage
             - secretRef:
                 name: walmart
