@@ -57,6 +57,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market staples provider: %w", err)
 	}
+	// mnfood club is big commerce doesn't need to go over bright data.
 	mnfoodclubClient, err := mnfoodclub.NewClient(cfg.MNFoodClub, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create MNFoodClub catalog client: %w", err)
@@ -69,7 +70,6 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		krogerBackend,
 		publixProvider,
 		farmersMarketProvider,
-		// mnfood club is big commerce doesn't need to go over bright data.
 		mnfoodclub.NewStaplesProvider(mnfoodclubClient),
 		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
 		walmart.NewStaplesProvider(),

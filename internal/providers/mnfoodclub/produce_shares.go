@@ -62,7 +62,6 @@ func produceShareIngredients() []ai.InputIngredient {
 				ProductID:   LocationIDPrefix + strings.ToLower(strings.ReplaceAll(description, " ", "-")),
 				Description: description,
 				Brand:       "mnfood.club",
-				AisleNumber: "Produce",
 				Categories:  []string{"Produce", share.name},
 				Grade:       &ai.IngredientGrade{Score: 10, Reason: "Fresh produce from the MNFoodClub produce share list."},
 			}

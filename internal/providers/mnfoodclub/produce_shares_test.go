@@ -17,7 +17,7 @@ func TestProduceShareIngredients(t *testing.T) {
 		require.GreaterOrEqual(t, len(ingredient.Categories), 2)
 		share := ingredient.Categories[1]
 		assert.Equal(t, "Produce", ingredient.Categories[0])
-		assert.Equal(t, "Produce", ingredient.AisleNumber)
+		assert.Empty(t, ingredient.AisleNumber)
 		assert.Equal(t, "mnfood.club", ingredient.Brand)
 		assert.True(t, strings.HasPrefix(ingredient.Description, "Produce share "+strings.ToLower(share)+" "))
 		byShare[share] = append(byShare[share], strings.TrimPrefix(ingredient.Description, "Produce share "+strings.ToLower(share)+" "))

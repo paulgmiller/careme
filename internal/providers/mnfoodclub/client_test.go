@@ -74,7 +74,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 					}
 					resp = jsonPage(t, []catalogProduct{{ID: page, Name: " Organic Beef - avg 1lb ", BrandID: 2, Categories: []int{1, 2}, Price: 10, IsVisible: true, Availability: "available", Variants: []catalogVariant{{CalculatedPrice: 8}}}}, page, 2)
 				case "/stores/test/v3/catalog/categories":
-					resp = jsonPage(t, []catalogCategory{{ID: page, Name: []string{"Shop All", "Meat"}[page-1], ParentID: page - 1}}, page, 2)
+					resp = jsonPage(t, []catalogCategory{{ID: page, Name: []string{"Shop All", "Meat"}[page-1]}}, page, 2)
 				case "/stores/test/v3/catalog/brands":
 					resp = jsonPage(t, []catalogBrand{{ID: page, Name: "Local Farm"}}, page, 2)
 				default:
@@ -93,7 +93,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 			assert.Equal(t, "avg 1lb", got[0].Size)
 			assert.Equal(t, "Local Farm", got[0].Brand)
 			assert.Equal(t, []string{"Shop All", "Meat"}, got[0].Categories)
-			assert.Equal(t, "Meat", got[0].AisleNumber)
+			assert.Empty(t, got[0].AisleNumber)
 			assert.Equal(t, float32(10), *got[0].PriceRegular)
 			assert.Equal(t, float32(8), *got[0].PriceSale)
 			assert.Nil(t, got[0].Grade)

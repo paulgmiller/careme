@@ -83,29 +83,13 @@ func TestCatalogStockAndPrices(t *testing.T) {
 }
 
 func TestCatalogCategoryMapping(t *testing.T) {
-	categories := []catalogCategory{{ID: 1, Name: "Shop All"}, {ID: 3, Name: "Fruit", ParentID: 1}, {ID: 2, Name: "Produce", ParentID: 1}}
+	categories := []catalogCategory{{ID: 1, Name: "Shop All"}, {ID: 3, Name: "Fruit"}, {ID: 2, Name: "Produce"}}
 	product := catalogProduct{ID: 123, Name: "Apples", BrandID: 1, Price: 5, Categories: []int{3, 1, 2}, IsVisible: true, Availability: "available", Variants: []catalogVariant{{CalculatedPrice: 5}}}
 	got, err := mapCatalog([]catalogProduct{product}, categories, []catalogBrand{{ID: 1, Name: "Local Farm"}})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, []string{"Fruit", "Shop All", "Produce"}, got[0].Categories)
-	assert.Equal(t, "Produce", got[0].AisleNumber)
+	assert.Empty(t, got[0].AisleNumber)
 	assert.Equal(t, "Local Farm", got[0].Brand)
 	assert.Empty(t, got[0].Size)
-	for _, test := range []struct {
-		name       string
-		categories []catalogCategory
-		want       string
-	}{
-		{"missing parent", []catalogCategory{{ID: 1, ParentID: 42}}, "missing category ancestor 42"},
-		{"cycle", []catalogCategory{{ID: 1, ParentID: 2}, {ID: 2, ParentID: 1}}, "cycle in category ancestry"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			product.Categories = []int{1}
-			product.BrandID = 0
-			got, err := mapCatalog([]catalogProduct{product}, test.categories, nil)
-			require.ErrorContains(t, err, test.want)
-			assert.Nil(t, got)
-		})
-	}
 }

@@ -22,6 +22,13 @@ type catalogProduct struct {
 	Variants          []catalogVariant `json:"variants"`
 }
 
+// catalogVariant is a purchasable option combination within a parent product,
+// with its own price and, when tracked by variant, stock level. Products without
+// options still have a base variant. MNFoodClub uses options for package sizes
+// (e.g. 14oz vs 22oz lard), dietary choices (regular vs gluten-free pie crust),
+// flavors (classic vs BBQ pork mac and cheese), and configurable bundles. A bundle
+// can have hundreds of variants combining proteins, sides, dressings, and other
+// choices; variants do not necessarily represent different sizes.
 type catalogVariant struct {
 	Price              *float32 `json:"price"`
 	CalculatedPrice    float32  `json:"calculated_price"`
@@ -30,9 +37,8 @@ type catalogVariant struct {
 }
 
 type catalogCategory struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	ParentID int    `json:"parent_id"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type catalogBrand struct {
@@ -65,6 +71,13 @@ func mapCatalog(products []catalogProduct, categories []catalogCategory, brands 
 	return ingredients, nil
 }
 
+// productIngredient maps a product to one ingredient, keeping the parent product ID.
+// BigCommerce includes a base variant even for products without options; products
+// with options can have variants with different prices and stock levels. We choose
+// the cheapest purchasable variant and use its regular and selling prices together.
+// It returns eligible=false with no error when every variant is purchasing-disabled
+// or, with variant-level inventory tracking, out of stock. Missing variant data is
+// an error rather than an ineligible product.
 func productIngredient(product catalogProduct, categories map[int]catalogCategory, brands map[int]string) (ai.InputIngredient, bool, error) {
 	if product.ID <= 0 || strings.TrimSpace(product.Name) == "" {
 		return ai.InputIngredient{}, false, fmt.Errorf("missing product ID or name")
@@ -111,42 +124,17 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 		}
 		ingredient.Brand = brand
 	}
-	deepest := -1
-	aisleID := 0
+	// MNFoodClub is online-only, so leave AisleNumber unset. If shopping-list
+	// grouping becomes useful, consider broad categories such as Meat or Produce
+	// rather than the deepest catalog category (e.g. Thighs & Drumsticks).
 	for _, id := range product.Categories {
 		category, ok := categories[id]
 		if !ok {
 			return ai.InputIngredient{}, false, fmt.Errorf("missing category %d", id)
 		}
 		ingredient.Categories = append(ingredient.Categories, category.Name)
-		depth, err := categoryDepth(id, categories)
-		if err != nil {
-			return ai.InputIngredient{}, false, err
-		}
-		if depth > deepest || (depth == deepest && id < aisleID) {
-			deepest, aisleID = depth, id
-			ingredient.AisleNumber = category.Name
-		}
 	}
 	return ai.NormalizeInputIngredient(ingredient), true, nil
-}
-
-func categoryDepth(id int, categories map[int]catalogCategory) (int, error) {
-	seen := map[int]bool{}
-	depth := 0
-	for id != 0 {
-		if seen[id] {
-			return 0, fmt.Errorf("cycle in category ancestry at %d", id)
-		}
-		seen[id] = true
-		category, ok := categories[id]
-		if !ok {
-			return 0, fmt.Errorf("missing category ancestor %d", id)
-		}
-		id = category.ParentID
-		depth++
-	}
-	return depth, nil
 }
 
 func validPrice(price float32) bool {
