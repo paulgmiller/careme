@@ -33,7 +33,7 @@ type errorReader struct{ err error }
 func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 
 func testClient(transport roundTripFunc) *Client {
-	return NewClient(config.BigCommerceConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
+	return NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
 }
 
 func jsonPage(t *testing.T, data any, page, pages int) *http.Response {
@@ -108,12 +108,12 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 
 func TestCatalogConfiguration(t *testing.T) {
 	for _, path := range []string{"https://api.bigcommerce.com/stores/test/", "https://api.bigcommerce.com/stores/test/v2/", "https://api.bigcommerce.com/stores/test/v3"} {
-		client := NewClient(config.BigCommerceConfig{APIPath: path, AccessToken: "token"}, &http.Client{})
+		client := NewClient(config.MNFoodClubConfig{APIPath: path, AccessToken: "token"}, &http.Client{})
 		got, err := client.catalogURL()
 		require.NoError(t, err)
 		assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/catalog/", got.String())
 	}
-	for _, cfg := range []config.BigCommerceConfig{
+	for _, cfg := range []config.MNFoodClubConfig{
 		{},
 		{APIPath: "https://api.bigcommerce.com/stores/test/v3"},
 		{AccessToken: "token"},

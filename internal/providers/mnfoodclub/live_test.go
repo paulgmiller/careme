@@ -17,7 +17,7 @@ func TestLiveBigCommerceCatalog(t *testing.T) {
 	if os.Getenv("MNFOODCLUB_LIVE_TEST") != "1" {
 		t.Skip("set MNFOODCLUB_LIVE_TEST=1 and BIGCOMMERCE_* credentials for read-only API verification")
 	}
-	provider := NewStaplesProvider(NewClient(config.BigCommerceConfig{
+	provider := NewStaplesProvider(NewClient(config.MNFoodClubConfig{
 		APIPath: os.Getenv("BIGCOMMERCE_API_PATH"), AccessToken: os.Getenv("BIGCOMMERCE_ACCESS_TOKEN"),
 	}, &http.Client{Timeout: 30 * time.Second}))
 	staples, err := provider.FetchStaples(t.Context(), "mnfoodclub_delivery")

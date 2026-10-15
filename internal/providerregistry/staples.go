@@ -65,7 +65,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		krogerBackend,
 		publixProvider,
 		farmersMarketProvider,
-		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(cfg.BigCommerce, httpClient)),
+		mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(cfg.MNFoodClub, httpClient)),
 		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),

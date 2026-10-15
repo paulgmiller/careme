@@ -18,11 +18,11 @@ import (
 // Client reads the complete store catalog using a store-level access token.
 // Configuration is checked on use so missing credentials do not disable other stores.
 type Client struct {
-	config     config.BigCommerceConfig
+	config     config.MNFoodClubConfig
 	httpClient *http.Client
 }
 
-func NewClient(cfg config.BigCommerceConfig, httpClient *http.Client) *Client {
+func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) *Client {
 	return &Client{config: cfg, httpClient: httpClient}
 }
 

@@ -53,7 +53,7 @@ func TestMNFoodClubAPIRoutingGradingAndOutput(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"data":` + data + `,"meta":{"pagination":{"current_page":1,"total_pages":1}}}`))}, nil
 	})}
-	backend := mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(config.BigCommerceConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3", AccessToken: "test-token"}, client))
+	backend := mnfoodclub.NewStaplesProvider(mnfoodclub.NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3", AccessToken: "test-token"}, client))
 	grader := &mnFoodClubGrader{}
 	service := recipes.NewCachedStaplesService([]recipes.StaplesBackend{backend}, cache.NewInMemoryCache(), grader)
 	date := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
