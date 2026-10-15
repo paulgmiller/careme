@@ -108,20 +108,39 @@ rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
 Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
 coordinates retained for distance filtering and store dates.
 
-Fetch the first three pages of both produce (sorted by bestselling) and meat,
-and display their ingredients and prices:
+Fetch all visible, available, in-stock catalog products across every category,
+plus the static weekly produce-share contents, and display their prices:
 
 ```sh
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
 ```
 
-Any store ID starting with `mnfoodclub_` routes to the same public catalog through
-the staples provider. No MNFoodClub credentials are required. Variant price ranges
-use the starting price. With grading disabled,
+Set `BIGCOMMERCE_API_PATH` to the supplied store API URL
+(`https://api.bigcommerce.com/stores/<store_hash>/v3/`) and
+`BIGCOMMERCE_ACCESS_TOKEN` to the store access token. The token needs Products
+read access; client ID, client secret, and account names are not used. These
+environment variables can later be supplied through kage or Kubernetes secrets.
+The local `secrets/bigcommerce` credential note is ignored by Git and is not loaded
+automatically. To use that note locally without printing its credentials:
+
+```sh
+export BIGCOMMERCE_API_PATH="$(sed -n 's/^API PATH[:=][[:space:]]*//p' secrets/bigcommerce)"
+export BIGCOMMERCE_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' secrets/bigcommerce)"
+```
+
+Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.
+The provider fetches every page (up to 250 products per request), resolves brands
+and category names, and uses the lowest-priced purchasable variant for each
+product. Zero stock excludes items only when inventory tracking is enabled.
+Prices are standard catalog prices, without custom membership discounts. Sizes
+come from product names, not shipping weights or unverified custom fields.
+Missing credentials or failed API pages fail the import without partial results.
+With grading disabled,
 the displayed 10/10 scores are placeholders, not quality assessments. Enable
 grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
-the existing grading and nearest-ingredient lookup. This provider supplies no wine
-candidates.
+the existing grading and nearest-ingredient lookup. Wine candidates include every
+page of the Wine & Wine Alternatives category (BigCommerce category 178), using
+the same stock and pricing rules. Requested wine styles do not restrict this list.
 
 ### Smith Brothers Farms ingredients
 

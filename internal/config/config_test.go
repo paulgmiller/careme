@@ -228,6 +228,8 @@ func resetStoreEnvs(t *testing.T) {
 	for _, name := range []string{
 		"ENABLE_MOCKS",
 		"PUBLIC_ORIGIN",
+		"BIGCOMMERCE_API_PATH",
+		"BIGCOMMERCE_ACCESS_TOKEN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
@@ -253,4 +255,15 @@ func resetStoreEnvs(t *testing.T) {
 
 func contains(got, want string) bool {
 	return strings.Contains(got, want)
+}
+
+func TestLoadBigCommerceCredentials(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("BIGCOMMERCE_API_PATH", "https://api.bigcommerce.com/stores/test/v3/")
+	t.Setenv("BIGCOMMERCE_ACCESS_TOKEN", "test-token")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/", cfg.BigCommerce.APIPath)
+	assert.Equal(t, "test-token", cfg.BigCommerce.AccessToken)
 }

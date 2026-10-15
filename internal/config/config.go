@@ -32,6 +32,7 @@ type Config struct {
 	OpenRouter        OpenRouterConfig        `json:"openrouter"`
 	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
 	Kroger            KrogerConfig            `json:"kroger"`
+	BigCommerce       BigCommerceConfig       `json:"bigcommerce"`
 	Walmart           WalmartConfig           `json:"walmart"`
 	Aldi              AldiConfig              `json:"aldi"`
 	WholeFoods        WholeFoodsConfig        `json:"wholefoods"`
@@ -71,6 +72,12 @@ func (c *OpenRouterConfig) IsEnabled() bool {
 type KrogerConfig struct {
 	ClientID     string
 	ClientSecret string
+}
+
+// BigCommerceConfig supplies the store-level credentials used for MNFoodClub.
+type BigCommerceConfig struct {
+	APIPath     string `json:"api_path"`
+	AccessToken string `json:"-"`
 }
 
 type MockConfig struct {
@@ -199,6 +206,10 @@ func Load() (*Config, error) {
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
+		},
+		BigCommerce: BigCommerceConfig{
+			APIPath:     os.Getenv("BIGCOMMERCE_API_PATH"),
+			AccessToken: os.Getenv("BIGCOMMERCE_ACCESS_TOKEN"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
