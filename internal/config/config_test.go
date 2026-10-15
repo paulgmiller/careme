@@ -228,6 +228,8 @@ func resetStoreEnvs(t *testing.T) {
 	for _, name := range []string{
 		"ENABLE_MOCKS",
 		"PUBLIC_ORIGIN",
+		"MNFOODCLUB_API_PATH",
+		"MNFOODCLUB_ACCESS_TOKEN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
@@ -253,4 +255,15 @@ func resetStoreEnvs(t *testing.T) {
 
 func contains(got, want string) bool {
 	return strings.Contains(got, want)
+}
+
+func TestLoadMNFoodClubCredentials(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("MNFOODCLUB_API_PATH", "https://api.bigcommerce.com/stores/test/v3/")
+	t.Setenv("MNFOODCLUB_ACCESS_TOKEN", "test-token")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/", cfg.MNFoodClub.APIPath)
+	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
 }

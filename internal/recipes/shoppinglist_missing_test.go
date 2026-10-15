@@ -28,6 +28,8 @@ func TestMissingCampaignShoppingListOffersGeneration(t *testing.T) {
 			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 			s := newTestServer(t, withTestClerk(noSessionAuth{}), withTestGenerator(generator),
 				withTestLocationServer(staticLocationLookup{location: &location}))
+			// The generator's called signal precedes the handler's cache writes.
+			t.Cleanup(s.Wait)
 			query := url.Values{"location": {location.ID}, "date": {"2026-07-29"}, "instructions": {"make it vegetarian"}, "help": {"Pick dinner & enjoy"}}
 			rr := httptest.NewRecorder()
 			s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, "/recipes?"+query.Encode(), nil))

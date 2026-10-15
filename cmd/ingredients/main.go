@@ -64,12 +64,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create cache for ingredient grading: %s", err)
 	}
-	grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, http.DefaultClient)
+	grader := ingredientgrading.NewManager(cfg, cacheStore, http.DefaultClient)
+	// combe back to embeddigns latter.
+	// grader := ingredientgrading.NewEnrichingGrader(cfg, cacheStore, http.DefaultClient)
 	graded, err := grader.GradeIngredients(ctx, ings)
 	if err != nil {
 		log.Fatalf("failed to grade ingredients: %s", err)
 	}
-	if ingredient != "" {
+	/*if ingredient != "" {
 		embedder := ai.NewIngredientEmbedder(cfg.AI.APIKey, http.DefaultClient)
 		vectors, err := embedder.EmbedIngredients(ctx, []string{ingredient})
 		if err != nil {
@@ -84,7 +86,7 @@ func main() {
 		}
 
 		return
-	}
+	}*/
 	slices.SortFunc(graded, func(a, b ai.InputIngredient) int {
 		if a.Grade.Score != b.Grade.Score {
 			return b.Grade.Score - a.Grade.Score
