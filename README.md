@@ -115,17 +115,17 @@ plus the static weekly produce-share contents, and display their prices:
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
 ```
 
-Set `BIGCOMMERCE_API_PATH` to the supplied store API URL
+Set `MNFOODCLUB_API_PATH` to the supplied store API URL
 (`https://api.bigcommerce.com/stores/<store_hash>/v3/`) and
-`BIGCOMMERCE_ACCESS_TOKEN` to the store access token. The token needs Products
+`MNFOODCLUB_ACCESS_TOKEN` to the store access token. The token needs Products
 read access; client ID, client secret, and account names are not used. These
 environment variables can later be supplied through kage or Kubernetes secrets.
 The local `secrets/bigcommerce` credential note is ignored by Git and is not loaded
 automatically. To use that note locally without printing its credentials:
 
 ```sh
-export BIGCOMMERCE_API_PATH="$(sed -n 's/^API PATH[:=][[:space:]]*//p' secrets/bigcommerce)"
-export BIGCOMMERCE_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' secrets/bigcommerce)"
+export MNFOODCLUB_API_PATH="$(sed -n 's/^API PATH[:=][[:space:]]*//p' secrets/bigcommerce)"
+export MNFOODCLUB_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' secrets/bigcommerce)"
 ```
 
 Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.

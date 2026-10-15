@@ -208,8 +208,8 @@ func Load() (*Config, error) {
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
 		},
 		MNFoodClub: MNFoodClubConfig{
-			APIPath:     os.Getenv("BIGCOMMERCE_API_PATH"),
-			AccessToken: os.Getenv("BIGCOMMERCE_ACCESS_TOKEN"),
+			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
+			AccessToken: os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv

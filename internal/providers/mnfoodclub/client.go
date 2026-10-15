@@ -28,17 +28,17 @@ func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) *Client {
 
 func (c *Client) catalogURL() (*url.URL, error) {
 	if strings.TrimSpace(c.config.APIPath) == "" || strings.TrimSpace(c.config.AccessToken) == "" {
-		return nil, fmt.Errorf("MNFoodClub requires BIGCOMMERCE_API_PATH and BIGCOMMERCE_ACCESS_TOKEN")
+		return nil, fmt.Errorf("MNFoodClub requires MNFOODCLUB_API_PATH and MNFOODCLUB_ACCESS_TOKEN")
 	}
 	u, err := url.Parse(strings.TrimSpace(c.config.APIPath))
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, fmt.Errorf("invalid BIGCOMMERCE_API_PATH: expected an absolute store API URL")
+		return nil, fmt.Errorf("invalid MNFOODCLUB_API_PATH: expected an absolute store API URL")
 	}
 	path := strings.TrimRight(u.Path, "/")
 	path = strings.TrimSuffix(strings.TrimSuffix(path, "/v2"), "/v3")
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if len(parts) != 2 || parts[0] != "stores" || parts[1] == "" {
-		return nil, fmt.Errorf("invalid BIGCOMMERCE_API_PATH: expected /stores/<store_hash>/v3")
+		return nil, fmt.Errorf("invalid MNFOODCLUB_API_PATH: expected /stores/<store_hash>/v3")
 	}
 	u.Path = path + "/v3/catalog/"
 	return u, nil
