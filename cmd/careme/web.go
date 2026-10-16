@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,9 +21,7 @@ import (
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
-	"careme/internal/ordering"
 	"careme/internal/providerregistry"
-	"careme/internal/providers/kroger"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/producescore"
@@ -146,36 +143,23 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	var orderingProviders []ordering.Provider
-	var krogerOrdering *kroger.OrderingAdapter
-	var resumeOrdering func(http.ResponseWriter, *http.Request, string, string)
-	if cfg.Kroger.CartTokenKey != "" {
-		if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-			return fmt.Errorf("kroger cart requires client ID and secret")
-		}
-		key, err := base64.StdEncoding.DecodeString(cfg.Kroger.CartTokenKey)
-		if err != nil || len(key) != 32 {
-			return fmt.Errorf("KROGER_CART_TOKEN_KEY must be a base64-encoded 32-byte key")
-		}
-		krogerHTTP := &http.Client{Timeout: 15 * time.Second}
-		client := &kroger.CartClient{ClientID: cfg.Kroger.ClientID, ClientSecret: cfg.Kroger.ClientSecret, RedirectURI: cfg.ResolvedPublicOrigin() + "/kroger/callback", HTTPClient: krogerHTTP, CatalogToken: kroger.NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, krogerHTTP)}
-		krogerOrdering, err = kroger.NewOrderingAdapter(kroger.OrderingOptions{Cache: cache, Client: client, TokenKey: key, Origin: cfg.ResolvedPublicOrigin(), Auth: authClient, Resume: func(w http.ResponseWriter, r *http.Request, userID, hash string) { resumeOrdering(w, r, userID, hash) }})
-		if err != nil {
-			return fmt.Errorf("create Kroger ordering adapter: %w", err)
-		}
-		orderingProviders = append(orderingProviders, krogerOrdering)
+	var resumeOrdering func(http.ResponseWriter, *http.Request, string, string, string)
+	orders, err := providers.NewOrdering(providerregistry.OrderingOptions{
+		Cache: cache,
+		Auth:  authClient,
+		Resume: func(w http.ResponseWriter, r *http.Request, providerID, userID, hash string) {
+			resumeOrdering(w, r, providerID, userID, hash)
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create ordering providers: %w", err)
 	}
-	orders := ordering.New(cache, orderingProviders)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, orders)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, orders.Service)
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}
-	resumeOrdering = func(w http.ResponseWriter, r *http.Request, userID, hash string) {
-		recipeHandler.ResumeOrdering(w, r, "kroger", userID, hash)
-	}
-	if krogerOrdering != nil {
-		appRoutes.HandleFunc("GET /kroger/callback", krogerOrdering.Callback)
-	}
+	resumeOrdering = recipeHandler.ResumeOrdering
+	orders.Register(appRoutes)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
