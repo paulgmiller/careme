@@ -461,19 +461,33 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	writeShoppingListPage(ctx, w, shoppingListViewInput{
-		params:              p,
-		purchases:           purchases,
-		list:                *slist,
-		wineRecommendations: wines.Clone(),
-		recipeImages:        images.Clone(),
-		currentUser:         currentUser,
-		hash:                hashParam,
-		selection:           selection,
-		helpMessage:         help,
-		pendingInstructions: instructions,
-		progress:            progress,
+	view, err := newShoppingListPageView(ctx, shoppingListViewInput{
+		params:               p,
+		purchases:            purchases,
+		list:                 *slist,
+		wineRecommendations:  wines.Clone(),
+		recipeImages:         images.Clone(),
+		currentUser:          currentUser,
+		hash:                 hashParam,
+		selection:            selection,
+		helpMessage:          help,
+		pendingInstructions:  instructions,
+		progress:             progress,
+		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
+	if err == nil && view.Finalized && view.ServerSignedIn {
+		err = s.populateOrderView(&view, r)
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
+		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
+		return
+	}
+	templateName := "shoppinglist.html"
+	if progress.Fragment {
+		templateName = "shopping_content"
+	}
+	renderHTML(w, templates.ShoppingList, templateName, view)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {

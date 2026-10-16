@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/recipes/status"
@@ -81,6 +83,7 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
+	Order                *ordertypes.OrderView
 }
 
 type shoppingListViewInput struct {

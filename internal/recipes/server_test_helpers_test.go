@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -39,6 +41,9 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if cfg.cfg == nil {
+		cfg.cfg = &config.Config{}
+	}
 	if cfg.imageCache == nil {
 		cfg.imageCache = cfg.cache
 	}
@@ -53,7 +58,10 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{})
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}
@@ -168,4 +176,11 @@ func (s *fakeStatusStore) failure(hash string) error {
 		return errors.New(failure)
 	}
 	return nil
+}
+
+// orderViewBuilderFunc lets tests supply one operation while exercising the interface.
+type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+
+func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	return f(input)
 }

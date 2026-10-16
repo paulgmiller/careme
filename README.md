@@ -34,6 +34,7 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
 - `CLARITY_PROJECT_ID` - Microsoft Clarity project ID for web analytics (optional)
@@ -50,6 +51,72 @@ For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry en
 
 if you're
 - `ENABLE_MOCKS` - For testing if you have none of the above
+
+## Adding a provider
+
+Add a store integration in this sequence: **locations → staples → optional
+ordering**. These are separate interfaces so location discovery can work before
+a catalog is available, and recipe generation can work without ordering. Keep
+the implementations together in `internal/providers/<provider>` and share one
+location-ID namespace and `IsID` implementation across them.
+
+### 1. Add locations
+
+Implement `locations.LocationBackend`: `IsID`, `GetLocationByID`,
+`GetLocationsByCoordinates`, and `HasInventory`. Use stable location IDs and
+return the store or delivery-area details needed by location selection. Keep
+`HasInventory` false until the location has a supported recipe catalog.
+
+Register the backend in `providerregistry.Factory.NewLocationBackends` in
+`internal/providerregistry/locations.go`. Delivery providers can represent a
+service area instead of physical stores; Smith Brothers Farms and MNFoodClub
+are examples. Optionally implement `CachePolicy() (version string, cacheable bool)`
+to version location cache entries or disable caching when results depend on the
+search point. Backends without this method use the default unversioned cache.
+
+### 2. Add staples
+
+Implement `recipes.StaplesBackend`: `IsID`, `Signature`, `FetchStaples`, and
+`FetchWines`. Staples supply the ingredient catalog used to generate recipes;
+they do not add products to a cart. Return `ai.InputIngredient` entries with
+stable product IDs, descriptions, and available size, price, and aisle details.
+Wine lookup is part of the current interface; providers without it should return
+an explicit unsupported error. `FetchPantry` is an optional additional interface.
+
+Register the backend in `providerregistry.Factory.NewStaplesBackends` in
+`internal/providerregistry/staples.go`, and its identity in
+`internal/providerregistry/identity.go` so ingredient and recipe cache keys use
+the provider's `Signature`. Change that signature when catalog definitions or
+parsing rules require cached ingredients to be refreshed. Enable `HasInventory`
+for supported locations once staples are available.
+
+Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
+
+### 3. Optionally add ordering
+
+Give each destination its own HTTP workflow, such as `POST /kroger/order`.
+The shopping list submits its displayed items, store hints, stable list key,
+and return URL. The destination owns authentication, matching, cart writes,
+duplicate prevention, and the redirect back with a review link and brief status.
+Register its routes independently of the recipe handler in `cmd/careme/web.go`.
+Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
+the recipe page renders the returned action, fields, and copy generically.
+
+Kroger is currently the only ordering destination. Future destinations can own
+routes such as `/instacart/order` or `/bigcommerce/order` without implementing
+a shared Go provider interface. Users review and complete checkout with the
+provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
+and OAuth continuation behavior.
+
+### Verify the integration
+
+Test location lookup and service-area filtering, consistent ID routing, catalog
+request/response shapes, parsing failures, and cache signatures. For ordering,
+also test matching gaps, submission failures, duplicate prevention or link reuse,
+and rendered results. Use deterministic fixtures and explicit fake clients.
+
+Run `./task.sh verify-go -- -cover`; run `./task.sh verify-ui` and inspect the UI
+when templates change.
 
 ## Mail placement tests
 
