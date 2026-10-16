@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/ordering"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
@@ -63,6 +65,7 @@ type server struct {
 	clerk              auth.AuthClient
 	critiques          critiqueStore
 	shoppingMerger     ShoppingQuantityMerger
+	ordering           *ordering.Service
 }
 
 type critiqueStore interface {
@@ -71,8 +74,11 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger) *server {
-	return &server{
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, orders *ordering.Service) (*server, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("recipe config is required")
+	}
+	s := &server{
 		recipeio:           IO(c),
 		images:             NewImageStore(imageCache),
 		imagegen:           imagegen,
@@ -84,7 +90,9 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
 		shoppingMerger:     shoppingMerger,
+		ordering:           orders,
 	}
+	return s, nil
 }
 
 func (s *server) Register(mux routing.Registrar) {
