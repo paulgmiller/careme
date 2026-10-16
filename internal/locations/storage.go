@@ -42,6 +42,17 @@ type locationCachePolicy interface {
 	IsCacheable() bool
 }
 
+type locationCacheVersion interface {
+	LocationCacheVersion() string
+}
+
+func locationCacheKey(backend LocationBackend, locationID string) string {
+	if versioned, ok := backend.(locationCacheVersion); ok {
+		return locationCachePrefix + versioned.LocationCacheVersion() + "/" + locationID
+	}
+	return locationCachePrefix + locationID
+}
+
 // name is terrible conflicting with locationStorage. locationStorage should become locationAggregator.
 type locationStore interface {
 	locationGetter
@@ -96,7 +107,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 		}
 		cachable := cachable(backend)
 		if cachable {
-			if cachedLoc, ok := l.cachedLocationByID(ctx, locationID); ok {
+			if cachedLoc, ok := l.cachedLocationByID(ctx, backend, locationID); ok {
 				// could relook up on error here.
 				return backfillLocationCoordinates(cachedLoc, l.zipCentroids)
 			}
@@ -113,7 +124,7 @@ func (l *locationStorage) GetLocationByID(ctx context.Context, locationID string
 
 		if cachable {
 			go func() {
-				if err := l.storeLocationIfMissing(*loc); err != nil {
+				if err := l.storeLocationIfMissing(backend, *loc); err != nil {
 					slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
 				}
 			}()
@@ -153,7 +164,7 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 		if cachable(backend) {
 			for _, loc := range hydrated {
 				go func() {
-					if err := l.storeLocationIfMissing(*loc); err != nil {
+					if err := l.storeLocationIfMissing(backend, *loc); err != nil {
 						slog.WarnContext(ctx, "failed to store location in cache", "location_id", loc.ID, "error", err)
 					}
 				}()
@@ -187,8 +198,8 @@ func (l *locationStorage) GetLocationsByCoordinates(ctx context.Context, coordin
 	return filtered, nil
 }
 
-func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID string) (Location, bool) {
-	blob, err := l.cache.Get(ctx, locationCachePrefix+locationID)
+func (l *locationStorage) cachedLocationByID(ctx context.Context, backend LocationBackend, locationID string) (Location, bool) {
+	blob, err := l.cache.Get(ctx, locationCacheKey(backend, locationID))
 	if err != nil {
 		return Location{}, false
 	}
@@ -204,12 +215,12 @@ func (l *locationStorage) cachedLocationByID(ctx context.Context, locationID str
 	return loc, true
 }
 
-func (l *locationStorage) storeLocationIfMissing(loc Location) error {
+func (l *locationStorage) storeLocationIfMissing(backend LocationBackend, loc Location) error {
 	// itentionally giving its own context so its not canceled
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	loc.CachedAt = time.Now().UTC()
-	id := locationCachePrefix + loc.ID
+	id := locationCacheKey(backend, loc.ID)
 	found, err := l.cache.Exists(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to check location cache: %w", err)

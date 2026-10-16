@@ -55,6 +55,53 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
 }
 
+type versionedLocationClient struct {
+	*fakeLocationClient
+}
+
+func (versionedLocationClient) LocationCacheVersion() string { return "kroger-v2" }
+
+func TestGetLocationByIDIgnoresLegacyChainCache(t *testing.T) {
+	client := newFakeLocationClient()
+	fc := cachepkg.NewInMemoryCache()
+	legacy := Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger", ZipCode: "00601"}
+	mustPutJSONInCache(t, fc, "location/70500874", legacy)
+	fresh := legacy
+	fresh.Chain = "QFC"
+	client.setDetailResponse(fresh.ID, fresh)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{versionedLocationClient{client}}, fc)
+	got, err := server.GetLocationByID(t.Context(), fresh.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
+	storedRaw := requireEventuallyCached(t, fc, "location/kroger-v2/70500874")
+	var stored Location
+	require.NoError(t, json.Unmarshal([]byte(storedRaw), &stored))
+	assert.Equal(t, "QFC", stored.Chain)
+	delete(client.details, fresh.ID)
+	got, err = server.GetLocationByID(t.Context(), fresh.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
+}
+
+func TestVersionedLocationSearchPopulatesLookupCache(t *testing.T) {
+	client := newFakeLocationClient()
+	fc := cachepkg.NewInMemoryCache()
+	coordinates := coordinatesForZIP(t, "00601")
+	location := Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC", ZipCode: "00601", Lat: &coordinates.Lat, Lon: &coordinates.Lon}
+	client.setListResponse("00601", []Location{location})
+	legacy := location
+	legacy.Chain = "kroger"
+	mustPutJSONInCache(t, fc, "location/70500874", legacy)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{versionedLocationClient{client}}, fc)
+	found, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	requireEventuallyCached(t, fc, "location/kroger-v2/70500874")
+	got, err := server.GetLocationByID(t.Context(), location.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
+}
+
 func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
 	client := newFakeLocationClient()
 	fc := cachepkg.NewInMemoryCache()

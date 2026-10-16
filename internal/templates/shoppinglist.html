@@ -355,6 +355,9 @@
 {{define "shopping_purchase_section"}}
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
+  {{range .OrderingActions}}
+  {{template "shopping_ordering_result" .}}
+  {{end}}
   <div class="mt-4 space-y-5 text-ink-700">
     {{range .Purchases}}
     <section>
@@ -375,5 +378,46 @@
     </section>
     {{end}}
   </div>
+  {{range .OrderingActions}}
+  {{if .CanSubmit}}
+  <form method="POST" action="{{.ActionURL}}" class="mt-6"
+        onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Preparing your list…';">
+    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">
+      {{.ActionLabel}}
+    </button>
+    {{if .Description}}<p class="mt-2 text-xs text-ink-600">{{.Description}}</p>{{end}}
+  </form>
+  {{end}}
+  {{end}}
 </section>
+{{end}}
+
+{{define "shopping_ordering_result"}}
+{{$action := .}}
+{{if .Notice}}<p role="alert" class="mt-4 text-sm text-ink-700">{{.Notice}}</p>{{end}}
+{{with .Result}}
+<div role="status" class="mt-4 rounded-lg bg-brand-50 p-4 text-sm text-ink-700">
+  {{if eq .Kind "shopping_list_created"}}
+  <p class="font-semibold">Your shopping list is ready.</p>
+  {{else}}
+  <p class="font-semibold">{{$action.Message}}</p>
+  {{if .Sent}}
+  <h3 class="mt-3 font-semibold">{{if eq .Status "complete"}}Products sent{{else if eq .Status "changed"}}Previously sent products{{else}}Products submitted; result unconfirmed{{end}}</h3>
+  <ul class="mt-2 space-y-2">
+    {{range .Sent}}<li>{{.Name}} — {{.PackageQuantity}} {{if eq .PackageQuantity 1.0}}package{{else}}packages{{end}}</li>{{end}}
+  </ul>
+  {{end}}
+  {{if .Gaps}}
+  <h3 class="mt-3 font-semibold">Not sent to your cart</h3>
+  <ul class="mt-2 space-y-2">
+    {{range .Gaps}}<li>{{.Name}}{{if .Needed}} — {{.Needed}}{{end}}</li>{{end}}
+  </ul>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+{{if and .URL (or .Result .Notice)}}
+<p class="mt-4 text-sm text-ink-700">Review your store, amounts, and checkout in {{.Brand}}.</p>
+<a href="{{.URL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600">{{if and .Result (eq .Result.Kind "shopping_list_created")}}Open shopping list{{else}}Review {{.Brand}} cart{{end}} (opens a new tab)</a>
+{{end}}
 {{end}}

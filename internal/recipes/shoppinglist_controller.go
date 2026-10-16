@@ -34,6 +34,8 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
+	mux.HandleFunc("POST /recipes/{hash}/kroger-cart", s.handleKrogerCart)
+	mux.HandleFunc("POST /recipes/{hash}/ordering/{provider}", s.handleOrdering)
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -461,19 +463,33 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	writeShoppingListPage(ctx, w, shoppingListViewInput{
-		params:              p,
-		purchases:           purchases,
-		list:                *slist,
-		wineRecommendations: wines.Clone(),
-		recipeImages:        images.Clone(),
-		currentUser:         currentUser,
-		hash:                hashParam,
-		selection:           selection,
-		helpMessage:         help,
-		pendingInstructions: instructions,
-		progress:            progress,
+	view, err := newShoppingListPageView(ctx, shoppingListViewInput{
+		params:               p,
+		purchases:            purchases,
+		list:                 *slist,
+		wineRecommendations:  wines.Clone(),
+		recipeImages:         images.Clone(),
+		currentUser:          currentUser,
+		hash:                 hashParam,
+		selection:            selection,
+		helpMessage:          help,
+		pendingInstructions:  instructions,
+		progress:             progress,
+		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
+	if err == nil && view.Finalized && view.ServerSignedIn {
+		err = s.populateOrderingView(ctx, &view, currentUser.ID, r)
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
+		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
+		return
+	}
+	templateName := "shoppinglist.html"
+	if progress.Fragment {
+		templateName = "shopping_content"
+	}
+	renderHTML(w, templates.ShoppingList, templateName, view)
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {

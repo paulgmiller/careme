@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/ordering"
 	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -81,6 +82,21 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
+	OrderingActions      []orderingActionView
+}
+
+// orderingActionView describes a configured destination and its latest handoff result.
+type orderingActionView struct {
+	Provider    string
+	Brand       string
+	ActionURL   string
+	URL         string
+	Notice      string
+	Message     string
+	ActionLabel string
+	Description string
+	Result      *ordering.Result
+	CanSubmit   bool
 }
 
 type shoppingListViewInput struct {

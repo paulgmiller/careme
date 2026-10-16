@@ -72,6 +72,7 @@ func (c *OpenRouterConfig) IsEnabled() bool {
 type KrogerConfig struct {
 	ClientID     string
 	ClientSecret string
+	CartTokenKey string
 }
 
 // MNFoodClubConfig supplies the store-level credentials used for MNFoodClub.
@@ -206,6 +207,7 @@ func Load() (*Config, error) {
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
+			CartTokenKey: os.Getenv("KROGER_CART_TOKEN_KEY"),
 		},
 		MNFoodClub: MNFoodClubConfig{
 			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
