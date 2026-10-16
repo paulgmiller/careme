@@ -12,6 +12,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
+	"careme/internal/templates"
 	"careme/internal/users"
 )
 
@@ -56,7 +57,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{})
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, func(templates.OrderViewInput) (*templates.OrderView, error) { return nil, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

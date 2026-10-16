@@ -81,17 +81,7 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
-	KrogerOrder          *krogerOrderView
-}
-
-type krogerOrderView struct {
-	ItemsJSON string
-	StoreID   string
-	Chain     string
-	ListKey   string
-	ReturnURL string
-	Notice    string
-	CartURL   string
+	Order                *templates.OrderView
 }
 
 type shoppingListViewInput struct {

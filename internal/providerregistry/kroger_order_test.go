@@ -11,6 +11,8 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
+	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,4 +69,29 @@ func TestNewKrogerOrderRegistersHTTPRoutes(t *testing.T) {
 	callback := httptest.NewRecorder()
 	routes.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/kroger/callback", nil))
 	assert.Equal(t, http.StatusBadRequest, callback.Code)
+}
+
+func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
+	for _, scenario := range []struct {
+		name, key, location string
+		want                bool
+	}{
+		{"Kroger enabled", "configured", "70500874", true},
+		{"Kroger disabled", "", "70500874", false},
+		{"other provider", "configured", "walmart_123", false},
+		{"unknown location", "configured", "unknown", false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
+			view, err := factory.OrderView(templates.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
+			require.NoError(t, err)
+			if scenario.want {
+				require.NotNil(t, view)
+				assert.Equal(t, "/kroger/order", view.ActionURL)
+				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
+			} else {
+				assert.Nil(t, view)
+			}
+		})
+	}
 }

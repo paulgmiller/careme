@@ -3,6 +3,7 @@ package recipes
 import (
 	"bytes"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	"careme/internal/providers/kroger"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
@@ -25,7 +27,8 @@ func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
-			view.KrogerOrder = &krogerOrderView{Notice: krogerOrderNotice(code)}
+			view.Order, err = kroger.OrderView(templates.OrderViewInput{Query: httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).URL.Query()})
+			require.NoError(t, err)
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
 			if code == "denied" {

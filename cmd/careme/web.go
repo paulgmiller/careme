@@ -150,7 +150,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if orders != nil {
 		orders.Register(appRoutes)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.OrderView)
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

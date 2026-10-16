@@ -2,7 +2,13 @@
 
 Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
-provider interface. Kroger is the only implemented destination.
+provider workflow interface. Kroger is the only implemented destination.
+
+The recipe handler passes displayed items and location to the provider registry’s
+`OrderView` function. The registry matches `location.ID` against configured
+providers. The matching provider returns a form action, hidden fields, labels,
+and return notice as `templates.OrderView`; recipes renders those generically.
+Kroger owns its form encoding, status interpretation, and cart-link validation.
 
 ## Kroger form contract
 
@@ -37,8 +43,8 @@ for changed lists and legacy records. A failed confirmation save leaves the
 reservation in place. See [cache layout](cache-layout.md).
 
 Kroger redirects to `return_url` with `kroger_status`, `kroger_added`,
-`kroger_unmatched`, and `kroger_cart`. Recipes renders fixed notices for known
-status codes and accepts only the exact HTTPS Kroger and QFC cart links. Partial
+`kroger_unmatched`, and `kroger_cart`. Its view builder supplies fixed notices
+for known status codes and accepts only the exact HTTPS Kroger and QFC cart links. Partial
 and uncertain outcomes tell the user to review the cart. These return fields
 are informational; they do not authorize any operation.
 

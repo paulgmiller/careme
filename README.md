@@ -102,6 +102,8 @@ The shopping list submits its displayed items, store hints, stable list key,
 and return URL. The destination owns authentication, matching, cart writes,
 duplicate prevention, and the redirect back with a review link and brief status.
 Register its routes independently of the recipe handler in `cmd/careme/web.go`.
+Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
+the recipe page renders the returned action, fields, and copy generically.
 
 Kroger is currently the only ordering destination. Future destinations can own
 routes such as `/instacart/order` or `/bigcommerce/order` without implementing

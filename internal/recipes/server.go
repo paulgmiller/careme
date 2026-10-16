@@ -64,6 +64,7 @@ type server struct {
 	clerk              auth.AuthClient
 	critiques          critiqueStore
 	shoppingMerger     ShoppingQuantityMerger
+	orderView          OrderViewBuilder
 }
 
 type critiqueStore interface {
@@ -72,9 +73,12 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, orderView OrderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
+	}
+	if orderView == nil {
+		return nil, fmt.Errorf("order view builder is required")
 	}
 	s := &server{
 		recipeio:           IO(c),
@@ -88,6 +92,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		clerk:              clerkClient,
 		critiques:          critique.NewStore(c),
 		shoppingMerger:     shoppingMerger,
+		orderView:          orderView,
 	}
 	return s, nil
 }

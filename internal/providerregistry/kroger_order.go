@@ -10,6 +10,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/httpretry"
 	"careme/internal/providers/kroger"
+	"careme/internal/templates"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -51,6 +52,15 @@ func (f Factory) NewKrogerOrder(options KrogerOrderOptions) (*kroger.OrderHandle
 			return nil, fmt.Errorf("create Kroger order handler: %w", err)
 		}
 		return handler, nil
+	}
+	return nil, nil
+}
+
+// OrderView finds the configured ordering destination for the source location.
+// Each destination owns its form contract and return presentation.
+func (f Factory) OrderView(input templates.OrderViewInput) (*templates.OrderView, error) {
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
+		return kroger.OrderView(input)
 	}
 	return nil, nil
 }

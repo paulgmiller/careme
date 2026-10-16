@@ -10,6 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	"careme/internal/providers/kroger"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,7 @@ import (
 
 func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	s := newTestServer(t)
-	s.cfg.Kroger.CartTokenKey = "configured"
+	s.orderView = kroger.OrderView
 	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Chicken", Quantity: "2 lbs"}}}
 	p.Saved = []ai.Recipe{recipe}
@@ -31,7 +32,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 		wineRecommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}},
 	})
 	require.NoError(t, err)
-	require.NoError(t, s.populateKrogerOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
+	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 	document, err := html.Parse(strings.NewReader(page.String()))
@@ -64,45 +65,4 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	assert.NotContains(t, page.String(), `target="_blank"`)
 	assert.NotContains(t, page.String(), "other")
 	assert.Len(t, food, 1, "wine is appended without changing cached food")
-}
-
-func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
-	for _, scenario := range []struct{ query, want, link string }{
-		{"kroger_status=complete&kroger_added=2&kroger_unmatched=1&kroger_cart=https://www.qfc.com/cart", "Sent 2 products to your cart.", "https://www.qfc.com/cart"},
-		{"kroger_status=uncertain&kroger_cart=https://www.kroger.com/cart", "could not confirm", "https://www.kroger.com/cart"},
-		{"kroger_status=changed", "list changed", ""},
-		{"kroger_status=denied&kroger_cart=javascript:alert(1)", "was not approved", ""},
-		{"kroger_status=complete&kroger_cart=https://evil.test/cart", "products were sent to your cart", ""},
-		{"kroger_status=%3Cscript%3Ealert(1)%3C/script%3E&kroger_cart=https://www.qfc.com/cart", "", ""},
-	} {
-		t.Run(scenario.query, func(t *testing.T) {
-			s := newTestServer(t)
-			s.cfg.Kroger.CartTokenKey = "configured"
-			view := shoppingListPageView{Hash: "hash", Location: locations.Location{ID: "70500874", Chain: "QFC"}}
-			require.NoError(t, s.populateKrogerOrderView(&view, httptest.NewRequest("GET", "/recipes?"+scenario.query, nil)))
-			assert.Equal(t, scenario.link, view.KrogerOrder.CartURL)
-			if scenario.want != "" {
-				assert.Contains(t, view.KrogerOrder.Notice, scenario.want)
-			} else {
-				assert.Empty(t, view.KrogerOrder.Notice)
-			}
-			var page bytes.Buffer
-			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
-			assert.NotContains(t, page.String(), "alert(1)")
-			assert.NotContains(t, page.String(), "evil.test")
-			if strings.Contains(scenario.query, "unmatched=1") {
-				assert.Contains(t, page.String(), "1 item could not be matched")
-			}
-		})
-	}
-}
-
-func TestKrogerOrderFormOnlyForConfiguredKrogerLists(t *testing.T) {
-	for _, scenario := range []struct{ key, store string }{{"", "70500874"}, {"configured", "walmart_123"}} {
-		s := newTestServer(t)
-		s.cfg.Kroger.CartTokenKey = scenario.key
-		view := shoppingListPageView{Location: locations.Location{ID: scenario.store}}
-		require.NoError(t, s.populateKrogerOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
-		assert.Nil(t, view.KrogerOrder)
-	}
 }

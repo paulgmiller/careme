@@ -1,37 +1,41 @@
-package recipes
+package kroger
 
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strconv"
 
-	"careme/internal/ai"
-	"careme/internal/providers"
+	"careme/internal/templates"
 )
 
-// This view only knows Kroger's form and return fields. Ordering owns the workflow.
-func (s *server) populateKrogerOrderView(view *shoppingListPageView, r *http.Request) error {
-	if s.cfg.Kroger.CartTokenKey == "" || providers.CatalogProviderID(view.Location.ID) != "kroger" {
-		return nil
-	}
-	var items []ai.ShoppingItem
-	for _, group := range view.Purchases {
-		for _, item := range group.Items {
-			items = append(items, item.ShoppingItem)
-		}
-	}
-	body, err := json.Marshal(items)
+// OrderView builds Kroger's form and interprets its informational return fields.
+func OrderView(input templates.OrderViewInput) (*templates.OrderView, error) {
+	body, err := json.Marshal(input.Items)
 	if err != nil {
-		return fmt.Errorf("encode shopping items for Kroger: %w", err)
+		return nil, fmt.Errorf("encode shopping items for Kroger: %w", err)
 	}
-	order := &krogerOrderView{ItemsJSON: string(body), StoreID: view.Location.ID, Chain: view.Location.Chain, ListKey: view.Hash, ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section"}
-	status := r.URL.Query().Get("kroger_status")
+	brand := input.Location.Chain
+	if brand == "" {
+		brand = "Kroger"
+	}
+	order := &templates.OrderView{
+		ActionURL:   "/kroger/order",
+		ActionLabel: "Add to " + brand + " cart",
+		Description: "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
+		ReviewLabel: "Review cart (opens a new tab)",
+		Fields: []templates.OrderField{
+			{Name: "items", Value: string(body)},
+			{Name: "store_id", Value: input.Location.ID},
+			{Name: "chain", Value: input.Location.Chain},
+			{Name: "list_key", Value: input.ListKey},
+			{Name: "return_url", Value: input.ReturnURL},
+		},
+	}
+	status := input.Query.Get("kroger_status")
 	order.Notice = krogerOrderNotice(status)
 	if status == "complete" {
-		added, addedErr := strconv.Atoi(r.URL.Query().Get("kroger_added"))
-		unmatched, unmatchedErr := strconv.Atoi(r.URL.Query().Get("kroger_unmatched"))
+		added, addedErr := strconv.Atoi(input.Query.Get("kroger_added"))
+		unmatched, unmatchedErr := strconv.Atoi(input.Query.Get("kroger_unmatched"))
 		if addedErr == nil && unmatchedErr == nil && added >= 0 && unmatched >= 0 {
 			order.Notice = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", added)
 			if unmatched > 0 {
@@ -44,13 +48,12 @@ func (s *server) populateKrogerOrderView(view *shoppingListPageView, r *http.Req
 		}
 	}
 	if order.Notice != "" {
-		switch destination := r.URL.Query().Get("kroger_cart"); destination {
+		switch destination := input.Query.Get("kroger_cart"); destination {
 		case "https://www.kroger.com/cart", "https://www.qfc.com/cart":
-			order.CartURL = destination
+			order.ReviewURL = destination
 		}
 	}
-	view.KrogerOrder = order
-	return nil
+	return order, nil
 }
 
 func krogerOrderNotice(code string) string {
