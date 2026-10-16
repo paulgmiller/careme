@@ -20,7 +20,7 @@ import (
 
 func orderForm() url.Values {
 	return url.Values{
-		"list_key": {"list-hash"}, "store_id": {"70500874"}, "chain": {"QFC"},
+		"list_key": {"list-hash"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`},
 		"return_url": {"/recipes?h=list-hash#shopping-list-section"},
 		"items":      {`[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]`},
 	}
@@ -282,7 +282,10 @@ func TestKrogerOrderValidation(t *testing.T) {
 		{"return_url", "//evil.test/"},
 		{"return_url", "/\\evil.test"},
 		{"return_url", ""},
-		{"store_id", "walmart_123"},
+		{"location", `{"id":"walmart_123"}`},
+		{"location", "broken"},
+		{"location", "null"},
+		{"location", "{}"},
 		{"list_key", "../other"},
 		{"list_key", ""},
 		{"items", "broken"},

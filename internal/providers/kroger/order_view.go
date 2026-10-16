@@ -14,6 +14,10 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode shopping items for Kroger: %w", err)
 	}
+	location, err := json.Marshal(input.Location)
+	if err != nil {
+		return nil, fmt.Errorf("encode ordering location: %w", err)
+	}
 	brand := input.Location.Chain
 	if brand == "" {
 		brand = "Kroger"
@@ -23,12 +27,9 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		ActionLabel: "Add to " + brand + " cart",
 		Description: "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		ReviewLabel: "Review cart (opens a new tab)",
-		Fields: []ordertypes.OrderField{
-			{Name: "items", Value: string(body)},
-			{Name: "store_id", Value: input.Location.ID},
-			{Name: "chain", Value: input.Location.Chain},
-			{Name: "list_key", Value: input.ListKey},
-			{Name: "return_url", Value: input.ReturnURL},
+		Fields: ordertypes.OrderFields{
+			Items: string(body), Location: string(location),
+			ListKey: input.ListKey, ReturnURL: input.ReturnURL,
 		},
 	}
 	status := input.Query.Get("kroger_status")

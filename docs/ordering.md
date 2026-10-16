@@ -12,7 +12,9 @@ registry factory implements its `OrderView` method and receives the displayed
 items and location. The registry matches `location.ID` against configured
 providers. The matching provider returns a form action, hidden fields, labels,
 and return notice as `orders/types.OrderView`; recipes renders those generically.
-Kroger owns its form encoding, status interpretation, and cart-link validation.
+Ordering destinations share the `OrderFields` form struct, which may be extended
+when an integration needs additional shopping-list information. Kroger owns its
+status interpretation and cart-link validation.
 
 ## Kroger form contract
 
@@ -21,10 +23,13 @@ Kroger owns its form encoding, status interpretation, and cart-link validation.
 | Field | Meaning |
 | --- | --- |
 | `items` | JSON array of `ai.ShoppingItem`: `id`, `name`, `needed`, nullable `buy` |
-| `store_id` | Kroger catalog location ID |
-| `chain` | Chain hint, including QFC for its authorization banner and cart URL |
+| `location` | JSON source `locations/types.Location`, including ID, chain, name, address, and coordinates when available; a hint for destination store selection |
 | `list_key` | Stable finalized shopping-list hash used for duplicate protection |
 | `return_url` | Application-local path, query, and optional fragment |
+
+The full source location is a shared store hint. Kroger currently uses its ID for
+product lookup and chain for its authorization banner and cart URL. Future
+destinations such as Instacart may use the location to suggest a store.
 
 The recipe page posts its merged food list with the current selected wines
 already appended. It does not regenerate quantities for ordering. Kroger reads

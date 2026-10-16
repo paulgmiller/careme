@@ -2,6 +2,7 @@ package kroger
 
 import (
 	"bytes"
+	"encoding/json"
 	"math"
 	"net/http/httptest"
 	"strings"
@@ -66,13 +67,17 @@ func TestKrogerOrderViewForm(t *testing.T) {
 			brand = "Kroger"
 		}
 		assert.Equal(t, "Add to "+brand+" cart", view.ActionLabel)
-		fields := map[string]string{}
-		for _, field := range view.Fields {
-			fields[field.Name] = field.Value
-		}
-		assert.Equal(t, "70500874", fields["store_id"])
-		assert.Equal(t, chain, fields["chain"])
-		assert.Equal(t, "list", fields["list_key"])
-		assert.Equal(t, "/recipes?h=list", fields["return_url"])
+		var location locationtypes.Location
+		require.NoError(t, json.Unmarshal([]byte(view.Fields.Location), &location))
+		assert.Equal(t, "70500874", location.ID)
+		assert.Equal(t, chain, location.Chain)
+		assert.Equal(t, "list", view.Fields.ListKey)
+		assert.Equal(t, "/recipes?h=list", view.Fields.ReturnURL)
 	}
+}
+
+func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
+	invalid := math.NaN()
+	_, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{Lat: &invalid}})
+	require.ErrorContains(t, err, "encode ordering location")
 }

@@ -15,6 +15,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	locationtypes "careme/internal/locations/types"
 )
 
 // orderRequest is the posted shopping list retained while connecting Kroger.
@@ -47,7 +48,12 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
 		return
 	}
-	request := orderRequest{UserID: userID, ListKey: r.PostForm.Get("list_key"), StoreID: r.PostForm.Get("store_id"), Chain: r.PostForm.Get("chain"), ReturnURL: r.PostForm.Get("return_url")}
+	var location locationtypes.Location
+	if err := json.Unmarshal([]byte(r.PostForm.Get("location")), &location); err != nil {
+		http.Error(w, "Invalid ordering location", http.StatusBadRequest)
+		return
+	}
+	request := orderRequest{UserID: userID, ListKey: r.PostForm.Get("list_key"), StoreID: location.ID, Chain: location.Chain, ReturnURL: r.PostForm.Get("return_url")}
 	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || json.Unmarshal([]byte(r.PostForm.Get("items")), &request.Items) != nil || len(request.Items) == 0 {
 		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
 		return

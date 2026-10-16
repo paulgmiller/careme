@@ -10,6 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
+	locationtypes "careme/internal/locations/types"
 	"careme/internal/providers/kroger"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -21,7 +22,7 @@ import (
 func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	s := newTestServer(t)
 	s.orderView = orderViewBuilderFunc(kroger.OrderView)
-	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC"}, time.Now())
+	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC", Address: "123 Store Street", ZipCode: "98004"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Chicken", Quantity: "2 lbs"}}}
 	p.Saved = []ai.Recipe{recipe}
 	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{ProductID: "food", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: buyNumber(2)}, Size: "1 lb"}}}}
@@ -57,8 +58,11 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	require.Len(t, posted, 2)
 	assert.Equal(t, food[0].Items[0].ShoppingItem, posted[0])
 	assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, posted[1])
-	assert.Equal(t, "70500874", values["store_id"])
-	assert.Equal(t, "QFC", values["chain"])
+	var location locationtypes.Location
+	require.NoError(t, json.Unmarshal([]byte(values["location"]), &location))
+	assert.Equal(t, *p.Location, location)
+	assert.NotContains(t, values, "store_id")
+	assert.NotContains(t, values, "chain")
 	assert.Equal(t, p.Hash(), values["list_key"])
 	assert.Contains(t, values["return_url"], "#shopping-list-section")
 	assert.Contains(t, page.String(), `action="/kroger/order"`)
