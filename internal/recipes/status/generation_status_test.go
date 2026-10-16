@@ -79,7 +79,7 @@ func TestGenerationStatusProgressPreservesStartAndRestartClearsError(t *testing.
 
 	retriedAt := startedAt.Add(time.Minute)
 	statuses.now = func() time.Time { return retriedAt }
-	require.NoError(t, statuses.Start(t.Context(), "status-lifecycle", ""))
+	require.NoError(t, statuses.Restart(t.Context(), "status-lifecycle", ""))
 	got, err = statuses.load(t.Context(), "status-lifecycle")
 	require.NoError(t, err)
 	assert.Empty(t, got.Error)
@@ -229,10 +229,44 @@ func TestRecipeProgressConcurrentCompletionAndFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "failed", got.Failed)
 	assert.Equal(t, "recipe-0", got.Slots[0].RecipeHash)
-	require.NoError(t, store.Start(t.Context(), hash, ""))
+	require.NoError(t, store.Restart(t.Context(), hash, ""))
 	got, err = store.Load(t.Context(), hash)
 	require.NoError(t, err)
 	assert.Empty(t, got.Slots)
+}
+
+func TestStartDoesNotEraseRunningPlan(t *testing.T) {
+	t.Parallel()
+	store := NewStore(cache.NewInMemoryCache())
+	const hash = "duplicate-start"
+	require.NoError(t, store.Start(t.Context(), hash, ""))
+	require.NoError(t, store.Plan(t.Context(), hash, []ai.RecipePlan{{Cuisine: "Basque"}}))
+	require.ErrorIs(t, store.Start(t.Context(), hash, ""), cache.ErrAlreadyExists)
+	require.ErrorContains(t, store.Restart(t.Context(), hash, ""), "still running")
+	require.NoError(t, store.RecipeDraft(t.Context(), hash, 0, "recipe-hash"))
+	got, err := store.Load(t.Context(), hash)
+	require.NoError(t, err)
+	require.Len(t, got.Slots, 1)
+	assert.Equal(t, "recipe-hash", got.Slots[0].RecipeHash)
+}
+
+func TestRestartRequiresFailedOrTimedOutStatus(t *testing.T) {
+	t.Parallel()
+	store := NewStore(cache.NewInMemoryCache())
+	require.ErrorIs(t, store.Restart(t.Context(), "missing", ""), cache.ErrNotFound)
+	require.NoError(t, store.Start(t.Context(), "completed", ""))
+	require.NoError(t, store.Complete(t.Context(), "completed", "new-hash"))
+	require.ErrorContains(t, store.Restart(t.Context(), "completed", ""), "already completed")
+	require.NoError(t, store.save(t.Context(), "timed-out", payload{
+		StartedAt: time.Now().Add(-recipeGenerationTimeout - time.Minute),
+		Slots:     []Slot{{RecipeHash: "old-recipe"}},
+	}))
+	require.NoError(t, store.Restart(t.Context(), "timed-out", "again"))
+	got, err := store.Load(t.Context(), "timed-out")
+	require.NoError(t, err)
+	assert.Empty(t, got.Slots)
+	assert.Empty(t, got.Failed)
+	assert.Equal(t, "again", got.Message)
 }
 
 func TestRecipeProgressTimeoutRetainsReadyRecipes(t *testing.T) {
