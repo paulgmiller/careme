@@ -70,8 +70,9 @@ return the store or delivery-area details needed by location selection. Keep
 Register the backend in `providerregistry.Factory.NewLocationBackends` in
 `internal/providerregistry/locations.go`. Delivery providers can represent a
 service area instead of physical stores; Smith Brothers Farms and MNFoodClub
-are examples. Implement `IsCacheable() bool` when location results depend on the
-search point and should not use the default location cache.
+are examples. Optionally implement `CachePolicy() (version string, cacheable bool)`
+to version location cache entries or disable caching when results depend on the
+search point. Backends without this method use the default unversioned cache.
 
 ### 2. Add staples
 

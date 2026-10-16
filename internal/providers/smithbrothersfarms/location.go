@@ -22,9 +22,9 @@ type LocationBackend struct{ identityProvider }
 
 func NewLocationBackend() LocationBackend { return LocationBackend{} }
 
-// IsCacheable disables location caching because search coordinates represent
+// CachePolicy disables location caching because search coordinates represent
 // the current delivery point rather than a fixed store.
-func (LocationBackend) IsCacheable() bool { return false }
+func (LocationBackend) CachePolicy() (version string, cacheable bool) { return "", false }
 
 func (b LocationBackend) HasInventory(locationID string) bool {
 	_, err := b.GetLocationByID(context.Background(), locationID)

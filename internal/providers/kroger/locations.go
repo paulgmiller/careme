@@ -16,7 +16,7 @@ type LocationBackend struct {
 	client *krogerlocations.ClientWithResponses
 }
 
-func (*LocationBackend) LocationCacheVersion() string { return "kroger-v2" }
+func (*LocationBackend) CachePolicy() (version string, cacheable bool) { return "kroger-v2", true }
 
 func NewLocationBackendFromConfig(cfg *config.Config, httpClient *http.Client) (*LocationBackend, error) {
 	if httpClient == nil {

@@ -45,21 +45,23 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if got.Lat == nil || got.Lon == nil {
 		t.Fatalf("expected coordinates to be backfilled: %+v", got)
 	}
-	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"12345")
 	// Remove backend value to prove the second read comes from persistent cache.
 	delete(client.details, "12345")
 	_, err = server.GetLocationByID(ctx, "12345")
 	if err != nil {
 		t.Fatalf("GetLocationByID second call returned error: %v", err)
 	}
-	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"12345")
 }
 
 type versionedLocationClient struct {
 	*fakeLocationClient
 }
 
-func (versionedLocationClient) LocationCacheVersion() string { return "kroger-v2" }
+func (versionedLocationClient) CachePolicy() (version string, cacheable bool) {
+	return "kroger-v2", true
+}
 
 func TestGetLocationByIDIgnoresLegacyChainCache(t *testing.T) {
 	client := newFakeLocationClient()
@@ -153,8 +155,8 @@ func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
 		t.Fatalf("unexpected second location zip code: %+v", locs[1])
 	}
 
-	requireEventuallyCached(t, fc, locationCachePrefix+"111")
-	requireEventuallyCached(t, fc, locationCachePrefix+"222")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"111")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"222")
 }
 
 func TestGetLocationsByCoordinatesSortsByDistance(t *testing.T) {
@@ -259,7 +261,7 @@ func TestGetLocationByIDLoadsFromPersistentCache(t *testing.T) {
 		ZipCode:  "00601",
 		CachedAt: cachedAt,
 	}
-	mustPutJSONInCache(t, fc, locationCachePrefix+"12345", preloaded)
+	mustPutJSONInCache(t, fc, locationCachePrefix+"/"+"12345", preloaded)
 
 	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	got, err := server.GetLocationByID(context.Background(), "12345")
@@ -289,7 +291,7 @@ func TestGetLocationsByCoordinatesStoresToPersistentCacheIfMissing(t *testing.T)
 		t.Fatalf("expected 1 location, got %d", len(locs))
 	}
 
-	storedRaw := requireEventuallyCached(t, fc, locationCachePrefix+"111")
+	storedRaw := requireEventuallyCached(t, fc, locationCachePrefix+"/"+"111")
 	var stored Location
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil {
 		t.Fatalf("failed to decode stored location: %v", err)
@@ -457,19 +459,25 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 type cachePolicyBackend struct {
 	*fakeLocationClient
 	cacheable bool
+	version   string
 }
 
-func (b cachePolicyBackend) IsCacheable() bool { return b.cacheable }
+func (b cachePolicyBackend) CachePolicy() (version string, cacheable bool) {
+	return b.version, b.cacheable
+}
 
 func TestLocationBackendCachePolicy(t *testing.T) {
 	for _, test := range []struct {
 		name          string
 		policy        *bool
 		wantCacheable bool
+		version       string
 	}{
-		{"default", nil, true},
-		{"enabled", new(true), true},
-		{"disabled", new(false), false},
+		{"default", nil, true, ""},
+		{"enabled", new(true), true, ""},
+		{"disabled", new(false), false, ""},
+		{"versioned", new(true), true, "v2"},
+		{"versioned disabled", new(false), false, "v2"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fc := cachepkg.NewInMemoryCache()
@@ -481,10 +489,14 @@ func TestLocationBackendCachePolicy(t *testing.T) {
 			client.setListResponse("00601", []Location{{ID: "search", Name: "Search result", Lat: &coordinates.Lat, Lon: &coordinates.Lon}})
 			var backend LocationBackend = client
 			if test.policy != nil {
-				backend = cachePolicyBackend{client, *test.policy}
+				backend = cachePolicyBackend{client, *test.policy, test.version}
 			}
 			server := newTestLocationServerWithBackendsAndCache([]LocationBackend{backend}, fc)
-			mustPutJSONInCache(t, fc, locationCachePrefix+"cached", Location{ID: "cached", Name: "Cached location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+			prefix := locationCachePrefix + "/"
+			if test.version != "" {
+				prefix += test.version + "/"
+			}
+			mustPutJSONInCache(t, fc, prefix+"cached", Location{ID: "cached", Name: "Cached location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
 
 			got, err := server.GetLocationByID(t.Context(), "cached")
 			require.NoError(t, err)
@@ -504,10 +516,10 @@ func TestLocationBackendCachePolicy(t *testing.T) {
 
 			for _, id := range []string{"fresh", "search"} {
 				if test.wantCacheable {
-					requireEventuallyCached(t, fc, locationCachePrefix+id)
+					requireEventuallyCached(t, fc, prefix+id)
 				} else {
 					assert.Never(t, func() bool {
-						exists, err := fc.Exists(t.Context(), locationCachePrefix+id)
+						exists, err := fc.Exists(t.Context(), prefix+id)
 						require.NoError(t, err)
 						return exists
 					}, 50*time.Millisecond, time.Millisecond)

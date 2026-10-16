@@ -13,7 +13,8 @@ import (
 
 func TestDeliveryLocations(t *testing.T) {
 	backend := NewLocationBackend()
-	assert.False(t, backend.IsCacheable())
+	_, cacheable := backend.CachePolicy()
+	assert.False(t, cacheable)
 	for _, point := range []geo.Coordinate{
 		{Lat: 47.61, Lon: -122.33}, // Seattle
 		{Lat: 47.04, Lon: -122.90}, // Olympia is beyond the tighter western boundary.
