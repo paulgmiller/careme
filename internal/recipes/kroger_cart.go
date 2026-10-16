@@ -78,8 +78,12 @@ func (s *server) ResumeOrdering(w http.ResponseWriter, r *http.Request, provider
 }
 
 func (s *server) transferOrdering(w http.ResponseWriter, r *http.Request, providerID string, req ordering.Request) {
-	_, err := s.ordering.Transfer(r.Context(), providerID, req)
+	result, err := s.ordering.Transfer(r.Context(), providerID, req)
 	if err == nil {
+		if result.Status == "complete" {
+			http.Redirect(w, r, result.URL, http.StatusSeeOther)
+			return
+		}
 		redirectOrderingShoppingList(w, r, providerID, req.Hash, "")
 		return
 	}

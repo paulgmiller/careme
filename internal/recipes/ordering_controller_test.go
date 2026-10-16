@@ -71,11 +71,7 @@ func TestOrderingShoppingLinkRouteAndReload(t *testing.T) {
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSeeOther, response.Code)
-	redirect, err := url.Parse(response.Header().Get("Location"))
-	require.NoError(t, err)
-	assert.Equal(t, "/recipes", redirect.Path)
-	assert.Equal(t, p.Hash(), redirect.Query().Get("h"))
-	assert.Equal(t, "shopping-list-section", redirect.Fragment)
+	assert.Equal(t, "https://shopping.example.test/lists/created", response.Header().Get("Location"))
 	assert.Empty(t, response.Result().Cookies(), "connection-free providers need no shopper OAuth cookie")
 	require.Len(t, provider.requests, 1)
 	req := provider.requests[0]
@@ -93,7 +89,7 @@ func TestOrderingShoppingLinkRouteAndReload(t *testing.T) {
 	assert.Equal(t, 1, provider.submissions)
 
 	pageResponse := httptest.NewRecorder()
-	pageRequest := httptest.NewRequest(http.MethodGet, redirect.RequestURI(), nil)
+	pageRequest := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(p.Hash()), nil)
 	user := &utypes.User{ID: "mock-clerk-user-id", Email: []string{"chef@example.test"}}
 	s.renderShoppingList(pageResponse, pageRequest, p, &ai.ShoppingList{Recipes: p.Saved}, user, shoppingProgress{})
 	require.Equal(t, http.StatusOK, pageResponse.Code)
@@ -107,6 +103,7 @@ func TestOrderingShoppingLinkRouteAndReload(t *testing.T) {
 	repeat := httptest.NewRecorder()
 	mux.ServeHTTP(repeat, httptest.NewRequest(http.MethodPost, request.URL.String(), nil))
 	assert.Equal(t, http.StatusSeeOther, repeat.Code)
+	assert.Equal(t, "https://shopping.example.test/lists/created", repeat.Header().Get("Location"))
 	assert.Equal(t, 1, provider.submissions)
 }
 

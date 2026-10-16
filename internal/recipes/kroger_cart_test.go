@@ -128,7 +128,7 @@ func TestKrogerCartTransferAndEncryptedConnection(t *testing.T) {
 	rr := httptest.NewRecorder()
 	s.performCartTransfer(rr, httptest.NewRequest(http.MethodPost, "/recipes/x/kroger-cart", nil), "mock-clerk-user-id", p.Hash(), token)
 	assert.Equal(t, http.StatusSeeOther, rr.Code)
-	assert.Contains(t, rr.Header().Get("Location"), "#shopping-list-section")
+	assert.Equal(t, "https://www.kroger.com/cart", rr.Header().Get("Location"))
 	page := renderKrogerShoppingSection(t, s, p.Hash(), "")
 	assert.Contains(t, page, "Sent 1 product")
 	assert.Contains(t, page, "Garlic — 1 package")
@@ -238,9 +238,13 @@ func TestKrogerCallback(t *testing.T) {
 			if tc.wantStatus == http.StatusSeeOther {
 				location, err := url.Parse(rr.Header().Get("Location"))
 				require.NoError(t, err)
-				assert.Equal(t, "/recipes", location.Path)
-				assert.Equal(t, p.Hash(), location.Query().Get("h"))
-				assert.Equal(t, "shopping-list-section", location.Fragment)
+				if tc.name == "connect and transfer" {
+					assert.Equal(t, "https://www.kroger.com/cart", location.String())
+				} else {
+					assert.Equal(t, "/recipes", location.Path)
+					assert.Equal(t, p.Hash(), location.Query().Get("h"))
+					assert.Equal(t, "shopping-list-section", location.Fragment)
+				}
 				assert.Empty(t, location.Query().Get("code"))
 				assert.Empty(t, location.Query().Get("state"))
 				assert.Contains(t, renderKrogerShoppingSection(t, s, p.Hash(), location.Query().Get("kroger_error")), tc.wantMessage)

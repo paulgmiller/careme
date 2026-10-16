@@ -380,12 +380,12 @@
   </div>
   {{range .OrderingActions}}
   {{if .CanSubmit}}
-  <form method="POST" action="{{.ActionURL}}" class="mt-6"
-        onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Preparing your list…';">
+  <form method="POST" action="{{.ActionURL}}" target="_blank" rel="noopener noreferrer" class="mt-6">
     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">
       {{.ActionLabel}}
     </button>
     {{if .Description}}<p class="mt-2 text-xs text-ink-600">{{.Description}}</p>{{end}}
+    <p class="mt-2 text-xs text-ink-600">Opens in a new tab.</p>
   </form>
   {{end}}
   {{end}}
