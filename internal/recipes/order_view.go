@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"net/url"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/ai"
-	"careme/internal/templates"
 )
 
-type OrderViewBuilder func(templates.OrderViewInput) (*templates.OrderView, error)
+type OrderViewBuilder func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 
 func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) error {
 	var items []ai.ShoppingItem
@@ -17,7 +18,7 @@ func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) 
 			items = append(items, item.ShoppingItem)
 		}
 	}
-	order, err := s.orderView(templates.OrderViewInput{
+	order, err := s.orderView(ordertypes.OrderViewInput{
 		Location: view.Location, Items: items, ListKey: view.Hash,
 		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
 		Query:     r.URL.Query(),
