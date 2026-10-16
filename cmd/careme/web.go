@@ -143,23 +143,17 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	var resumeOrdering func(http.ResponseWriter, *http.Request, string, string, string)
-	orders, err := providers.NewOrdering(providerregistry.OrderingOptions{
-		Cache: cache,
-		Auth:  authClient,
-		Resume: func(w http.ResponseWriter, r *http.Request, providerID, userID, hash string) {
-			resumeOrdering(w, r, providerID, userID, hash)
-		},
-	})
+	orders, err := providers.NewKrogerOrder(providerregistry.KrogerOrderOptions{Cache: cache, Auth: authClient})
 	if err != nil {
-		return fmt.Errorf("create ordering providers: %w", err)
+		return fmt.Errorf("create Kroger ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, orders.Service)
+	if orders != nil {
+		orders.Register(appRoutes)
+	}
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger)
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}
-	resumeOrdering = recipeHandler.ResumeOrdering
-	orders.Register(appRoutes)
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 

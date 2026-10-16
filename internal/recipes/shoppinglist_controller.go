@@ -34,8 +34,6 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
-	mux.HandleFunc("POST /recipes/{hash}/kroger-cart", s.handleKrogerCart)
-	mux.HandleFunc("POST /recipes/{hash}/ordering/{provider}", s.handleOrdering)
 }
 
 func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +476,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
 	if err == nil && view.Finalized && view.ServerSignedIn {
-		err = s.populateOrderingView(ctx, &view, currentUser.ID, r)
+		err = s.populateKrogerOrderView(&view, r)
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)

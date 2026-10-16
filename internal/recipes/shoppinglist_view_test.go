@@ -25,7 +25,7 @@ func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
-			view.OrderingActions = []orderingActionView{{Provider: "kroger", Brand: "QFC", Notice: krogerCartNotice(code)}}
+			view.KrogerOrder = &krogerOrderView{Notice: krogerOrderNotice(code)}
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
 			if code == "denied" {

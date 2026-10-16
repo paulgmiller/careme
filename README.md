@@ -97,25 +97,17 @@ cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Implement `ordering.Provider`. Choose `CartTransfer` for adding products to a
-cart or `ShoppingListLink` for creating a shopping page. `Supports` and
-`Presentation` determine eligible lists and action copy. `Prepare` validates or
-resolves items without changing a cart or creating a page; `Submit` performs the
-handoff and returns its outcome and review URL. Keep credentials and account
-connection inside the adapter.
+Give each destination its own HTTP workflow, such as `POST /kroger/order`.
+The shopping list submits its displayed items, store hints, stable list key,
+and return URL. The destination owns authentication, matching, cart writes,
+duplicate prevention, and the redirect back with a review link and brief status.
+Register its routes independently of the recipe handler in `cmd/careme/web.go`.
 
-Construct the adapter in `cmd/careme/web.go` and add it to `orderingProviders`.
-Register a callback only if account connection requires one. The shared route
-and shopping-list templates handle its action and result. Users review and
-complete checkout with the provider.
-
-Kroger is currently the only ordering adapter. Smith Brothers Farms and
-MNFoodClub have locations and staples, but no ordering adapter. A destination
-such as a future Instacart shopping-link adapter can accept lists sourced from
-other providers without supplying its own locations or staples.
-
-See [Ordering adapters](docs/ordering.md) for measurements, product references,
-duplicate prevention, link caching, and the intended Instacart mapping.
+Kroger is currently the only ordering destination. Future destinations can own
+routes such as `/instacart/order` or `/bigcommerce/order` without implementing
+a shared Go provider interface. Users review and complete checkout with the
+provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
+and OAuth continuation behavior.
 
 ### Verify the integration
 
