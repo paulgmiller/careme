@@ -12,6 +12,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/httpretry"
 	"careme/internal/providers/kroger"
+	"careme/internal/routing"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -22,11 +23,20 @@ type OrderOptions struct {
 	Auth  auth.AuthClient
 }
 
-func (f Factory) NewOrder(options OrderOptions) (*kroger.OrderHandler, error) {
-	cfg := f.config
-	if cfg.Kroger.CartTokenKey == "" {
-		return nil, nil
+// RegisterOrders installs routes for every configured ordering destination.
+func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
+	if f.config.Kroger.CartTokenKey != "" {
+		handler, err := f.newKrogerOrder(options)
+		if err != nil {
+			return err
+		}
+		handler.Register(routes)
 	}
+	return nil
+}
+
+func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, error) {
+	cfg := f.config
 	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
 		return nil, fmt.Errorf("kroger cart requires client ID and secret")
 	}

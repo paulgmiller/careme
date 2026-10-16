@@ -3,6 +3,9 @@
 Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
 provider workflow interface. Kroger is the only implemented destination.
+Application startup calls `providerregistry.Factory.RegisterOrders` with the
+shared application routes; it constructs each configured destination and registers
+its routes directly, preserving application middleware.
 
 The recipe handler depends on an `OrderViewBuilder` interface. The provider
 registry factory implements its `OrderView` method and receives the displayed
