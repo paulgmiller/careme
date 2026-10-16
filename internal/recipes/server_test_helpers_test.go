@@ -7,12 +7,13 @@ import (
 	"sync"
 	"testing"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/status"
-	"careme/internal/templates"
 	"careme/internal/users"
 )
 
@@ -57,7 +58,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, func(templates.OrderViewInput) (*templates.OrderView, error) { return nil, nil })
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,4 +176,11 @@ func (s *fakeStatusStore) failure(hash string) error {
 		return errors.New(failure)
 	}
 	return nil
+}
+
+// orderViewBuilderFunc lets tests supply one operation while exercising the interface.
+type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+
+func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	return f(input)
 }

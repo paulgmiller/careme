@@ -20,7 +20,7 @@ import (
 
 func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	s := newTestServer(t)
-	s.orderView = kroger.OrderView
+	s.orderView = orderViewBuilderFunc(kroger.OrderView)
 	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Chicken", Quantity: "2 lbs"}}}
 	p.Saved = []ai.Recipe{recipe}

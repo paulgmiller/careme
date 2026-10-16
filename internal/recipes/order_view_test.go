@@ -21,14 +21,14 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Food", Needed: "1 lb"}}}},
 		{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Wine", Needed: "1 bottle"}}}},
 	}}
-	s.orderView = func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
 		assert.Equal(t, "ready", input.Query.Get("destination_status"))
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
 		return &ordertypes.OrderView{ActionURL: "/destination/order", ActionLabel: "Send groceries", Fields: []ordertypes.OrderField{{Name: "custom_items", Value: `Food & "Wine"`}}, Description: "Destination instructions", Notice: "Ready to review", ReviewURL: "https://destination.example/cart", ReviewLabel: "Review groceries"}, nil
-	}
+	})
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
@@ -42,7 +42,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("cannot build destination form")} {
 		s := newTestServer(t)
-		s.orderView = func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, failure }
+		s.orderView = orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, failure })
 		view := shoppingListPageView{}
 		err := s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil))
 		if failure != nil {

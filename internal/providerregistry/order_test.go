@@ -8,29 +8,30 @@ import (
 	"strings"
 	"testing"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
-	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func orderingTestOptions() KrogerOrderOptions {
-	return KrogerOrderOptions{
+func orderingTestOptions() OrderOptions {
+	return OrderOptions{
 		Cache: cache.NewInMemoryCache(), Auth: auth.DefaultMock(),
 	}
 }
 
-func TestNewKrogerOrderDisabled(t *testing.T) {
-	orders, err := NewFactory(&config.Config{}).NewKrogerOrder(orderingTestOptions())
+func TestNewOrderDisabled(t *testing.T) {
+	orders, err := NewFactory(&config.Config{}).NewOrder(orderingTestOptions())
 	require.NoError(t, err)
 	assert.Nil(t, orders)
 }
 
-func TestNewKrogerOrderInvalidKrogerConfig(t *testing.T) {
+func TestNewOrderInvalidKrogerConfig(t *testing.T) {
 	validKey := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
 	for _, tt := range []struct {
 		name string
@@ -43,15 +44,15 @@ func TestNewKrogerOrderInvalidKrogerConfig(t *testing.T) {
 		{"wrong key length", config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte("short"))}, "base64-encoded 32-byte key"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			orders, err := NewFactory(&config.Config{Kroger: tt.cfg}).NewKrogerOrder(orderingTestOptions())
+			orders, err := NewFactory(&config.Config{Kroger: tt.cfg}).NewOrder(orderingTestOptions())
 			require.ErrorContains(t, err, tt.want)
 			assert.Nil(t, orders)
 		})
 	}
 }
 
-func TestNewKrogerOrderRegistersHTTPRoutes(t *testing.T) {
-	handler, err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).NewKrogerOrder(orderingTestOptions())
+func TestNewOrderRegistersHTTPRoutes(t *testing.T) {
+	handler, err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).NewOrder(orderingTestOptions())
 	require.NoError(t, err)
 	routes := http.NewServeMux()
 	handler.Register(routes)
@@ -83,7 +84,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
-			view, err := factory.OrderView(templates.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
+			view, err := factory.OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)

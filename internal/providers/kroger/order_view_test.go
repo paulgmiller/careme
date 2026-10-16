@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/ai"
 	"careme/internal/config"
 	locationtypes "careme/internal/locations/types"
@@ -26,7 +28,7 @@ func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
 		{"kroger_status=%3Cscript%3Ealert(1)%3C/script%3E&kroger_cart=https://www.qfc.com/cart", "", ""},
 	} {
 		t.Run(scenario.query, func(t *testing.T) {
-			input := templates.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Query: httptest.NewRequest("GET", "/recipes?"+scenario.query, nil).URL.Query()}
+			input := ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Query: httptest.NewRequest("GET", "/recipes?"+scenario.query, nil).URL.Query()}
 			order, err := OrderView(input)
 			require.NoError(t, err)
 			view := map[string]any{"Order": order, "Purchases": nil}
@@ -49,14 +51,14 @@ func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
 
 func TestKrogerOrderViewRejectsInvalidItems(t *testing.T) {
 	invalid := math.NaN()
-	_, err := OrderView(templates.OrderViewInput{Items: []ai.ShoppingItem{{Name: "Invalid", Buy: &invalid}}})
+	_, err := OrderView(ordertypes.OrderViewInput{Items: []ai.ShoppingItem{{Name: "Invalid", Buy: &invalid}}})
 	require.ErrorContains(t, err, "encode shopping items for Kroger")
 }
 
 func TestKrogerOrderViewForm(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	for _, chain := range []string{"QFC", ""} {
-		view, err := OrderView(templates.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: chain}, ListKey: "list", ReturnURL: "/recipes?h=list"})
+		view, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: chain}, ListKey: "list", ReturnURL: "/recipes?h=list"})
 		require.NoError(t, err)
 		assert.Equal(t, "/kroger/order", view.ActionURL)
 		brand := chain

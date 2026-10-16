@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"careme/internal/templates"
+	ordertypes "careme/internal/orders/types"
 )
 
 // OrderView builds Kroger's form and interprets its informational return fields.
-func OrderView(input templates.OrderViewInput) (*templates.OrderView, error) {
+func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	body, err := json.Marshal(input.Items)
 	if err != nil {
 		return nil, fmt.Errorf("encode shopping items for Kroger: %w", err)
@@ -18,12 +18,12 @@ func OrderView(input templates.OrderViewInput) (*templates.OrderView, error) {
 	if brand == "" {
 		brand = "Kroger"
 	}
-	order := &templates.OrderView{
+	order := &ordertypes.OrderView{
 		ActionURL:   "/kroger/order",
 		ActionLabel: "Add to " + brand + " cart",
 		Description: "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		ReviewLabel: "Review cart (opens a new tab)",
-		Fields: []templates.OrderField{
+		Fields: []ordertypes.OrderField{
 			{Name: "items", Value: string(body)},
 			{Name: "store_id", Value: input.Location.ID},
 			{Name: "chain", Value: input.Location.Chain},

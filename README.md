@@ -90,10 +90,7 @@ the provider's `Signature`. Change that signature when catalog definitions or
 parsing rules require cached ingredients to be refreshed. Enable `HasInventory`
 for supported locations once staples are available.
 
-Also register the catalog namespace in `internal/providers/identity.go` so
-shopping-list product references retain their source provider, even when ordered
-through a different destination. Update [cache layout](docs/cache-layout.md) if
-cache keys or prefixes change.
+Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 

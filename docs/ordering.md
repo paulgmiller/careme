@@ -4,10 +4,11 @@ Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
 provider workflow interface. Kroger is the only implemented destination.
 
-The recipe handler passes displayed items and location to the provider registry’s
-`OrderView` function. The registry matches `location.ID` against configured
+The recipe handler depends on an `OrderViewBuilder` interface. The provider
+registry factory implements its `OrderView` method and receives the displayed
+items and location. The registry matches `location.ID` against configured
 providers. The matching provider returns a form action, hidden fields, labels,
-and return notice as `templates.OrderView`; recipes renders those generically.
+and return notice as `orders/types.OrderView`; recipes renders those generically.
 Kroger owns its form encoding, status interpretation, and cart-link validation.
 
 ## Kroger form contract
