@@ -125,12 +125,6 @@ type InvalidParameter struct {
 	Timestamp *float32 `json:"timestamp,omitempty"`
 }
 
-// UPC The UPC of the product to return.
-type UPC = string
-
-// ProductId The productId of the product to return.
-type ProductId = string
-
 // ProductsAllergenModel defines model for products.allergenModel.
 type ProductsAllergenModel struct {
 	LevelOfContainmentName *string `json:"levelOfContainmentName,omitempty"`
@@ -496,9 +490,7 @@ type ClientInterface interface {
 	ProductGet(ctx context.Context, params *ProductGetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProductGetID request
-	ProductGetID(ctx context.Context, id struct {
-		union json.RawMessage
-	}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ProductGetID(ctx context.Context, id string, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ProductGet(ctx context.Context, params *ProductGetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -513,9 +505,7 @@ func (c *Client) ProductGet(ctx context.Context, params *ProductGetParams, reqEd
 	return c.Client.Do(req)
 }
 
-func (c *Client) ProductGetID(ctx context.Context, id struct {
-	union json.RawMessage
-}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+func (c *Client) ProductGetID(ctx context.Context, id string, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewProductGetIDRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
@@ -673,14 +663,12 @@ func NewProductGetRequest(server string, params *ProductGetParams) (*http.Reques
 }
 
 // NewProductGetIDRequest generates requests for ProductGetID
-func NewProductGetIDRequest(server string, id struct {
-	union json.RawMessage
-}, params *ProductGetIDParams) (*http.Request, error) {
+func NewProductGetIDRequest(server string, id string, params *ProductGetIDParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "", Format: ""})
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
 	if err != nil {
 		return nil, err
 	}
@@ -777,9 +765,7 @@ type ClientWithResponsesInterface interface {
 	ProductGetWithResponse(ctx context.Context, params *ProductGetParams, reqEditors ...RequestEditorFn) (*ProductGetResponse, error)
 
 	// ProductGetIDWithResponse request
-	ProductGetIDWithResponse(ctx context.Context, id struct {
-		union json.RawMessage
-	}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error)
+	ProductGetIDWithResponse(ctx context.Context, id string, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error)
 }
 
 type ProductGetResponse struct {
@@ -848,9 +834,7 @@ func (c *ClientWithResponses) ProductGetWithResponse(ctx context.Context, params
 }
 
 // ProductGetIDWithResponse request returning *ProductGetIDResponse
-func (c *ClientWithResponses) ProductGetIDWithResponse(ctx context.Context, id struct {
-	union json.RawMessage
-}, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error) {
+func (c *ClientWithResponses) ProductGetIDWithResponse(ctx context.Context, id string, params *ProductGetIDParams, reqEditors ...RequestEditorFn) (*ProductGetIDResponse, error) {
 	rsp, err := c.ProductGetID(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
