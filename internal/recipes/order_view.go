@@ -10,7 +10,7 @@ import (
 )
 
 type OrderViewBuilder interface {
-	OrderView(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+	OrderViews(ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error)
 }
 
 func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) error {
@@ -20,7 +20,7 @@ func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) 
 			items = append(items, item.ShoppingItem)
 		}
 	}
-	order, err := s.orderView.OrderView(ordertypes.OrderViewInput{
+	order, err := s.orderView.OrderViews(ordertypes.OrderViewInput{
 		Location: view.Location, Items: items, ListKey: view.Hash,
 		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
 		Query:     r.URL.Query(),
@@ -28,6 +28,6 @@ func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	view.Order = order
+	view.Orders = order
 	return nil
 }

@@ -181,6 +181,10 @@ func (s *fakeStatusStore) failure(hash string) error {
 // orderViewBuilderFunc lets tests supply one operation while exercising the interface.
 type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 
-func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	return f(input)
+func (f orderViewBuilderFunc) OrderViews(input ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error) {
+	view, err := f(input)
+	if err != nil || view == nil {
+		return nil, err
+	}
+	return []*ordertypes.OrderView{view}, nil
 }

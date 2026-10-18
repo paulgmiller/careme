@@ -11,6 +11,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpretry"
+	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
 	"careme/internal/routing"
 
@@ -27,6 +28,17 @@ type OrderOptions struct {
 func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
 	if f.config.Kroger.CartTokenKey != "" {
 		handler, err := f.newKrogerOrder(options)
+		if err != nil {
+			return err
+		}
+		handler.Register(routes)
+	}
+	if f.config.Instacart.APIKey != "" {
+		client, err := instacart.NewClient(instacart.ClientOptions{APIKey: f.config.Instacart.APIKey, BaseURL: f.config.Instacart.BaseURL})
+		if err != nil {
+			return err
+		}
+		handler, err := instacart.NewOrderHandler(instacart.OrderOptions{Cache: options.Cache, Client: client, Origin: f.config.ResolvedPublicOrigin(), Auth: options.Auth})
 		if err != nil {
 			return err
 		}
@@ -67,11 +79,22 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	return handler, nil
 }
 
-// OrderView finds the configured ordering destination for the source location.
-// Each destination owns its form contract and return presentation.
-func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+// OrderViews builds each configured destination's form and return presentation.
+func (f Factory) OrderViews(input ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error) {
+	var views []*ordertypes.OrderView
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
-		return kroger.OrderView(input)
+		view, err := kroger.OrderView(input)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
 	}
-	return nil, nil
+	if f.config.Instacart.APIKey != "" {
+		view, err := instacart.OrderView(input)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	return views, nil
 }

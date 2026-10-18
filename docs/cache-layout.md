@@ -38,6 +38,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
+| `instacart_shopping_links/` | Shopping-list URL and expiry keyed by authenticated user ID and SHA-256 of the outbound payload plus API environment | Instacart order handler | Instacart order handler; reuse until 30-day expiry or changed content |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `kroger_cart_transfers/` | JSON transfer status, submitted product names, and skipped ingredients keyed by Careme user ID and finalized list hash | Kroger order handler | Duplicate prevention and return status |
 | `kroger_order_requests/` | Posted shopping items, source store/chain, list key, local return URL, authenticated user ID, and server-issued timestamp keyed by random OAuth state | Kroger order handler before authorization | Kroger callback; accepted only for the same authenticated user within ten minutes |
@@ -212,3 +213,15 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - `kroger_order_requests/<random state>` retains the posted request across OAuth. A secure, HTTP-only, same-site cookie carries the opaque state. The callback verifies state, authenticated ownership, and the server-stored ten-minute age before resuming the stored request. The cache has no per-record expiry or delete operation; expired requests remain stored but cannot be resumed.
 - Recipes never reads transfer or OAuth records. It renders the generic order view supplied by the provider registry. Kroger’s view builder interprets redirect query parameters into fixed messages and a validated Kroger/QFC cart link. These fields are informational and never authorize a cart write.
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger continues to use its original provider-specific keys.
+
+### Instacart ordering links
+
+- `instacart_shopping_links/<user ID>/<payload hash>` stores `url` and `expires_at`.
+  The hash covers the full outbound JSON and API base URL, separating development
+  and production. The payload includes the Careme linkback and displayed items.
+- Links are created with a 30-day expiry. Expired records are replaced on the next
+  submission; changed payloads use a new key. Records are private to the authenticated
+  user, and cache failures stop the handoff with an error notice.
+- Only successfully created and validated HTTPS Instacart links are saved. This is
+  link reuse, not cart-write duplicate prevention. Concurrent initial requests may
+  create equivalent shopping pages without changing a cart.

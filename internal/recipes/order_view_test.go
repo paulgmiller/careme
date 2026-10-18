@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"careme/internal/providers/instacart"
+	"careme/internal/providers/kroger"
 
 	ordertypes "careme/internal/orders/types"
 
@@ -51,7 +55,7 @@ func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 		} else {
 			require.NoError(t, err)
 		}
-		assert.Nil(t, view.Order)
+		assert.Nil(t, view.Orders)
 	}
 }
 
@@ -67,7 +71,7 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			view := shoppingListPageView{Hash: "list", HasSavedRecipes: true, Finalized: scenario.finalized}
 			if scenario.ordering {
-				view.Order = &ordertypes.OrderView{ActionURL: "/destination/order", ActionLabel: "Add to cart", Description: "Review amounts before checkout."}
+				view.Orders = []*ordertypes.OrderView{{ActionURL: "/destination/order", ActionLabel: "Add to cart", Description: "Review amounts before checkout."}}
 			}
 			var controls bytes.Buffer
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls", view))
@@ -85,4 +89,41 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 			assert.Contains(t, controls.String(), `aria-label="Share shopping list"`)
 		})
 	}
+}
+
+func TestShoppingListRendersBothOrderingDestinations(t *testing.T) {
+	s := newTestServer(t)
+	s.orderView = orderViewsBuilderFunc(func(input ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error) {
+		krogerView, err := kroger.OrderView(input)
+		if err != nil {
+			return nil, err
+		}
+		instacartView, err := instacart.OrderView(input)
+		if err != nil {
+			return nil, err
+		}
+		return []*ordertypes.OrderView{krogerView, instacartView}, nil
+	})
+	view := shoppingListPageView{Hash: "list", HasSavedRecipes: true, Finalized: true, Location: locations.Location{ID: "70500874", Chain: "QFC"}, Purchases: []shoppingPurchaseGroup{{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: `Food & "Wine"`, Needed: "2 cups"}}}}}}
+	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?kroger_status=denied&instacart_status=failed", nil)))
+	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
+	body := page.String()
+	assert.Contains(t, body, `action="/kroger/order"`)
+	assert.Contains(t, body, `action="/instacart/order"`)
+	assert.Contains(t, body, "Add to QFC cart")
+	assert.Contains(t, body, "Shop with Instacart")
+	assert.Contains(t, body, "Kroger connection was not approved")
+	assert.Contains(t, body, "Could not prepare your Instacart list")
+	assert.NotContains(t, body, "Build Shopping List")
+	assert.Equal(t, 2, strings.Count(body, `name="items"`))
+	assert.Less(t, strings.Index(body, `action="/kroger/order"`), strings.Index(body, `action="/instacart/order"`))
+	assert.Equal(t, view.Orders[0].Fields, view.Orders[1].Fields)
+}
+
+type orderViewsBuilderFunc func(ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error)
+
+func (f orderViewsBuilderFunc) OrderViews(input ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error) {
+	return f(input)
 }

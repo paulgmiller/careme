@@ -28,6 +28,7 @@ const (
 )
 
 type Config struct {
+	Instacart         InstacartConfig         `json:"instacart"`
 	AI                AIConfig                `json:"ai"`
 	OpenRouter        OpenRouterConfig        `json:"openrouter"`
 	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
@@ -67,6 +68,11 @@ type OpenRouterConfig struct {
 
 func (c *OpenRouterConfig) IsEnabled() bool {
 	return strings.TrimSpace(c.APIKey) != ""
+}
+
+type InstacartConfig struct {
+	APIKey  string `json:"-"`
+	BaseURL string `json:"base_url"`
 }
 
 type KrogerConfig struct {
@@ -191,6 +197,7 @@ func Load() (*Config, error) {
 	}
 
 	config := &Config{
+		Instacart: InstacartConfig{APIKey: os.Getenv("INSTACART_API_KEY"), BaseURL: os.Getenv("INSTACART_BASE_URL")},
 		AI: AIConfig{
 			APIKey:      os.Getenv("AI_API_KEY"),
 			RecipeModel: DefaultRecipeModel,

@@ -267,3 +267,11 @@ func TestLoadMNFoodClubCredentials(t *testing.T) {
 	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/", cfg.MNFoodClub.APIPath)
 	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
 }
+
+func TestLoadInstacart(t *testing.T) {
+	t.Setenv("INSTACART_API_KEY", "test-key")
+	t.Setenv("INSTACART_BASE_URL", "https://connect.dev.instacart.tools")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, InstacartConfig{APIKey: "test-key", BaseURL: "https://connect.dev.instacart.tools"}, cfg.Instacart)
+}
