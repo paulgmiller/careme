@@ -43,6 +43,9 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
+  {{with .Order}}
+  {{template "shopping_order_form" .}}
+  {{else}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
             id="finalizeButton"
@@ -67,7 +70,11 @@
     Could not build your shopping list. Try again, chef.
   </p>
   {{end}}
+  {{end}}
   {{template "shopping_list_share_button" .}}
+  {{with .Order}}
+  {{if .Description}}<p class="basis-full text-xs text-ink-600">{{.Description}}</p>{{end}}
+  {{end}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
@@ -379,15 +386,16 @@
     </section>
     {{end}}
   </div>
-  {{with .Order}}
-  <form method="POST" action="{{.ActionURL}}" class="mt-6">
+
+</section>
+{{end}}
+
+{{define "shopping_order_form"}}
+  <form method="POST" action="{{.ActionURL}}">
     <input type="hidden" name="items" value="{{.Fields.Items}}">
     <input type="hidden" name="location" value="{{.Fields.Location}}">
     <input type="hidden" name="list_key" value="{{.Fields.ListKey}}">
     <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">
     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
-    {{if .Description}}<p class="mt-2 text-xs text-ink-600">{{.Description}}</p>{{end}}
   </form>
-  {{end}}
-</section>
 {{end}}

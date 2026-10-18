@@ -35,6 +35,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
 	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 	document, err := html.Parse(strings.NewReader(page.String()))
 	require.NoError(t, err)
