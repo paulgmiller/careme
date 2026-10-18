@@ -204,6 +204,15 @@ recipe's `recipe_instructions`, while serving count reaches every recipe.
 Category override cases request three all-Fancy, all-Healthy, or all-Different
 meals and assert that every returned category matches, overriding category spread.
 The existing judge also checks whether the plans fit the requested direction.
+The `Protein anchors` cases require meat or seafood as the anchor of a strict
+majority of meals by default (one of one, two of three, three of four), including
+a vegetable-heavy healthy request. Vegetarian and vegan requests instead require
+zero meat or seafood anchors. Explicit fixture labels classify anchors; sides,
+broth, cheese, and incidental mentions do not count toward the majority. The
+existing judge checks the full dietary request, including vegan restrictions.
+Run these cases with `./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'Protein anchors'`.
+Check the assertion boundaries offline with `node --test evals/menu-plan/protein-anchors.test.cjs`.
+
 Run just these cases with repeated samples:
 
 ```sh
