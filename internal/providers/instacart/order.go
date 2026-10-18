@@ -41,11 +41,11 @@ type OrderHandler struct {
 
 func NewOrderHandler(options OrderOptions) (*OrderHandler, error) {
 	if options.Cache == nil || options.Client == nil || options.Auth == nil {
-		return nil, fmt.Errorf("Instacart ordering requires cache, client, and authentication")
+		return nil, fmt.Errorf("instacart ordering requires cache, client, and authentication")
 	}
 	origin, err := url.Parse(options.Origin)
 	if err != nil || (origin.Scheme != "https" && origin.Scheme != "http") || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
-		return nil, fmt.Errorf("Instacart ordering requires a valid public origin")
+		return nil, fmt.Errorf("instacart ordering requires a valid public origin")
 	}
 	return &OrderHandler{cache: options.Cache, client: options.Client, origin: strings.TrimRight(options.Origin, "/"), auth: options.Auth}, nil
 }

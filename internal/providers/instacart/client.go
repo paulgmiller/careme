@@ -42,10 +42,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 		baseURL = ProductionURL
 	}
 	if baseURL != ProductionURL && baseURL != DevelopmentURL {
-		return nil, fmt.Errorf("Instacart base URL must be the production or development endpoint")
+		return nil, fmt.Errorf("instacart base URL must be the production or development endpoint")
 	}
 	if strings.TrimSpace(options.APIKey) == "" {
-		return nil, fmt.Errorf("Instacart requires an API key")
+		return nil, fmt.Errorf("instacart requires an API key")
 	}
 	transport := options.Transport
 	if transport == nil {
@@ -98,14 +98,14 @@ func (c *Client) createLink(ctx context.Context, body []byte) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Instacart link request returned %d", resp.StatusCode)
+		return "", fmt.Errorf("instacart link request returned %d", resp.StatusCode)
 	}
 	body, err = io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		return "", fmt.Errorf("read Instacart link: %w", err)
 	}
 	if len(body) > 1<<20 {
-		return "", fmt.Errorf("Instacart link response is too large")
+		return "", fmt.Errorf("instacart link response is too large")
 	}
 	var result struct {
 		URL string `json:"products_link_url"`
@@ -114,7 +114,7 @@ func (c *Client) createLink(ctx context.Context, body []byte) (string, error) {
 		return "", fmt.Errorf("decode Instacart link: %w", err)
 	}
 	if !validLink(result.URL) {
-		return "", fmt.Errorf("Instacart returned an invalid shopping link")
+		return "", fmt.Errorf("instacart returned an invalid shopping link")
 	}
 	return result.URL, nil
 }
