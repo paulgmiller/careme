@@ -217,8 +217,6 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 }
 
 type shoppingFinalizeView struct {
-	// Selection changes require rebuilding before another order can be submitted.
-	Order           *ordertypes.OrderView
 	Hash            string
 	HasSavedRecipes bool
 }
