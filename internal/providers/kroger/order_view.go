@@ -56,8 +56,15 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 			order.ReviewURL = destination
 		}
 	}
-	if input.Transfer != nil {
-		applyTransfer(order, input)
+	if status == "complete" || status == "uncertain" || status == "changed" {
+		order.ActionLabel = "Add again"
+		order.ActionURL = "/kroger/order"
+		order.Secondary = true
+		order.Fields.Attempt = input.Query.Get("kroger_attempt")
+		if order.Fields.Attempt == "" {
+			order.Fields.Attempt = "1"
+		}
+		order.Description = "Adds this list again, including products already in your cart."
 	}
 	return order, nil
 }
@@ -77,30 +84,4 @@ func krogerOrderNotice(code string) string {
 		"start_failed":        "Could not start your Kroger transfer. Check your cart before trying again.",
 		"confirmation_failed": "Could not save the transfer result. Items may have been sent. Review your Kroger cart.",
 	}[code]
-}
-
-func applyTransfer(view *ordertypes.OrderView, input ordertypes.OrderViewInput) {
-	latest := input.Transfer
-	view.ActionURL = ""
-	view.ActionLabel = ""
-	view.Description = ""
-	if view.Notice == "" || input.Query.Get("kroger_status") == "complete" {
-		view.Notice = krogerOrderNotice(latest.Status)
-		if latest.Status == "complete" {
-			view.Notice = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", latest.Added)
-			if latest.Unmatched == 1 {
-				view.Notice += " 1 item could not be matched and was not sent."
-			} else if latest.Unmatched > 1 {
-				view.Notice += fmt.Sprintf(" %d items could not be matched and were not sent.", latest.Unmatched)
-			}
-		}
-	}
-	view.ReviewURL = cartURL(input.Location.Chain)
-	if latest.Status == "complete" || latest.Status == "uncertain" {
-		view.ActionURL = "/kroger/order"
-		view.ActionLabel = "Add again"
-		view.Secondary = true
-		view.Fields.Attempt = strconv.Itoa(latest.NextAttempt)
-		view.Description = "Adds this list again, including products already in your cart."
-	}
 }

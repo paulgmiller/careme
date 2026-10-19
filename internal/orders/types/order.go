@@ -9,21 +9,11 @@ import (
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
-	Transfer  *OrderTransfer
 	Location  locationtypes.Location
 	Items     []ai.ShoppingItem
 	ListKey   string
 	ReturnURL string
 	Query     url.Values
-}
-
-// OrderTransfer is persisted transfer state supplied to the view by the controller.
-// A nil transfer means this list has not been sent.
-type OrderTransfer struct {
-	Status      string
-	Added       int
-	Unmatched   int
-	NextAttempt int
 }
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.

@@ -2,7 +2,6 @@ package recipes
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
@@ -10,9 +9,7 @@ import (
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/locations"
-	locationtypes "careme/internal/locations/types"
 	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,62 +83,6 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 				assert.Contains(t, controls.String(), "Build Shopping List")
 			}
 			assert.Contains(t, controls.String(), `aria-label="Share shopping list"`)
-		})
-	}
-}
-
-type orderProviderStub struct {
-	load  func(context.Context, cache.Cache, locationtypes.Location, string, string) (*ordertypes.OrderTransfer, error)
-	build func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
-}
-
-func (p orderProviderStub) LoadTransfer(ctx context.Context, store cache.Cache, location locationtypes.Location, userID, listKey string) (*ordertypes.OrderTransfer, error) {
-	return p.load(ctx, store, location, userID, listKey)
-}
-
-func (p orderProviderStub) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	return p.build(input)
-}
-
-func TestPopulateOrderViewLoadsTransferBeforeFormatting(t *testing.T) {
-	for _, failure := range []error{nil, errors.New("transfer cache unavailable")} {
-		name := "success"
-		if failure != nil {
-			name = "load failure"
-		}
-		t.Run(name, func(t *testing.T) {
-			s := newTestServer(t)
-			transfer := &ordertypes.OrderTransfer{Status: "complete", Added: 2, NextAttempt: 1}
-			view := shoppingListPageView{Hash: "list", Location: locations.Location{ID: "70500874", Chain: "QFC"}}
-			built := false
-			s.orderView = orderProviderStub{
-				load: func(ctx context.Context, store cache.Cache, location locationtypes.Location, userID, listKey string) (*ordertypes.OrderTransfer, error) {
-					assert.Same(t, s.Cache, store)
-					assert.Equal(t, "mock-clerk-user-id", userID)
-					assert.Equal(t, view.Location, location)
-					assert.Equal(t, "list", listKey)
-					if failure != nil {
-						return nil, failure
-					}
-					return transfer, nil
-				},
-				build: func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-					built = true
-					assert.Same(t, transfer, input.Transfer)
-					return &ordertypes.OrderView{ActionLabel: "Add again"}, nil
-				},
-			}
-			err := s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil))
-			if failure != nil {
-				require.ErrorIs(t, err, failure)
-				assert.False(t, built)
-				assert.Nil(t, view.Order)
-			} else {
-				require.NoError(t, err)
-				assert.True(t, built)
-				require.NotNil(t, view.Order)
-				assert.Equal(t, "Add again", view.Order.ActionLabel)
-			}
 		})
 	}
 }

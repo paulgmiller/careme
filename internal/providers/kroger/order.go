@@ -16,7 +16,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
-	ordertypes "careme/internal/orders/types"
 )
 
 // orderRequest is the posted shopping list retained while connecting Kroger.
@@ -113,6 +112,7 @@ func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, requ
 		code = result.Status
 	}
 	query.Set("kroger_status", code)
+	query.Set("kroger_attempt", strconv.Itoa(request.Attempt+1))
 	query.Set("kroger_added", strconv.Itoa(result.Added))
 	query.Set("kroger_unmatched", strconv.Itoa(len(result.Gaps)))
 	query.Set("kroger_cart", cartURL(request.Chain))
@@ -230,25 +230,4 @@ func transferKey(userID, listKey string, attempt int) string {
 		return "kroger_cart_transfers/" + userID + "/" + listKey
 	}
 	return "kroger_cart_reorders/" + userID + "/" + listKey + "/" + strconv.Itoa(attempt)
-}
-
-// LoadTransfer returns persisted state for the controller to pass to OrderView.
-func LoadTransfer(ctx context.Context, store cache.Cache, userID, listKey string) (*ordertypes.OrderTransfer, error) {
-	var latest *ordertypes.OrderTransfer
-	for attempt := 0; ; attempt++ {
-		reader, err := store.Get(ctx, transferKey(userID, listKey, attempt))
-		if errors.Is(err, cache.ErrNotFound) {
-			return latest, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("load Kroger transfer: %w", err)
-		}
-		var result orderResult
-		err = json.NewDecoder(reader).Decode(&result)
-		_ = reader.Close()
-		if err != nil {
-			return nil, fmt.Errorf("decode Kroger transfer: %w", err)
-		}
-		latest = &ordertypes.OrderTransfer{Status: result.Status, Added: result.Added, Unmatched: len(result.Gaps), NextAttempt: attempt + 1}
-	}
 }

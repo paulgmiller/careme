@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/auth"
@@ -184,8 +183,4 @@ type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView
 
 func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	return f(input)
-}
-
-func (f orderViewBuilderFunc) LoadTransfer(context.Context, cache.Cache, locationtypes.Location, string, string) (*ordertypes.OrderTransfer, error) {
-	return nil, nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"math"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -46,7 +45,9 @@ func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 			if input.Query.Get("kroger_status") == "complete" {
-				assert.NotContains(t, page.String(), `action="/kroger/order"`)
+				assert.Contains(t, page.String(), `action="/kroger/order"`)
+				assert.Contains(t, page.String(), "Add again")
+				assert.Contains(t, page.String(), `name="attempt" value="1"`)
 				assert.NotContains(t, page.String(), "Add to QFC cart")
 				assert.NotContains(t, page.String(), "Build Shopping List")
 			} else {
@@ -109,38 +110,18 @@ func TestKrogerOrderViewAcceptsEveryChainCart(t *testing.T) {
 	}
 }
 
-func TestOrderViewUsesSuppliedTransferWithoutReturnQuery(t *testing.T) {
+func TestKrogerOrderAgainButtonUsesReturnAttempt(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
-	for _, status := range []string{"complete", "uncertain", "pending"} {
-		t.Run(status, func(t *testing.T) {
-			input := ordertypes.OrderViewInput{ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Transfer: &ordertypes.OrderTransfer{Status: status, Added: 2, NextAttempt: 1}}
-			view, err := OrderView(input)
-			require.NoError(t, err)
-			assert.Equal(t, "https://www.qfc.com/cart", view.ReviewURL)
-			var page bytes.Buffer
-			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
-			assert.NotContains(t, page.String(), "Add to QFC cart")
-			if status == "pending" {
-				assert.Empty(t, view.ActionURL)
-				assert.NotContains(t, page.String(), "Add again")
-			} else {
-				assert.True(t, view.Secondary)
-				assert.Contains(t, page.String(), "Add again")
-				assert.Contains(t, page.String(), `name="attempt" value="1"`)
-			}
-		})
+	for _, status := range []string{"complete", "uncertain", "changed"} {
+		input := ordertypes.OrderViewInput{Query: httptest.NewRequest("GET", "/recipes?kroger_status="+status+"&kroger_attempt=3", nil).URL.Query()}
+		view, err := OrderView(input)
+		require.NoError(t, err)
+		assert.True(t, view.Secondary)
+		assert.Equal(t, "Add again", view.ActionLabel)
+		assert.Equal(t, "3", view.Fields.Attempt)
+		var page bytes.Buffer
+		require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+		assert.Contains(t, page.String(), `name="attempt" value="3"`)
+		assert.Contains(t, page.String(), "Add again")
 	}
-}
-
-func TestOrderViewFormatsTransferAndPreservesFailures(t *testing.T) {
-	input := ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Transfer: &ordertypes.OrderTransfer{Status: "complete", Added: 3, Unmatched: 1, NextAttempt: 2}}
-	view, err := OrderView(input)
-	require.NoError(t, err)
-	assert.Equal(t, "2", view.Fields.Attempt)
-	assert.Contains(t, view.Notice, "Sent 3 products")
-	assert.Contains(t, view.Notice, "1 item could not be matched")
-	input.Query = url.Values{"kroger_status": {"lookup_failed"}}
-	view, err = OrderView(input)
-	require.NoError(t, err)
-	assert.Contains(t, view.Notice, "Could not check Kroger products")
 }

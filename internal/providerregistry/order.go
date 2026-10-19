@@ -1,13 +1,11 @@
 package providerregistry
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
 
-	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/auth"
@@ -74,14 +72,6 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
 		return kroger.OrderView(input)
-	}
-	return nil, nil
-}
-
-// LoadTransfer reads destination-owned state using the controller's shared cache.
-func (f Factory) LoadTransfer(ctx context.Context, store cache.Cache, location locationtypes.Location, userID, listKey string) (*ordertypes.OrderTransfer, error) {
-	if kroger.NewIdentityProvider().IsID(location.ID) && f.config.Kroger.CartTokenKey != "" {
-		return kroger.LoadTransfer(ctx, store, userID, listKey)
 	}
 	return nil, nil
 }

@@ -7,13 +7,11 @@ Application startup calls `providerregistry.Factory.RegisterOrders` with the
 shared application routes; it constructs each configured destination and registers
 its routes directly, preserving application middleware.
 
-The recipe controller calls `LoadTransfer` with its shared cache, request context,
-authenticated user ID, list key, and source location. The registry selects the
-configured provider; Kroger's transfer loader reads the state from that cache. The
-controller supplies that state in `OrderViewInput.Transfer` alongside the displayed
-items and location, then calls the stateless `OrderView(input)` transformation.
-View formatting has no context, cache, or authentication dependency. Recipes
-renders the resulting form action, hidden fields, labels, and notices generically.
+The recipe handler depends on an `OrderViewBuilder` interface. The provider
+registry factory implements its `OrderView` method and receives the displayed
+items and location. The registry matches `location.ID` against configured
+providers. The matching provider returns a form action, hidden fields, labels,
+and return notice as `orders/types.OrderView`; recipes renders those generically.
 Ordering destinations share the `OrderFields` form struct, which may be extended
 when an integration needs additional shopping-list information. Kroger owns its
 status interpretation and cart-link validation.
@@ -61,7 +59,8 @@ and setting these URL-encoded parameters:
 
 | Parameter | Meaning |
 | --- | --- |
-| `kroger_status` | Transfer outcome code listed below; supplies return notices alongside stored transfer state |
+| `kroger_status` | Transfer outcome code listed below; determines the fixed notice shown on the shopping list |
+| `kroger_attempt` | Next repeat number used by the Add again button; validated against stored transfers on submission |
 | `kroger_added` | Number of unique matched UPCs successfully sent, one package each; used in the notice for `complete` |
 | `kroger_unmatched` | Number of submitted shopping items without a product ID or available product; used in the notice for `complete` |
 | `kroger_cart` | Absolute HTTPS cart URL for the submitted chain; accepted for display only when it exactly matches a URL in the shared [chain table](../internal/providers/kroger/chains.go) |
@@ -74,11 +73,12 @@ For example:
 
 This displays “Sent 17 products to your cart. Review amounts before checkout.”
 and “13 items could not be matched and were not sent.” The review link opens
-`https://www.kroger.com/cart` in a new tab. Stored transfer state hides the primary add-to-cart
-button, including when reopening a list without return query parameters. Completed
-and uncertain transfers offer a small “Add again” button that sends the displayed
-list as a new attempt, including products already in the cart. Each attempt has
-independent duplicate protection; pending attempts cannot be repeated. Fred Meyer uses
+`https://www.kroger.com/cart` in a new tab. Completed, uncertain, and changed-list
+return statuses show a small “Add again”
+button that sends the displayed list again, including products already in the cart.
+Each repeat has independent duplicate protection. The button uses return query
+parameters; reopening a list without them keeps the existing add-to-cart behavior.
+Fred Meyer uses
 `https://www.fredmeyer.com/cart`; other mapped chains use their own domains.
 Unknown chains currently default to the Kroger cart URL.
 

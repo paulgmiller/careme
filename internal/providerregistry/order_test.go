@@ -112,35 +112,3 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 		})
 	}
 }
-
-func TestLoadTransferSelectsConfiguredProvider(t *testing.T) {
-	for _, scenario := range []struct {
-		name, key, location, record string
-		want, fail                  bool
-	}{
-		{"Kroger enabled", "configured", "70500874", `{"status":"complete","added":2}`, true, false},
-		{"Kroger disabled", "", "70500874", `{"status":"complete"}`, false, false},
-		{"other provider", "configured", "walmart_123", `{"status":"complete"}`, false, false},
-		{"no transfer", "configured", "70500874", "", false, false},
-		{"corrupt transfer", "configured", "70500874", "broken", false, true},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			store := cache.NewInMemoryCache()
-			if scenario.record != "" {
-				require.NoError(t, store.Put(t.Context(), "kroger_cart_transfers/chef/list", scenario.record, cache.Unconditional()))
-			}
-			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
-			transfer, err := factory.LoadTransfer(t.Context(), store, locationtypes.Location{ID: scenario.location}, "chef", "list")
-			if scenario.fail {
-				require.ErrorContains(t, err, "decode Kroger transfer")
-				return
-			}
-			require.NoError(t, err)
-			if scenario.want {
-				assert.Equal(t, &ordertypes.OrderTransfer{Status: "complete", Added: 2, NextAttempt: 1}, transfer)
-			} else {
-				assert.Nil(t, transfer)
-			}
-		})
-	}
-}
