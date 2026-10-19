@@ -2,7 +2,7 @@
 
 Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
-provider workflow interface. Kroger and Instacart are implemented destinations.
+provider workflow interface. Kroger, Instacart, and BigCommerce are implemented destinations.
 Application startup calls `providerregistry.Factory.RegisterOrders` with the
 shared application routes; it constructs each configured destination and registers
 its routes directly, preserving application middleware.
@@ -11,7 +11,8 @@ The recipe handler depends on an `OrderViewBuilder` interface. The provider
 registry factory implements its `OrderViews` method and receives the displayed
 items and location. The registry returns an ordered slice of `orders/types.OrderView`, each with a form
 action, hidden fields, labels, and a return notice. Configured Kroger stores receive
-the Kroger action first; every source store receives Instacart when configured.
+the Kroger action first, and configured MNFoodClub stores receive their BigCommerce
+action first; every source store also receives Instacart when configured.
 Recipes renders each destination generically.
 Ordering destinations share the `OrderFields` form struct, which may be extended
 when an integration needs additional shopping-list information. Kroger owns its
@@ -83,6 +84,53 @@ Users select a supported retailer, review matched products and quantities, and
 add items to their cart on Instacart. The source store is not automatically selected.
 No user OAuth tokens are needed. Configure `INSTACART_API_KEY` and optionally
 `INSTACART_BASE_URL`; see [Instacart's shopping-list API](https://docs.instacart.com/developer_platform_api/api/products/create_shopping_list_page).
+
+## BigCommerce carts
+
+`POST /bigcommerce/order` accepts the same form contract, requires authentication
+and same-origin protection, and currently serves `mnfoodclub_*` source stores.
+Enable it explicitly with `MNFOODCLUB_CART_ENABLE=true`; set
+`MNFOODCLUB_CART_ORIGIN` to the exact HTTPS origin returned by the store’s cart
+redirect API. It reuses the MNFoodClub store API path and access token. The token
+needs Products read and Carts modify (`store_cart`) scopes. No customer login or
+payment credentials are transmitted, and Careme does not place orders.
+
+The provider resolves each numeric source product ID against the configured store
+catalog, choosing the lowest-priced purchasable variant using the same stock and
+price rules as ingredient sourcing. Products with required modifiers cannot be
+ordered automatically. Deleted, hidden, unavailable, or out-of-stock products,
+pantry items, and static produce-share contents are counted as unmatched and
+reported in the return notice. Other lookup failures stop the transfer before
+creating a cart. Duplicate IDs in a merged list fail instead of inventing quantities.
+
+Known `buy` multiples are rounded up to positive integer package counts; unknown
+amounts use one package. Users must review product options and quantities on the
+storefront. Source names and prices never override catalog values. All matched
+products, including selected wines, are sent together to `POST /v3/carts` in a
+new guest cart, without modifying an existing shopper cart.
+
+Before creation, the handler reserves a per-user/store/list transfer record.
+Pending, uncertain, and completed records prevent repeated creation; a changed
+payload for the same list returns a changed-list notice. Failed confirmation
+writes leave the reservation in place. Cart creation is never automatically retried.
+A new finalized list uses a new transfer key.
+
+Completion returns to the Careme list with fixed `bigcommerce_status` notices,
+matched/unmatched counts, and a transfer reference. The review link points to
+authenticated `GET /bigcommerce/cart?transfer=<hash>`. That route loads the
+current user’s completed record and requests a fresh single-use redirect from
+`POST /v3/carts/<cart ID>/redirect_urls`. The URL must match the configured cart
+origin. Redirect tokens are never cached or returned in Careme’s status query.
+Expired, checked-out, or deleted carts report a review error; they are not
+silently recreated. Uncertain creation requires the user to check the store
+before creating another list.
+
+The client and handler are in `internal/providers/bigcommerce`; the provider
+registry supplies MNFoodClub’s source location prefix and store name. Additional
+BigCommerce stores require explicit catalog identity and credential wiring.
+
+References: [Create Cart](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/carts/carts-single/create-cart),
+[Create Cart Redirect URL](https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/carts/redirects/create-cart-redirect-url).
 
 ## Future destinations
 

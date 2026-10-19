@@ -11,8 +11,10 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpretry"
+	"careme/internal/providers/bigcommerce"
 	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/routing"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -39,6 +41,17 @@ func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) 
 			return err
 		}
 		handler, err := instacart.NewOrderHandler(instacart.OrderOptions{Cache: options.Cache, Client: client, Origin: f.config.ResolvedPublicOrigin(), Auth: options.Auth})
+		if err != nil {
+			return err
+		}
+		handler.Register(routes)
+	}
+	if f.config.MNFoodClub.CartEnable {
+		client, err := bigcommerce.NewClient(bigcommerce.ClientOptions{APIPath: f.config.MNFoodClub.APIPath, AccessToken: f.config.MNFoodClub.AccessToken, CartOrigin: f.config.MNFoodClub.CartOrigin})
+		if err != nil {
+			return err
+		}
+		handler, err := bigcommerce.NewOrderHandler(bigcommerce.OrderOptions{Cache: options.Cache, Client: client, Auth: options.Auth, LocationPrefix: mnfoodclub.LocationIDPrefix})
 		if err != nil {
 			return err
 		}
@@ -84,6 +97,13 @@ func (f Factory) OrderViews(input ordertypes.OrderViewInput) ([]*ordertypes.Orde
 	var views []*ordertypes.OrderView
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
 		view, err := kroger.OrderView(input)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	if f.config.MNFoodClub.CartEnable && mnfoodclub.NewIdentityProvider().IsID(input.Location.ID) {
+		view, err := bigcommerce.OrderView(input, "MNFoodClub")
 		if err != nil {
 			return nil, err
 		}

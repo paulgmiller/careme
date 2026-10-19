@@ -38,6 +38,7 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
+| `bigcommerce_cart_transfers/` | Transfer status, item fingerprint, cart ID, and matched/unmatched counts keyed by authenticated user and store/location/list hash | BigCommerce order handler | BigCommerce order and authenticated cart-review handlers |
 | `instacart_shopping_links/` | Shopping-list URL and expiry keyed by authenticated user ID and SHA-256 of the outbound payload plus API environment | Instacart order handler | Instacart order handler; reuse until 30-day expiry or changed content |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `kroger_cart_transfers/` | JSON transfer status, submitted product names, and skipped ingredients keyed by Careme user ID and finalized list hash | Kroger order handler | Duplicate prevention and return status |
@@ -225,3 +226,18 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - Only successfully created and validated HTTPS Instacart links are saved. This is
   link reuse, not cart-write duplicate prevention. Concurrent initial requests may
   create equivalent shopping pages without changing a cart.
+
+### BigCommerce cart transfers
+
+- `bigcommerce_cart_transfers/<user ID>/<transfer hash>` uses SHA-256 of the store
+  API path, source location ID, and finalized list key, separated by newlines.
+  The record stores `status`, `fingerprint`, `cart_id`, `added`, and `unmatched`.
+  The fingerprint is SHA-256 of the complete submitted item JSON after decoding.
+- A conditional pending reservation precedes cart creation. Complete, pending,
+  and uncertain records block repeat cart creation. Changed items under the same
+  transfer key return a changed-list notice. Confirmation failures leave the
+  reservation intact; no background retries or automatic recreation occur.
+- Cart IDs remain server-side. Authenticated review requests load only the
+  current user’s completed transfer. Single-use BigCommerce redirect URLs and
+  their tokens are generated afresh and never persisted. Expired or checked-out
+  carts return an error rather than creating a replacement cart.

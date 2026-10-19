@@ -34,6 +34,8 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `MNFOODCLUB_CART_ENABLE` - set to `true` to enable BigCommerce cart handoff for MNFoodClub lists. Reuses `MNFOODCLUB_API_PATH` and `MNFOODCLUB_ACCESS_TOKEN`; the token additionally needs Carts modify (`store_cart`) access.
+- `MNFOODCLUB_CART_ORIGIN` - required when cart handoff is enabled: the exact HTTPS origin used by the store’s BigCommerce cart redirect URLs (for example, `https://your-store.mybigcommerce.com`). Do not include a path.
 - `INSTACART_API_KEY` - Instacart Developer Platform key enabling shopping-list handoff from any source store. Users choose a retailer and review items on Instacart.
 - `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com`. Use `https://connect.dev.instacart.tools` with a development key.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
@@ -104,10 +106,12 @@ Register its routes independently of the recipe handler in `cmd/careme/web.go`.
 Add its location-ID match and form builder to `providerregistry.Factory.OrderViews`;
 the recipe page renders the returned action, fields, and copy generically.
 
-Kroger and Instacart register their own ordering routes without implementing
+Kroger, Instacart, and BigCommerce register their own ordering routes without implementing
 a shared Go provider interface. Instacart accepts lists from any source store;
 configured Kroger stores show both actions when Instacart is enabled. Instacart
-creates a shopping-list link and reuses it until its content changes or it expires. Users review and complete checkout with the
+creates a shopping-list link and reuses it until its content changes or it expires.
+BigCommerce supports MNFoodClub catalog products, creates a separate guest cart,
+and generates a fresh single-use redirect each time the user reviews that cart. Users review and complete checkout with the
 provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
 and OAuth continuation behavior.
 

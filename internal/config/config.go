@@ -83,6 +83,8 @@ type KrogerConfig struct {
 
 // MNFoodClubConfig supplies the store-level credentials used for MNFoodClub.
 type MNFoodClubConfig struct {
+	CartEnable  bool   `json:"cart_enable"`
+	CartOrigin  string `json:"cart_origin"`
 	APIPath     string `json:"api_path"`
 	AccessToken string `json:"-"`
 }
@@ -217,6 +219,8 @@ func Load() (*Config, error) {
 			CartTokenKey: os.Getenv("KROGER_CART_TOKEN_KEY"),
 		},
 		MNFoodClub: MNFoodClubConfig{
+			CartEnable:  envEnabled("MNFOODCLUB_CART_ENABLE"),
+			CartOrigin:  os.Getenv("MNFOODCLUB_CART_ORIGIN"),
 			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
 			AccessToken: os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
 		},

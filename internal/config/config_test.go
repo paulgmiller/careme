@@ -275,3 +275,12 @@ func TestLoadInstacart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, InstacartConfig{APIKey: "test-key", BaseURL: "https://connect.dev.instacart.tools"}, cfg.Instacart)
 }
+
+func TestLoadMNFoodClubOrdering(t *testing.T) {
+	t.Setenv("MNFOODCLUB_CART_ENABLE", "true")
+	t.Setenv("MNFOODCLUB_CART_ORIGIN", "https://groceries.example.test")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.MNFoodClub.CartEnable)
+	assert.Equal(t, "https://groceries.example.test", cfg.MNFoodClub.CartOrigin)
+}

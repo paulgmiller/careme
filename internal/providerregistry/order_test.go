@@ -2,6 +2,7 @@ package providerregistry
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -164,6 +165,74 @@ func TestOrderViewsIncludeBothDestinations(t *testing.T) {
 			if len(views) == 2 {
 				assert.Contains(t, views[0].Notice, "Kroger connection was not approved")
 				assert.Contains(t, views[1].Notice, "Could not prepare your Instacart list")
+			}
+		})
+	}
+}
+
+func TestBigCommerceOrderRegistration(t *testing.T) {
+	for _, tt := range []struct {
+		name             string
+		cfg              config.MNFoodClubConfig
+		enabled, invalid bool
+	}{
+		{name: "disabled"},
+		{name: "enabled", cfg: config.MNFoodClubConfig{CartEnable: true, APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token", CartOrigin: "https://groceries.example.test"}, enabled: true},
+		{name: "missing credentials", cfg: config.MNFoodClubConfig{CartEnable: true}, invalid: true},
+		{name: "missing cart origin", cfg: config.MNFoodClubConfig{CartEnable: true, APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			routes := http.NewServeMux()
+			appRoutes := routing.Wrap(routes, func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("X-Order-Middleware", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			factory := NewFactory(&config.Config{MNFoodClub: tt.cfg})
+			err := factory.RegisterOrders(appRoutes, orderingTestOptions())
+			if tt.invalid {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			for _, path := range []string{"/bigcommerce/order", "/bigcommerce/cart"} {
+				method := "GET"
+				if path == "/bigcommerce/order" {
+					method = "POST"
+				}
+				w := httptest.NewRecorder()
+				routes.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+				if tt.enabled {
+					assert.Equal(t, 400, w.Code)
+					assert.Equal(t, "applied", w.Header().Get("X-Order-Middleware"))
+				} else {
+					assert.Equal(t, 404, w.Code)
+				}
+			}
+		})
+	}
+}
+
+func TestBigCommerceOrderViewsOnlyMatchConfiguredCatalog(t *testing.T) {
+	for _, tt := range []struct {
+		location string
+		enabled  bool
+		actions  []string
+	}{
+		{location: "mnfoodclub_delivery", enabled: true, actions: []string{"/bigcommerce/order", "/instacart/order"}},
+		{location: "mnfoodclub_pickup", enabled: true, actions: []string{"/bigcommerce/order", "/instacart/order"}},
+		{location: "70500874", enabled: true, actions: []string{"/instacart/order"}},
+		{location: "unknown", enabled: true, actions: []string{"/instacart/order"}},
+		{location: "mnfoodclub_delivery", enabled: false, actions: []string{"/instacart/order"}},
+	} {
+		t.Run(tt.location+fmt.Sprint(tt.enabled), func(t *testing.T) {
+			factory := NewFactory(&config.Config{Instacart: config.InstacartConfig{APIKey: "configured"}, MNFoodClub: config.MNFoodClubConfig{CartEnable: tt.enabled}})
+			views, err := factory.OrderViews(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: tt.location}})
+			require.NoError(t, err)
+			require.Len(t, views, len(tt.actions))
+			for i, action := range tt.actions {
+				assert.Equal(t, action, views[i].ActionURL)
 			}
 		})
 	}
