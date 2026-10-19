@@ -226,8 +226,9 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) (
 }
 
 func transferKey(userID, listKey string, attempt int) string {
-	if attempt == 0 {
-		return "kroger_cart_transfers/" + userID + "/" + listKey
+	key := "kroger_cart_transfers/" + userID + "/" + listKey
+	if attempt > 0 {
+		key += "-" + strconv.Itoa(attempt)
 	}
-	return "kroger_cart_reorders/" + userID + "/" + listKey + "/" + strconv.Itoa(attempt)
+	return key
 }

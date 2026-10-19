@@ -387,6 +387,7 @@ func TestKrogerAddAgainHasIndependentDuplicateProtection(t *testing.T) {
 		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
+	a.cache = cache.NewFileCache(t.TempDir())
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	mux := orderMux(a)
 	assert.Equal(t, "complete", returnQuery(t, postOrder(mux, orderForm())).Get("kroger_status"))
