@@ -199,10 +199,6 @@ Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.
 The provider fetches every page (up to 250 products per request), resolves brands
 and category names, and uses the lowest-priced purchasable variant for each
 product. Zero stock excludes items only when inventory tracking is enabled.
-
-For a test-site cart handoff walkthrough and standalone mock API, see
-[MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
-available at `/mnfoodclub-demo/` only when `ENABLE_MOCKS` is enabled.
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.
 Missing credentials fail client construction when the staples backends are

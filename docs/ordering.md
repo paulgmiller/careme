@@ -103,16 +103,6 @@ protection relies on the server-side transfer record, not the URL.
 
 ## Future destinations
 
-The [MN Food Club cart handoff proposal](mnfoodclub-ordering.md) includes an
-[OpenAPI contract](mnfoodclub-ordering.openapi.yaml) for partner review. It covers
-product quantities, identity hints, partial acceptance, and login handoff links;
-no MN Food Club ordering client or route is implemented yet.
-
-A separate [mock API and walkthrough](mnfoodclub-mock.md) is available at
-`/mnfoodclub-demo/` when mocks are enabled. It demonstrates the proposal using
-fictional products and simulated storefront login; it is not a recipe ordering
-destination or a production partner integration.
-
 An Instacart or BigCommerce integration can register its own `/instacart/order`
 or `/bigcommerce/order` route and own its complete workflow. No common provider
 interface or future destination schema is introduced here.
