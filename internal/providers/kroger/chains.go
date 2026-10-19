@@ -3,6 +3,8 @@ package kroger
 import "strings"
 
 // Grocery banners use different storefront domains from their OAuth banner names.
+// Keys come from the grocery banner values documented in openapi-auth.json;
+// domains were manually paired with those banners, not fetched from the chains API.
 // Keep this table shared by authorization, cart redirects, and review-link validation.
 var chainDomains = map[string]string{
 	"bakers":       "bakersplus.com",
@@ -27,6 +29,12 @@ var chainDomains = map[string]string{
 	"smiths":       "smithsfoodanddrug.com",
 }
 
+// authorizationBanner normalizes every chain name to an OAuth banner value.
+// Most names match openapi-auth.json after lowercasing and removing punctuation
+// and spaces (for example, "QFC" -> "qfc" and "Pick 'n Save" -> "picknsave").
+// The switch handles names whose spelling also differs: FRED was observed in
+// location data; the other aliases accept shortened or expanded store names.
+// This alias list is manually maintained, not an exhaustive list from the API.
 func authorizationBanner(chain string) string {
 	banner := strings.NewReplacer(" ", "", "'", "", "’", "", "-", "").Replace(strings.ToLower(strings.TrimSpace(chain)))
 	switch banner {
