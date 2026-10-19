@@ -1,7 +1,6 @@
 package gradereview
 
 import (
-	"context"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -10,24 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/locations"
 )
 
 type Server struct {
-	store   *Store
-	catalog Catalog
-	now     func() time.Time
+	store *Store
+	now   func() time.Time
 }
 
-type Catalog interface {
-	LoadCatalog(context.Context, string) (*locations.Location, []ai.InputIngredient, error)
-	RemoveReviewed(string, string)
-}
-
-func NewHandler(c cache.Cache, catalog Catalog) http.Handler {
-	server := &Server{store: NewStore(c), catalog: catalog, now: time.Now}
+func NewHandler(store *Store) http.Handler {
+	server := &Server{store: store, now: time.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /grader", server.handleIndex)
 	mux.HandleFunc("GET /grader/", server.handleIndex)
@@ -41,23 +32,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A location ID is required.", http.StatusBadRequest)
 		return
 	}
-	location, ingredients, err := s.catalog.LoadCatalog(r.Context(), locationID)
+	candidate, err := s.store.Next(r.Context(), locationID)
 	if err != nil {
 		s.writeLoadError(w, r, err)
 		return
 	}
-	candidate, err := s.store.Next(r.Context(), ingredients)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to load ingredient grade for review", "error", err)
-		http.Error(w, "Could not load ingredient grades.", http.StatusInternalServerError)
-		return
-	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pageTemplate.Execute(w, struct {
-		*Candidate
-		Location *locations.Location
-	}{candidate, location}); err != nil {
+	if err := pageTemplate.Execute(w, candidate); err != nil {
 		slog.ErrorContext(r.Context(), "failed to render ingredient grade review", "error", err)
 	}
 }
@@ -81,13 +63,9 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A location ID is required.", http.StatusBadRequest)
 		return
 	}
-	_, ingredients, err := s.catalog.LoadCatalog(r.Context(), locationID)
-	if err == nil {
-		err = s.store.Save(r.Context(), locationID, gradeKey, ingredients, verdict, s.now())
-	}
+	err := s.store.Save(r.Context(), locationID, gradeKey, verdict, s.now())
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):
-		s.catalog.RemoveReviewed(locationID, gradeKey)
 		target := "/grader?" + url.Values{"location": {locationID}}.Encode()
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	case errors.Is(err, cache.ErrNotFound):

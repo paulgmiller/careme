@@ -1,7 +1,6 @@
 package gradereview
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -22,33 +21,19 @@ import (
 
 var testReviewTime = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 
-type fakeCatalog struct {
-	ingredients map[string][]ai.InputIngredient
-	err         error
-}
-
-func (f fakeCatalog) LoadCatalog(_ context.Context, id string) (*locations.Location, []ai.InputIngredient, error) {
-	if f.err != nil {
-		return nil, nil, f.err
+func newTestStore(c cache.Cache, items map[string][]ai.InputIngredient) *Store {
+	store := NewStore(c, fakeLocationLookup{err: cache.ErrNotFound}, &failingIngredientCache{err: assert.AnError})
+	for id, ingredients := range items {
+		store.entries[id] = &catalogEntry{location: &locations.Location{ID: id, Name: "Store " + id}, ingredients: slices.Clone(ingredients)}
 	}
-	ingredients, ok := f.ingredients[id]
-	if !ok {
-		return nil, nil, cache.ErrNotFound
-	}
-	return &locations.Location{ID: id, Name: "Store " + id}, ingredients, nil
-}
-
-func (f fakeCatalog) RemoveReviewed(locationID, gradeKey string) {
-	f.ingredients[locationID] = slices.DeleteFunc(f.ingredients[locationID], func(ingredient ai.InputIngredient) bool {
-		return ingredient.Grade != nil && catalogGradeKey(ingredient) == gradeKey
-	})
+	return store
 }
 
 func TestStoreReviewFlow(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	ingredient := ai.InputIngredient{ProductID: "one", Description: "Asparagus", Grade: &ai.IngredientGrade{Score: 9, Reason: "Fresh."}}
 	other := ai.InputIngredient{ProductID: "two", Description: "Prepared dip", Grade: &ai.IngredientGrade{Score: 2, Reason: "Prepared."}}
-	h := NewHandler(c, fakeCatalog{ingredients: map[string][]ai.InputIngredient{"a": {ingredient}, "b": {other}}})
+	h := NewHandler(newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}, "b": {other}}))
 	response := httptest.NewRecorder()
 	h.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
 	require.Equal(t, http.StatusOK, response.Code)
@@ -97,7 +82,7 @@ func TestStoreReviewFlow(t *testing.T) {
 }
 
 func TestStoreReviewLoadingFailure(t *testing.T) {
-	h := NewHandler(cache.NewInMemoryCache(), fakeCatalog{err: errors.New("catalog unavailable")})
+	h := NewHandler(NewStore(cache.NewInMemoryCache(), fakeLocationLookup{err: errors.New("catalog unavailable")}, &failingIngredientCache{err: assert.AnError}))
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		t.Run(method, func(t *testing.T) {
 			r := httptest.NewRequest(method, "/grader?location=a", nil)
@@ -114,10 +99,10 @@ func TestStoreReviewLoadingFailure(t *testing.T) {
 
 func TestSharedIngredientReviewSkippedAcrossStores(t *testing.T) {
 	c := cache.NewInMemoryCache()
-	s := NewStore(c)
 	ingredient := ai.InputIngredient{ProductID: "shared", Grade: &ai.IngredientGrade{Score: 8, Reason: "Flexible"}}
-	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
-	candidate, err := s.Next(t.Context(), []ai.InputIngredient{ingredient})
+	s := newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}, "b": {ingredient}})
+	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
+	candidate, err := s.Next(t.Context(), "b")
 	require.NoError(t, err)
 	assert.Empty(t, candidate.GradeKey)
 }

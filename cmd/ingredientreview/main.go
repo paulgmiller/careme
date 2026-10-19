@@ -49,10 +49,10 @@ func run(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create location storage: %w", err)
 	}
-	catalog := gradereview.NewCachedCatalog(locationStore, recipes.IO(cacheStore))
+	store := gradereview.NewStore(cacheStore, locationStore, recipes.IO(cacheStore))
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           gradereview.NewHandler(cacheStore, catalog),
+		Handler:           gradereview.NewHandler(store),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("Ingredient grade review app listening at http://%s", *addr)
