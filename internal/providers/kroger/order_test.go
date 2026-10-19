@@ -114,37 +114,50 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 }
 
 func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
-	var added []CartItem
-	a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
-		var payload struct {
-			Items []CartItem `json:"items"`
-		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		added = payload.Items
-		return cartResponse(http.StatusNoContent, ""), nil
-	})
-	mux := orderMux(a)
-	form := orderForm()
-	response := postOrder(mux, form)
-	require.Equal(t, http.StatusSeeOther, response.Code)
-	destination, err := url.Parse(response.Header().Get("Location"))
-	require.NoError(t, err)
-	assert.Equal(t, "qfc", destination.Query().Get("banner"))
-	assert.Equal(t, "https://careme.test/kroger/callback", destination.Query().Get("redirect_uri"))
-	cookies := response.Result().Cookies()
-	require.Len(t, cookies, 1)
-	assert.True(t, cookies[0].Secure)
-	assert.True(t, cookies[0].HttpOnly)
-	assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
-	// No recipes, location lookup, or shopping merger exists in this fixture.
-	form.Set("items", `[{"id":"new","name":"Changed after authorization started"}]`)
-	callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?code=code&state="+url.QueryEscape(destination.Query().Get("state")), nil)
-	callback.AddCookie(cookies[0])
-	result := httptest.NewRecorder()
-	mux.ServeHTTP(result, callback)
-	assert.Equal(t, "complete", returnQuery(t, result).Get("kroger_status"))
-	assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
-	assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
+	for _, scenario := range []struct{ chain, banner, cart string }{
+		{"QFC", "qfc", "https://www.qfc.com/cart"},
+		{"FRED", "fredmeyer", "https://www.fredmeyer.com/cart"},
+		{"FREDMEYER", "fredmeyer", "https://www.fredmeyer.com/cart"},
+		{"Fred Meyer", "fredmeyer", "https://www.fredmeyer.com/cart"},
+		{"FRYS", "frys", "https://www.frysfood.com/cart"},
+	} {
+		t.Run(scenario.chain, func(t *testing.T) {
+			var added []CartItem
+			a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
+				var payload struct {
+					Items []CartItem `json:"items"`
+				}
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+				added = payload.Items
+				return cartResponse(http.StatusNoContent, ""), nil
+			})
+			mux := orderMux(a)
+			form := orderForm()
+			form.Set("location", `{"id":"70500874","chain":"`+scenario.chain+`"}`)
+			response := postOrder(mux, form)
+			require.Equal(t, http.StatusSeeOther, response.Code)
+			destination, err := url.Parse(response.Header().Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, scenario.banner, destination.Query().Get("banner"))
+			assert.Equal(t, "https://careme.test/kroger/callback", destination.Query().Get("redirect_uri"))
+			cookies := response.Result().Cookies()
+			require.Len(t, cookies, 1)
+			assert.True(t, cookies[0].Secure)
+			assert.True(t, cookies[0].HttpOnly)
+			assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+			// No recipes, location lookup, or shopping merger exists in this fixture.
+			form.Set("items", `[{"id":"new","name":"Changed after authorization started"}]`)
+			callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?code=code&state="+url.QueryEscape(destination.Query().Get("state")), nil)
+			callback.AddCookie(cookies[0])
+			result := httptest.NewRecorder()
+			mux.ServeHTTP(result, callback)
+			query := returnQuery(t, result)
+			assert.Equal(t, "complete", query.Get("kroger_status"))
+			assert.Equal(t, scenario.cart, query.Get("kroger_cart"))
+			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
+			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
+		})
+	}
 }
 
 func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {

@@ -35,6 +35,9 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	status := input.Query.Get("kroger_status")
 	order.Notice = krogerOrderNotice(status)
 	if status == "complete" {
+		order.ActionURL = ""
+		order.ActionLabel = ""
+		order.Description = ""
 		added, addedErr := strconv.Atoi(input.Query.Get("kroger_added"))
 		unmatched, unmatchedErr := strconv.Atoi(input.Query.Get("kroger_unmatched"))
 		if addedErr == nil && unmatchedErr == nil && added >= 0 && unmatched >= 0 {
@@ -49,8 +52,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		}
 	}
 	if order.Notice != "" {
-		switch destination := input.Query.Get("kroger_cart"); destination {
-		case "https://www.kroger.com/cart", "https://www.qfc.com/cart":
+		if destination := input.Query.Get("kroger_cart"); validCartURL(destination) {
 			order.ReviewURL = destination
 		}
 	}

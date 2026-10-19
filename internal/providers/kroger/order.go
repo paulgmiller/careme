@@ -96,13 +96,6 @@ func orderFingerprint(request orderRequest) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func cartURL(chain string) string {
-	if strings.EqualFold(chain, "qfc") {
-		return "https://www.qfc.com/cart"
-	}
-	return "https://www.kroger.com/cart"
-}
-
 func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, request orderRequest, result orderResult, code string) {
 	destination, _ := url.Parse(request.ReturnURL)
 	query := destination.Query()

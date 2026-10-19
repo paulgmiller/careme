@@ -391,6 +391,7 @@
 {{end}}
 
 {{define "shopping_order_form"}}
+  {{if .ActionURL}}
   <form method="POST" action="{{.ActionURL}}">
     <input type="hidden" name="items" value="{{.Fields.Items}}">
     <input type="hidden" name="location" value="{{.Fields.Location}}">
@@ -398,4 +399,5 @@
     <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">
     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
   </form>
+  {{end}}
 {{end}}
