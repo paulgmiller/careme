@@ -114,7 +114,7 @@ func (a *OrderHandler) loadToken(ctx context.Context, userID string) (CartToken,
 }
 
 func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, request orderRequest) {
-	banner := strings.ToLower(request.Chain)
+	banner := authorizationBanner(request.Chain)
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)

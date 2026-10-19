@@ -31,6 +31,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 	})
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
 	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 	for _, want := range []string{`action="/destination/order"`, `name="items"`, `name="location"`, `name="list_key"`, `name="return_url"`, `value="Food &amp; &#34;Wine&#34;"`, "Send groceries", "Destination instructions", "Ready to review", "Review groceries"} {
 		assert.Contains(t, page.String(), want)
@@ -51,5 +52,37 @@ func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 			require.NoError(t, err)
 		}
 		assert.Nil(t, view.Order)
+	}
+}
+
+func TestShoppingListCartReplacesBuildAction(t *testing.T) {
+	for _, scenario := range []struct {
+		name                string
+		finalized, ordering bool
+	}{
+		{name: "not built"},
+		{name: "built with ordering", finalized: true, ordering: true},
+		{name: "built without ordering", finalized: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			view := shoppingListPageView{Hash: "list", HasSavedRecipes: true, Finalized: scenario.finalized}
+			if scenario.ordering {
+				view.Order = &ordertypes.OrderView{ActionURL: "/destination/order", ActionLabel: "Add to cart", Description: "Review amounts before checkout."}
+			}
+			var controls bytes.Buffer
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls", view))
+			if scenario.ordering {
+				assert.Contains(t, controls.String(), `action="/destination/order"`)
+				assert.Contains(t, controls.String(), "Add to cart")
+				assert.Contains(t, controls.String(), "Review amounts before checkout.")
+				assert.NotContains(t, controls.String(), "Build Shopping List")
+				var purchases bytes.Buffer
+				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&purchases, "shopping_purchase_section", view))
+				assert.NotContains(t, purchases.String(), `action="/destination/order"`, "cart action belongs above the shopping list")
+			} else {
+				assert.Contains(t, controls.String(), "Build Shopping List")
+			}
+			assert.Contains(t, controls.String(), `aria-label="Share shopping list"`)
+		})
 	}
 }
