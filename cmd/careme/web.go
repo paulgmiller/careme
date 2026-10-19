@@ -22,6 +22,7 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/providerregistry"
+	"careme/internal/providers/mnfoodclub/mockorder"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/producescore"
@@ -37,6 +38,7 @@ import (
 
 	cachepkg "careme/internal/cache"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -68,6 +70,10 @@ func runServer(cfg *config.Config, addr string) error {
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
 	appredirect.Register(infraRoutes)
+	if cfg.Mocks.Enable {
+		demo := mockorder.New(cfg.ResolvedPublicOrigin()+"/mnfoodclub-demo", uuid.NewString())
+		appRoutes.Handle("/mnfoodclub-demo/", http.StripPrefix("/mnfoodclub-demo", demo.Handler()))
+	}
 
 	userStorage := users.NewStorage(cache)
 	ro := &readyOnce{}
