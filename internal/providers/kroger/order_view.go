@@ -56,6 +56,16 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 			order.ReviewURL = destination
 		}
 	}
+	if status == "complete" || status == "uncertain" || status == "changed" {
+		order.ActionLabel = "Add again"
+		order.ActionURL = "/kroger/order"
+		order.Secondary = true
+		order.Fields.Attempt = input.Query.Get("kroger_attempt")
+		if order.Fields.Attempt == "" {
+			order.Fields.Attempt = "1"
+		}
+		order.Description = "Adds this list again, including products already in your cart."
+	}
 	return order, nil
 }
 

@@ -45,7 +45,9 @@ func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 			if input.Query.Get("kroger_status") == "complete" {
-				assert.NotContains(t, page.String(), `action="/kroger/order"`)
+				assert.Contains(t, page.String(), `action="/kroger/order"`)
+				assert.Contains(t, page.String(), "Add again")
+				assert.Contains(t, page.String(), `name="attempt" value="1"`)
 				assert.NotContains(t, page.String(), "Add to QFC cart")
 				assert.NotContains(t, page.String(), "Build Shopping List")
 			} else {
@@ -105,5 +107,21 @@ func TestKrogerOrderViewAcceptsEveryChainCart(t *testing.T) {
 			assert.Equal(t, destination, view.ReviewURL)
 			assert.Equal(t, destination, cartURL(banner))
 		})
+	}
+}
+
+func TestKrogerOrderAgainButtonUsesReturnAttempt(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	for _, status := range []string{"complete", "uncertain", "changed"} {
+		input := ordertypes.OrderViewInput{Query: httptest.NewRequest("GET", "/recipes?kroger_status="+status+"&kroger_attempt=3", nil).URL.Query()}
+		view, err := OrderView(input)
+		require.NoError(t, err)
+		assert.True(t, view.Secondary)
+		assert.Equal(t, "Add again", view.ActionLabel)
+		assert.Equal(t, "3", view.Fields.Attempt)
+		var page bytes.Buffer
+		require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+		assert.Contains(t, page.String(), `name="attempt" value="3"`)
+		assert.Contains(t, page.String(), "Add again")
 	}
 }

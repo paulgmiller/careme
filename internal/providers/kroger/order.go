@@ -21,6 +21,7 @@ import (
 // orderRequest is the posted shopping list retained while connecting Kroger.
 // UserID comes exclusively from authentication, never from the submitted form.
 type orderRequest struct {
+	Attempt   int
 	UserID    string
 	ListKey   string
 	StoreID   string
@@ -57,6 +58,14 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || json.Unmarshal([]byte(r.PostForm.Get("items")), &request.Items) != nil || len(request.Items) == 0 {
 		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
 		return
+	}
+	if raw := r.PostForm.Get("attempt"); raw != "" {
+		attempt, err := strconv.Atoi(raw)
+		if err != nil || attempt < 1 {
+			http.Error(w, "Invalid Kroger attempt", http.StatusBadRequest)
+			return
+		}
+		request.Attempt = attempt
 	}
 	a.order(w, r, request, true)
 }
@@ -103,6 +112,7 @@ func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, requ
 		code = result.Status
 	}
 	query.Set("kroger_status", code)
+	query.Set("kroger_attempt", strconv.Itoa(request.Attempt+1))
 	query.Set("kroger_added", strconv.Itoa(result.Added))
 	query.Set("kroger_unmatched", strconv.Itoa(len(result.Gaps)))
 	query.Set("kroger_cart", cartURL(request.Chain))
@@ -112,7 +122,18 @@ func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, requ
 
 func (a *OrderHandler) order(w http.ResponseWriter, r *http.Request, request orderRequest, allowAuthorization bool) {
 	ctx := r.Context()
-	key := "kroger_cart_transfers/" + request.UserID + "/" + request.ListKey
+	key := transferKey(request.UserID, request.ListKey, request.Attempt)
+	if request.Attempt > 0 {
+		var prior orderResult
+		if err := a.loadJSON(ctx, transferKey(request.UserID, request.ListKey, request.Attempt-1), &prior); err != nil {
+			a.returnToList(w, r, request, orderResult{}, "start_failed")
+			return
+		}
+		if prior.Status != "complete" && prior.Status != "uncertain" {
+			a.returnToList(w, r, request, prior, "")
+			return
+		}
+	}
 	fingerprint := orderFingerprint(request)
 	var previous orderResult
 	if err := a.loadJSON(ctx, key, &previous); err == nil {
@@ -202,4 +223,12 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) (
 		}
 	}
 	return items, gaps, nil
+}
+
+func transferKey(userID, listKey string, attempt int) string {
+	key := "kroger_cart_transfers/" + userID + "/" + listKey
+	if attempt > 0 {
+		key += "-" + strconv.Itoa(attempt)
+	}
+	return key
 }

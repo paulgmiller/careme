@@ -18,6 +18,7 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
+	Secondary   bool
 	ActionURL   string
 	ActionLabel string
 	Fields      OrderFields
@@ -32,6 +33,7 @@ type OrderView struct {
 // store hint; each destination decides how to select its destination store.
 // Extend this struct when an integration needs more shopping-list information.
 type OrderFields struct {
+	Attempt   string
 	Items     string
 	Location  string
 	ListKey   string
