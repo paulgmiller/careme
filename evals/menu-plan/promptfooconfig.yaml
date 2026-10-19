@@ -36,8 +36,9 @@ defaultTest:
         if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
         const requested = new Set((context.vars.requested_ingredients ?? []).map((name) => name.toLowerCase()));
+        const anchorExceptions = new Set((context.vars.catalog_exceptions?.anchor_ingredients ?? []).map((name) => name.toLowerCase()));
         return plan.plans.every((recipe) =>
-          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()))
+          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()) || anchorExceptions.has(recipe.anchor_ingredient.toLowerCase()))
           && (available.has(recipe.side_vegetable.toLowerCase()) || requested.has(recipe.side_vegetable.toLowerCase())));
       metric: available-menu-ingredients
     - type: javascript
@@ -427,3 +428,105 @@ tests:
           const plans = JSON.parse(output).plans;
           return plans.length === 3 && plans.every((recipe) => recipe.category === 'different');
         metric: all-meals-different
+
+  # Keep the default request neutral: the protein rule must come from the planner.
+  # Enough meat/seafood and meat-free choices exist for either dietary direction.
+  - description: Protein anchors — default single dinner
+    vars: &protein-anchor-vars
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Plan dinner.
+      meat_free: false
+      protein_policy:
+        animal_anchors:
+          - Boneless Skinless Chicken Thighs
+          - Atlantic Salmon Fillet
+          - Ground Beef
+          - Raw Shrimp
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs}
+        - {id: salmon, description: Atlantic Salmon Fillet}
+        - {id: beef, description: Ground Beef}
+        - {id: shrimp, description: Raw Shrimp}
+        - {id: tofu, description: Extra Firm Tofu}
+        - {id: lentils, description: Lentils}
+        - {id: chickpeas, description: Chickpeas}
+        - {id: beans, description: Black Beans}
+        - {id: halloumi, description: Halloumi}
+        - {id: broccoli, description: Broccoli Crowns}
+        - {id: zucchini, description: Zucchini}
+        - {id: carrots, description: Carrots}
+        - {id: spinach, description: Baby Spinach}
+        - {id: rice, description: Brown Rice}
+    assert: &protein-anchor-assertions
+      - type: javascript
+        value: file://protein-anchors.cjs
+        metric: animal-seafood-anchor-policy
+
+  - description: Protein anchors — default majority of three dinners
+    vars:
+      <<: *protein-anchor-vars
+      count: 3
+      instructions: Plan three varied dinners.
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — healthy four dinners still need a strict majority
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four healthy dinners with plenty of vegetables.
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — explicit vegetarian overrides the default
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four varied dinners. Make it vegetarian.
+      meat_free: true
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — explicit vegan overrides the default
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four varied vegan dinners.
+      meat_free: true
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat or seafood in TSV allows common cuts
+    vars: &no-meat-vars
+      <<: *protein-anchor-vars
+      count: 3
+      instructions: Plan three varied dinners.
+      protein_policy:
+        animal_anchors: &common-protein-anchors
+          - chicken thighs
+          - chicken breasts
+          - ground beef
+          - pork chops
+          - salmon fillets
+          - shrimp
+      catalog_exceptions:
+        anchor_ingredients: *common-protein-anchors
+      ingredients:
+        - {id: tofu, description: Extra Firm Tofu}
+        - {id: lentils, description: Lentils}
+        - {id: chickpeas, description: Chickpeas}
+        - {id: broccoli, description: Broccoli Crowns}
+        - {id: zucchini, description: Zucchini}
+        - {id: carrots, description: Carrots}
+        - {id: rice, description: Brown Rice}
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat in TSV still honors vegetarian
+    vars:
+      <<: *no-meat-vars
+      instructions: Plan three varied vegetarian dinners.
+      meat_free: true
+      catalog_exceptions:
+        anchor_ingredients: []
+    assert: *protein-anchor-assertions
