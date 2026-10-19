@@ -32,7 +32,7 @@ type Review struct {
 	Ingredient ai.InputIngredient `json:"ingredient"`
 	Verdict    Verdict            `json:"verdict"`
 	ReviewedAt time.Time          `json:"reviewed_at"`
-	LocationID string             `json:"location_id,omitempty"`
+	LocationID string             `json:"location_id"`
 }
 
 type Candidate struct {
@@ -69,8 +69,8 @@ func (v Verdict) Valid() bool {
 	}
 }
 
-// NextFromCatalog selects an unreviewed ingredient from the chosen store only.
-func (s *Store) NextFromCatalog(ctx context.Context, ingredients []ai.InputIngredient) (*Candidate, error) {
+// Next selects an unreviewed ingredient from the chosen store only.
+func (s *Store) Next(ctx context.Context, ingredients []ai.InputIngredient) (*Candidate, error) {
 	for _, ingredient := range ingredients {
 		if ingredient.Grade == nil {
 			continue
@@ -88,8 +88,8 @@ func (s *Store) NextFromCatalog(ctx context.Context, ingredients []ai.InputIngre
 	return &Candidate{}, nil
 }
 
-// SaveFromCatalog validates membership and persists the server-side snapshot.
-func (s *Store) SaveFromCatalog(ctx context.Context, locationID, gradeKey string, ingredients []ai.InputIngredient, verdict Verdict, reviewedAt time.Time) error {
+// Save validates membership and persists the server-side snapshot.
+func (s *Store) Save(ctx context.Context, locationID, gradeKey string, ingredients []ai.InputIngredient, verdict Verdict, reviewedAt time.Time) error {
 	if !verdict.Valid() {
 		return ErrInvalidVerdict
 	}

@@ -11,19 +11,15 @@ import (
 
 const cachePrefix = "ingredient_grades/"
 
-func CachePrefix() string {
-	return cachePrefix
-}
-
 func cacheKey(ingredientHash string) string {
 	return cachePrefix + ingredientHash
 }
 
 type store struct {
-	cache cache.ListCache
+	cache cache.Cache
 }
 
-func NewStore(c cache.ListCache) store {
+func NewStore(c cache.Cache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}

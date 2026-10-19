@@ -26,10 +26,7 @@ type Catalog interface {
 }
 
 func NewHandler(c cache.Cache, catalog Catalog) http.Handler {
-	return handler(&Server{store: NewStore(c), catalog: catalog, now: time.Now})
-}
-
-func handler(server *Server) http.Handler {
+	server := &Server{store: NewStore(c), catalog: catalog, now: time.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /grader", server.handleIndex)
 	mux.HandleFunc("GET /grader/", server.handleIndex)
@@ -48,7 +45,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		s.writeLoadError(w, r, err)
 		return
 	}
-	candidate, err := s.store.NextFromCatalog(r.Context(), ingredients)
+	candidate, err := s.store.Next(r.Context(), ingredients)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to load ingredient grade for review", "error", err)
 		http.Error(w, "Could not load ingredient grades.", http.StatusInternalServerError)
@@ -85,7 +82,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 	_, ingredients, err := s.catalog.LoadCatalog(r.Context(), locationID)
 	if err == nil {
-		err = s.store.SaveFromCatalog(r.Context(), locationID, gradeKey, ingredients, verdict, s.now())
+		err = s.store.Save(r.Context(), locationID, gradeKey, ingredients, verdict, s.now())
 	}
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):

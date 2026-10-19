@@ -109,8 +109,8 @@ func TestSharedIngredientReviewSkippedAcrossStores(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	s := NewStore(c)
 	ingredient := ai.InputIngredient{ProductID: "shared", Grade: &ai.IngredientGrade{Score: 8, Reason: "Flexible"}}
-	require.NoError(t, s.SaveFromCatalog(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
-	candidate, err := s.NextFromCatalog(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, s.Save(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
+	candidate, err := s.Next(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
 	assert.Empty(t, candidate.GradeKey)
 }

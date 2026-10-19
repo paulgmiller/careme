@@ -43,13 +43,13 @@ func TestHandlerSkipsUngradedIngredients(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Asparagus")
 	assert.NotContains(t, rr.Body.String(), "Ungraded item")
 	store := NewStore(c)
-	require.NoError(t, store.SaveFromCatalog(t.Context(), "a", store.catalogGradeKey(graded), []ai.InputIngredient{ungraded, graded}, VerdictCorrect, testReviewTime))
+	require.NoError(t, store.Save(t.Context(), "a", store.catalogGradeKey(graded), []ai.InputIngredient{ungraded, graded}, VerdictCorrect, testReviewTime))
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "No grades left to review")
 	// An ungraded catalog item cannot be submitted as a review.
-	require.ErrorIs(t, store.SaveFromCatalog(t.Context(), "a", "catalog-v1/"+ungraded.Hash()+"/0", []ai.InputIngredient{ungraded}, VerdictCorrect, testReviewTime), cache.ErrNotFound)
+	require.ErrorIs(t, store.Save(t.Context(), "a", "catalog-v1/"+ungraded.Hash()+"/0", []ai.InputIngredient{ungraded}, VerdictCorrect, testReviewTime), cache.ErrNotFound)
 }
 
 func TestHandlerMissingCatalog(t *testing.T) {
@@ -72,9 +72,9 @@ func TestHandlerRejectsInvalidReview(t *testing.T) {
 func TestChangedScoreCanBeReviewedAgain(t *testing.T) {
 	s := NewStore(cache.NewInMemoryCache())
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}}
-	require.NoError(t, s.SaveFromCatalog(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
+	require.NoError(t, s.Save(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
 	ingredient.Grade = &ai.IngredientGrade{Score: 9, Reason: "Fresh"}
-	candidate, err := s.NextFromCatalog(t.Context(), []ai.InputIngredient{ingredient})
+	candidate, err := s.Next(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
 	assert.Equal(t, ingredient, candidate.Ingredient)
 }
@@ -113,7 +113,7 @@ func TestReviewSnapshotExcludesEmbeddings(t *testing.T) {
 	s := NewStore(c)
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}, Embedding: ai.IngredientEmbedding{1, 0}}
 	key := s.catalogGradeKey(ingredient)
-	require.NoError(t, s.SaveFromCatalog(t.Context(), "a", key, []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
+	require.NoError(t, s.Save(t.Context(), "a", key, []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
 	reader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reader.Close()) }()
