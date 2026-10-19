@@ -210,6 +210,10 @@ a vegetable-heavy healthy request. Vegetarian and vegan requests instead require
 zero meat or seafood anchors. Explicit fixture labels classify anchors; sides,
 broth, cheese, and incidental mentions do not count toward the majority. The
 existing judge checks the full dietary request, including vegan restrictions.
+When the TSV has no meat or seafood, two further cases check that common cuts
+and seafood outside the catalog can supply the majority, while vegetarian
+requests still use catalog ingredients without meat or seafood. The exception
+applies only to anchors; sides must still come from the catalog or user requests.
 Run these cases with `./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'Protein anchors'`.
 Check the assertion boundaries offline with `node --test evals/menu-plan/protein-anchors.test.cjs`.
 

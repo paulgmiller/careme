@@ -36,8 +36,9 @@ defaultTest:
         if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
         const requested = new Set((context.vars.requested_ingredients ?? []).map((name) => name.toLowerCase()));
+        const anchorExceptions = new Set((context.vars.catalog_exceptions?.anchor_ingredients ?? []).map((name) => name.toLowerCase()));
         return plan.plans.every((recipe) =>
-          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()))
+          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()) || anchorExceptions.has(recipe.anchor_ingredient.toLowerCase()))
           && (available.has(recipe.side_vegetable.toLowerCase()) || requested.has(recipe.side_vegetable.toLowerCase())));
       metric: available-menu-ingredients
     - type: javascript
@@ -494,4 +495,38 @@ tests:
       count: 4
       instructions: Plan four varied vegan dinners.
       meat_free: true
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat or seafood in TSV allows common cuts
+    vars: &no-meat-vars
+      <<: *protein-anchor-vars
+      count: 3
+      instructions: Plan three varied dinners.
+      protein_policy:
+        animal_anchors: &common-protein-anchors
+          - chicken thighs
+          - chicken breasts
+          - ground beef
+          - pork chops
+          - salmon fillets
+          - shrimp
+      catalog_exceptions:
+        anchor_ingredients: *common-protein-anchors
+      ingredients:
+        - {id: tofu, description: Extra Firm Tofu}
+        - {id: lentils, description: Lentils}
+        - {id: chickpeas, description: Chickpeas}
+        - {id: broccoli, description: Broccoli Crowns}
+        - {id: zucchini, description: Zucchini}
+        - {id: carrots, description: Carrots}
+        - {id: rice, description: Brown Rice}
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat in TSV still honors vegetarian
+    vars:
+      <<: *no-meat-vars
+      instructions: Plan three varied vegetarian dinners.
+      meat_free: true
+      catalog_exceptions:
+        anchor_ingredients: []
     assert: *protein-anchor-assertions
