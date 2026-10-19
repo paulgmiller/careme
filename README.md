@@ -138,7 +138,7 @@ go run ./cmd/ingredientreview
 
 Then open `http://127.0.0.1:8090/grader?location=70100023`, replacing the ID with the store you want to review. A location ID is required for viewing and submitting reviews.
 
-The app reads the current store day’s cached ingredients, or the previous store day’s on a cache miss, matching the produce score. It shows graded items one at a time and records each as too high, correct, or too low. It skips ungraded items and never fetches or grades inventory. Missing catalogs return a not-found response. Each location’s catalog stays in memory for 30 minutes after loading, then is purged even when idle. The next request reloads it. Successfully reviewed items are removed from all in-memory catalogs immediately; failed saves leave them available to retry. Location lookup uses the normal app configuration.
+The app reads the current store day’s cached ingredients, or the previous store day’s on a cache miss, matching the produce score. It shows graded items one at a time and records each as too high, correct, or too low. It skips ungraded items and never fetches or grades inventory. Missing catalogs return a not-found response. Each location’s catalog stays in memory for 30 minutes after loading, then is purged even when idle. The next request reloads it. Successfully reviewed items are removed from the active store’s in-memory catalog immediately; failed saves leave them available to retry. Location lookup uses the normal app configuration.
 
 Reviews include the location ID and ingredient snapshot, excluding embeddings. Reviews are shared across stores by ingredient and displayed score; a changed score can be reviewed again.
 

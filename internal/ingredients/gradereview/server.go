@@ -23,7 +23,7 @@ type Server struct {
 
 type Catalog interface {
 	LoadCatalog(context.Context, string) (*locations.Location, []ai.InputIngredient, error)
-	RemoveReviewed(string)
+	RemoveReviewed(string, string)
 }
 
 func NewHandler(c cache.Cache, catalog Catalog) http.Handler {
@@ -87,7 +87,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):
-		s.catalog.RemoveReviewed(gradeKey)
+		s.catalog.RemoveReviewed(locationID, gradeKey)
 		target := "/grader?" + url.Values{"location": {locationID}}.Encode()
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	case errors.Is(err, cache.ErrNotFound):

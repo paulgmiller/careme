@@ -190,7 +190,7 @@ func (c fixedIngredientCache) IngredientsFromCache(context.Context, string) ([]a
 	return slices.Clone(c.items), nil
 }
 
-func TestRemoveReviewedReleasesItemsAcrossCatalogs(t *testing.T) {
+func TestRemoveReviewedReleasesItemsOnlyInActiveCatalog(t *testing.T) {
 	shared := ai.InputIngredient{ProductID: "shared", Description: "Asparagus", Grade: &ai.IngredientGrade{Score: 9, Reason: "Fresh"}, Embedding: ai.IngredientEmbedding{1, 2}}
 	remaining := ai.InputIngredient{ProductID: "remaining", Grade: &ai.IngredientGrade{Score: 5, Reason: "Useful"}}
 	lat, lon := 44.98, -93.26
@@ -199,20 +199,22 @@ func TestRemoveReviewedReleasesItemsAcrossCatalogs(t *testing.T) {
 	require.NoError(t, err)
 	_, _, err = catalog.LoadCatalog(t.Context(), "b")
 	require.NoError(t, err)
-	catalog.RemoveReviewed(catalogGradeKey(shared))
-	for _, id := range []string{"a", "b"} {
-		_, items, err := catalog.LoadCatalog(t.Context(), id)
-		require.NoError(t, err)
-		assert.Equal(t, []ai.InputIngredient{remaining}, items)
-		// The unused backing-array slot must release all ingredient references.
-		entry := catalog.entries[id]
-		backing := entry.ingredients[:cap(entry.ingredients)]
-		assert.Equal(t, ai.InputIngredient{}, backing[1])
-	}
+	catalog.RemoveReviewed("a", catalogGradeKey(shared))
+	_, items, err := catalog.LoadCatalog(t.Context(), "a")
+	require.NoError(t, err)
+	assert.Equal(t, []ai.InputIngredient{remaining}, items)
+	// The unused backing-array slot must release all ingredient references.
+	entry := catalog.entries["a"]
+	backing := entry.ingredients[:cap(entry.ingredients)]
+	assert.Equal(t, ai.InputIngredient{}, backing[1])
+	_, otherStore, err := catalog.LoadCatalog(t.Context(), "b")
+	require.NoError(t, err)
+	assert.Equal(t, []ai.InputIngredient{shared, remaining}, otherStore)
 	assert.Equal(t, []ai.InputIngredient{shared, remaining}, snapshot, "in-flight requests keep a stable snapshot")
-	catalog.RemoveReviewed(catalogGradeKey(remaining))
+	catalog.RemoveReviewed("a", catalogGradeKey(remaining))
 	assert.Nil(t, catalog.entries["a"].ingredients)
-	assert.Nil(t, catalog.entries["b"].ingredients)
+	catalog.RemoveReviewed("missing", catalogGradeKey(shared))
+	assert.Len(t, catalog.entries, 2, "removing from an expired or unknown store does not create a catalog")
 }
 
 type reviewWriteCache struct {
@@ -270,6 +272,6 @@ func TestCatalogReadConcurrentWithRemoval(t *testing.T) {
 			}
 		}
 	})
-	requests.Go(func() { catalog.RemoveReviewed(key) })
+	requests.Go(func() { catalog.RemoveReviewed("a", key) })
 	requests.Wait()
 }

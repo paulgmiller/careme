@@ -38,12 +38,10 @@ func (f fakeCatalog) LoadCatalog(_ context.Context, id string) (*locations.Locat
 	return &locations.Location{ID: id, Name: "Store " + id}, ingredients, nil
 }
 
-func (f fakeCatalog) RemoveReviewed(gradeKey string) {
-	for id, ingredients := range f.ingredients {
-		f.ingredients[id] = slices.DeleteFunc(ingredients, func(ingredient ai.InputIngredient) bool {
-			return ingredient.Grade != nil && catalogGradeKey(ingredient) == gradeKey
-		})
-	}
+func (f fakeCatalog) RemoveReviewed(locationID, gradeKey string) {
+	f.ingredients[locationID] = slices.DeleteFunc(f.ingredients[locationID], func(ingredient ai.InputIngredient) bool {
+		return ingredient.Grade != nil && catalogGradeKey(ingredient) == gradeKey
+	})
 }
 
 func TestStoreReviewFlow(t *testing.T) {

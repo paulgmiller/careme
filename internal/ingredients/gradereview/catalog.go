@@ -26,8 +26,6 @@ const catalogTTL = 30 * time.Minute
 type catalogEntry struct {
 	location    *locations.Location
 	ingredients []ai.InputIngredient
-	expiresAt   time.Time
-	timer       *time.Timer
 }
 
 type CachedCatalog struct {
@@ -49,34 +47,28 @@ func (c *CachedCatalog) LoadCatalog(ctx context.Context, id string) (*locations.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if entry, ok := c.entries[id]; ok {
-		if c.now().Before(entry.expiresAt) {
-			return entry.location, slices.Clone(entry.ingredients), nil
-		}
-		entry.timer.Stop()
-		delete(c.entries, id)
+		return entry.location, slices.Clone(entry.ingredients), nil
 	}
 	location, ingredients, err := c.loadCatalog(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
-	entry := &catalogEntry{location: location, ingredients: ingredients, expiresAt: c.now().Add(catalogTTL)}
+	entry := &catalogEntry{location: location, ingredients: ingredients}
 	c.entries[id] = entry
-	entry.timer = time.AfterFunc(catalogTTL, func() {
+	time.AfterFunc(catalogTTL, func() {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		if c.entries[id] == entry {
-			delete(c.entries, id)
-		}
+		delete(c.entries, id)
 	})
 	return location, slices.Clone(ingredients), nil
 }
 
-// RemoveReviewed releases matching ingredients in every cached store. Request
+// RemoveReviewed releases matching ingredients in the active store. Request
 // snapshots remain valid until those requests finish.
-func (c *CachedCatalog) RemoveReviewed(gradeKey string) {
+func (c *CachedCatalog) RemoveReviewed(locationID, gradeKey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, entry := range c.entries {
+	if entry := c.entries[locationID]; entry != nil {
 		entry.ingredients = slices.DeleteFunc(entry.ingredients, func(ingredient ai.InputIngredient) bool {
 			return ingredient.Grade != nil && catalogGradeKey(ingredient) == gradeKey
 		})
