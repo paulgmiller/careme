@@ -75,7 +75,7 @@ func (s *Store) Next(ctx context.Context, ingredients []ai.InputIngredient) (*Ca
 		if ingredient.Grade == nil {
 			continue
 		}
-		key := s.catalogGradeKey(ingredient)
+		key := catalogGradeKey(ingredient)
 		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
 		if err != nil {
 			return nil, fmt.Errorf("check ingredient grade review %q: %w", key, err)
@@ -94,7 +94,7 @@ func (s *Store) Save(ctx context.Context, locationID, gradeKey string, ingredien
 		return ErrInvalidVerdict
 	}
 	for _, ingredient := range ingredients {
-		if ingredient.Grade == nil || s.catalogGradeKey(ingredient) != gradeKey {
+		if ingredient.Grade == nil || catalogGradeKey(ingredient) != gradeKey {
 			continue
 		}
 		ingredient.Embedding = nil
@@ -103,6 +103,6 @@ func (s *Store) Save(ctx context.Context, locationID, gradeKey string, ingredien
 	return cache.ErrNotFound
 }
 
-func (s *Store) catalogGradeKey(ingredient ai.InputIngredient) string {
+func catalogGradeKey(ingredient ai.InputIngredient) string {
 	return fmt.Sprintf("%s/%s/%d", catalogReviewVersion, ai.NormalizeInputIngredient(ingredient).Hash(), ingredient.Grade.Score)
 }

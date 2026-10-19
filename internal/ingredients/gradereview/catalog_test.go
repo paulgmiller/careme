@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,14 @@ func (f fakeCatalog) LoadCatalog(_ context.Context, id string) (*locations.Locat
 	return &locations.Location{ID: id, Name: "Store " + id}, ingredients, nil
 }
 
+func (f fakeCatalog) RemoveReviewed(gradeKey string) {
+	for id, ingredients := range f.ingredients {
+		f.ingredients[id] = slices.DeleteFunc(ingredients, func(ingredient ai.InputIngredient) bool {
+			return ingredient.Grade != nil && catalogGradeKey(ingredient) == gradeKey
+		})
+	}
+}
+
 func TestStoreReviewFlow(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	ingredient := ai.InputIngredient{ProductID: "one", Description: "Asparagus", Grade: &ai.IngredientGrade{Score: 9, Reason: "Fresh."}}
@@ -49,7 +58,7 @@ func TestStoreReviewFlow(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "Asparagus")
 	assert.NotContains(t, response.Body.String(), "Prepared dip")
 	assert.Contains(t, response.Body.String(), `name="location" value="a"`)
-	key := NewStore(c).catalogGradeKey(ingredient)
+	key := catalogGradeKey(ingredient)
 	post := func(location, gradeKey, verdict string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "/grader/review", strings.NewReader(url.Values{"location": {location}, "grade_key": {gradeKey}, "verdict": {verdict}}.Encode()))
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -73,7 +82,7 @@ func TestStoreReviewFlow(t *testing.T) {
 	assert.Equal(t, "a", review.LocationID)
 	assert.Equal(t, ingredient, review.Ingredient)
 	assert.Equal(t, VerdictTooHigh, review.Verdict)
-	require.Equal(t, http.StatusSeeOther, post("a", key, "too_low").Code)
+	require.Equal(t, http.StatusNotFound, post("a", key, "too_low").Code)
 	savedReader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, savedReader.Close()) }()
@@ -109,7 +118,7 @@ func TestSharedIngredientReviewSkippedAcrossStores(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	s := NewStore(c)
 	ingredient := ai.InputIngredient{ProductID: "shared", Grade: &ai.IngredientGrade{Score: 8, Reason: "Flexible"}}
-	require.NoError(t, s.Save(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
+	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
 	candidate, err := s.Next(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
 	assert.Empty(t, candidate.GradeKey)

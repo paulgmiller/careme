@@ -43,7 +43,7 @@ func TestHandlerSkipsUngradedIngredients(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Asparagus")
 	assert.NotContains(t, rr.Body.String(), "Ungraded item")
 	store := NewStore(c)
-	require.NoError(t, store.Save(t.Context(), "a", store.catalogGradeKey(graded), []ai.InputIngredient{ungraded, graded}, VerdictCorrect, testReviewTime))
+	require.NoError(t, store.Save(t.Context(), "a", catalogGradeKey(graded), []ai.InputIngredient{ungraded, graded}, VerdictCorrect, testReviewTime))
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
 	require.Equal(t, http.StatusOK, rr.Code)
@@ -72,7 +72,7 @@ func TestHandlerRejectsInvalidReview(t *testing.T) {
 func TestChangedScoreCanBeReviewedAgain(t *testing.T) {
 	s := NewStore(cache.NewInMemoryCache())
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}}
-	require.NoError(t, s.Save(t.Context(), "a", s.catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
+	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
 	ingredient.Grade = &ai.IngredientGrade{Score: 9, Reason: "Fresh"}
 	candidate, err := s.Next(t.Context(), []ai.InputIngredient{ingredient})
 	require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestHandlerReviewCacheFailure(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			r := httptest.NewRequest(method, "/grader?location=a", nil)
 			if method == http.MethodPost {
-				key := NewStore(c).catalogGradeKey(ingredient)
+				key := catalogGradeKey(ingredient)
 				r = httptest.NewRequest(method, "/grader/review", strings.NewReader("location=a&grade_key="+key+"&verdict=correct"))
 				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			}
@@ -112,7 +112,7 @@ func TestReviewSnapshotExcludesEmbeddings(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	s := NewStore(c)
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}, Embedding: ai.IngredientEmbedding{1, 0}}
-	key := s.catalogGradeKey(ingredient)
+	key := catalogGradeKey(ingredient)
 	require.NoError(t, s.Save(t.Context(), "a", key, []ai.InputIngredient{ingredient}, VerdictCorrect, testReviewTime))
 	reader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
