@@ -5,153 +5,123 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/ingredients/grading"
+	"careme/internal/locations"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandlerReviewsIngredientAndAdvances(t *testing.T) {
-	cacheStore := &countingCache{InMemoryCache: cache.NewInMemoryCache()}
-	saveGrade(t, cacheStore, "version/ve/one", ai.InputIngredient{
-		ProductID:   "one",
-		Brand:       "Garden Farm",
-		Description: "Asparagus",
-		Size:        "1 bunch",
-		Categories:  []string{"produce", "vegetables"},
-		Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
-	})
-	saveGrade(t, cacheStore, "version/ve/two", ai.InputIngredient{
-		ProductID:   "two",
-		Description: "Prepared dip",
-		Grade:       &ai.IngredientGrade{Score: 2, Reason: "Ready to eat."},
-	})
-
-	store := NewStore(cacheStore, "version")
-	store.prefix = func() (string, error) { return "ve", nil }
-	handler := newHandler(store)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader", nil))
-
-	require.Equal(t, http.StatusOK, response.Code)
-	assert.Contains(t, response.Body.String(), "Asparagus")
-	assert.Contains(t, response.Body.String(), "9<small>/10</small>")
-	assert.Contains(t, response.Body.String(), "Too high")
-	assert.Contains(t, response.Body.String(), "Correct")
-	assert.Contains(t, response.Body.String(), "Too low")
-	assert.Equal(t, []string{grading.CachePrefix() + "version/ve"}, cacheStore.listPrefixes)
-
-	form := url.Values{
-		"grade_key": {"version/ve/one"},
-		"verdict":   {string(VerdictTooHigh)},
+func TestHandlerRequiresLocation(t *testing.T) {
+	h := NewHandler(newTestStore(cache.NewInMemoryCache(), nil))
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			r := httptest.NewRequest(method, "/grader", nil)
+			if method == http.MethodPost {
+				r = httptest.NewRequest(method, "/grader/review", strings.NewReader("grade_key=key&verdict=correct"))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, r)
+			assert.Equal(t, http.StatusBadRequest, rr.Code)
+			assert.Contains(t, rr.Body.String(), "location ID is required")
+		})
 	}
-	response = httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/grader/review", strings.NewReader(form.Encode()))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	handler.ServeHTTP(response, request)
-
-	require.Equal(t, http.StatusSeeOther, response.Code)
-	assert.Equal(t, "/grader", response.Header().Get("Location"))
-
-	reviewReader, err := cacheStore.Get(t.Context(), reviewCachePrefix+"version/ve/one")
-	require.NoError(t, err)
-	defer func() { require.NoError(t, reviewReader.Close()) }()
-	var review Review
-	require.NoError(t, json.NewDecoder(reviewReader).Decode(&review))
-	assert.Equal(t, VerdictTooHigh, review.Verdict)
-	assert.Equal(t, "Asparagus", review.Ingredient.Description)
-	assert.False(t, review.ReviewedAt.IsZero())
-
-	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader", nil))
-	require.Equal(t, http.StatusOK, response.Code)
-	assert.Contains(t, response.Body.String(), "Prepared dip")
-	assert.Equal(t, 1, cacheStore.listCalls, "the sampled grade index should only be listed once")
 }
 
-func TestHandlerShowsCompletionWhenEveryGradeIsReviewed(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	saveGrade(t, cacheStore, "version/ve/one", ai.InputIngredient{
-		ProductID:   "one",
-		Description: "Asparagus",
-		Grade:       &ai.IngredientGrade{Score: 9, Reason: "Fresh and flexible."},
-	})
-	reviewer := NewStore(cacheStore, "version")
-	reviewer.prefix = func() (string, error) { return "ve", nil }
-	require.NoError(t, reviewer.Save(t.Context(), "version/ve/one", VerdictCorrect, time.Now()))
-	store := NewStore(cacheStore, "version")
-	store.prefix = func() (string, error) { return "ve", nil }
-
-	response := httptest.NewRecorder()
-	newHandler(store).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader", nil))
-
-	require.Equal(t, http.StatusOK, response.Code)
-	assert.Contains(t, response.Body.String(), "No grades found")
+func TestHandlerSkipsUngradedIngredients(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	graded := ai.InputIngredient{ProductID: "graded", Description: "Asparagus", Grade: &ai.IngredientGrade{Score: 9, Reason: "Fresh"}}
+	ungraded := ai.InputIngredient{ProductID: "ungraded", Description: "Ungraded item"}
+	h := NewHandler(newTestStore(c, map[string][]ai.InputIngredient{"a": {ungraded, graded}}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Asparagus")
+	assert.NotContains(t, rr.Body.String(), "Ungraded item")
+	store := newTestStore(c, map[string][]ai.InputIngredient{"a": {ungraded, graded}})
+	require.NoError(t, store.Save(t.Context(), "a", catalogGradeKey(graded), VerdictCorrect, testReviewTime))
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "No grades left to review")
+	// An ungraded catalog item cannot be submitted as a review.
+	require.ErrorIs(t, store.Save(t.Context(), "a", "catalog-v1/"+ungraded.Hash()+"/0", VerdictCorrect, testReviewTime), cache.ErrNotFound)
 }
 
-func TestStoreReloadsWithANewPrefixWhenBatchIsFullyReviewed(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	saveGrade(t, cacheStore, "version/ab/one", ai.InputIngredient{
-		ProductID: "one",
-		Grade:     &ai.IngredientGrade{Score: 9, Reason: "Flexible."},
-	})
-	saveGrade(t, cacheStore, "version/cd/two", ai.InputIngredient{
-		ProductID: "two",
-		Grade:     &ai.IngredientGrade{Score: 3, Reason: "Prepared."},
-	})
-
-	prefixes := []string{"ab", "cd"}
-	store := NewStore(cacheStore, "version")
-	store.prefix = func() (string, error) {
-		prefix := prefixes[0]
-		prefixes = prefixes[1:]
-		return prefix, nil
-	}
-	require.NoError(t, store.Save(t.Context(), "version/ab/one", VerdictCorrect, time.Now()))
-
-	candidate, err := store.Next(t.Context())
-	require.NoError(t, err)
-	assert.Equal(t, "version/cd/two", candidate.GradeKey)
-	assert.Equal(t, "two", candidate.Ingredient.ProductID)
+func TestHandlerMissingCatalog(t *testing.T) {
+	h := NewHandler(newTestStore(cache.NewInMemoryCache(), nil))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=missing", nil))
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "No cached ingredients found")
 }
 
 func TestHandlerRejectsInvalidReview(t *testing.T) {
-	cacheStore := cache.NewInMemoryCache()
-	form := url.Values{
-		"grade_key": {"version/one"},
-		"verdict":   {"great"},
-	}
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/grader/review", strings.NewReader(form.Encode()))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	NewHandler(cacheStore, "version").ServeHTTP(response, request)
-
-	assert.Equal(t, http.StatusBadRequest, response.Code)
+	h := NewHandler(newTestStore(cache.NewInMemoryCache(), nil))
+	r := httptest.NewRequest(http.MethodPost, "/grader/review", strings.NewReader("location=a&grade_key=key&verdict=great"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, r)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
-func saveGrade(t *testing.T, cacheStore cache.Cache, key string, ingredient ai.InputIngredient) {
-	t.Helper()
-	body, err := json.Marshal(ingredient)
+func TestChangedScoreCanBeReviewedAgain(t *testing.T) {
+	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}}
+	s := newTestStore(cache.NewInMemoryCache(), map[string][]ai.InputIngredient{"a": {ingredient}})
+	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
+	ingredient.Grade = &ai.IngredientGrade{Score: 9, Reason: "Fresh"}
+	s.entries["b"] = &catalogEntry{location: &locations.Location{ID: "b"}, ingredients: []ai.InputIngredient{ingredient}}
+	candidate, err := s.Next(t.Context(), "b")
 	require.NoError(t, err)
-	require.NoError(t, cacheStore.Put(t.Context(), grading.CachePrefix()+key, string(body), cache.Unconditional()))
+	assert.Equal(t, ingredient, candidate.Ingredient)
 }
 
-type countingCache struct {
-	*cache.InMemoryCache
-	listCalls    int
-	listPrefixes []string
+type failingReviewCache struct{ cache.Cache }
+
+func (f failingReviewCache) Exists(context.Context, string) (bool, error) {
+	return false, assert.AnError
 }
 
-func (c *countingCache) List(ctx context.Context, prefix string, token string) ([]string, error) {
-	c.listCalls++
-	c.listPrefixes = append(c.listPrefixes, prefix)
-	return c.InMemoryCache.List(ctx, prefix, token)
+func (f failingReviewCache) Put(context.Context, string, string, cache.PutOptions) error {
+	return assert.AnError
+}
+
+func TestHandlerReviewCacheFailure(t *testing.T) {
+	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}}
+	c := failingReviewCache{cache.NewInMemoryCache()}
+	h := NewHandler(newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}}))
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			r := httptest.NewRequest(method, "/grader?location=a", nil)
+			if method == http.MethodPost {
+				key := catalogGradeKey(ingredient)
+				r = httptest.NewRequest(method, "/grader/review", strings.NewReader("location=a&grade_key="+key+"&verdict=correct"))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, r)
+			assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		})
+	}
+}
+
+func TestReviewSnapshotExcludesEmbeddings(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}, Embedding: ai.IngredientEmbedding{1, 0}}
+	s := newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}})
+	key := catalogGradeKey(ingredient)
+	require.NoError(t, s.Save(t.Context(), "a", key, VerdictCorrect, testReviewTime))
+	reader, err := c.Get(t.Context(), reviewCachePrefix+key)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, reader.Close()) }()
+	var review Review
+	require.NoError(t, json.NewDecoder(reader).Decode(&review))
+	assert.Empty(t, review.Ingredient.Embedding)
+	assert.NotEmpty(t, ingredient.Embedding)
+	assert.Equal(t, testReviewTime, review.ReviewedAt)
 }
