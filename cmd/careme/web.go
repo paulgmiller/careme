@@ -143,12 +143,10 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	orders, err := providers.NewOrders(providerregistry.OrderOptions{Cache: cache, Auth: authClient})
-	if err != nil {
-		return fmt.Errorf("create ordering providers: %w", err)
+	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
+		return fmt.Errorf("register ordering: %w", err)
 	}
-	orders.Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, orders)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers)
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

@@ -3,16 +3,17 @@
 Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
 provider workflow interface. Kroger is the only implemented destination.
-Application startup calls `providerregistry.Factory.NewOrders` with the shared
-cache and authentication client, then registers the returned providers on the
-application routes, preserving middleware.
+Application startup calls `providerregistry.Factory.RegisterOrders` with the
+shared application routes; it constructs each configured destination and registers
+its routes directly, preserving application middleware.
 
-The recipe controller uses the same ordering provider instances to prepare an
-`orders/types.OrderView` from the request context, authenticated user ID, displayed
-items, and source location. The registry matches `location.ID` to its configured
-provider. Kroger's order handler loads the user's transfer state using its existing
-cache, then passes that state to a pure view formatter. Recipes renders the
-resulting form action, hidden fields, labels, and notices generically.
+The recipe controller calls `LoadTransfer` with its shared cache, request context,
+authenticated user ID, list key, and source location. The registry selects the
+configured provider; Kroger's transfer loader reads the state from that cache. The
+controller supplies that state in `OrderViewInput.Transfer` alongside the displayed
+items and location, then calls the stateless `OrderView(input)` transformation.
+View formatting has no context, cache, or authentication dependency. Recipes
+renders the resulting form action, hidden fields, labels, and notices generically.
 Ordering destinations share the `OrderFields` form struct, which may be extended
 when an integration needs additional shopping-list information. Kroger owns its
 status interpretation and cart-link validation.

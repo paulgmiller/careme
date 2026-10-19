@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/auth"
@@ -24,33 +25,16 @@ type OrderOptions struct {
 	Auth  auth.AuthClient
 }
 
-// NewOrders constructs the configured ordering providers with the shared cache.
-func (f Factory) NewOrders(options OrderOptions) (Orders, error) {
-	var orders Orders
+// RegisterOrders installs routes for every configured ordering destination.
+func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
 	if f.config.Kroger.CartTokenKey != "" {
 		handler, err := f.newKrogerOrder(options)
 		if err != nil {
-			return Orders{}, err
+			return err
 		}
-		orders.kroger = handler
+		handler.Register(routes)
 	}
-	return orders, nil
-}
-
-// Orders routes ordering requests and page preparation to the same provider instances.
-type Orders struct{ kroger *kroger.OrderHandler }
-
-func (o Orders) Register(routes routing.Registrar) {
-	if o.kroger != nil {
-		o.kroger.Register(routes)
-	}
-}
-
-func (o Orders) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	if o.kroger != nil && kroger.NewIdentityProvider().IsID(input.Location.ID) {
-		return o.kroger.OrderView(ctx, input)
-	}
-	return nil, nil
+	return nil
 }
 
 func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, error) {
@@ -83,4 +67,21 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 		return nil, fmt.Errorf("create Kroger order handler: %w", err)
 	}
 	return handler, nil
+}
+
+// OrderView finds the configured ordering destination for the source location.
+// Each destination owns its form contract and return presentation.
+func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
+		return kroger.OrderView(input)
+	}
+	return nil, nil
+}
+
+// LoadTransfer reads destination-owned state using the controller's shared cache.
+func (f Factory) LoadTransfer(ctx context.Context, store cache.Cache, location locationtypes.Location, userID, listKey string) (*ordertypes.OrderTransfer, error) {
+	if kroger.NewIdentityProvider().IsID(location.ID) && f.config.Kroger.CartTokenKey != "" {
+		return kroger.LoadTransfer(ctx, store, userID, listKey)
+	}
+	return nil, nil
 }

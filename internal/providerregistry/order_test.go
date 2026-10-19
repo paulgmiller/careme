@@ -28,9 +28,8 @@ func orderingTestOptions() OrderOptions {
 
 func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
-	orders, err := NewFactory(&config.Config{}).NewOrders(orderingTestOptions())
+	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	orders.Register(routes)
 	for _, path := range []string{"/kroger/order", "/kroger/callback"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -38,7 +37,7 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	}
 }
 
-func TestNewOrdersInvalidKrogerConfig(t *testing.T) {
+func TestRegisterOrdersInvalidKrogerConfig(t *testing.T) {
 	validKey := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
 	for _, tt := range []struct {
 		name string
@@ -52,7 +51,7 @@ func TestNewOrdersInvalidKrogerConfig(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			routes := http.NewServeMux()
-			_, err := NewFactory(&config.Config{Kroger: tt.cfg}).NewOrders(orderingTestOptions())
+			err := NewFactory(&config.Config{Kroger: tt.cfg}).RegisterOrders(routes, orderingTestOptions())
 			require.ErrorContains(t, err, tt.want)
 			response := httptest.NewRecorder()
 			routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/callback", nil))
@@ -69,9 +68,8 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	})
-	orders, err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).NewOrders(orderingTestOptions())
+	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
-	orders.Register(appRoutes)
 	form := url.Values{"list_key": {"list"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`}, "return_url": {"/recipes?h=list"}, "items": {`[{"id":"milk","name":"Milk"}]`}}
 	request := httptest.NewRequest(http.MethodPost, "/kroger/order", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -101,14 +99,8 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 		{"unknown location", "configured", "unknown", false},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			key := ""
-			if scenario.key != "" {
-				key = base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))
-			}
-			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: key}})
-			orders, err := factory.NewOrders(orderingTestOptions())
-			require.NoError(t, err)
-			view, err := orders.OrderView(t.Context(), ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
+			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
+			view, err := factory.OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
@@ -121,26 +113,34 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 	}
 }
 
-func TestOrdersUsesSharedProviderForTransferControlsAndSubmission(t *testing.T) {
-	options := orderingTestOptions()
-	require.NoError(t, options.Cache.Put(t.Context(), "kroger_cart_transfers/mock-clerk-user-id/list", `{"status":"complete","added":2}`, cache.Unconditional()))
-	cfg := &config.Config{Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}
-	orders, err := NewFactory(cfg).NewOrders(options)
-	require.NoError(t, err)
-	view, err := orders.OrderView(t.Context(), ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}})
-	require.NoError(t, err)
-	require.NotNil(t, view)
-	assert.Equal(t, "Add again", view.ActionLabel)
-	assert.Equal(t, "1", view.Fields.Attempt)
-	routes := http.NewServeMux()
-	orders.Register(routes)
-	form := url.Values{"list_key": {"list"}, "location": {`{"id":"70500874","chain":"QFC"}`}, "items": {`[{"id":"milk","name":"Milk"}]`}, "return_url": {"/recipes?h=list"}}
-	request := httptest.NewRequest(http.MethodPost, "/kroger/order", strings.NewReader(form.Encode()))
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response := httptest.NewRecorder()
-	routes.ServeHTTP(response, request)
-	require.Equal(t, http.StatusSeeOther, response.Code)
-	destination, err := url.Parse(response.Header().Get("Location"))
-	require.NoError(t, err)
-	assert.Equal(t, "changed", destination.Query().Get("kroger_status"))
+func TestLoadTransferSelectsConfiguredProvider(t *testing.T) {
+	for _, scenario := range []struct {
+		name, key, location, record string
+		want, fail                  bool
+	}{
+		{"Kroger enabled", "configured", "70500874", `{"status":"complete","added":2}`, true, false},
+		{"Kroger disabled", "", "70500874", `{"status":"complete"}`, false, false},
+		{"other provider", "configured", "walmart_123", `{"status":"complete"}`, false, false},
+		{"no transfer", "configured", "70500874", "", false, false},
+		{"corrupt transfer", "configured", "70500874", "broken", false, true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			store := cache.NewInMemoryCache()
+			if scenario.record != "" {
+				require.NoError(t, store.Put(t.Context(), "kroger_cart_transfers/chef/list", scenario.record, cache.Unconditional()))
+			}
+			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
+			transfer, err := factory.LoadTransfer(t.Context(), store, locationtypes.Location{ID: scenario.location}, "chef", "list")
+			if scenario.fail {
+				require.ErrorContains(t, err, "decode Kroger transfer")
+				return
+			}
+			require.NoError(t, err)
+			if scenario.want {
+				assert.Equal(t, &ordertypes.OrderTransfer{Status: "complete", Added: 2, NextAttempt: 1}, transfer)
+			} else {
+				assert.Nil(t, transfer)
+			}
+		})
+	}
 }

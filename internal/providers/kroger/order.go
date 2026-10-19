@@ -232,26 +232,23 @@ func transferKey(userID, listKey string, attempt int) string {
 	return "kroger_cart_reorders/" + userID + "/" + listKey + "/" + strconv.Itoa(attempt)
 }
 
-// OrderView prepares ordering controls using this provider's stored transfers.
-func (a *OrderHandler) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	latest, attempt, err := a.latestTransfer(ctx, input.UserID, input.ListKey)
-	if err != nil {
-		return nil, err
-	}
-	return orderViewWithTransfer(input, latest, attempt)
-}
-
-func (a *OrderHandler) latestTransfer(ctx context.Context, userID, listKey string) (orderResult, int, error) {
-	var latest orderResult
+// LoadTransfer returns persisted state for the controller to pass to OrderView.
+func LoadTransfer(ctx context.Context, store cache.Cache, userID, listKey string) (*ordertypes.OrderTransfer, error) {
+	var latest *ordertypes.OrderTransfer
 	for attempt := 0; ; attempt++ {
-		var result orderResult
-		err := a.loadJSON(ctx, transferKey(userID, listKey, attempt), &result)
+		reader, err := store.Get(ctx, transferKey(userID, listKey, attempt))
 		if errors.Is(err, cache.ErrNotFound) {
-			return latest, attempt, nil
+			return latest, nil
 		}
 		if err != nil {
-			return orderResult{}, 0, fmt.Errorf("load Kroger transfer: %w", err)
+			return nil, fmt.Errorf("load Kroger transfer: %w", err)
 		}
-		latest = result
+		var result orderResult
+		err = json.NewDecoder(reader).Decode(&result)
+		_ = reader.Close()
+		if err != nil {
+			return nil, fmt.Errorf("decode Kroger transfer: %w", err)
+		}
+		latest = &ordertypes.OrderTransfer{Status: result.Status, Added: result.Added, Unmatched: len(result.Gaps), NextAttempt: attempt + 1}
 	}
 }

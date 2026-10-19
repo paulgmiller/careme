@@ -14,6 +14,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	ordertypes "careme/internal/orders/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -429,4 +430,21 @@ func TestKrogerAddAgainRequiresFinishedPriorTransfer(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKrogerLoadTransferFindsLatestAndScopesUserAndList(t *testing.T) {
+	store := cache.NewInMemoryCache()
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 0), `{"status":"complete"}`, cache.Unconditional()))
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `{"status":"complete","added":3,"gaps":[{"name":"Salt"}]}`, cache.Unconditional()))
+	transfer, err := LoadTransfer(t.Context(), store, "chef", "list")
+	require.NoError(t, err)
+	assert.Equal(t, &ordertypes.OrderTransfer{Status: "complete", Added: 3, Unmatched: 1, NextAttempt: 2}, transfer)
+	for _, pair := range [][2]string{{"other-chef", "list"}, {"chef", "other-list"}} {
+		transfer, err := LoadTransfer(t.Context(), store, pair[0], pair[1])
+		require.NoError(t, err)
+		assert.Nil(t, transfer)
+	}
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `broken`, cache.Unconditional()))
+	_, err = LoadTransfer(t.Context(), store, "chef", "list")
+	require.ErrorContains(t, err, "decode Kroger transfer")
 }

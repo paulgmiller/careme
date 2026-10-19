@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/auth"
@@ -181,6 +182,10 @@ func (s *fakeStatusStore) failure(hash string) error {
 // orderViewBuilderFunc lets tests supply one operation while exercising the interface.
 type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 
-func (f orderViewBuilderFunc) OrderView(_ context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	return f(input)
+}
+
+func (f orderViewBuilderFunc) LoadTransfer(context.Context, cache.Cache, locationtypes.Location, string, string) (*ordertypes.OrderTransfer, error) {
+	return nil, nil
 }

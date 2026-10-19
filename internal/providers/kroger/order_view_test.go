@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"careme/internal/cache"
-
 	ordertypes "careme/internal/orders/types"
 
 	"careme/internal/ai"
@@ -111,15 +109,12 @@ func TestKrogerOrderViewAcceptsEveryChainCart(t *testing.T) {
 	}
 }
 
-func TestOrderHandlerViewUsesTransfersWithoutReturnQuery(t *testing.T) {
+func TestOrderViewUsesSuppliedTransferWithoutReturnQuery(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	for _, status := range []string{"complete", "uncertain", "pending"} {
 		t.Run(status, func(t *testing.T) {
-			handler := newTestOrderHandler(t, &CartClient{})
-			store := handler.cache
-			input := ordertypes.OrderViewInput{UserID: "chef", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}
-			require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 0), `{"status":"`+status+`","added":2}`, cache.Unconditional()))
-			view, err := handler.OrderView(t.Context(), input)
+			input := ordertypes.OrderViewInput{ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Transfer: &ordertypes.OrderTransfer{Status: status, Added: 2, NextAttempt: 1}}
+			view, err := OrderView(input)
 			require.NoError(t, err)
 			assert.Equal(t, "https://www.qfc.com/cart", view.ReviewURL)
 			var page bytes.Buffer
@@ -133,34 +128,19 @@ func TestOrderHandlerViewUsesTransfersWithoutReturnQuery(t *testing.T) {
 				assert.Contains(t, page.String(), "Add again")
 				assert.Contains(t, page.String(), `name="attempt" value="1"`)
 			}
-			input.UserID = "other-chef"
-			other, err := handler.OrderView(t.Context(), input)
-			require.NoError(t, err)
-			assert.Equal(t, "Add to QFC cart", other.ActionLabel)
-			input.UserID, input.ListKey = "chef", "other-list"
-			other, err = handler.OrderView(t.Context(), input)
-			require.NoError(t, err)
-			assert.Equal(t, "Add to QFC cart", other.ActionLabel)
 		})
 	}
 }
 
-func TestOrderHandlerViewUsesLatestAttemptAndPreservesFailures(t *testing.T) {
-	handler := newTestOrderHandler(t, &CartClient{})
-	store := handler.cache
-	input := ordertypes.OrderViewInput{UserID: "chef", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}
-	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 0), `{"status":"complete"}`, cache.Unconditional()))
-	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `{"status":"complete","added":3,"gaps":[{"name":"Salt"}]}`, cache.Unconditional()))
-	view, err := handler.OrderView(t.Context(), input)
+func TestOrderViewFormatsTransferAndPreservesFailures(t *testing.T) {
+	input := ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Transfer: &ordertypes.OrderTransfer{Status: "complete", Added: 3, Unmatched: 1, NextAttempt: 2}}
+	view, err := OrderView(input)
 	require.NoError(t, err)
 	assert.Equal(t, "2", view.Fields.Attempt)
 	assert.Contains(t, view.Notice, "Sent 3 products")
 	assert.Contains(t, view.Notice, "1 item could not be matched")
 	input.Query = url.Values{"kroger_status": {"lookup_failed"}}
-	view, err = handler.OrderView(t.Context(), input)
+	view, err = OrderView(input)
 	require.NoError(t, err)
 	assert.Contains(t, view.Notice, "Could not check Kroger products")
-	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `broken`, cache.Unconditional()))
-	_, err = handler.OrderView(t.Context(), input)
-	require.ErrorContains(t, err, "load Kroger transfer")
 }

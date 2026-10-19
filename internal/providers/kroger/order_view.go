@@ -56,6 +56,9 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 			order.ReviewURL = destination
 		}
 	}
+	if input.Transfer != nil {
+		applyTransfer(order, input)
+	}
 	return order, nil
 }
 
@@ -76,15 +79,8 @@ func krogerOrderNotice(code string) string {
 	}[code]
 }
 
-// orderViewWithTransfer formats transfer state already loaded by the ordering provider.
-func orderViewWithTransfer(input ordertypes.OrderViewInput, latest orderResult, attempt int) (*ordertypes.OrderView, error) {
-	view, err := OrderView(input)
-	if err != nil {
-		return nil, err
-	}
-	if attempt == 0 {
-		return view, nil
-	}
+func applyTransfer(view *ordertypes.OrderView, input ordertypes.OrderViewInput) {
+	latest := input.Transfer
 	view.ActionURL = ""
 	view.ActionLabel = ""
 	view.Description = ""
@@ -92,10 +88,10 @@ func orderViewWithTransfer(input ordertypes.OrderViewInput, latest orderResult, 
 		view.Notice = krogerOrderNotice(latest.Status)
 		if latest.Status == "complete" {
 			view.Notice = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", latest.Added)
-			if len(latest.Gaps) == 1 {
+			if latest.Unmatched == 1 {
 				view.Notice += " 1 item could not be matched and was not sent."
-			} else if len(latest.Gaps) > 1 {
-				view.Notice += fmt.Sprintf(" %d items could not be matched and were not sent.", len(latest.Gaps))
+			} else if latest.Unmatched > 1 {
+				view.Notice += fmt.Sprintf(" %d items could not be matched and were not sent.", latest.Unmatched)
 			}
 		}
 	}
@@ -104,8 +100,7 @@ func orderViewWithTransfer(input ordertypes.OrderViewInput, latest orderResult, 
 		view.ActionURL = "/kroger/order"
 		view.ActionLabel = "Add again"
 		view.Secondary = true
-		view.Fields.Attempt = strconv.Itoa(attempt)
+		view.Fields.Attempt = strconv.Itoa(latest.NextAttempt)
 		view.Description = "Adds this list again, including products already in your cart."
 	}
-	return view, nil
 }
