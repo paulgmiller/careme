@@ -1,6 +1,7 @@
 package providerregistry
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -67,11 +68,19 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	return handler, nil
 }
 
-// OrderView finds the configured ordering destination for the source location.
-// Each destination owns its form contract and return presentation.
-func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
-		return kroger.OrderView(input)
+// NewOrderViews builds ordering controls using the authenticated user's stored transfers.
+func (f Factory) NewOrderViews(store cache.Cache) OrderViews {
+	return OrderViews{factory: f, store: store}
+}
+
+type OrderViews struct {
+	factory Factory
+	store   cache.Cache
+}
+
+func (v OrderViews) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && v.factory.config.Kroger.CartTokenKey != "" {
+		return kroger.StoredOrderView(ctx, input, v.store)
 	}
 	return nil, nil
 }

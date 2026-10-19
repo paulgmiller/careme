@@ -1,9 +1,13 @@
 package kroger
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
+
+	"careme/internal/cache"
 
 	ordertypes "careme/internal/orders/types"
 )
@@ -74,4 +78,55 @@ func krogerOrderNotice(code string) string {
 		"start_failed":        "Could not start your Kroger transfer. Check your cart before trying again.",
 		"confirmation_failed": "Could not save the transfer result. Items may have been sent. Review your Kroger cart.",
 	}[code]
+}
+
+// StoredOrderView reflects persisted transfers even when the URL has no return status.
+func StoredOrderView(ctx context.Context, input ordertypes.OrderViewInput, store cache.Cache) (*ordertypes.OrderView, error) {
+	view, err := OrderView(input)
+	if err != nil {
+		return nil, err
+	}
+	var latest orderResult
+	attempt := 0
+	for {
+		reader, err := store.Get(ctx, transferKey(input.UserID, input.ListKey, attempt))
+		if errors.Is(err, cache.ErrNotFound) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load Kroger transfer: %w", err)
+		}
+		err = json.NewDecoder(reader).Decode(&latest)
+		_ = reader.Close()
+		if err != nil {
+			return nil, fmt.Errorf("decode Kroger transfer: %w", err)
+		}
+		attempt++
+	}
+	if attempt == 0 {
+		return view, nil
+	}
+	view.ActionURL = ""
+	view.ActionLabel = ""
+	view.Description = ""
+	if view.Notice == "" || input.Query.Get("kroger_status") == "complete" {
+		view.Notice = krogerOrderNotice(latest.Status)
+		if latest.Status == "complete" {
+			view.Notice = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", latest.Added)
+			if len(latest.Gaps) == 1 {
+				view.Notice += " 1 item could not be matched and was not sent."
+			} else if len(latest.Gaps) > 1 {
+				view.Notice += fmt.Sprintf(" %d items could not be matched and were not sent.", len(latest.Gaps))
+			}
+		}
+	}
+	view.ReviewURL = cartURL(input.Location.Chain)
+	if latest.Status == "complete" || latest.Status == "uncertain" {
+		view.ActionURL = "/kroger/order"
+		view.ActionLabel = "Add again"
+		view.Secondary = true
+		view.Fields.Attempt = strconv.Itoa(attempt)
+		view.Description = "Adds this list again, including products already in your cart."
+	}
+	return view, nil
 }

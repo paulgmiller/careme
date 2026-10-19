@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"math"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	"careme/internal/cache"
 
 	ordertypes "careme/internal/orders/types"
 
@@ -106,4 +109,56 @@ func TestKrogerOrderViewAcceptsEveryChainCart(t *testing.T) {
 			assert.Equal(t, destination, cartURL(banner))
 		})
 	}
+}
+
+func TestStoredOrderViewUsesTransfersWithoutReturnQuery(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	for _, status := range []string{"complete", "uncertain", "pending"} {
+		t.Run(status, func(t *testing.T) {
+			store := cache.NewInMemoryCache()
+			input := ordertypes.OrderViewInput{UserID: "chef", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}
+			require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 0), `{"status":"`+status+`","added":2}`, cache.Unconditional()))
+			view, err := StoredOrderView(t.Context(), input, store)
+			require.NoError(t, err)
+			assert.Equal(t, "https://www.qfc.com/cart", view.ReviewURL)
+			var page bytes.Buffer
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+			assert.NotContains(t, page.String(), "Add to QFC cart")
+			if status == "pending" {
+				assert.Empty(t, view.ActionURL)
+				assert.NotContains(t, page.String(), "Add again")
+			} else {
+				assert.True(t, view.Secondary)
+				assert.Contains(t, page.String(), "Add again")
+				assert.Contains(t, page.String(), `name="attempt" value="1"`)
+			}
+			input.UserID = "other-chef"
+			other, err := StoredOrderView(t.Context(), input, store)
+			require.NoError(t, err)
+			assert.Equal(t, "Add to QFC cart", other.ActionLabel)
+			input.UserID, input.ListKey = "chef", "other-list"
+			other, err = StoredOrderView(t.Context(), input, store)
+			require.NoError(t, err)
+			assert.Equal(t, "Add to QFC cart", other.ActionLabel)
+		})
+	}
+}
+
+func TestStoredOrderViewUsesLatestAttemptAndPreservesFailures(t *testing.T) {
+	store := cache.NewInMemoryCache()
+	input := ordertypes.OrderViewInput{UserID: "chef", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 0), `{"status":"complete"}`, cache.Unconditional()))
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `{"status":"complete","added":3,"gaps":[{"name":"Salt"}]}`, cache.Unconditional()))
+	view, err := StoredOrderView(t.Context(), input, store)
+	require.NoError(t, err)
+	assert.Equal(t, "2", view.Fields.Attempt)
+	assert.Contains(t, view.Notice, "Sent 3 products")
+	assert.Contains(t, view.Notice, "1 item could not be matched")
+	input.Query = url.Values{"kroger_status": {"lookup_failed"}}
+	view, err = StoredOrderView(t.Context(), input, store)
+	require.NoError(t, err)
+	assert.Contains(t, view.Notice, "Could not check Kroger products")
+	require.NoError(t, store.Put(t.Context(), transferKey("chef", "list", 1), `broken`, cache.Unconditional()))
+	_, err = StoredOrderView(t.Context(), input, store)
+	require.ErrorContains(t, err, "decode Kroger transfer")
 }

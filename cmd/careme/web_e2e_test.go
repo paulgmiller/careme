@@ -262,7 +262,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg).NewOrderViews(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}

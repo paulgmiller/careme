@@ -22,6 +22,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Wine", Needed: "1 bottle"}}}},
 	}}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+		assert.Equal(t, "mock-clerk-user-id", input.UserID)
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)

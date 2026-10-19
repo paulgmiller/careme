@@ -1,6 +1,8 @@
 package recipes
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -10,7 +12,7 @@ import (
 )
 
 type OrderViewBuilder interface {
-	OrderView(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+	OrderView(context.Context, ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 }
 
 func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) error {
@@ -20,7 +22,12 @@ func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) 
 			items = append(items, item.ShoppingItem)
 		}
 	}
-	order, err := s.orderView.OrderView(ordertypes.OrderViewInput{
+	userID, err := s.clerk.GetUserIDFromRequest(r)
+	if err != nil {
+		return fmt.Errorf("load ordering user: %w", err)
+	}
+	order, err := s.orderView.OrderView(r.Context(), ordertypes.OrderViewInput{
+		UserID:   userID,
 		Location: view.Location, Items: items, ListKey: view.Hash,
 		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
 		Query:     r.URL.Query(),

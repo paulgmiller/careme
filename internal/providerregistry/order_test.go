@@ -100,7 +100,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
-			view, err := factory.OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
+			view, err := factory.NewOrderViews(cache.NewInMemoryCache()).OrderView(t.Context(), ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
