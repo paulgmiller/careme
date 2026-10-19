@@ -397,12 +397,7 @@
     <input type="hidden" name="location" value="{{.Fields.Location}}">
     <input type="hidden" name="list_key" value="{{.Fields.ListKey}}">
     <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">
-    {{if .Fields.Attempt}}<input type="hidden" name="attempt" value="{{.Fields.Attempt}}">{{end}}
-    {{if .Secondary}}
-    <button type="submit" class="text-xs underline text-ink-600 hover:text-ink-900">{{.ActionLabel}}</button>
-    {{else}}
     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
-    {{end}}
   </form>
   {{end}}
 {{end}}

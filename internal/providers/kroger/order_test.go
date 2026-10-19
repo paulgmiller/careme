@@ -103,7 +103,6 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	result := postOrder(mux, form)
 	query := returnQuery(t, result)
 	assert.Equal(t, "complete", query.Get("kroger_status"))
-	assert.Equal(t, "1", query.Get("kroger_attempt"))
 	assert.Equal(t, "2", query.Get("kroger_added"))
 	assert.Equal(t, "2", query.Get("kroger_unmatched"))
 	assert.Equal(t, "https://www.qfc.com/cart", query.Get("kroger_cart"))
@@ -302,9 +301,6 @@ func TestKrogerOrderValidation(t *testing.T) {
 		{"location", "{}"},
 		{"list_key", "../other"},
 		{"list_key", ""},
-		{"attempt", "-1"},
-		{"attempt", "0"},
-		{"attempt", "../other"},
 		{"items", "broken"},
 		{"items", "[]"},
 		{"items", "null"},
@@ -368,69 +364,6 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				return
 			}
 			assert.Equal(t, expected, returnQuery(t, response).Get("kroger_status"))
-		})
-	}
-}
-
-func TestKrogerAddAgainHasIndependentDuplicateProtection(t *testing.T) {
-	var calls atomic.Int32
-	entered, release := make(chan struct{}), make(chan struct{})
-	a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
-		if calls.Add(1) == 2 {
-			close(entered)
-			<-release
-		}
-		var payload struct {
-			Items []CartItem `json:"items"`
-		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
-		return cartResponse(http.StatusNoContent, ""), nil
-	})
-	a.cache = cache.NewFileCache(t.TempDir())
-	saveShopper(t, a, time.Now().Add(time.Hour))
-	mux := orderMux(a)
-	assert.Equal(t, "complete", returnQuery(t, postOrder(mux, orderForm())).Get("kroger_status"))
-	form := orderForm()
-	form.Set("attempt", "1")
-	completed := make(chan *httptest.ResponseRecorder, 1)
-	go func() { completed <- postOrder(mux, form) }()
-	<-entered
-	assert.Equal(t, "pending", returnQuery(t, postOrder(mux, form)).Get("kroger_status"))
-	close(release)
-	query := returnQuery(t, <-completed)
-	assert.Equal(t, "complete", query.Get("kroger_status"))
-	assert.Equal(t, "2", query.Get("kroger_attempt"))
-	assert.Equal(t, "complete", returnQuery(t, postOrder(mux, form)).Get("kroger_status"))
-	assert.Equal(t, "complete", returnQuery(t, postOrder(mux, orderForm())).Get("kroger_status"))
-	assert.Equal(t, int32(2), calls.Load())
-	form.Set("attempt", "2")
-	assert.Equal(t, "complete", returnQuery(t, postOrder(mux, form)).Get("kroger_status"))
-	assert.Equal(t, int32(3), calls.Load())
-}
-
-func TestKrogerAddAgainRequiresFinishedPriorTransfer(t *testing.T) {
-	for _, status := range []string{"", "pending", "complete", "uncertain"} {
-		t.Run(status, func(t *testing.T) {
-			calls := 0
-			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
-				calls++
-				return cartResponse(http.StatusNoContent, ""), nil
-			})
-			saveShopper(t, a, time.Now().Add(time.Hour))
-			if status != "" {
-				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash", 0), orderResult{Status: status}, cache.Unconditional()))
-			}
-			form := orderForm()
-			form.Set("attempt", "1")
-			query := returnQuery(t, postOrder(orderMux(a), form))
-			if status == "complete" || status == "uncertain" {
-				assert.Equal(t, "complete", query.Get("kroger_status"))
-				assert.Equal(t, 1, calls)
-			} else {
-				assert.Zero(t, calls)
-				assert.NotEqual(t, "complete", query.Get("kroger_status"))
-			}
 		})
 	}
 }

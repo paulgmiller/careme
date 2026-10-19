@@ -26,7 +26,6 @@ status interpretation and cart-link validation.
 | `location` | JSON source `locations/types.Location`, including ID, chain, name, address, and coordinates when available; a hint for destination store selection |
 | `list_key` | Stable finalized shopping-list hash used for duplicate protection |
 | `return_url` | Application-local path, query, and optional fragment |
-| `attempt` | Optional positive repeat number supplied by Add again; omitted for the original transfer. The preceding attempt must be complete or uncertain. |
 
 The full source location is a shared store hint. Kroger currently uses its ID for
 product lookup and chain for its authorization banner and cart URL. Future
@@ -60,7 +59,6 @@ and setting these URL-encoded parameters:
 | Parameter | Meaning |
 | --- | --- |
 | `kroger_status` | Transfer outcome code listed below; determines the fixed notice shown on the shopping list |
-| `kroger_attempt` | Next repeat number used by the Add again button; validated against stored transfers on submission |
 | `kroger_added` | Number of unique matched UPCs successfully sent, one package each; used in the notice for `complete` |
 | `kroger_unmatched` | Number of submitted shopping items without a product ID or available product; used in the notice for `complete` |
 | `kroger_cart` | Absolute HTTPS cart URL for the submitted chain; accepted for display only when it exactly matches a URL in the shared [chain table](../internal/providers/kroger/chains.go) |
@@ -73,12 +71,8 @@ For example:
 
 This displays “Sent 17 products to your cart. Review amounts before checkout.”
 and “13 items could not be matched and were not sent.” The review link opens
-`https://www.kroger.com/cart` in a new tab. Completed, uncertain, and changed-list
-return statuses show a small “Add again”
-button that sends the displayed list again, including products already in the cart.
-Each repeat has independent duplicate protection. The button uses return query
-parameters; reopening a list without them keeps the existing add-to-cart behavior.
-Fred Meyer uses
+`https://www.kroger.com/cart` in a new tab. A `complete` status hides the add-to-cart
+form, even when some items were unmatched. Fred Meyer uses
 `https://www.fredmeyer.com/cart`; other mapped chains use their own domains.
 Unknown chains currently default to the Kroger cart URL.
 
