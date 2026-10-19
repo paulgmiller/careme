@@ -182,6 +182,25 @@ plus the static weekly produce-share contents, and display their prices:
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
 ```
 
+For weekly share updates, download the TC Farm Produce Weekly Feature PDF while
+signed in to SharePoint, then extract its first page with Poppler's `pdftotext`:
+
+```sh
+pdftotext -f 1 -l 1 -layout '/path/to/TC Farm Produce Weekly Feature.pdf' -
+```
+
+Check the delivery dates and all six share lists, then update
+`internal/providers/mnfoodclub/produce_shares.go` and its test expectations and run
+`./task.sh verify-go`. The PDF also contains previous weeks and recipe kits;
+only the current week's produce-share page supplies this inventory. Preserve
+alternatives such as “Stripetti or Spaghetti Squash” as one item and include only
+explicitly listed substitutions. Share-content changes automatically change the
+provider's cache signature. Deploy the updated application to serve the new list.
+
+A short-term automation can turn this extraction into a proposed weekly PR for
+review. Unattended downloading needs authenticated SharePoint access or a public
+download link; the supplied document URL currently rejects anonymous requests.
+
 Set `MNFOODCLUB_API_PATH` to the supplied store API URL
 (`https://api.bigcommerce.com/stores/<store_hash>/v3/`, including the trailing slash) and
 `MNFOODCLUB_ACCESS_TOKEN` to the store access token. The token needs Products
