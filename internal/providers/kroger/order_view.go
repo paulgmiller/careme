@@ -1,13 +1,9 @@
 package kroger
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
-
-	"careme/internal/cache"
 
 	ordertypes "careme/internal/orders/types"
 )
@@ -80,28 +76,11 @@ func krogerOrderNotice(code string) string {
 	}[code]
 }
 
-// StoredOrderView reflects persisted transfers even when the URL has no return status.
-func StoredOrderView(ctx context.Context, input ordertypes.OrderViewInput, store cache.Cache) (*ordertypes.OrderView, error) {
+// orderViewWithTransfer formats transfer state already loaded by the ordering provider.
+func orderViewWithTransfer(input ordertypes.OrderViewInput, latest orderResult, attempt int) (*ordertypes.OrderView, error) {
 	view, err := OrderView(input)
 	if err != nil {
 		return nil, err
-	}
-	var latest orderResult
-	attempt := 0
-	for {
-		reader, err := store.Get(ctx, transferKey(input.UserID, input.ListKey, attempt))
-		if errors.Is(err, cache.ErrNotFound) {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("load Kroger transfer: %w", err)
-		}
-		err = json.NewDecoder(reader).Decode(&latest)
-		_ = reader.Close()
-		if err != nil {
-			return nil, fmt.Errorf("decode Kroger transfer: %w", err)
-		}
-		attempt++
 	}
 	if attempt == 0 {
 		return view, nil

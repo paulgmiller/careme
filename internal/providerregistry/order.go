@@ -24,16 +24,33 @@ type OrderOptions struct {
 	Auth  auth.AuthClient
 }
 
-// RegisterOrders installs routes for every configured ordering destination.
-func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
+// NewOrders constructs the configured ordering providers with the shared cache.
+func (f Factory) NewOrders(options OrderOptions) (Orders, error) {
+	var orders Orders
 	if f.config.Kroger.CartTokenKey != "" {
 		handler, err := f.newKrogerOrder(options)
 		if err != nil {
-			return err
+			return Orders{}, err
 		}
-		handler.Register(routes)
+		orders.kroger = handler
 	}
-	return nil
+	return orders, nil
+}
+
+// Orders routes ordering requests and page preparation to the same provider instances.
+type Orders struct{ kroger *kroger.OrderHandler }
+
+func (o Orders) Register(routes routing.Registrar) {
+	if o.kroger != nil {
+		o.kroger.Register(routes)
+	}
+}
+
+func (o Orders) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if o.kroger != nil && kroger.NewIdentityProvider().IsID(input.Location.ID) {
+		return o.kroger.OrderView(ctx, input)
+	}
+	return nil, nil
 }
 
 func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, error) {
@@ -66,21 +83,4 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 		return nil, fmt.Errorf("create Kroger order handler: %w", err)
 	}
 	return handler, nil
-}
-
-// NewOrderViews builds ordering controls using the authenticated user's stored transfers.
-func (f Factory) NewOrderViews(store cache.Cache) OrderViews {
-	return OrderViews{factory: f, store: store}
-}
-
-type OrderViews struct {
-	factory Factory
-	store   cache.Cache
-}
-
-func (v OrderViews) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	if kroger.NewIdentityProvider().IsID(input.Location.ID) && v.factory.config.Kroger.CartTokenKey != "" {
-		return kroger.StoredOrderView(ctx, input, v.store)
-	}
-	return nil, nil
 }

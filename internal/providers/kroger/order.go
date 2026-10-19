@@ -16,6 +16,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
+	ordertypes "careme/internal/orders/types"
 )
 
 // orderRequest is the posted shopping list retained while connecting Kroger.
@@ -229,4 +230,28 @@ func transferKey(userID, listKey string, attempt int) string {
 		return "kroger_cart_transfers/" + userID + "/" + listKey
 	}
 	return "kroger_cart_reorders/" + userID + "/" + listKey + "/" + strconv.Itoa(attempt)
+}
+
+// OrderView prepares ordering controls using this provider's stored transfers.
+func (a *OrderHandler) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	latest, attempt, err := a.latestTransfer(ctx, input.UserID, input.ListKey)
+	if err != nil {
+		return nil, err
+	}
+	return orderViewWithTransfer(input, latest, attempt)
+}
+
+func (a *OrderHandler) latestTransfer(ctx context.Context, userID, listKey string) (orderResult, int, error) {
+	var latest orderResult
+	for attempt := 0; ; attempt++ {
+		var result orderResult
+		err := a.loadJSON(ctx, transferKey(userID, listKey, attempt), &result)
+		if errors.Is(err, cache.ErrNotFound) {
+			return latest, attempt, nil
+		}
+		if err != nil {
+			return orderResult{}, 0, fmt.Errorf("load Kroger transfer: %w", err)
+		}
+		latest = result
+	}
 }
