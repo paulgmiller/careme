@@ -10,11 +10,11 @@ import (
 
 func TestProduceShareIngredients(t *testing.T) {
 	ingredients := produceShareIngredients()
-	require.Len(t, ingredients, 32)
+	require.Len(t, ingredients, 33)
 	byShare := map[string][]string{}
 	ids := map[string]bool{}
 	for _, ingredient := range ingredients {
-		require.GreaterOrEqual(t, len(ingredient.Categories), 2)
+		require.Len(t, ingredient.Categories, 2) // No substitutions listed for October 19–24.
 		share := ingredient.Categories[1]
 		assert.Equal(t, "Produce", ingredient.Categories[0])
 		assert.Empty(t, ingredient.AisleNumber)
@@ -31,14 +31,13 @@ func TestProduceShareIngredients(t *testing.T) {
 		assert.NotEmpty(t, ingredient.Grade.Reason)
 	}
 	assert.Equal(t, map[string][]string{
-		"Seasonal":       {"Rutabaga", "Leeks", "Flat Leaf Parsley", "Watermelon Radish", "Parsnips", "Pie Apples (2nds)"},
-		"Small Seasonal": {"Butternut Squash", "Yellow Onions", "Flat Leaf Parsley", "Garlic Chives", "Parsnips", "Table Apples (1sts)"},
-		"Low Carb":       {"Kohlrabi", "Asparagus", "Yellow Candy Onions", "Avocado", "Carmen Peppers", "Cauliflower (substitution)"},
-		"Staple":         {"Broccoli", "Russet Potatoes", "Red Beets", "Red Onions", "Koginut Squash"},
-		"Fruit":          {"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Pineapple", "Red Grapes"},
-		"Small Fruit":    {"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Red Grapes"},
+		"Seasonal":       {"Koginut Squash", "Broccolini", "Carrots", "Daikon Radish", "Kennebec Potatoes", "Red Keeper Onions", "Poblano Peppers"},
+		"Small Seasonal": {"Stripetti or Spaghetti Squash", "Poblano Peppers", "Carrots", "Cilantro", "Red Keeper Onions", "Pie Apples (2nds)"},
+		"Low Carb":       {"Mini Peppers", "Broccolini", "Zucchini", "Kale", "Red Cabbage"},
+		"Staple":         {"Jalapeño Peppers", "Red Potatoes", "Kohlrabi", "Green Cabbage", "Yellow Onions", "Cucumbers"},
+		"Fruit":          {"Mandarins", "Asian Pear", "Mango", "Cranberries", "Cantaloupe"},
+		"Small Fruit":    {"Mandarins", "Asian Pear", "Mango", "Cantaloupe"},
 	}, byShare)
-	assert.Equal(t, []string{"Produce", "Low Carb", "Substitution"}, ingredients[17].Categories)
 
 	// A caller's edits must not affect another fetch's grades or categories.
 	ingredients[0].Grade.Score = 0
