@@ -126,7 +126,12 @@ func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Value: state, Path: "/kroger/callback", MaxAge: 600, HttpOnly: true, Secure: strings.HasPrefix(a.origin, "https://"), SameSite: http.SameSiteLaxMode})
-	http.Redirect(w, r, a.client.AuthorizationURL(state, banner), http.StatusSeeOther)
+	destination, err := a.client.AuthorizationURL(state, banner)
+	if err != nil {
+		http.Error(w, "Unable to start Kroger connection", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, destination, http.StatusSeeOther)
 }
 
 func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {

@@ -44,6 +44,15 @@ type AuthorizationCodeResponse struct {
 	TokenType *string `json:"token_type,omitempty"`
 }
 
+// InvalidAccess defines model for invalid_access.
+type InvalidAccess struct {
+	// Error The error message
+	Error *string `json:"error,omitempty"`
+
+	// ErrorDescription Detailed error description
+	ErrorDescription *string `json:"error_description,omitempty"`
+}
+
 // InvalidCode defines model for invalid_code.
 type InvalidCode struct {
 	// Error The error message
@@ -71,6 +80,15 @@ type InvalidGrantType struct {
 	ErrorDescription *string `json:"error_description,omitempty"`
 }
 
+// InvalidRedirectUri defines model for invalid_redirect_uri.
+type InvalidRedirectUri struct {
+	// Error The error message
+	Error *string `json:"error,omitempty"`
+
+	// ErrorDescription Detailed error description
+	ErrorDescription *string `json:"error_description,omitempty"`
+}
+
 // InvalidRefreshToken defines model for invalid_refresh_token.
 type InvalidRefreshToken struct {
 	// Error The error message
@@ -87,6 +105,55 @@ type InvalidScope struct {
 
 	// ErrorDescription Detailed error description
 	ErrorDescription *string `json:"error_description,omitempty"`
+}
+
+// Oauth2CodeResponse Your registered redirect with the authorization code appended to the URL.
+type Oauth2CodeResponse = string
+
+// AuthorizationCodeParams defines parameters for AuthorizationCode.
+type AuthorizationCodeParams struct {
+	// Scope The level of access your application is requesting.
+	Scope string `form:"scope" json:"scope"`
+
+	// ClientId Your application's client ID.
+	ClientId string `form:"client_id" json:"client_id"`
+
+	// RedirectUri Your registered redirect URL. The redirect URL tells this endpoint which URL to display after the user approves access to the protected resource.
+	RedirectUri string `form:"redirect_uri" json:"redirect_uri"`
+
+	// ResponseType Is always `code`.
+	ResponseType string `form:"response_type" json:"response_type"`
+
+	// State A random string to verify that the response belongs to the initiated request. The server should always return the same state value as the one specified in the request to protect against forgery attacks.
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+
+	// Banner Sets the chain specific branding displayed on the authorization consent screen presented to the end user for shopper logins. When this parameter is not supplied the default chain branding (Kroger) will be used. Only one option may be used at a time and the available options are the following:
+	//
+	// "bakers" - Bakers' Plus
+	// "citymarket" - City Market
+	// "dillons" - Dillons
+	// "fredmeyer" - Fred Meyer
+	// "frys" - Fry's Food
+	// "gerbes" - Gerbes
+	// "kingsoopers" - King Soopers
+	// "kroger" - Kroger (default if no banner provided)
+	// "metromarket" - Metro Market
+	// "picknsave" - Pick 'n Save
+	// "qfc" - QFC
+	// "ralphs" - Ralphs
+	// "smiths" - Smiths Food and Drug
+	// "food4less" - Food 4 Less"
+	// "foodsco" - Foods Co.
+	// "harristeeter" - Harris Teeter
+	// "vons" - Vons
+	// "fredmeyerjewelers" - Fred Meyer
+	// "jaycfoods" - Jay C
+	// "marianos" - Marianos
+	// "payless" - Pay Less
+	// "ppsrx" - Postal Prescription Services (PPSRX)
+	// "rulerfoods" - Ruler Foods
+	// "copps" - Copps
+	Banner *string `form:"banner,omitempty" json:"banner,omitempty"`
 }
 
 // AccessTokenFormdataBody defines parameters for AccessToken.
@@ -180,10 +247,25 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// AuthorizationCode request
+	AuthorizationCode(ctx context.Context, params *AuthorizationCodeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AccessTokenWithBody request with any body
 	AccessTokenWithBody(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	AccessTokenWithFormdataBody(ctx context.Context, params *AccessTokenParams, body AccessTokenFormdataRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) AuthorizationCode(ctx context.Context, params *AuthorizationCodeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAuthorizationCodeRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) AccessTokenWithBody(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -208,6 +290,119 @@ func (c *Client) AccessTokenWithFormdataBody(ctx context.Context, params *Access
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewAuthorizationCodeRequest generates requests for AuthorizationCode
+func NewAuthorizationCodeRequest(server string, params *AuthorizationCodeParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/connect/oauth2/authorize")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "scope", params.Scope, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "client_id", params.ClientId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "redirect_uri", params.RedirectUri, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "response_type", params.ResponseType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Banner != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "banner", *params.Banner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewAccessTokenRequestWithFormdataBody calls the generic AccessToken builder with application/x-www-form-urlencoded body
@@ -306,13 +501,42 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// AccessTokenWithBodyWithResponse request with any body
-	AccessTokenWithBodyWithResponse(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AccessTokenResponse, error)
+	// AuthorizationCodeWithResponse request
+	AuthorizationCodeWithResponse(ctx context.Context, params *AuthorizationCodeParams, reqEditors ...RequestEditorFn) (*AuthorizationCodeAPIResponse, error)
 
-	AccessTokenWithFormdataBodyWithResponse(ctx context.Context, params *AccessTokenParams, body AccessTokenFormdataRequestBody, reqEditors ...RequestEditorFn) (*AccessTokenResponse, error)
+	// AccessTokenWithBodyWithResponse request with any body
+	AccessTokenWithBodyWithResponse(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AccessTokenAPIResponse, error)
+
+	AccessTokenWithFormdataBodyWithResponse(ctx context.Context, params *AccessTokenParams, body AccessTokenFormdataRequestBody, reqEditors ...RequestEditorFn) (*AccessTokenAPIResponse, error)
 }
 
-type AccessTokenResponse struct {
+type AuthorizationCodeAPIResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON301      *Oauth2CodeResponse
+	JSON400      *struct {
+		union json.RawMessage
+	}
+	JSON500 *AuthServerError
+}
+
+// Status returns HTTPResponse.Status
+func (r AuthorizationCodeAPIResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AuthorizationCodeAPIResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AccessTokenAPIResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *AuthorizationCodeResponse
@@ -323,7 +547,7 @@ type AccessTokenResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r AccessTokenResponse) Status() string {
+func (r AccessTokenAPIResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -331,39 +555,90 @@ func (r AccessTokenResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r AccessTokenResponse) StatusCode() int {
+func (r AccessTokenAPIResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// AccessTokenWithBodyWithResponse request with arbitrary body returning *AccessTokenResponse
-func (c *ClientWithResponses) AccessTokenWithBodyWithResponse(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AccessTokenResponse, error) {
+// AuthorizationCodeWithResponse request returning *AuthorizationCodeAPIResponse
+func (c *ClientWithResponses) AuthorizationCodeWithResponse(ctx context.Context, params *AuthorizationCodeParams, reqEditors ...RequestEditorFn) (*AuthorizationCodeAPIResponse, error) {
+	rsp, err := c.AuthorizationCode(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAuthorizationCodeAPIResponse(rsp)
+}
+
+// AccessTokenWithBodyWithResponse request with arbitrary body returning *AccessTokenAPIResponse
+func (c *ClientWithResponses) AccessTokenWithBodyWithResponse(ctx context.Context, params *AccessTokenParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AccessTokenAPIResponse, error) {
 	rsp, err := c.AccessTokenWithBody(ctx, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAccessTokenResponse(rsp)
+	return ParseAccessTokenAPIResponse(rsp)
 }
 
-func (c *ClientWithResponses) AccessTokenWithFormdataBodyWithResponse(ctx context.Context, params *AccessTokenParams, body AccessTokenFormdataRequestBody, reqEditors ...RequestEditorFn) (*AccessTokenResponse, error) {
+func (c *ClientWithResponses) AccessTokenWithFormdataBodyWithResponse(ctx context.Context, params *AccessTokenParams, body AccessTokenFormdataRequestBody, reqEditors ...RequestEditorFn) (*AccessTokenAPIResponse, error) {
 	rsp, err := c.AccessTokenWithFormdataBody(ctx, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseAccessTokenResponse(rsp)
+	return ParseAccessTokenAPIResponse(rsp)
 }
 
-// ParseAccessTokenResponse parses an HTTP response from a AccessTokenWithResponse call
-func ParseAccessTokenResponse(rsp *http.Response) (*AccessTokenResponse, error) {
+// ParseAuthorizationCodeAPIResponse parses an HTTP response from a AuthorizationCodeWithResponse call
+func ParseAuthorizationCodeAPIResponse(rsp *http.Response) (*AuthorizationCodeAPIResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &AccessTokenResponse{
+	response := &AuthorizationCodeAPIResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 301:
+		var dest Oauth2CodeResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON301 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest struct {
+			union json.RawMessage
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest AuthServerError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAccessTokenAPIResponse parses an HTTP response from a AccessTokenWithResponse call
+func ParseAccessTokenAPIResponse(rsp *http.Response) (*AccessTokenAPIResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AccessTokenAPIResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
