@@ -306,7 +306,7 @@ func TestCatalogReadConcurrentWithRemoval(t *testing.T) {
 	var requests sync.WaitGroup
 	requests.Go(func() {
 		for range 100 {
-			_, err := catalog.Next(t.Context(), "a")
+			_, _, err := catalog.Next(t.Context(), "a")
 			assert.NoError(t, err)
 		}
 	})

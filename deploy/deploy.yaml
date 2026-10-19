@@ -144,8 +144,6 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: ai
-            - secretRef:
                 name: storage
           readinessProbe:
             httpGet:

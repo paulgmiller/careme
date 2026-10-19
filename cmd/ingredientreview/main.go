@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/config"
 	"careme/internal/ingredients/gradereview"
-	"careme/internal/locations"
-	"careme/internal/providerregistry"
 	"careme/internal/recipes"
+
+	"github.com/paulgmiller/kage/pkg/kage"
 )
 
 func main() {
@@ -29,9 +28,9 @@ func run(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfg, err := config.Load()
+	err := kage.Load()
 	if err != nil {
-		return fmt.Errorf("load configuration: %w", err)
+		return fmt.Errorf("load environment: %w", err)
 	}
 
 	cacheStore, err := cache.MakeCache()
@@ -39,17 +38,7 @@ func run(args []string) error {
 		return fmt.Errorf("create cache: %w", err)
 	}
 
-	factory := providerregistry.NewFactory(cfg)
-	centroids := locations.LoadCentroids()
-	locationBackends, err := factory.NewLocationBackends(centroids)
-	if err != nil {
-		return fmt.Errorf("create location backends: %w", err)
-	}
-	locationStore, err := locations.New(cacheStore, centroids, locationBackends)
-	if err != nil {
-		return fmt.Errorf("create location storage: %w", err)
-	}
-	store := gradereview.NewStore(cacheStore, locationStore, recipes.IO(cacheStore))
+	store := gradereview.NewStore(cacheStore, cachedLocations{cacheStore}, recipes.IO(cacheStore))
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           gradereview.NewHandler(store),
