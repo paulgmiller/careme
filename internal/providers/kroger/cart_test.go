@@ -53,7 +53,9 @@ func TestCartClientConnectLookupAndAdd(t *testing.T) {
 	manager.token = "catalog-token"
 	manager.expiresAt = time.Now().Add(time.Hour)
 	cart := CartClient{ClientID: "id", ClientSecret: "secret", RedirectURI: "https://careme.test/kroger/callback", HTTPClient: client, CatalogToken: manager}
-	parsed, err := url.Parse(cart.AuthorizationURL("nonce", "qfc"))
+	destination, err := cart.AuthorizationURL("nonce", "qfc")
+	require.NoError(t, err)
+	parsed, err := url.Parse(destination)
 	require.NoError(t, err)
 	assert.Equal(t, "cart.basic:write", parsed.Query().Get("scope"))
 	assert.Equal(t, "nonce", parsed.Query().Get("state"))
@@ -88,4 +90,60 @@ func TestCartAddReportsRejectionWithoutRetry(t *testing.T) {
 	err := cart.Add(t.Context(), "shopper-token", []CartItem{{UPC: "123", Quantity: 1}})
 	require.ErrorContains(t, err, "503")
 	assert.Equal(t, 1, calls)
+}
+
+func TestCartAddResponses(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusNoContent, http.StatusBadRequest, http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			calls := 0
+			client := &http.Client{Transport: cartRoundTrip(func(req *http.Request) (*http.Response, error) {
+				calls++
+				assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+				var payload map[string]any
+				require.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+				assert.Equal(t, map[string]any{"items": []any{map[string]any{"upc": "123", "quantity": float64(2)}}}, payload)
+				return cartResponse(status, ""), nil
+			})}
+			cart := &CartClient{HTTPClient: client}
+			err := cart.Add(t.Context(), "shopper", []CartItem{{UPC: "123", Quantity: 2}})
+			if status < 300 {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, "kroger cart returned")
+			}
+			assert.Equal(t, 1, calls)
+		})
+	}
+}
+
+func TestCartAddEmptyDoesNotSend(t *testing.T) {
+	client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) { t.Fatal("empty cart must not be sent"); return nil, nil })}
+	cart := &CartClient{HTTPClient: client}
+	require.ErrorContains(t, cart.Add(t.Context(), "shopper", nil), "cart has no items")
+}
+
+func TestCartProductResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+		unavailable      bool
+	}{
+		{"malformed", `{`, "look up Kroger product", false},
+		{"missing data", `{}`, "missing product data", false},
+		{"no items", `{"data":{}}`, "no available UPC", true},
+		{"out of stock", `{"data":{"items":[{"itemId":"123","inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}}]}}`, "no available UPC", true},
+		{"empty UPC", `{"data":{"items":[{"itemId":" "}]}}`, "no available UPC", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) { return cartResponse(200, tc.body), nil })}
+			manager := NewKrogerTokenManager("client", "secret", client)
+			manager.token = "catalog"
+			manager.expiresAt = time.Now().Add(time.Hour)
+			cart := &CartClient{HTTPClient: client, CatalogToken: manager}
+			_, err := cart.ProductUPC(t.Context(), "123", "store")
+			require.ErrorContains(t, err, tc.want)
+			if tc.unavailable {
+				require.ErrorIs(t, err, ErrProductUnavailable)
+			}
+		})
+	}
 }

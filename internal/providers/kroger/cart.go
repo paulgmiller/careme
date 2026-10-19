@@ -1,16 +1,16 @@
 package kroger
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
+
+	"careme/internal/providers/kroger/cart"
+	"careme/internal/providers/kroger/oauth"
+	"careme/internal/providers/kroger/products"
 )
 
 const krogerAPIOrigin = "https://api.kroger.com"
@@ -34,53 +34,30 @@ type CartClient struct {
 	CatalogToken                        *KrogerTokenManager
 }
 
-func (c *CartClient) httpClient() *http.Client {
-	if c.HTTPClient != nil {
-		return c.HTTPClient
+func (c *CartClient) AuthorizationURL(state, banner string) (string, error) {
+	req, err := oauth.NewAuthorizationCodeRequest(krogerAPIOrigin, &oauth.AuthorizationCodeParams{
+		Scope: "cart.basic:write", ClientId: c.ClientID, RedirectUri: c.RedirectURI,
+		ResponseType: "code", State: &state, Banner: &banner,
+	})
+	if err != nil {
+		return "", fmt.Errorf("create Kroger authorization URL: %w", err)
 	}
-	return http.DefaultClient
+	return req.URL.String(), nil
 }
 
-func (c *CartClient) AuthorizationURL(state, banner string) string {
-	query := url.Values{
-		"response_type": {"code"}, "client_id": {c.ClientID},
-		"redirect_uri": {c.RedirectURI}, "scope": {"cart.basic:write"}, "state": {state},
-	}
-	query.Set("banner", banner)
-	return krogerAPIOrigin + "/v1/connect/oauth2/authorize?" + query.Encode()
-}
-
-func (c *CartClient) tokenRequest(ctx context.Context, values url.Values) (CartToken, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, krogerAPIOrigin+"/v1/connect/oauth2/token", strings.NewReader(values.Encode()))
+func (c *CartClient) tokenRequest(ctx context.Context, body oauth.AccessTokenFormdataRequestBody) (CartToken, error) {
+	token, err := requestToken(ctx, c.HTTPClient, c.ClientID, c.ClientSecret, body)
 	if err != nil {
 		return CartToken{}, err
 	}
-	req.SetBasicAuth(c.ClientID, c.ClientSecret)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.httpClient().Do(req)
-	if err != nil {
-		return CartToken{}, fmt.Errorf("request Kroger token: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return CartToken{}, fmt.Errorf("kroger token request returned %d", resp.StatusCode)
-	}
-	var body struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return CartToken{}, fmt.Errorf("decode Kroger token: %w", err)
-	}
-	if body.AccessToken == "" || body.ExpiresIn <= 0 {
-		return CartToken{}, fmt.Errorf("incomplete Kroger token response")
-	}
-	return CartToken{AccessToken: body.AccessToken, RefreshToken: body.RefreshToken, ExpiresAt: time.Now().Add(time.Duration(body.ExpiresIn) * time.Second)}, nil
+	return CartToken{
+		AccessToken: *token.AccessToken, RefreshToken: stringValue(token.RefreshToken),
+		ExpiresAt: time.Now().Add(time.Duration(*token.ExpiresIn) * time.Second),
+	}, nil
 }
 
 func (c *CartClient) Exchange(ctx context.Context, code string) (CartToken, error) {
-	token, err := c.tokenRequest(ctx, url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {c.RedirectURI}})
+	token, err := c.tokenRequest(ctx, oauth.AccessTokenFormdataRequestBody{GrantType: "authorization_code", Code: &code, RedirectUri: &c.RedirectURI})
 	if err != nil {
 		return CartToken{}, err
 	}
@@ -91,7 +68,7 @@ func (c *CartClient) Exchange(ctx context.Context, code string) (CartToken, erro
 }
 
 func (c *CartClient) Refresh(ctx context.Context, refreshToken string) (CartToken, error) {
-	result, err := c.tokenRequest(ctx, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}})
+	result, err := c.tokenRequest(ctx, oauth.AccessTokenFormdataRequestBody{GrantType: "refresh_token", RefreshToken: &refreshToken})
 	if err != nil {
 		return CartToken{}, err
 	}
@@ -110,42 +87,34 @@ func (c *CartClient) ProductUPC(ctx context.Context, productID, locationID strin
 	if err != nil {
 		return "", fmt.Errorf("authorize Kroger product lookup: %w", err)
 	}
-	endpoint := krogerAPIOrigin + "/v1/products/" + url.PathEscape(productID) + "?filter.locationId=" + url.QueryEscape(locationID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(withRetries(c.HTTPClient)))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create Kroger products client: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := c.httpClient().Do(req)
+	resp, err := client.ProductGetIDWithResponse(ctx, productID, &products.ProductGetIDParams{FilterLocationId: &locationID}, func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	})
 	if err != nil {
 		return "", fmt.Errorf("look up Kroger product %q: %w", productID, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.StatusCode() == http.StatusNotFound {
 		return "", fmt.Errorf("%w: %q", ErrProductUnavailable, productID)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("kroger product %q lookup returned %d", productID, resp.StatusCode)
+	if resp.StatusCode() != http.StatusOK {
+		return "", fmt.Errorf("kroger product %q lookup returned %d", productID, resp.StatusCode())
 	}
-	var body struct {
-		Data struct {
-			Items []struct {
-				ItemID    string `json:"itemId"`
-				Inventory struct {
-					StockLevel string `json:"stockLevel"`
-				} `json:"inventory"`
-			} `json:"items"`
-		} `json:"data"`
+	if resp.JSON200 == nil || resp.JSON200.Data == nil {
+		return "", fmt.Errorf("decode Kroger product %q: missing product data", productID)
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
-		return "", fmt.Errorf("decode Kroger product %q: %w", productID, err)
-	}
-	for _, item := range body.Data.Items {
-		if item.Inventory.StockLevel == "TEMPORARILY_OUT_OF_STOCK" {
-			continue
-		}
-		if strings.TrimSpace(item.ItemID) != "" {
-			return strings.TrimSpace(item.ItemID), nil
+	if resp.JSON200.Data.Items != nil {
+		for _, item := range *resp.JSON200.Data.Items {
+			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
+				continue
+			}
+			if upc := strings.TrimSpace(stringValue(item.ItemId)); upc != "" {
+				return upc, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("%w: %q has no available UPC", ErrProductUnavailable, productID)
@@ -155,26 +124,23 @@ func (c *CartClient) Add(ctx context.Context, token string, items []CartItem) er
 	if len(items) == 0 {
 		return fmt.Errorf("cart has no items")
 	}
-	body, err := json.Marshal(struct {
-		Items []CartItem `json:"items"`
-	}{Items: items})
+	client, err := cart.NewClientWithResponses(krogerAPIOrigin, cart.WithHTTPClient(singleAttemptClient(c.HTTPClient)))
 	if err != nil {
-		return err
+		return fmt.Errorf("create Kroger cart client: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, krogerAPIOrigin+"/v1/cart/add", bytes.NewReader(body))
-	if err != nil {
-		return err
+	generatedItems := make([]cart.Item, len(items))
+	for i, item := range items {
+		generatedItems[i] = cart.Item{Upc: item.UPC, Quantity: item.Quantity}
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient().Do(req)
+	resp, err := client.AddToCartWithResponse(ctx, cart.AddToCartJSONRequestBody{Items: generatedItems}, func(_ context.Context, req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("add Kroger cart items: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("kroger cart returned %d", resp.StatusCode)
+	if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
+		return fmt.Errorf("kroger cart returned %d", resp.StatusCode())
 	}
 	return nil
 }
