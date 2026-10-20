@@ -30,6 +30,8 @@ spec:
             - secretRef:
                 name: ai
             - secretRef:
+                name: albertsons
+            - secretRef:
                 name: auth
             - secretRef:
                 name: brightdata-proxy
@@ -141,6 +143,8 @@ spec:
             - containerPort: 8090
               name: http
           envFrom:
+            - secretRef:
+                name: albertsons
             - secretRef:
                 name: brightdata-proxy
             - secretRef:
