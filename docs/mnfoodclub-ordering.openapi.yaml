@@ -1,0 +1,531 @@
+openapi: 3.0.3
+info:
+  title: MN Food Club Cart Handoff API (proposal)
+  version: 0.1.0
+  description: |
+    Proposed partner contract for Careme to send products to MN Food Club.
+    This document does not describe an already deployed service. The server URL,
+    credentials, and operational limits require agreement with MN Food Club.
+
+    A successful response means the transfer was received and either processed
+    for a matched customer or preserved for a shopper to continue through login.
+    It does not mean every product was added. Products are added to a cart;
+    MN Food Club's existing checkout and order-cutoff rules still apply.
+servers:
+  - url: https://api.mnfoodclub.example
+    description: Placeholder only; MN Food Club will supply the real base URL.
+security:
+  - PartnerBearer: []
+paths:
+  /v1/cart-transfers:
+    post:
+      operationId: createCartTransfer
+      summary: Add products to a matched customer's cart or prepare a login handoff
+      description: |
+        MN Food Club owns customer matching, including precedence and conflicts
+        between hints. No hints are required. Missing, ambiguous, or unresolved
+        identity must produce a pending_login handoff rather than a rejection.
+        Email hints can identify a customer without a prior account connection.
+        Hints do not authenticate a shopper in their browser.
+
+        For a matched customer, add accepted quantities to their existing cart
+        without removing or replacing existing contents. Quantities count
+        purchasable packages, not recipe measurements. Each product ID must appear
+        only once; omitted quantity defaults to one. Reject duplicate product IDs
+        with HTTP 400 and code duplicate_product_id before any cart changes or
+        pending handoff creation, even when their quantities or variant IDs differ.
+        When variant_id is supplied, use that variant of the specified product.
+        Reject the item's quantity if the variant does not belong to the product
+        or cannot be purchased; do not substitute another variant. When variant_id
+        is omitted, choose the smallest purchasable size for now. MN Food Club
+        chooses valid defaults for any other required options.
+        If no valid selection exists, reject that product's quantity and continue.
+        Add partial quantities when possible. Unknown, unavailable, or otherwise
+        unpurchasable products are product rejections, not whole-request errors.
+        Even if every product is rejected, return an applied response and URL.
+
+        For an unmatched customer, preserve the complete product list, including
+        any supplied variant IDs, until they visit the URL. Resolve products, options,
+        and quantities then, and preserve the request through login. Show results on MN Food Club.
+        Apply a pending transfer at most once, including repeated link visits.
+        Careme can retrieve the current state and eventual user ID through
+        GET /v1/cart-transfers/{transfer_id}. No webhook or callback is required.
+
+        Scope idempotency keys to the partner integration and retain them for at
+        least 24 hours from first receipt. Atomically reserve a key before any
+        cart changes or pending handoff creation. The same key and payload must
+        return the original successful response without creating another handoff
+        or adding products again, even after a pending transfer is applied.
+        Use GET for the current state. Reject changed payloads with 409 and code
+        idempotency_conflict. Concurrent requests must share a result or return
+        409 with code transfer_in_progress and Retry-After. Operational failures
+        must not release the key in a way that permits replaying cart changes.
+        A deliberate new addition requires a new key. After the guaranteed
+        retention window, callers must verify an uncertain result before retrying.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Opaque unique key for one intended addition; reuse for retries only.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+            pattern: '\S'
+          example: 4c508d23-650c-49d3-934d-b9aab24da783
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartTransferRequest'
+            examples:
+              quantitiesAndHints:
+                summary: Explicit quantities and optional identity hints
+                value:
+                  items:
+                    - product_id: '101'
+                      variant_id: '1005'
+                      quantity: 3
+                    - product_id: '202'
+                  identity_hints:
+                    emails: [chef@example.com, kitchen@example.com]
+                    user_id: customer-42
+                    storefront_brand: preferred-storefront
+                    zip_code: '55401'
+              explicitQuantity:
+                summary: Two packages of product 101, without identity hints
+                value:
+                  items:
+                    - product_id: '101'
+                      quantity: 2
+      responses:
+        '200':
+          description: |
+            Transfer received; inspect status and quantities. Both product
+            rejection and unresolved identity are successful handoffs.
+          headers:
+            Cache-Control:
+              description: Responses contain customer identifiers and private handoff links.
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartTransferResponse'
+              examples:
+                fullAcceptance:
+                  value:
+                    transfer_id: transfer-1001
+                    status: applied
+                    cart_url: https://shop.mnfoodclub.example/cart
+                    user_id: customer-42
+                    items:
+                      - product_id: '101'
+                        accepted_quantity: 3
+                        rejected_quantity: 0
+                      - product_id: '202'
+                        accepted_quantity: 1
+                        rejected_quantity: 0
+                partialAcceptance:
+                  value:
+                    transfer_id: transfer-1002
+                    status: applied
+                    cart_url: https://shop.mnfoodclub.example/cart
+                    user_id: customer-42
+                    items:
+                      - product_id: '101'
+                        accepted_quantity: 2
+                        rejected_quantity: 1
+                        rejection_reason: insufficient_stock
+                      - product_id: '202'
+                        accepted_quantity: 0
+                        rejected_quantity: 1
+                        rejection_reason: product_unavailable
+                allProductsRejected:
+                  value:
+                    transfer_id: transfer-1003
+                    status: applied
+                    cart_url: https://shop.mnfoodclub.example/cart
+                    user_id: customer-42
+                    items:
+                      - product_id: '999'
+                        accepted_quantity: 0
+                        rejected_quantity: 1
+                        rejection_reason: product_not_found
+                unmatchedCustomer:
+                  value:
+                    transfer_id: transfer-1004
+                    status: pending_login
+                    cart_url: https://shop.mnfoodclub.example/handoff/opaque-transfer-token
+        '400':
+          description: Malformed JSON or invalid fields, including duplicate product IDs, empty items, or a nonpositive quantity. No cart changes or pending handoff creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: duplicate_product_id
+                message: Each product_id must appear only once; use quantity to request multiple packages.
+        '401':
+          description: Missing or invalid partner bearer token. No cart changes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Partner integration is not permitted to use this endpoint. No cart changes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: |
+            idempotency_conflict means the key belongs to a different payload;
+            do not retry that payload with this key. transfer_in_progress means
+            the original transfer is still processing; retry the unchanged
+            request with the same key after Retry-After.
+          headers:
+            Retry-After:
+              description: Seconds to wait; required for transfer_in_progress.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: idempotency_conflict
+                message: This key was already used with a different request.
+        '429':
+          description: Rate limited. Retry the unchanged request with the same key after Retry-After.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/OperationalFailure'
+        '503':
+          $ref: '#/components/responses/OperationalFailure'
+  /v1/cart-transfers/{transfer_id}:
+    get:
+      operationId: getCartTransfer
+      summary: Get the current transfer state and eventual customer ID
+      description: |
+        Read the latest state of a transfer created by this partner integration.
+        Use the same partner bearer authentication as POST; no Idempotency-Key
+        is needed. A transfer ID alone does not authorize access. Return 404 for
+        IDs belonging to another integration as well as unknown or expired IDs.
+
+        Before the shopper completes login and cart application, return
+        pending_login with the handoff URL and no user_id or product results.
+        Once application completes, return applied with the resolved MN Food Club
+        user_id, cart URL, and accepted/rejected quantities for every product.
+        This includes transfers where every product was rejected. A transfer
+        initially applied by POST is also available here.
+
+        GET never applies products, starts a new transfer, or authenticates a
+        shopper. Applied quantities describe the completed transfer, not the
+        customer's current cart; later cart edits do not change those results.
+        POST retries continue returning the original successful POST response,
+        while GET reflects the current state under the same transfer_id.
+
+        Retain status while a pending handoff link is usable and for at least
+        24 hours after application completes, with a minimum of 24 hours from
+        transfer creation. MN Food Club owns any longer retention policy.
+        Callers may poll while pending, backing off between requests and honoring
+        Retry-After on rate limits. Stop polling when applied or 404 is returned.
+        A 404 does not prove products were never added; do not automatically
+        submit a new transfer to recover a missing status.
+      parameters:
+        - name: transfer_id
+          in: path
+          required: true
+          description: Opaque transfer_id returned by POST /v1/cart-transfers.
+          schema:
+            type: string
+            minLength: 1
+          example: transfer-1004
+      responses:
+        '200':
+          description: Current transfer state; applied includes the resolved user ID and final product results.
+          headers:
+            Cache-Control:
+              description: Status contains customer identifiers and private handoff links; always return no-store.
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartTransferResponse'
+              examples:
+                awaitingLogin:
+                  summary: Shopper has not completed the handoff yet
+                  value:
+                    transfer_id: transfer-1004
+                    status: pending_login
+                    cart_url: https://shop.mnfoodclub.example/handoff/opaque-transfer-token
+                appliedAfterLogin:
+                  summary: Same transfer after login, with a reusable customer ID
+                  value:
+                    transfer_id: transfer-1004
+                    status: applied
+                    cart_url: https://shop.mnfoodclub.example/cart
+                    user_id: customer-42
+                    items:
+                      - product_id: '101'
+                        accepted_quantity: 2
+                        rejected_quantity: 1
+                        rejection_reason: insufficient_stock
+                      - product_id: '202'
+                        accepted_quantity: 0
+                        rejected_quantity: 1
+                        rejection_reason: product_unavailable
+        '401':
+          description: Missing or invalid partner bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Partner integration is not permitted to use this endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transfer is unknown, expired, or not owned by this partner integration; no customer information is disclosed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: transfer_not_found
+                message: Transfer not found.
+        '429':
+          description: Rate limited. Wait for Retry-After before polling again.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/StatusLookupFailure'
+        '503':
+          $ref: '#/components/responses/StatusLookupFailure'
+components:
+  securitySchemes:
+    PartnerBearer:
+      type: http
+      scheme: bearer
+      description: Dedicated integration token issued by MN Food Club to Careme; never a shopper token.
+  responses:
+    StatusLookupFailure:
+      description: |
+        The current status could not be retrieved. GET does not change the
+        transfer or cart. Retry this GET with backoff; do not create a new
+        transfer to recover a status lookup failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    OperationalFailure:
+      description: |
+        The service could not complete or confirm the transfer. Cart changes may
+        have occurred. Retry only with the same key and unchanged payload within
+        the retention window; never switch keys to recover an uncertain result.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    CartTransferRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: |
+            Each product_id must appear only once, even if quantities or variant
+            IDs differ. Only one variant per product may be requested in a transfer.
+            Duplicate IDs cause HTTP 400 with code duplicate_product_id before
+            cart changes or pending handoff creation. uniqueItems catches identical
+            entries; the server must also enforce uniqueness by product_id.
+          items:
+            $ref: '#/components/schemas/RequestedItem'
+        identity_hints:
+          $ref: '#/components/schemas/IdentityHints'
+    RequestedItem:
+      type: object
+      additionalProperties: false
+      required: [product_id]
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: Opaque catalog product ID, as a string; Careme currently retains parent product IDs.
+        variant_id:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: |
+            Optional opaque variant ID belonging to product_id. When supplied,
+            request this exact variant; an invalid, mismatched, or unpurchasable
+            variant is an item rejection, with no substitution. When omitted,
+            MN Food Club chooses the smallest purchasable size for now.
+          example: '1005'
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Number of purchasable packages, defaulting to one. Use quantity rather than repeating a product ID.
+    IdentityHints:
+      type: object
+      additionalProperties: false
+      description: |
+        Optional hints, not authentication. MN Food Club owns precedence and
+        conflict resolution; unresolved identity uses the login handoff.
+      properties:
+        emails:
+          type: array
+          description: Candidate customer email addresses; array order does not prescribe precedence.
+          items:
+            type: string
+            format: email
+        user_id:
+          type: string
+          minLength: 1
+          description: Opaque MN Food Club customer ID returned by a previous matched transfer.
+        storefront_brand:
+          type: string
+          minLength: 1
+          description: |
+            Preferred storefront for branding and destination URL. This is not a
+            catalog product brand or a strict customer/account boundary.
+            MN Food Club owns recognized values and handling of unknown brands.
+        zip_code:
+          type: string
+          pattern: '^[0-9]{5}(-[0-9]{4})?$'
+          description: Optional customer ZIP code for identity matching. Keep as a string to preserve leading zeros; MN Food Club owns matching precedence.
+          example: '55401'
+    CartTransferResponse:
+      oneOf:
+        - $ref: '#/components/schemas/AppliedTransfer'
+        - $ref: '#/components/schemas/PendingTransfer'
+      discriminator:
+        propertyName: status
+        mapping:
+          applied: '#/components/schemas/AppliedTransfer'
+          pending_login: '#/components/schemas/PendingTransfer'
+    AppliedTransfer:
+      type: object
+      additionalProperties: false
+      required: [transfer_id, status, cart_url, user_id, items]
+      properties:
+        transfer_id:
+          type: string
+          minLength: 1
+          description: Stable identifier for this transfer, including idempotent replays.
+        status:
+          type: string
+          enum: [applied]
+          description: Processing completed; some or all product quantities may have been rejected.
+        cart_url:
+          $ref: '#/components/schemas/CartURL'
+        user_id:
+          type: string
+          minLength: 1
+          description: Reusable MN Food Club customer ID; may be supplied as a hint on later transfers.
+        items:
+          type: array
+          minItems: 1
+          description: Exactly one result per requested product ID; no submitted product may be omitted.
+          items:
+            $ref: '#/components/schemas/ItemResult'
+    PendingTransfer:
+      type: object
+      additionalProperties: false
+      required: [transfer_id, status, cart_url]
+      description: The complete product list is preserved; no customer cart has been changed and no products assessed yet.
+      properties:
+        transfer_id:
+          type: string
+          minLength: 1
+        status:
+          type: string
+          enum: [pending_login]
+        cart_url:
+          $ref: '#/components/schemas/CartURL'
+    CartURL:
+      type: string
+      format: uri
+      pattern: '^https://'
+      description: |
+        Absolute HTTPS URL on an MN Food Club-controlled storefront. For applied
+        transfers, opens the customer's cart subject to normal browser access
+        checks. For pending_login, lets the shopper review the preserved products
+        and log in to add them to their cart. Use an opaque handoff token rather
+        than emails or user IDs in the URL. Revisiting must never apply a transfer
+        twice. Link lifetime and expired-link UX are owned by MN Food Club;
+        idempotent replays must remain usable throughout the retry window.
+    ItemResult:
+      type: object
+      additionalProperties: false
+      required: [product_id, accepted_quantity, rejected_quantity]
+      description: |
+        accepted_quantity + rejected_quantity must equal the requested quantity for
+        this product ID (defaulting to one when omitted in the request). Accepted
+        quantities are packages added by this transfer, not the resulting cart
+        total. Include rejection_reason whenever rejected_quantity is positive.
+        Accepted packages use the requested variant when supplied; otherwise,
+        choose the smallest purchasable size for now. Variant IDs and option
+        selections are not returned. These cross-field rules are normative even where
+        OpenAPI 3.0 cannot express them as schema constraints.
+      properties:
+        product_id:
+          type: string
+          minLength: 1
+        accepted_quantity:
+          type: integer
+          minimum: 0
+        rejected_quantity:
+          type: integer
+          minimum: 0
+        rejection_reason:
+          type: string
+          minLength: 1
+          description: |
+            Partner-defined machine-readable reason, for example product_not_found,
+            product_unavailable, insufficient_stock, invalid_variant, or no_valid_options.
+            Callers must tolerate new reasons. Omit when nothing was rejected.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: Machine-readable error code; callers must tolerate new codes.
+        message:
+          type: string
+          minLength: 1
+          description: Explanation without secrets or customer identity hints.
