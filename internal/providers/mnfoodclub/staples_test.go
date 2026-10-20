@@ -46,7 +46,7 @@ func TestMNFoodClubFetchStaples(t *testing.T) {
 	want := []ai.InputIngredient{{ProductID: "194", Description: "Avocados - qty 3"}, {ProductID: "195", Description: "Ground beef"}}
 	client := &stubIngredientClient{ingredients: want}
 	provider := NewStaplesProvider(client)
-	for _, id := range []string{"mnfoodclub_", "mnfoodclub_1", "mnfoodclub_delivery"} {
+	for _, id := range []string{"mnfoodclub_", "mnfoodclub_1", "mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
 		client.calls = nil
 		got, err := provider.FetchStaples(t.Context(), id)
 		require.NoError(t, err)
@@ -61,11 +61,14 @@ func TestMNFoodClubFetchStaples(t *testing.T) {
 func TestMNFoodClubFetchWines(t *testing.T) {
 	want := []ai.InputIngredient{{ProductID: "197", Description: "Pinot Noir"}}
 	client := &stubIngredientClient{ingredients: want}
-	got, err := NewStaplesProvider(client).FetchWines(t.Context(), "mnfoodclub_delivery", []string{"Pinot Noir"})
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
-	assert.Equal(t, t.Context(), client.ctx)
-	assert.Equal(t, []int{178}, client.calls)
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		client.calls = nil
+		got, err := NewStaplesProvider(client).FetchWines(t.Context(), id, []string{"Pinot Noir"})
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+		assert.Equal(t, t.Context(), client.ctx)
+		assert.Equal(t, []int{178}, client.calls)
+	}
 }
 
 func TestMNFoodClubInvalidLocationsAndFailures(t *testing.T) {

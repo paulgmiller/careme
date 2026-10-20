@@ -20,7 +20,7 @@
                 Location:
                 <a href="/locations?lat={{.Location.Lat}}&amp;lon={{.Location.Lon}}"
                   class="inline font-semibold text-brand-700 hover:text-brand-600 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">{{.Location.Name}}</a>
-                <span class="text-sm text-gray-500">({{.Location.Address}})</span>
+                <span class="text-sm text-gray-500">{{template "location_details" .Location}}</span>
               </p>
               {{end}}
               {{if .OriginHash}}

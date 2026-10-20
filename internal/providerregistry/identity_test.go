@@ -68,7 +68,9 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 }
 
 func TestMNFoodClubSignature(t *testing.T) {
-	assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), cachekey.StaplesSignature("mnfoodclub_delivery"))
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), cachekey.StaplesSignature(id))
+	}
 	date := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)
 	signature := cachekey.StaplesSignature("mnfoodclub_delivery")
 	assert.NotPanics(t, func() { _ = cachekey.ForStore("mnfoodclub_delivery", date, signature) })

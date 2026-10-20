@@ -70,6 +70,7 @@ func inDeliveryArea(coordinates geo.Coordinate) bool {
 func deliveryLocation(id string, coordinates geo.Coordinate) *locationtypes.Location {
 	return &locationtypes.Location{
 		ID: id, Name: "Smith Brothers Farms delivery", Chain: "Smith Brothers Farms", Address: "Home delivery",
+		URL: "https://www.smithbrothersfarms.com/",
 		Lat: &coordinates.Lat, Lon: &coordinates.Lon,
 	}
 }
