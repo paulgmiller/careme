@@ -119,6 +119,14 @@ and rendered results. Use deterministic fixtures and explicit fake clients.
 Run `./task.sh verify-go -- -cover`; run `./task.sh verify-ui` and inspect the UI
 when templates change.
 
+Run `./task.sh k8s-secrets` to check that every Deployment and CronJob using the
+`careme` or `careme-ingredientreview` image imports its required secrets through
+`envFrom`. Maintain the provider and full-config secret lists and image mapping
+in `deploy/secrets_test.go` when configuration or deployed binaries change.
+Secrets remain separate; the check reads manifests without accessing credentials
+or Kubernetes. It also runs in `k8s-lint`, which gates publishing and deployment
+in CI. It checks secret references, not the keys or values stored in the cluster.
+
 ## Mail placement tests
 
 Send today's real recipe email through the production sender to test Gmail placement:

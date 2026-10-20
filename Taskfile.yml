@@ -81,6 +81,12 @@ tasks:
     desc: Validate Kubernetes manifests with kubeconform
     cmds:
       - ./tool.sh kubeconform -strict -summary deploy/*.yaml
+      - task: k8s-secrets
+
+  k8s-secrets:
+    desc: Check required full/provider secrets in Deployments and CronJobs
+    cmds:
+      - go test ./deploy -run '^TestRequiredSecrets$' -count=1
 
   js-lint:
     desc: Lint JavaScript assets with ESLint
