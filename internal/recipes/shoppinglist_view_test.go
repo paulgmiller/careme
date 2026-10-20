@@ -699,7 +699,7 @@ func TestFinalizedShoppingListRendersMergedQuantities(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: id}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
-			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Garlic", Needed: "1 clove"}}}}}})
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Garlic", Needed: "1 clove"}}}}})
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -717,7 +717,7 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 	recipe := ai.Recipe{Title: "Dinner"}
 	otherRecipe := ai.Recipe{Title: "Unsaved dinner"}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Pork", Needed: "24 oz"}}}}}
+	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Pork", Needed: "24 oz"}}}}
 	for _, tc := range []struct {
 		name            string
 		purchases       []shoppingPurchaseGroup

@@ -25,7 +25,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC", Address: "123 Store Street", ZipCode: "98004"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Chicken", Quantity: "2 lbs"}}}
 	p.Saved = []ai.Recipe{recipe}
-	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{ProductID: "food", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: buyNumber(2)}, Size: "1 lb"}}}}
+	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ProductID: "food", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: new(float64(2)), Size: "1 lb"}}}}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
 	view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
 		params: p, list: ai.ShoppingList{Recipes: p.Saved}, purchases: food, hash: p.Hash(),
