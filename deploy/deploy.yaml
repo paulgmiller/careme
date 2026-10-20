@@ -144,6 +144,8 @@ spec:
               name: http
           envFrom:
             - secretRef:
+                name: kroger
+            - secretRef:
                 name: storage
           readinessProbe:
             httpGet:
