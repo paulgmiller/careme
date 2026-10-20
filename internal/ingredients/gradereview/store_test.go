@@ -3,6 +3,7 @@ package gradereview
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -60,9 +61,11 @@ func TestStoreReviewFlow(t *testing.T) {
 	reader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reader.Close()) }()
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
 	var review Review
-	require.NoError(t, json.NewDecoder(reader).Decode(&review))
-	assert.Equal(t, "a", review.LocationID)
+	require.NoError(t, json.Unmarshal(body, &review))
+	assert.NotContains(t, string(body), "location_id")
 	assert.Equal(t, ingredient, review.Ingredient)
 	assert.Equal(t, VerdictTooHigh, review.Verdict)
 	require.Equal(t, http.StatusNotFound, post("a", key, "too_low").Code)
@@ -102,7 +105,7 @@ func TestSharedIngredientReviewSkippedAcrossStores(t *testing.T) {
 	ingredient := ai.InputIngredient{ProductID: "shared", Grade: &ai.IngredientGrade{Score: 8, Reason: "Flexible"}}
 	s := newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}, "b": {ingredient}})
 	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
-	candidate, err := s.Next(t.Context(), "b")
+	_, candidate, err := s.Next(t.Context(), "b")
 	require.NoError(t, err)
 	assert.Empty(t, candidate.GradeKey)
 }

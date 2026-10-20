@@ -29,9 +29,9 @@ func run(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfg, err := config.Load()
+	cfg, err := config.LoadOnlyProviders()
 	if err != nil {
-		return fmt.Errorf("load configuration: %w", err)
+		return fmt.Errorf("load provider configuration: %w", err)
 	}
 
 	cacheStore, err := cache.MakeCache()
@@ -39,13 +39,12 @@ func run(args []string) error {
 		return fmt.Errorf("create cache: %w", err)
 	}
 
-	factory := providerregistry.NewFactory(cfg)
 	centroids := locations.LoadCentroids()
-	locationBackends, err := factory.NewLocationBackends(centroids)
+	backends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
 	if err != nil {
 		return fmt.Errorf("create location backends: %w", err)
 	}
-	locationStore, err := locations.New(cacheStore, centroids, locationBackends)
+	locationStore, err := locations.New(cacheStore, centroids, backends)
 	if err != nil {
 		return fmt.Errorf("create location storage: %w", err)
 	}

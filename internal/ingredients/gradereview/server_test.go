@@ -76,7 +76,7 @@ func TestChangedScoreCanBeReviewedAgain(t *testing.T) {
 	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
 	ingredient.Grade = &ai.IngredientGrade{Score: 9, Reason: "Fresh"}
 	s.entries["b"] = &catalogEntry{location: &locations.Location{ID: "b"}, ingredients: []ai.InputIngredient{ingredient}}
-	candidate, err := s.Next(t.Context(), "b")
+	_, candidate, err := s.Next(t.Context(), "b")
 	require.NoError(t, err)
 	assert.Equal(t, ingredient, candidate.Ingredient)
 }

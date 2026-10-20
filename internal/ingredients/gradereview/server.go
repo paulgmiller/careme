@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/locations"
 )
 
 type Server struct {
@@ -32,14 +33,17 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A location ID is required.", http.StatusBadRequest)
 		return
 	}
-	candidate, err := s.store.Next(r.Context(), locationID)
+	location, candidate, err := s.store.Next(r.Context(), locationID)
 	if err != nil {
 		s.writeLoadError(w, r, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pageTemplate.Execute(w, candidate); err != nil {
+	if err := pageTemplate.Execute(w, struct {
+		*Candidate
+		Location *locations.Location
+	}{candidate, location}); err != nil {
 		slog.ErrorContext(r.Context(), "failed to render ingredient grade review", "error", err)
 	}
 }

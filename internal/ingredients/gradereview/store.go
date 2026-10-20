@@ -36,11 +36,9 @@ type Review struct {
 	Ingredient ai.InputIngredient `json:"ingredient"`
 	Verdict    Verdict            `json:"verdict"`
 	ReviewedAt time.Time          `json:"reviewed_at"`
-	LocationID string             `json:"location_id"`
 }
 
 type Candidate struct {
-	Location   *locations.Location
 	GradeKey   string
 	Ingredient ai.InputIngredient
 }
@@ -105,12 +103,12 @@ func (v Verdict) Valid() bool {
 
 // Next removes previously reviewed ingredients from the chosen store and selects
 // its next unreviewed ingredient.
-func (s *Store) Next(ctx context.Context, locationID string) (*Candidate, error) {
+func (s *Store) Next(ctx context.Context, locationID string) (*locations.Location, *Candidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, err := s.loadCatalog(ctx, locationID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for len(entry.ingredients) > 0 {
 		ingredient := entry.ingredients[0]
@@ -121,14 +119,14 @@ func (s *Store) Next(ctx context.Context, locationID string) (*Candidate, error)
 		key := catalogGradeKey(ingredient)
 		reviewed, err := s.cache.Exists(ctx, reviewCachePrefix+key)
 		if err != nil {
-			return nil, fmt.Errorf("check ingredient grade review %q: %w", key, err)
+			return nil, nil, fmt.Errorf("check ingredient grade review %q: %w", key, err)
 		}
 		if !reviewed {
-			return &Candidate{Location: entry.location, GradeKey: key, Ingredient: ingredient}, nil
+			return entry.location, &Candidate{GradeKey: key, Ingredient: ingredient}, nil
 		}
 		entry.remove(0)
 	}
-	return &Candidate{Location: entry.location}, nil
+	return entry.location, &Candidate{}, nil
 }
 
 // Save validates membership and persists the server-side snapshot.
@@ -147,7 +145,7 @@ func (s *Store) Save(ctx context.Context, locationID, gradeKey string, verdict V
 			continue
 		}
 		ingredient.Embedding = nil
-		err := s.saveReview(ctx, Review{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC(), LocationID: locationID})
+		err := s.saveReview(ctx, Review{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC()})
 		if err == nil || errors.Is(err, cache.ErrAlreadyExists) {
 			entry.remove(i)
 		}
