@@ -144,16 +144,16 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: ai
+                name: kroger
             - secretRef:
                 name: storage
           readinessProbe:
             httpGet:
-              path: /grader
+              path: /healthz
               port: http
           livenessProbe:
             httpGet:
-              path: /grader
+              path: /healthz
               port: http
           resources:
             requests:

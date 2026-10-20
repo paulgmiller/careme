@@ -1,0 +1,54 @@
+# Scoped contract for Kroger's public Cart API:
+# https://www.postman.com/kroger/the-kroger-co-s-public-workspace/documentation/ki6utqb/kroger-public-apis
+openapi: 3.0.3
+info:
+  title: Kroger Public Cart API
+  version: '1.0'
+servers:
+  - url: https://api.kroger.com
+paths:
+  /v1/cart/add:
+    put:
+      operationId: addToCart
+      security:
+        - shopperToken: [cart.basic:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddItems'
+      responses:
+        '204':
+          description: Items added to the cart
+        '200':
+          description: Items added to the cart
+components:
+  securitySchemes:
+    shopperToken:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.kroger.com/v1/connect/oauth2/authorize
+          tokenUrl: https://api.kroger.com/v1/connect/oauth2/token
+          scopes:
+            cart.basic:write: Add items to a customer's cart
+  schemas:
+    AddItems:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+    Item:
+      type: object
+      required: [upc, quantity]
+      properties:
+        upc:
+          type: string
+        quantity:
+          type: integer
+        modality:
+          type: string

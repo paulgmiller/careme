@@ -136,7 +136,11 @@ Run the small local review app with:
 go run ./cmd/ingredientreview
 ```
 
-Then open `http://127.0.0.1:8090/grader`. It shows cached ingredient grades one at a time and records each as too high, correct, or too low.
+Then open `http://127.0.0.1:8090/grader?location=70100023`, replacing the ID with the store you want to review. A location ID is required for viewing and submitting reviews.
+
+The app reads the current store day’s cached ingredients, or the previous store day’s on a cache miss, matching the produce score. It shows graded items one at a time and records each as too high, correct, or too low. It skips ungraded items and never fetches or grades inventory. Missing catalogs return a not-found response. Each location’s catalog stays in memory for 30 minutes after loading, then is purged even when idle. The next request reloads it. Successfully reviewed items are removed from the active store’s in-memory catalog immediately; failed saves leave them available to retry. Items reviewed elsewhere are removed as the active store advances past them. Location lookup uses the normal location providers and their cache. The reviewer loads only provider configuration, requiring Kroger credentials (and credentials for any other enabled provider that needs them) plus cache access. Clerk and AI configuration are not required; the deployment mounts the `kroger` and `storage` secrets.
+
+Reviews include the ingredient snapshot, excluding embeddings. Reviews are shared across stores by ingredient and displayed score; a changed score can be reviewed again.
 
 
 ## Cache Key Layout
@@ -181,6 +185,25 @@ plus the static weekly produce-share contents, and display their prices:
 ```sh
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location mnfoodclub_delivery -verbose
 ```
+
+For weekly share updates, download the TC Farm Produce Weekly Feature PDF while
+signed in to SharePoint, then extract its first page with Poppler's `pdftotext`:
+
+```sh
+pdftotext -f 1 -l 1 -layout '/path/to/TC Farm Produce Weekly Feature.pdf' -
+```
+
+Check the delivery dates and all six share lists, then update
+`internal/providers/mnfoodclub/produce_shares.go` and its test expectations and run
+`./task.sh verify-go`. The PDF also contains previous weeks and recipe kits;
+only the current week's produce-share page supplies this inventory. Preserve
+alternatives such as “Stripetti or Spaghetti Squash” as one item and include only
+explicitly listed substitutions. Share-content changes automatically change the
+provider's cache signature. Deploy the updated application to serve the new list.
+
+A short-term automation can turn this extraction into a proposed weekly PR for
+review. Unattended downloading needs authenticated SharePoint access or a public
+download link; the supplied document URL currently rejects anonymous requests.
 
 Set `MNFOODCLUB_API_PATH` to the supplied store API URL
 (`https://api.bigcommerce.com/stores/<store_hash>/v3/`, including the trailing slash) and
