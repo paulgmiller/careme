@@ -30,15 +30,18 @@ paths:
 
         For a matched customer, add accepted quantities to their existing cart
         without removing or replacing existing contents. Quantities count
-        purchasable packages, not recipe measurements. Sum repeated product IDs
-        before processing; each missing quantity contributes one. Choose valid
-        defaults for required product options and report the actual selections.
+        purchasable packages, not recipe measurements. Each product ID must appear
+        only once; omitted quantity defaults to one. Reject duplicate product IDs
+        with HTTP 400 and code duplicate_product_id before any cart changes or
+        pending handoff creation, even when their quantities differ. For now, always
+        choose the smallest purchasable size for each product. MN Food Club
+        chooses valid defaults for any other required options.
         If no valid selection exists, reject that product's quantity and continue.
         Add partial quantities when possible. Unknown, unavailable, or otherwise
         unpurchasable products are product rejections, not whole-request errors.
         Even if every product is rejected, return an applied response and URL.
 
-        For an unmatched customer, preserve the complete normalized product list
+        For an unmatched customer, preserve the complete product list
         until they visit the URL. Resolve products, options, and quantities then,
         and preserve the request through login. Show results on MN Food Club.
         Apply a pending transfer at most once, including repeated link visits.
@@ -83,12 +86,12 @@ paths:
                     emails: [chef@example.com, kitchen@example.com]
                     user_id: customer-42
                     storefront_brand: preferred-storefront
-              repeatedProducts:
+              explicitQuantity:
                 summary: Two packages of product 101, without identity hints
                 value:
                   items:
                     - product_id: '101'
-                    - product_id: '101'
+                      quantity: 2
       responses:
         '200':
           description: |
@@ -113,14 +116,9 @@ paths:
                     user_id: customer-42
                     items:
                       - product_id: '101'
-                        requested_quantity: 3
                         accepted_quantity: 3
                         rejected_quantity: 0
-                        selected_variant_id: '1005'
-                        selected_options:
-                          Size: 22 oz
                       - product_id: '202'
-                        requested_quantity: 1
                         accepted_quantity: 1
                         rejected_quantity: 0
                 partialAcceptance:
@@ -131,15 +129,10 @@ paths:
                     user_id: customer-42
                     items:
                       - product_id: '101'
-                        requested_quantity: 3
                         accepted_quantity: 2
                         rejected_quantity: 1
                         rejection_reason: insufficient_stock
-                        selected_variant_id: '1005'
-                        selected_options:
-                          Size: 22 oz
                       - product_id: '202'
-                        requested_quantity: 1
                         accepted_quantity: 0
                         rejected_quantity: 1
                         rejection_reason: product_unavailable
@@ -151,7 +144,6 @@ paths:
                     user_id: customer-42
                     items:
                       - product_id: '999'
-                        requested_quantity: 1
                         accepted_quantity: 0
                         rejected_quantity: 1
                         rejection_reason: product_not_found
@@ -161,11 +153,14 @@ paths:
                     status: pending_login
                     cart_url: https://shop.mnfoodclub.example/handoff/opaque-transfer-token
         '400':
-          description: Malformed JSON or invalid fields, such as empty items or a nonpositive quantity. No cart changes.
+          description: Malformed JSON or invalid fields, including duplicate product IDs, empty items, or a nonpositive quantity. No cart changes or pending handoff creation.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+              example:
+                code: duplicate_product_id
+                message: Each product_id must appear only once; use quantity to request multiple packages.
         '401':
           description: Missing or invalid partner bearer token. No cart changes.
           content:
@@ -238,6 +233,12 @@ components:
         items:
           type: array
           minItems: 1
+          uniqueItems: true
+          description: |
+            Each product_id must appear only once, even if quantities differ.
+            Duplicate IDs cause HTTP 400 with code duplicate_product_id before
+            cart changes or pending handoff creation. uniqueItems catches identical
+            entries; the server must also enforce uniqueness by product_id.
           items:
             $ref: '#/components/schemas/RequestedItem'
         identity_hints:
@@ -256,7 +257,7 @@ components:
           type: integer
           minimum: 1
           default: 1
-          description: Number of purchasable packages. Sum quantities across repeated IDs.
+          description: Number of purchasable packages, defaulting to one. Use quantity rather than repeating a product ID.
     IdentityHints:
       type: object
       additionalProperties: false
@@ -312,7 +313,7 @@ components:
         items:
           type: array
           minItems: 1
-          description: Exactly one result per distinct requested product ID; no submitted product may be omitted.
+          description: Exactly one result per requested product ID; no submitted product may be omitted.
           items:
             $ref: '#/components/schemas/ItemResult'
     PendingTransfer:
@@ -344,22 +345,20 @@ components:
     ItemResult:
       type: object
       additionalProperties: false
-      required: [product_id, requested_quantity, accepted_quantity, rejected_quantity]
+      required: [product_id, accepted_quantity, rejected_quantity]
       description: |
-        requested_quantity equals the sum requested for this product ID and must
-        equal accepted_quantity + rejected_quantity. Accepted quantities are
-        packages added by this transfer, not the resulting cart total. Include
-        rejection_reason whenever rejected_quantity is positive. When defaults
-        select required product choices, report the actual selected variant ID
-        and/or named options. These cross-field rules are normative even where
-        OpenAPI 3.0 cannot express them as schema constraints.
+        accepted_quantity + rejected_quantity must equal the requested quantity for
+        this product ID (defaulting to one when omitted in the request). Accepted
+        quantities are packages added by this transfer, not the resulting cart
+        total. Include rejection_reason whenever rejected_quantity is positive.
+        For now, accepted packages always use the smallest purchasable size;
+        variant IDs and option selections are not returned. These cross-field
+        rules are normative even where OpenAPI 3.0 cannot express them as schema
+        constraints.
       properties:
         product_id:
           type: string
           minLength: 1
-        requested_quantity:
-          type: integer
-          minimum: 1
         accepted_quantity:
           type: integer
           minimum: 0
@@ -373,15 +372,6 @@ components:
             Partner-defined machine-readable reason, for example product_not_found,
             product_unavailable, insufficient_stock, or no_valid_options. Callers
             must tolerate new reasons. Omit when nothing was rejected.
-        selected_variant_id:
-          type: string
-          minLength: 1
-          description: Actual variant chosen by MN Food Club for accepted packages, when applicable.
-        selected_options:
-          type: object
-          additionalProperties:
-            type: string
-          description: Actual option names and values chosen for accepted packages, when applicable.
     Error:
       type: object
       additionalProperties: false

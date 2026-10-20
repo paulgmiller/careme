@@ -36,14 +36,16 @@ curl http://localhost:8081/v1/cart-transfers \
 
 The [proposed OpenAPI contract](mnfoodclub-ordering.openapi.yaml) defines the
 request and response. The mock accepts `POST /v1/cart-transfers`, bearer auth,
-and an idempotency key. It defaults omitted quantities to one, combines repeated
-product IDs, and returns one result per product. Matched hints are
+and an idempotency key. The contract defaults omitted quantities to one and
+rejects repeated product IDs with HTTP 400 and `duplicate_product_id`. Results
+contain accepted and rejected quantities per product. The mock must follow this
+validation before cart changes or pending handoff creation. Matched hints are
 `chef@example.com` or `customer-42`; unknown or conflicting hints use
 `pending_login`. Storefront brand hints are ignored by this single-brand mock.
 
 | Product ID | Fictional behavior |
 | --- | --- |
-| `101` | Two packages in stock across the server's demo cart; default variant `1005`, Size `22 oz` |
+| `101` | Two packages in stock across the server's demo cart; smallest purchasable size `22 oz` |
 | `202` | `product_unavailable` |
 | `303` | `no_valid_options` |
 | Any other ID | `product_not_found` |

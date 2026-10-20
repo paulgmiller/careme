@@ -29,9 +29,11 @@ partner's actual endpoint before use.
 
 Product IDs are opaque strings from the catalog, currently parent BigCommerce
 product IDs on Careme's side. Quantities count purchasable packages, default to
-one, and add together for repeated IDs. Two entries containing only
-`{"product_id":"101"}` therefore request two packages. Recipe measurements such
-as “2 cups” are not package counts and must not be sent as quantities.
+one, and must be specified on a single item per product ID. To request two
+packages, send `{"product_id":"101","quantity":2}`. Repeated product IDs return
+HTTP 400 with `duplicate_product_id`, even when quantities differ, before any
+cart changes or pending handoff creation. Recipe measurements such as “2 cups”
+are not package counts and must not be sent as quantities.
 
 All identity hints are optional. Emails can identify a customer without a prior
 connection. MN Food Club owns matching, including conflicts between a saved ID
@@ -44,26 +46,28 @@ MN Food Club defines the recognized brand values.
 
 For a matched customer, immediately add accepted quantities to their existing
 cart, preserving its other contents. Return `status: applied`, their reusable
-`user_id`, a cart URL, and exactly one result per distinct requested product ID.
+`user_id`, a cart URL, and exactly one result per requested product ID.
 The ID can be retained by Careme and passed as a hint on future requests; this
 proposal does not add that persistence yet.
 
-Each result reports requested, accepted, and rejected quantities. Accepted means
+Each result reports accepted and rejected quantities. Accepted means
 added by this transfer, not the cart's total quantity. Add partial quantities when
 possible: a request for three packages can report two accepted and one rejected
-with `insufficient_stock`. Accepted plus rejected must equal requested. A positive
+with `insufficient_stock`. Accepted plus rejected must equal the request quantity
+(defaulting to one); the response does not repeat that quantity. A positive
 rejected quantity requires a reason; callers must tolerate new reason codes.
 
-MN Food Club chooses defaults for required sizes, flavors, or other options and
-reports the actual selected variant and/or named options for accepted packages.
-If no valid selection is possible, reject that product and continue processing
-the others. Unknown or unavailable products are also individual rejections.
+**For now, always choose the smallest purchasable size for each product.**
+Quantities count packages of that size. MN Food Club chooses valid defaults for
+other required choices, such as flavor. The response does not include variant
+IDs or selected options. If no valid selection is possible, reject that product
+and continue processing the others. Unknown or unavailable products are also individual rejections.
 Even if all products are rejected, return HTTP 200, `applied`, the product results,
 and a usable cart URL. “Applied” describes completed processing, not full product
 acceptance. Existing checkout and order-cutoff rules remain MN Food Club's.
 
 For an unmatched customer, return HTTP 200, `status: pending_login`, a transfer
-ID, and a handoff URL. Preserve the complete normalized product list without
+ID, and a handoff URL. Preserve the complete product list without
 assessing acceptance yet. The shopper can review it on MN Food Club, log in,
 and have the transfer added to their cart. Preserve the request through login
 and apply it at most once. MN Food Club shows the eventual results; v1 does not
@@ -94,8 +98,9 @@ retry window ends.
 - Timeouts and HTTP 500/503 can leave the outcome uncertain. Retry with the same
   key within the retention window. After that window, verify the outcome with
   MN Food Club before attempting another addition.
-- Malformed requests and invalid quantities return HTTP 400. Authentication and
-  authorization failures return HTTP 401/403. These do not modify a cart.
+- Malformed requests, duplicate product IDs, and invalid quantities return
+  HTTP 400. Authentication and authorization failures return HTTP 401/403.
+  These do not modify a cart.
 
 Missing customers and rejected products are business outcomes, not operational
 failures. A service outage must not be reported as an ordinary product rejection
@@ -121,6 +126,7 @@ query strings; an opaque handoff token or browser POST could carry those hints
 if needed. No integration bearer token belongs in a browser URL.
 
 MN Food Club should confirm the production URL and credentials, storefront brand
-values, matching rules, default-option policy, link lifetime, rate and payload
-limits, and the proposed minimum 24-hour idempotency retention. These are partner
+values, matching rules, the smallest-size policy and defaults for other options,
+link lifetime, rate and payload limits, and the proposed minimum 24-hour
+idempotency retention. These are partner
 deployment details and policy confirmations, not claims about an existing API.
