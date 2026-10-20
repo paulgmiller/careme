@@ -70,8 +70,9 @@ For an unmatched customer, return HTTP 200, `status: pending_login`, a transfer
 ID, and a handoff URL. Preserve the complete product list without
 assessing acceptance yet. The shopper can review it on MN Food Club, log in,
 and have the transfer added to their cart. Preserve the request through login
-and apply it at most once. MN Food Club shows the eventual results; v1 does not
-send Careme a later user ID or product results through polling or a webhook.
+and apply it at most once. MN Food Club shows the eventual results; Careme can
+retrieve the resolved user ID and product results through the status endpoint
+below. No webhook or result callback is required.
 
 Cart links use HTTPS and MN Food Club-controlled storefronts. Identity hints do
 not sign the shopper into a browser or bypass normal access checks. Pending
@@ -79,6 +80,33 @@ links use opaque tokens rather than emails or customer IDs in their URLs.
 MN Food Club owns link lifetime and the expired-link experience, while ensuring
 replayed successful responses remain usable during the retry window. Use
 `Cache-Control: no-store` for responses containing identifiers and handoff links.
+
+## Retrieve transfer status after login
+
+Careme can call `GET /v1/cart-transfers/{transfer_id}` with its partner bearer
+token to retrieve the current state. The ID comes from the original POST; the
+GET requires no idempotency key and never changes a cart. Only the integration
+that created the transfer can read it.
+
+Before the shopper completes login and cart application, GET returns
+`pending_login`, the transfer ID, and the handoff URL. Once applied, it returns
+`applied`, the same transfer ID, the resolved `user_id`, cart URL, and each
+product's accepted/rejected quantities. Careme can then retain the user ID for
+future requests. Results describe that transfer, including all-rejected outcomes;
+later edits to the customer's cart do not change its product results.
+
+The OpenAPI document includes before-login and after-login examples for the
+same transfer. GET reflects the latest state; replaying the original POST with
+its idempotency key still returns the original POST response, even if that
+response was `pending_login` and the shopper has since completed the handoff.
+
+MN Food Club must retain status while the pending handoff link is usable and
+for at least 24 hours after application completes, with a minimum of 24 hours
+from creation. Longer retention is partner-defined. Poll with backoff while
+pending and honor `Retry-After` on HTTP 429. Stop polling at `applied` or HTTP 404.
+Unknown, expired, and other integrations' transfers all return HTTP 404 without
+customer information. A missing status does not mean no products were added;
+do not create a new transfer automatically. Retry failed GETs with backoff.
 
 ## Retries and failures
 
@@ -128,5 +156,5 @@ if needed. No integration bearer token belongs in a browser URL.
 MN Food Club should confirm the production URL and credentials, storefront brand
 values, matching rules, the smallest-size policy and defaults for other options,
 link lifetime, rate and payload limits, and the proposed minimum 24-hour
-idempotency retention. These are partner
+idempotency and transfer-status retention. These are partner
 deployment details and policy confirmations, not claims about an existing API.

@@ -45,13 +45,15 @@ paths:
         until they visit the URL. Resolve products, options, and quantities then,
         and preserve the request through login. Show results on MN Food Club.
         Apply a pending transfer at most once, including repeated link visits.
-        V1 has no status lookup, webhook, or result callback to Careme.
+        Careme can retrieve the current state and eventual user ID through
+        GET /v1/cart-transfers/{transfer_id}. No webhook or callback is required.
 
         Scope idempotency keys to the partner integration and retain them for at
         least 24 hours from first receipt. Atomically reserve a key before any
         cart changes or pending handoff creation. The same key and payload must
         return the original successful response without creating another handoff
-        or adding products again. Reject changed payloads with 409 and code
+        or adding products again, even after a pending transfer is applied.
+        Use GET for the current state. Reject changed payloads with 409 and code
         idempotency_conflict. Concurrent requests must share a result or return
         409 with code transfer_in_progress and Retry-After. Operational failures
         must not release the key in a way that permits replaying cart changes.
@@ -208,6 +210,118 @@ paths:
           $ref: '#/components/responses/OperationalFailure'
         '503':
           $ref: '#/components/responses/OperationalFailure'
+  /v1/cart-transfers/{transfer_id}:
+    get:
+      operationId: getCartTransfer
+      summary: Get the current transfer state and eventual customer ID
+      description: |
+        Read the latest state of a transfer created by this partner integration.
+        Use the same partner bearer authentication as POST; no Idempotency-Key
+        is needed. A transfer ID alone does not authorize access. Return 404 for
+        IDs belonging to another integration as well as unknown or expired IDs.
+
+        Before the shopper completes login and cart application, return
+        pending_login with the handoff URL and no user_id or product results.
+        Once application completes, return applied with the resolved MN Food Club
+        user_id, cart URL, and accepted/rejected quantities for every product.
+        This includes transfers where every product was rejected. A transfer
+        initially applied by POST is also available here.
+
+        GET never applies products, starts a new transfer, or authenticates a
+        shopper. Applied quantities describe the completed transfer, not the
+        customer's current cart; later cart edits do not change those results.
+        POST retries continue returning the original successful POST response,
+        while GET reflects the current state under the same transfer_id.
+
+        Retain status while a pending handoff link is usable and for at least
+        24 hours after application completes, with a minimum of 24 hours from
+        transfer creation. MN Food Club owns any longer retention policy.
+        Callers may poll while pending, backing off between requests and honoring
+        Retry-After on rate limits. Stop polling when applied or 404 is returned.
+        A 404 does not prove products were never added; do not automatically
+        submit a new transfer to recover a missing status.
+      parameters:
+        - name: transfer_id
+          in: path
+          required: true
+          description: Opaque transfer_id returned by POST /v1/cart-transfers.
+          schema:
+            type: string
+            minLength: 1
+          example: transfer-1004
+      responses:
+        '200':
+          description: Current transfer state; applied includes the resolved user ID and final product results.
+          headers:
+            Cache-Control:
+              description: Status contains customer identifiers and private handoff links; always return no-store.
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartTransferResponse'
+              examples:
+                awaitingLogin:
+                  summary: Shopper has not completed the handoff yet
+                  value:
+                    transfer_id: transfer-1004
+                    status: pending_login
+                    cart_url: https://shop.mnfoodclub.example/handoff/opaque-transfer-token
+                appliedAfterLogin:
+                  summary: Same transfer after login, with a reusable customer ID
+                  value:
+                    transfer_id: transfer-1004
+                    status: applied
+                    cart_url: https://shop.mnfoodclub.example/cart
+                    user_id: customer-42
+                    items:
+                      - product_id: '101'
+                        accepted_quantity: 2
+                        rejected_quantity: 1
+                        rejection_reason: insufficient_stock
+                      - product_id: '202'
+                        accepted_quantity: 0
+                        rejected_quantity: 1
+                        rejection_reason: product_unavailable
+        '401':
+          description: Missing or invalid partner bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Partner integration is not permitted to use this endpoint.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Transfer is unknown, expired, or not owned by this partner integration; no customer information is disclosed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: transfer_not_found
+                message: Transfer not found.
+        '429':
+          description: Rate limited. Wait for Retry-After before polling again.
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/StatusLookupFailure'
+        '503':
+          $ref: '#/components/responses/StatusLookupFailure'
 components:
   securitySchemes:
     PartnerBearer:
@@ -215,6 +329,15 @@ components:
       scheme: bearer
       description: Dedicated integration token issued by MN Food Club to Careme; never a shopper token.
   responses:
+    StatusLookupFailure:
+      description: |
+        The current status could not be retrieved. GET does not change the
+        transfer or cart. Retry this GET with backoff; do not create a new
+        transfer to recover a status lookup failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     OperationalFailure:
       description: |
         The service could not complete or confirm the transfer. Cart changes may
