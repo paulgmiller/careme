@@ -181,11 +181,20 @@ Manual Jobs do not change the suspension and are not protected by the CronJob's 
 
 ### MNFoodClub ingredients
 
-Nearby location search includes MNFoodClub home delivery within an approximate
+Nearby location search includes three home-delivery storefronts sharing the
+MNFoodClub catalog: MN Food Club (`mnfood.club`), TC Farm (`tc.farm`), and
+Nelson Grass Farm (`nelsongrassfarm.com`). All three appear within an approximate
 rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
 -94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
-Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
-coordinates retained for distance filtering and store dates.
+Search results use stable IDs `mnfoodclub_delivery`, `mnfoodclub_tcfarm_delivery`,
+and `mnfoodclub_nelsongrassfarm_delivery`, respectively. Each result retains the
+search coordinates for distance filtering; lookup by ID uses the shared Blaine
+coordinates for store dates. Location results are not cached.
+
+Online delivery locations include their storefront URL, displayed instead of
+the address in location search and as a link in shopping list and recipe headers.
+Smith Brothers Farms uses the same display behavior. Previously saved recipe
+parameters retain their original location details.
 
 Fetch all visible, available, in-stock catalog products across every category,
 plus the static weekly produce-share contents, and display their prices:

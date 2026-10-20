@@ -10,6 +10,7 @@ type Location struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	Address  string    `json:"address"`
+	URL      string    `json:"url,omitempty"`
 	State    string    `json:"state"`
 	ZipCode  string    `json:"zip_code"`
 	Lat      *float64  `json:"lat,omitempty"`

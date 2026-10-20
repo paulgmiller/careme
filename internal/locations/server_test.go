@@ -15,6 +15,7 @@ import (
 	cachepkg "careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/guest"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
@@ -488,6 +489,33 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 			t.Fatalf("unexpected score lookup for %s; calls=%v", id, gotCalls)
 		}
 	}
+}
+
+func TestLocationsPageShowsAllMNFoodClubStorefronts(t *testing.T) {
+	mustInitLocationTemplates(t)
+	storage := newTestLocationServerWithBackends([]LocationBackend{mnfoodclub.NewLocationBackend()})
+	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
+	mux := http.NewServeMux()
+	server.Register(mux, auth.DefaultMock())
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/locations?lat=44.98&lon=-93.27", nil))
+	assert.Equal(t, http.StatusOK, rr.Code)
+	body := rr.Body.String()
+	assert.Equal(t, 3, strings.Count(body, `<li class=`))
+	for _, store := range []struct{ id, name string }{
+		{"mnfoodclub_delivery", "MN Food Club delivery"},
+		{"mnfoodclub_tcfarm_delivery", "TC Farm delivery"},
+		{"mnfoodclub_nelsongrassfarm_delivery", "Nelson Grass Farm delivery"},
+	} {
+		assert.Contains(t, body, "<span>"+store.name+"</span>")
+		assert.Contains(t, body, `<input type="hidden" name="location" value="`+store.id+`" />`)
+	}
+	assert.NotContains(t, body, "Not available yet for recipe building.")
+	for _, url := range []string{"https://mnfood.club/", "https://tc.farm/", "https://nelsongrassfarm.com/"} {
+		assert.Contains(t, body, url)
+	}
+	assert.NotContains(t, body, "Home delivery")
 }
 
 func mustInitLocationTemplates(t *testing.T) {
