@@ -16,6 +16,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandlerHealth(t *testing.T) {
+	c := failingReviewCache{cache.NewInMemoryCache()}
+	h := NewHandler(newTestStore(c, nil))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
 func TestHandlerRequiresLocation(t *testing.T) {
 	h := NewHandler(newTestStore(cache.NewInMemoryCache(), nil))
 	for _, method := range []string{http.MethodGet, http.MethodPost} {

@@ -21,6 +21,9 @@ type Server struct {
 func NewHandler(store *Store) http.Handler {
 	server := &Server{store: store, now: time.Now}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc("GET /grader", server.handleIndex)
 	mux.HandleFunc("GET /grader/", server.handleIndex)
 	mux.HandleFunc("POST /grader/review", server.handleReview)
