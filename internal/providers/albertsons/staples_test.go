@@ -11,8 +11,42 @@ import (
 	"sync"
 	"testing"
 
+	"careme/internal/config"
 	"careme/internal/providers/albertsons/query"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewStaplesProviderRequiresSubscriptionKey(t *testing.T) {
+	for _, key := range []string{"", " \t\n"} {
+		t.Run(fmt.Sprintf("key=%q", key), func(t *testing.T) {
+			provider, err := NewStaplesProvider(config.AlbertsonsConfig{SearchSubscriptionKey: key}, &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					t.Fatal("construction must not make HTTP requests")
+					return nil, nil
+				}),
+			})
+			require.ErrorContains(t, err, "ALBERTSONS_SEARCH_SUBSCRIPTION_KEY")
+			assert.Nil(t, provider.newClient)
+		})
+	}
+}
+
+func TestNewStaplesProviderAcceptsSubscriptionKey(t *testing.T) {
+	t.Chdir(t.TempDir())
+	provider, err := NewStaplesProvider(config.AlbertsonsConfig{SearchSubscriptionKey: "test-key"}, &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			t.Fatal("construction must not make HTTP requests")
+			return nil, nil
+		}),
+	})
+	require.NoError(t, err)
+	client, storeID, err := provider.clientForLocation("acmemarkets_806")
+	require.NoError(t, err)
+	assert.NotNil(t, client)
+	assert.Equal(t, "806", storeID)
+}
 
 func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
 	t.Parallel()

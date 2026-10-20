@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"careme/internal/httpretry"
 
@@ -71,6 +72,13 @@ func (c ProxyConfig) proxyURL() *url.URL {
 }
 
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	cfg.Port = strings.TrimSpace(cfg.Port)
+	cfg.Username = strings.TrimSpace(cfg.Username)
+	cfg.Password = strings.TrimSpace(cfg.Password)
+	if cfg != (ProxyConfig{}) && !cfg.Enabled() {
+		return nil, fmt.Errorf("bright data proxy requires BRIGHTDATA_PROXY_HOST, BRIGHTDATA_PROXY_PORT, BRIGHTDATA_PROXY_USERNAME and BRIGHTDATA_PROXY_PASSWORD")
+	}
 	transport := http.DefaultTransport
 	if cfg.Enabled() {
 		var err error

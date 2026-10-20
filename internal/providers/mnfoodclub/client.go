@@ -16,6 +16,7 @@ import (
 	"careme/internal/httpretry"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // AllCategories selects the full catalog without a category filter.
@@ -24,19 +25,29 @@ const AllCategories = 0
 // Client reads the complete store catalog using a store-level access token.
 // Required credentials are checked at construction.
 type Client struct {
-	config     config.MNFoodClubConfig
-	httpClient *http.Client
+	catalogBase *url.URL
+	accessToken string
+	httpClient  *http.Client
 }
 
 func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*Client, error) {
 	if strings.TrimSpace(cfg.APIPath) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
 		return nil, fmt.Errorf("MNFoodClub requires MNFOODCLUB_API_PATH and MNFOODCLUB_ACCESS_TOKEN")
 	}
+	base, err := catalogURL(cfg.APIPath)
+	if err != nil {
+		return nil, err
+	}
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	instrumented := *httpClient
+	instrumented.Transport = otelhttp.NewTransport(httpClient.Transport)
 	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient = httpClient
+	retryClient.HTTPClient = &instrumented
 	retryClient.RequestLogHook = httpretry.LogRetry("mnfoodclub")
 	retryClient.Backoff = catalogBackoff
-	return &Client{config: cfg, httpClient: retryClient.StandardClient()}, nil
+	return &Client{catalogBase: base, accessToken: strings.TrimSpace(cfg.AccessToken), httpClient: retryClient.StandardClient()}, nil
 }
 
 // catalogBackoff honors BigCommerce's X-Rate-Limit-Time-Reset-Ms (milliseconds)
@@ -60,8 +71,8 @@ func catalogBackoff(min, max time.Duration, attempt int, resp *http.Response) ti
 	return retryablehttp.DefaultBackoff(min, max, attempt, resp)
 }
 
-func (c *Client) catalogURL() (*url.URL, error) {
-	u, err := url.Parse(strings.TrimSpace(c.config.APIPath))
+func catalogURL(apiPath string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimSpace(apiPath))
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("invalid MNFOODCLUB_API_PATH: expected an absolute store API URL")
 	}
@@ -113,7 +124,7 @@ func (c *Client) getPage(ctx context.Context, pageURL string, result any) error 
 	if err != nil {
 		return fmt.Errorf("create catalog request: %w", err)
 	}
-	req.Header.Set("X-Auth-Token", c.config.AccessToken)
+	req.Header.Set("X-Auth-Token", c.accessToken)
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -132,23 +143,19 @@ func (c *Client) getPage(ctx context.Context, pageURL string, result any) error 
 // Fetch returns every eligible product, optionally restricted to one category.
 // Use AllCategories to fetch products across all categories.
 func (c *Client) Fetch(ctx context.Context, categoryID int) ([]ai.InputIngredient, error) {
-	base, err := c.catalogURL()
-	if err != nil {
-		return nil, err
-	}
 	filters := url.Values{"is_visible": {"true"}, "include": {"variants"}, "sort": {"id"}, "direction": {"asc"}}
 	if categoryID != AllCategories {
 		filters.Set("categories:in", strconv.Itoa(categoryID))
 	}
-	products, err := catalogItems[catalogProduct](ctx, c, base, "products", filters)
+	products, err := catalogItems[catalogProduct](ctx, c, c.catalogBase, "products", filters)
 	if err != nil {
 		return nil, err
 	}
-	categories, err := catalogItems[catalogCategory](ctx, c, base, "categories", nil)
+	categories, err := catalogItems[catalogCategory](ctx, c, c.catalogBase, "categories", nil)
 	if err != nil {
 		return nil, err
 	}
-	brands, err := catalogItems[catalogBrand](ctx, c, base, "brands", nil)
+	brands, err := catalogItems[catalogBrand](ctx, c, c.catalogBase, "brands", nil)
 	if err != nil {
 		return nil, err
 	}

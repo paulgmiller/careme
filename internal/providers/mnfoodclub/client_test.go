@@ -59,7 +59,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 			var bodies []*trackedBody
 			client := testClient(t, func(req *http.Request) (*http.Response, error) {
 				assert.Equal(t, http.MethodGet, req.Method)
-				assert.Equal(t, t.Context(), req.Context())
+				assert.Equal(t, t.Context().Done(), req.Context().Done())
 				assert.Equal(t, "test-token", req.Header.Get("X-Auth-Token"))
 				assert.Equal(t, "application/json", req.Header.Get("Accept"))
 				assert.Equal(t, "250", req.URL.Query().Get("limit"))
@@ -118,9 +118,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 func TestCatalogConfiguration(t *testing.T) {
 	client, err := NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "token"}, &http.Client{})
 	require.NoError(t, err)
-	got, err := client.catalogURL()
-	require.NoError(t, err)
-	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/catalog/", got.String())
+	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/catalog/", client.catalogBase.String())
 	for _, cfg := range []config.MNFoodClubConfig{
 		{APIPath: "https://api.bigcommerce.com/stores/test/", AccessToken: "token"},
 		{APIPath: "https://api.bigcommerce.com/stores/test/v3", AccessToken: "token"},
@@ -137,10 +135,8 @@ func TestCatalogConfiguration(t *testing.T) {
 			t.Fatal("invalid configuration must not make requests")
 			return nil, nil
 		})})
-		require.NoError(t, err)
-		got, err := client.Fetch(t.Context(), AllCategories)
-		require.Error(t, err)
-		assert.Nil(t, got)
+		require.ErrorContains(t, err, "invalid MNFOODCLUB_API_PATH")
+		assert.Nil(t, client)
 		assert.NotContains(t, err.Error(), "password")
 	}
 }

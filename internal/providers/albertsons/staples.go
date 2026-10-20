@@ -43,6 +43,9 @@ func NewIdentityProvider() identityProvider {
 }
 
 func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (StaplesProvider, error) {
+	if strings.TrimSpace(cfg.SearchSubscriptionKey) == "" {
+		return StaplesProvider{}, fmt.Errorf("albertsons requires ALBERTSONS_SEARCH_SUBSCRIPTION_KEY")
+	}
 	c, err := cache.EnsureCache(Container)
 	if err != nil {
 		return StaplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
