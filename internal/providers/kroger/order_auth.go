@@ -159,25 +159,25 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	request := continuation.Request
 	if r.URL.Query().Get("error") != "" {
-		a.returnToList(w, r, request, orderResult{}, "denied")
+		a.completeAuthorization(w, r, request, orderResult{Status: "denied"})
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		a.returnToList(w, r, request, orderResult{}, "missing_code")
+		a.completeAuthorization(w, r, request, orderResult{Status: "missing_code"})
 		return
 	}
 	token, err := a.client.Exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
-		a.returnToList(w, r, request, orderResult{}, "connect_failed")
+		a.completeAuthorization(w, r, request, orderResult{Status: "connect_failed"})
 		return
 	}
 	if err := a.saveToken(r.Context(), userID, token); err != nil {
-		a.returnToList(w, r, request, orderResult{}, "save_failed")
+		a.completeAuthorization(w, r, request, orderResult{Status: "save_failed"})
 		return
 	}
-	a.order(w, r, request, false)
+	a.completeAuthorization(w, r, request, a.order(r.Context(), request, false))
 }
 
 func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -195,12 +195,28 @@ func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request) (string,
 
 func redirectToOrderingSignIn(w http.ResponseWriter, r *http.Request) {
 	if httpx.IsHTMX(r) {
-		w.Header().Set("HX-Redirect", "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(httpx.RequestPath(r)))))
+		destination := httpx.RequestPath(r)
+		// A fragment request should return to the shopping page after sign-in,
+		// not the transfer API. Only accept the current page on this host.
+		if current, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil && current.Host == r.Host && localReturnURL(current.RequestURI()) {
+			destination = current.RequestURI()
+		}
+		w.Header().Set("HX-Redirect", "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(destination))))
 	}
 	http.Error(w, "must be logged in", http.StatusUnauthorized)
 }
 
 func (a *OrderHandler) Register(routes routing.Registrar) {
-	routes.Handle("POST /kroger/order", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
+	routes.Handle("POST /kroger/cart-transfers", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
 	routes.HandleFunc("GET /kroger/callback", a.handleCallback)
+	routes.HandleFunc("GET /kroger/cart-transfers/{transfer_id}", a.handleTransfer)
+	routes.HandleFunc("GET /kroger/cart-transfers/{transfer_id}/connect", a.handleConnect)
+}
+
+// OAuth redirects return to the original page without encoding outcome fields.
+// The page retrieves the transfer through the same API used after POST.
+func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, request orderRequest, result orderResult) {
+	if a.saveTransfer(w, r, cartTransfer{Request: request, Result: result}) {
+		http.Redirect(w, r, request.ReturnURL, http.StatusSeeOther)
+	}
 }

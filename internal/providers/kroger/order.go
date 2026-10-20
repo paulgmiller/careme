@@ -7,15 +7,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	locationtypes "careme/internal/locations/types"
+	ordertypes "careme/internal/orders/types"
 )
 
 // orderRequest is the posted shopping list retained while connecting Kroger.
@@ -44,21 +46,41 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
+	var input ordertypes.TransferRequest
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	switch mediaType {
+	case "application/json":
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+			return
+		}
+		if err := decoder.Decode(new(any)); err != io.EOF {
+			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+			return
+		}
+	case "application/x-www-form-urlencoded":
+		if err := r.ParseForm(); err != nil {
+			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+			return
+		}
+		var location locationtypes.Location
+		if json.Unmarshal([]byte(r.PostForm.Get("location")), &location) != nil || json.Unmarshal([]byte(r.PostForm.Get("items")), &input.Items) != nil {
+			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+			return
+		}
+		input.Location, input.ListKey, input.ReturnURL = location, r.PostForm.Get("list_key"), r.PostForm.Get("return_url")
+	default:
+		writeTransferError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Use JSON or a URL-encoded form.")
 		return
 	}
-	var location locationtypes.Location
-	if err := json.Unmarshal([]byte(r.PostForm.Get("location")), &location); err != nil {
-		http.Error(w, "Invalid ordering location", http.StatusBadRequest)
+	request := orderRequest{UserID: userID, ListKey: input.ListKey, StoreID: input.Location.ID, Chain: input.Location.Chain, ReturnURL: input.ReturnURL, Items: input.Items}
+	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || len(request.Items) == 0 {
+		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}
-	request := orderRequest{UserID: userID, ListKey: r.PostForm.Get("list_key"), StoreID: location.ID, Chain: location.Chain, ReturnURL: r.PostForm.Get("return_url")}
-	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || json.Unmarshal([]byte(r.PostForm.Get("items")), &request.Items) != nil || len(request.Items) == 0 {
-		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
-		return
-	}
-	a.order(w, r, request, true)
+	a.createTransfer(w, r, request)
 }
 
 func validListKey(key string) bool {
@@ -96,22 +118,7 @@ func orderFingerprint(request orderRequest) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, request orderRequest, result orderResult, code string) {
-	destination, _ := url.Parse(request.ReturnURL)
-	query := destination.Query()
-	if code == "" {
-		code = result.Status
-	}
-	query.Set("kroger_status", code)
-	query.Set("kroger_added", strconv.Itoa(result.Added))
-	query.Set("kroger_unmatched", strconv.Itoa(len(result.Gaps)))
-	query.Set("kroger_cart", cartURL(request.Chain))
-	destination.RawQuery = query.Encode()
-	http.Redirect(w, r, destination.String(), http.StatusSeeOther)
-}
-
-func (a *OrderHandler) order(w http.ResponseWriter, r *http.Request, request orderRequest, allowAuthorization bool) {
-	ctx := r.Context()
+func (a *OrderHandler) order(ctx context.Context, request orderRequest, allowAuthorization bool) orderResult {
 	key := "kroger_cart_transfers/" + request.UserID + "/" + request.ListKey
 	fingerprint := orderFingerprint(request)
 	var previous orderResult
@@ -119,52 +126,45 @@ func (a *OrderHandler) order(w http.ResponseWriter, r *http.Request, request ord
 		if previous.Status == "complete" && previous.Fingerprint != fingerprint {
 			previous.Status = "changed"
 		}
-		a.returnToList(w, r, request, previous, "")
-		return
+		return previous
 	} else if !errors.Is(err, cache.ErrNotFound) {
-		a.returnToList(w, r, request, orderResult{}, "start_failed")
-		return
+		return orderResult{Status: "start_failed"}
 	}
 	token, err := a.loadToken(ctx, request.UserID)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		a.returnToList(w, r, request, orderResult{}, "connect_failed")
-		return
+		return orderResult{Status: "connect_failed"}
 	}
 	if err == nil && time.Now().After(token.ExpiresAt.Add(-time.Minute)) {
 		token, err = a.client.Refresh(ctx, token.RefreshToken)
 		if err == nil {
 			if err = a.saveToken(ctx, request.UserID, token); err != nil {
-				a.returnToList(w, r, request, orderResult{}, "save_failed")
-				return
+				return orderResult{Status: "save_failed"}
 			}
 		}
 	}
 	if err != nil || token.AccessToken == "" {
 		if allowAuthorization {
-			a.startAuthorization(w, r, request)
+			return orderResult{Status: "pending_login"}
 		} else {
-			a.returnToList(w, r, request, orderResult{}, "connect_failed")
+			return orderResult{Status: "connect_failed"}
 		}
-		return
 	}
 	items, gaps, err := a.resolveItems(ctx, request)
 	if err != nil {
-		a.returnToList(w, r, request, orderResult{}, "lookup_failed")
-		return
+		return orderResult{Status: "lookup_failed"}
 	}
 	result := orderResult{Status: "pending", Gaps: gaps, Fingerprint: fingerprint}
 	if len(items) == 0 {
-		a.returnToList(w, r, request, result, "no_matches")
-		return
+		result.Status = "no_matches"
+		return result
 	}
 	if err := a.saveJSON(ctx, key, result, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			// Re-enter the read path; the winner owns the only cart write.
-			a.order(w, r, request, false)
-			return
+			return a.order(ctx, request, false)
 		}
-		a.returnToList(w, r, request, result, "start_failed")
-		return
+		result.Status = "start_failed"
+		return result
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
 		result.Status = "uncertain"
@@ -173,10 +173,10 @@ func (a *OrderHandler) order(w http.ResponseWriter, r *http.Request, request ord
 		result.Added = len(items)
 	}
 	if err := a.saveJSON(ctx, key, result, cache.Unconditional()); err != nil {
-		a.returnToList(w, r, request, result, "confirmation_failed")
-		return
+		result.Status = "confirmation_failed"
+		return result
 	}
-	a.returnToList(w, r, request, result, "")
+	return result
 }
 
 func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) ([]CartItem, []ai.ShoppingItem, error) {

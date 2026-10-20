@@ -25,7 +25,6 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
-		assert.Equal(t, "ready", input.Query.Get("destination_status"))
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
 		return &ordertypes.OrderView{ActionURL: "/destination/order", ActionLabel: "Send groceries", Fields: ordertypes.OrderFields{Items: `Food & "Wine"`, Location: `{"id":"other-store"}`, ListKey: input.ListKey, ReturnURL: input.ReturnURL}, Description: "Destination instructions", Notice: "Ready to review", ReviewURL: "https://destination.example/cart", ReviewLabel: "Review groceries"}, nil
 	})
