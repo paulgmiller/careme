@@ -16,8 +16,9 @@ import (
 
 // Keep these lists in sync with config.LoadOnlyProviders and config.Load.
 // Include the workloads' shared storage and telemetry requirements as well.
+// Albertsons inventory searches use ALBERTSONS_SEARCH_SUBSCRIPTION_KEY.
 var providerSecrets = []string{
-	"brightdata-proxy", "kroger", "mnfoodclub", "storage", "walmart",
+	"albertsons", "brightdata-proxy", "kroger", "mnfoodclub", "storage", "walmart",
 }
 
 var fullSecrets = append(append([]string{}, providerSecrets...), "ai", "auth", "grafana")
