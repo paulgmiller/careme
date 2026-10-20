@@ -33,17 +33,20 @@ paths:
         purchasable packages, not recipe measurements. Each product ID must appear
         only once; omitted quantity defaults to one. Reject duplicate product IDs
         with HTTP 400 and code duplicate_product_id before any cart changes or
-        pending handoff creation, even when their quantities differ. For now, always
-        choose the smallest purchasable size for each product. MN Food Club
+        pending handoff creation, even when their quantities or variant IDs differ.
+        When variant_id is supplied, use that variant of the specified product.
+        Reject the item's quantity if the variant does not belong to the product
+        or cannot be purchased; do not substitute another variant. When variant_id
+        is omitted, choose the smallest purchasable size for now. MN Food Club
         chooses valid defaults for any other required options.
         If no valid selection exists, reject that product's quantity and continue.
         Add partial quantities when possible. Unknown, unavailable, or otherwise
         unpurchasable products are product rejections, not whole-request errors.
         Even if every product is rejected, return an applied response and URL.
 
-        For an unmatched customer, preserve the complete product list
-        until they visit the URL. Resolve products, options, and quantities then,
-        and preserve the request through login. Show results on MN Food Club.
+        For an unmatched customer, preserve the complete product list, including
+        any supplied variant IDs, until they visit the URL. Resolve products, options,
+        and quantities then, and preserve the request through login. Show results on MN Food Club.
         Apply a pending transfer at most once, including repeated link visits.
         Careme can retrieve the current state and eventual user ID through
         GET /v1/cart-transfers/{transfer_id}. No webhook or callback is required.
@@ -82,12 +85,14 @@ paths:
                 value:
                   items:
                     - product_id: '101'
+                      variant_id: '1005'
                       quantity: 3
                     - product_id: '202'
                   identity_hints:
                     emails: [chef@example.com, kitchen@example.com]
                     user_id: customer-42
                     storefront_brand: preferred-storefront
+                    zip_code: '55401'
               explicitQuantity:
                 summary: Two packages of product 101, without identity hints
                 value:
@@ -358,7 +363,8 @@ components:
           minItems: 1
           uniqueItems: true
           description: |
-            Each product_id must appear only once, even if quantities differ.
+            Each product_id must appear only once, even if quantities or variant
+            IDs differ. Only one variant per product may be requested in a transfer.
             Duplicate IDs cause HTTP 400 with code duplicate_product_id before
             cart changes or pending handoff creation. uniqueItems catches identical
             entries; the server must also enforce uniqueness by product_id.
@@ -376,6 +382,16 @@ components:
           minLength: 1
           pattern: '\S'
           description: Opaque catalog product ID, as a string; Careme currently retains parent product IDs.
+        variant_id:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          description: |
+            Optional opaque variant ID belonging to product_id. When supplied,
+            request this exact variant; an invalid, mismatched, or unpurchasable
+            variant is an item rejection, with no substitution. When omitted,
+            MN Food Club chooses the smallest purchasable size for now.
+          example: '1005'
         quantity:
           type: integer
           minimum: 1
@@ -405,6 +421,11 @@ components:
             Preferred storefront for branding and destination URL. This is not a
             catalog product brand or a strict customer/account boundary.
             MN Food Club owns recognized values and handling of unknown brands.
+        zip_code:
+          type: string
+          pattern: '^[0-9]{5}(-[0-9]{4})?$'
+          description: Optional customer ZIP code for identity matching. Keep as a string to preserve leading zeros; MN Food Club owns matching precedence.
+          example: '55401'
     CartTransferResponse:
       oneOf:
         - $ref: '#/components/schemas/AppliedTransfer'
@@ -474,10 +495,10 @@ components:
         this product ID (defaulting to one when omitted in the request). Accepted
         quantities are packages added by this transfer, not the resulting cart
         total. Include rejection_reason whenever rejected_quantity is positive.
-        For now, accepted packages always use the smallest purchasable size;
-        variant IDs and option selections are not returned. These cross-field
-        rules are normative even where OpenAPI 3.0 cannot express them as schema
-        constraints.
+        Accepted packages use the requested variant when supplied; otherwise,
+        choose the smallest purchasable size for now. Variant IDs and option
+        selections are not returned. These cross-field rules are normative even where
+        OpenAPI 3.0 cannot express them as schema constraints.
       properties:
         product_id:
           type: string
@@ -493,8 +514,8 @@ components:
           minLength: 1
           description: |
             Partner-defined machine-readable reason, for example product_not_found,
-            product_unavailable, insufficient_stock, or no_valid_options. Callers
-            must tolerate new reasons. Omit when nothing was rejected.
+            product_unavailable, insufficient_stock, invalid_variant, or no_valid_options.
+            Callers must tolerate new reasons. Omit when nothing was rejected.
     Error:
       type: object
       additionalProperties: false

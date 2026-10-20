@@ -16,13 +16,14 @@ partner's actual endpoint before use.
 ```json
 {
   "items": [
-    {"product_id": "101", "quantity": 3},
+    {"product_id": "101", "variant_id": "1005", "quantity": 3},
     {"product_id": "202"}
   ],
   "identity_hints": {
     "emails": ["chef@example.com", "kitchen@example.com"],
     "user_id": "customer-42",
-    "storefront_brand": "preferred-storefront"
+    "storefront_brand": "preferred-storefront",
+    "zip_code": "55401"
   }
 }
 ```
@@ -31,9 +32,15 @@ Product IDs are opaque strings from the catalog, currently parent BigCommerce
 product IDs on Careme's side. Quantities count purchasable packages, default to
 one, and must be specified on a single item per product ID. To request two
 packages, send `{"product_id":"101","quantity":2}`. Repeated product IDs return
-HTTP 400 with `duplicate_product_id`, even when quantities differ, before any
-cart changes or pending handoff creation. Recipe measurements such as “2 cups”
-are not package counts and must not be sent as quantities.
+HTTP 400 with `duplicate_product_id`, even when quantities or variant IDs differ,
+before any cart changes or pending handoff creation. Recipe measurements such
+as “2 cups” are not package counts and must not be sent as quantities.
+
+An optional `variant_id` identifies the exact variant of `product_id` to add.
+Use opaque strings for both IDs. If that variant does not belong to the product
+or cannot be purchased, reject the item's quantity without substituting another
+variant. Each transfer may request only one variant per product, consistent
+with the duplicate-product rule.
 
 All identity hints are optional. Emails can identify a customer without a prior
 connection. MN Food Club owns matching, including conflicts between a saved ID
@@ -41,6 +48,10 @@ and emails, ambiguous matches, and unknown hints. An unresolved customer gets a
 login handoff rather than an error. The storefront brand is a preferred site for
 branding and the destination URL, not a product brand or an account boundary.
 MN Food Club defines the recognized brand values.
+
+The optional `zip_code` is another customer-matching hint, supplied as a string
+to preserve leading zeros. It accepts a five-digit ZIP or ZIP+4. MN Food Club
+owns how it combines the ZIP code with the other hints.
 
 ## Matched and unmatched flows
 
@@ -57,19 +68,19 @@ with `insufficient_stock`. Accepted plus rejected must equal the request quantit
 (defaulting to one); the response does not repeat that quantity. A positive
 rejected quantity requires a reason; callers must tolerate new reason codes.
 
-**For now, always choose the smallest purchasable size for each product.**
-Quantities count packages of that size. MN Food Club chooses valid defaults for
-other required choices, such as flavor. The response does not include variant
-IDs or selected options. If no valid selection is possible, reject that product
+**Use the supplied variant; when no variant is supplied, choose the smallest
+purchasable size for now.** Quantities count packages of the selected variant or
+size. MN Food Club chooses valid defaults for other required choices, such as
+flavor. The response does not include variant IDs or selected options. If no valid selection is possible, reject that product
 and continue processing the others. Unknown or unavailable products are also individual rejections.
 Even if all products are rejected, return HTTP 200, `applied`, the product results,
 and a usable cart URL. “Applied” describes completed processing, not full product
 acceptance. Existing checkout and order-cutoff rules remain MN Food Club's.
 
 For an unmatched customer, return HTTP 200, `status: pending_login`, a transfer
-ID, and a handoff URL. Preserve the complete product list without
-assessing acceptance yet. The shopper can review it on MN Food Club, log in,
-and have the transfer added to their cart. Preserve the request through login
+ID, and a handoff URL. Preserve the complete product list, including supplied
+variant IDs, without assessing acceptance yet. The shopper can review it on
+MN Food Club, log in, and have the transfer added to their cart. Preserve the request through login
 and apply it at most once. MN Food Club shows the eventual results; Careme can
 retrieve the resolved user ID and product results through the status endpoint
 below. No webhook or result callback is required.
