@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,6 +86,9 @@ func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) fu
 }
 
 func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
+	if strings.TrimSpace(cfg.Kroger.ClientID) == "" || strings.TrimSpace(cfg.Kroger.ClientSecret) == "" {
+		return nil, fmt.Errorf("kroger requires KROGER_CLIENT_ID and KROGER_CLIENT_SECRET")
+	}
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}

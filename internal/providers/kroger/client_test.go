@@ -5,10 +5,43 @@ import (
 	"net/http"
 	"testing"
 
+	"careme/internal/config"
+
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewStaplesProviderRequiresCredentials(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		credentials config.KrogerConfig
+		wantError   bool
+	}{
+		{"missing both", config.KrogerConfig{}, true},
+		{"missing client ID", config.KrogerConfig{ClientSecret: "secret"}, true},
+		{"missing secret", config.KrogerConfig{ClientID: "client"}, true},
+		{"blank client ID", config.KrogerConfig{ClientID: " \t", ClientSecret: "secret"}, true},
+		{"blank secret", config.KrogerConfig{ClientID: "client", ClientSecret: " \n"}, true},
+		{"valid", config.KrogerConfig{ClientID: "client", ClientSecret: "secret"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewStaplesProvider(&config.Config{Kroger: tt.credentials}, &http.Client{
+				Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					t.Fatal("construction must not make HTTP requests")
+					return nil, nil
+				}),
+			})
+			if tt.wantError {
+				require.ErrorContains(t, err, "KROGER_CLIENT_ID and KROGER_CLIENT_SECRET")
+				assert.Nil(t, provider)
+				return
+			}
+			require.NoError(t, err)
+			assert.NotNil(t, provider)
+		})
+	}
+}
 
 func TestWithRetries_UsesDefaultStatusPolicy(t *testing.T) {
 	client := withRetries(&http.Client{})

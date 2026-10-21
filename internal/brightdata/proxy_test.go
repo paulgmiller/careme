@@ -7,7 +7,28 @@ import (
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewProxyAwareHTTPClientRejectsMissingCredentials(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		config ProxyConfig
+	}{
+		{"missing host", ProxyConfig{Port: "33335", Username: "user", Password: "password"}},
+		{"missing port", ProxyConfig{Host: "brd.superproxy.io", Username: "user", Password: "password"}},
+		{"missing username", ProxyConfig{Host: "brd.superproxy.io", Port: "33335", Password: "password"}},
+		{"missing password", ProxyConfig{Host: "brd.superproxy.io", Port: "33335", Username: "user"}},
+		{"blank password", ProxyConfig{Host: "brd.superproxy.io", Port: "33335", Username: "user", Password: " \t\n"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewProxyAwareHTTPClient(tt.config)
+			require.ErrorContains(t, err, "bright data proxy requires BRIGHTDATA_PROXY_HOST")
+			assert.Nil(t, client)
+		})
+	}
+}
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
 	t.Parallel()
