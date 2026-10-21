@@ -111,29 +111,28 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 	if selected.ID <= 0 {
 		return ai.InputIngredient{}, false, fmt.Errorf("missing selected variant ID")
 	}
-	regular := product.Price
+	regularPrice := product.Price
 	if selected.Price != nil {
-		regular = *selected.Price
+		regularPrice = *selected.Price
 	}
-	current := selected.CalculatedPrice
-	if !validPrice(regular) || !validPrice(current) {
+	if !validPrice(regularPrice) || !validPrice(selected.CalculatedPrice) {
 		return ai.InputIngredient{}, false, fmt.Errorf("invalid catalog price")
 	}
 	// A variant's calculated price is the selling price, including inherited sales.
 	// Do not compare it with another variant's base price or the retail/MSRP field.
-	// Raising regular here is defensive: we have observed calculated prices above
+	// Raising regularPrice here is defensive: we have observed calculated prices above
 	// the parent product's price, but not confirmed above the variant's own price.
-	if current > regular {
-		regular = current
+	if selected.CalculatedPrice > regularPrice {
+		regularPrice = selected.CalculatedPrice
 	}
 	ingredient := ai.InputIngredient{
 		ProductID: strconv.Itoa(product.ID), VariantID: strconv.Itoa(selected.ID), Description: product.Name,
-		Size: catalogSizeFromDescription(product.Name), PriceRegular: &regular,
+		Size: catalogSizeFromDescription(product.Name), PriceRegular: &regularPrice,
 	}
 	// PriceSale represents a discount for PercentOff(), rather than every selling
 	// price. Equal prices need no sale value; a higher value would give negative savings.
-	if current < regular {
-		ingredient.PriceSale = &current
+	if selected.CalculatedPrice < regularPrice {
+		ingredient.PriceSale = &selected.CalculatedPrice
 	}
 	if product.BrandID != 0 {
 		brand, ok := brands[product.BrandID]
