@@ -63,26 +63,24 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	got, err := client.MergeShoppingQuantities(t.Context(), ingredients, catalog)
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, ShoppingItem{ProductID: "pork", Name: "Ground pork", Needed: "24 oz", Buy: buyNumber(1)}, got[0])
+	assert.Equal(t, ShoppingItem{ProductID: "pork", Name: "Ground pork", Needed: "24 oz", Buy: new(float64(1))}, got[0])
 	assert.Equal(t, ShoppingItem{ProductID: "garlic", Name: "Garlic", Needed: "3 cloves"}, got[1])
 	assert.NotNil(t, catalog[0].Grade)
 	assert.Equal(t, IngredientEmbedding{1, 2}, catalog[0].Embedding)
 }
-
-func buyNumber(n float64) *float64 { return &n }
 
 func TestMergeShoppingPurchaseResults(t *testing.T) {
 	for _, tc := range []struct {
 		name, output, size, wantErr string
 		buy                         *float64
 	}{
-		{name: "whole size multiple", output: `{"items":[{"id":"pork","name":"Pork","needed":"40 oz","buy":3}]}`, size: "16 oz", buy: buyNumber(3)},
-		{name: "weight fraction", output: `{"items":[{"id":"pork","name":"Pork","needed":"8 oz","buy":0.5}]}`, size: "1 lb", buy: buyNumber(0.5)},
+		{name: "whole size multiple", output: `{"items":[{"id":"pork","name":"Pork","needed":"40 oz","buy":3}]}`, size: "16 oz", buy: new(float64(3))},
+		{name: "weight fraction", output: `{"items":[{"id":"pork","name":"Pork","needed":"8 oz","buy":0.5}]}`, size: "1 lb", buy: new(0.5)},
 		{name: "pantry", output: `{"items":[{"id":"","name":"Saffron","needed":"1 pinch","buy":null}]}`},
 		{name: "uncertain conversion", output: `{"items":[{"id":"pork","name":"Pork","needed":"1 cup","buy":null}]}`, size: "16 oz"},
 		{name: "unknown product", output: `{"items":[{"id":"invented","name":"Pork","needed":"24 oz","buy":1}]}`, wantErr: "unknown product"},
 		{name: "pantry cannot buy", output: `{"items":[{"id":"","name":"Saffron","needed":"1 pinch","buy":1}]}`, wantErr: "requires a catalog product"},
-		{name: "missing size", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":1}]}`, buy: buyNumber(1)},
+		{name: "missing size", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":1}]}`, buy: new(float64(1))},
 		{name: "zero buy", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":0}]}`, size: "16 oz", wantErr: "must be positive"},
 		{name: "negative buy", output: `{"items":[{"id":"pork","name":"Pork","needed":"24 oz","buy":-1}]}`, size: "16 oz", wantErr: "must be positive"},
 	} {

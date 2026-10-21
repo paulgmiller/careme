@@ -18,8 +18,8 @@ import (
 func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 	s := newTestServer(t)
 	view := shoppingListPageView{Hash: "list", Location: locations.Location{ID: "other-store"}, Purchases: []shoppingPurchaseGroup{
-		{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Food", Needed: "1 lb"}}}},
-		{Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Wine", Needed: "1 bottle"}}}},
+		{Items: []shoppingPurchaseItem{{Name: "Food", Needed: "1 lb"}}},
+		{Items: []shoppingPurchaseItem{{Name: "Wine", Needed: "1 bottle"}}},
 	}}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		assert.Equal(t, view.Location, input.Location)

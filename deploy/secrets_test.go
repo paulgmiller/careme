@@ -85,7 +85,7 @@ func TestRequiredSecrets(t *testing.T) {
 				for _, c := range template.Spec.Containers {
 					// These are the deployed binaries calling config.Load*.
 					// Scraper images use their own configuration.
-					image := strings.Split(strings.Split(path.Base(c.Image), "@")[0], ":")[0]
+					image, _, _ := strings.Cut(strings.Split(path.Base(c.Image), "@")[0], ":")
 					var secrets []string
 					switch image {
 					case "careme":

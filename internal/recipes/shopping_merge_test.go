@@ -185,7 +185,7 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "pork", Description: "Pork & herbs", Size: "32 oz", AisleNumber: "Meat"}}))
 	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		require.Len(t, catalog, 1)
-		return []ai.ShoppingItem{{ProductID: needs[0].ProductID, Name: needs[0].Name, Needed: needs[0].Quantity, Buy: buyNumber(1)}, {Name: needs[1].Name, Needed: needs[1].Quantity}}, nil
+		return []ai.ShoppingItem{{ProductID: needs[0].ProductID, Name: needs[0].Name, Needed: needs[0].Quantity, Buy: new(float64(1))}, {Name: needs[1].Name, Needed: needs[1].Quantity}}, nil
 	})
 	originParams := DefaultParams(p.Location, p.Date)
 	hash := prepareShoppingFinalize(t, s, originParams, p.Saved...)
@@ -224,7 +224,7 @@ func TestShoppingPurchaseSectionPreservesCatalogSizes(t *testing.T) {
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			catalog := []ai.InputIngredient{{ProductID: "product", Description: "Ingredient", Size: size, AisleNumber: "Produce"}}
 			s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
-				return []ai.ShoppingItem{{ProductID: "product", Name: "Ingredient", Needed: "1 serving", Buy: buyNumber(1)}}, nil
+				return []ai.ShoppingItem{{ProductID: "product", Name: "Ingredient", Needed: "1 serving", Buy: new(float64(1))}}, nil
 			})
 			require.NoError(t, s.mergeAndCacheShoppingList(t.Context(), p.Hash(), p.Saved[0].Ingredients, catalog))
 			rr := httptest.NewRecorder()
@@ -288,7 +288,7 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 		calls++
 		require.Equal(t, []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}}, catalog)
 		require.Len(t, needs, 3, "send raw needs without deduplication")
-		return []ai.ShoppingItem{{ProductID: "onion", Name: "Onion", Needed: "8 oz", Buy: buyNumber(1)}, {Name: "Olive oil", Needed: "4½ tbsp"}}, nil
+		return []ai.ShoppingItem{{ProductID: "onion", Name: "Onion", Needed: "8 oz", Buy: new(float64(1))}, {Name: "Olive oil", Needed: "4½ tbsp"}}, nil
 	})
 	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "4½ tbsp"}}
 	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil", Size: "16 fl oz"}}
@@ -302,8 +302,6 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	assert.Equal(t, first, second)
 	assert.Equal(t, 1, calls, "unmatched catalog metadata does not invalidate the merge")
 }
-
-func buyNumber(n float64) *float64 { return &n }
 
 func cachedShoppingItems(t *testing.T, s *server, hash string) []ai.ShoppingItem {
 	t.Helper()

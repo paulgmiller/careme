@@ -16,15 +16,15 @@ type shoppingMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(ctx)
 	if err != nil {
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(ctx map[string]any) (map[string]any, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)
@@ -35,7 +35,7 @@ func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
 	return runEval(ctx, ai.NewClient(cfg.AI, http.DefaultClient, nil))
 }
 
-func runEval(ctx map[string]interface{}, merger shoppingMerger) (map[string]interface{}, error) {
+func runEval(ctx map[string]any, merger shoppingMerger) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("encode eval context: %w", err)
@@ -64,5 +64,5 @@ func runEval(ctx map[string]interface{}, merger shoppingMerger) (map[string]inte
 	if err != nil {
 		return nil, fmt.Errorf("encode shopping items: %w", err)
 	}
-	return map[string]interface{}{"output": string(output), "latencyMs": latency.Milliseconds()}, nil
+	return map[string]any{"output": string(output), "latencyMs": latency.Milliseconds()}, nil
 }
