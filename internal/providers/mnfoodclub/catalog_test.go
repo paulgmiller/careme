@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func pricePointer(price float32) *float32 { return &price }
-
 func TestCatalogStockAndPrices(t *testing.T) {
 	for _, test := range []struct {
 		name          string
@@ -33,14 +31,14 @@ func TestCatalogStockAndPrices(t *testing.T) {
 		{name: "all variants disabled", change: func(p *catalogProduct) { p.Variants[0].PurchasingDisabled = true }},
 		{name: "inherited sale", change: func(p *catalogProduct) { p.Variants[0].CalculatedPrice = 8 }, wantCount: 1, regular: 10, sale: 8},
 		{name: "free product", change: func(p *catalogProduct) { p.Price = 0; p.Variants[0].CalculatedPrice = 0 }, wantCount: 1},
-		{name: "variant regular override", change: func(p *catalogProduct) { p.Variants[0].Price = pricePointer(12); p.Variants[0].CalculatedPrice = 12 }, wantCount: 1, regular: 12},
+		{name: "variant regular override", change: func(p *catalogProduct) { p.Variants[0].Price = new(float32(12)); p.Variants[0].CalculatedPrice = 12 }, wantCount: 1, regular: 12},
 		{name: "cheapest eligible variant", change: func(p *catalogProduct) {
 			p.InventoryTracking = "variant"
 			p.Variants = []catalogVariant{
-				{Price: pricePointer(5), CalculatedPrice: 1, InventoryLevel: 0},
-				{Price: pricePointer(6), CalculatedPrice: 2, InventoryLevel: 1, PurchasingDisabled: true},
-				{Price: pricePointer(20), CalculatedPrice: 18, InventoryLevel: 2},
-				{Price: pricePointer(14), CalculatedPrice: 12, InventoryLevel: 3},
+				{Price: new(float32(5)), CalculatedPrice: 1, InventoryLevel: 0},
+				{Price: new(float32(6)), CalculatedPrice: 2, InventoryLevel: 1, PurchasingDisabled: true},
+				{Price: new(float32(20)), CalculatedPrice: 18, InventoryLevel: 2},
+				{Price: new(float32(14)), CalculatedPrice: 12, InventoryLevel: 3},
 			}
 		}, wantCount: 1, regular: 14, sale: 12},
 		{name: "adjusted price exceeds base", change: func(p *catalogProduct) { p.Variants[0].CalculatedPrice = 12 }, wantCount: 1, regular: 12},

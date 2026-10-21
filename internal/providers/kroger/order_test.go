@@ -239,8 +239,8 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			})
 			saveShopper(t, a, time.Now().Add(time.Hour))
 			expected := "uncertain"
-			if strings.HasPrefix(scenario, "legacy ") {
-				status := strings.TrimPrefix(scenario, "legacy ")
+			if after, ok := strings.CutPrefix(scenario, "legacy "); ok {
+				status := after
 				require.NoError(t, a.cache.Put(t.Context(), "kroger_cart_transfers/mock-clerk-user-id/list-hash", `{"status":"`+status+`","added":1,"sent":[{"id":"food","quantity":"1 cup"}]}`, cache.Unconditional()))
 				expected = status
 				if status == "complete" {
