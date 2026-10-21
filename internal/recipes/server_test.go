@@ -231,6 +231,45 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	}
 }
 
+func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, zone)
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		t.Run(id, func(t *testing.T) {
+			lat, lon := 45.152, -93.194
+			location := &locations.Location{ID: id, Name: "Weekly delivery", Lat: &lat, Lon: &lon}
+			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+			s := newTestServer(t, withTestGenerator(generator), withTestLocationServer(staticLocationLookup{location: location}))
+			p := DefaultParams(location, monday)
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+				Recipes: []ai.Recipe{{Title: "Monday supper"}},
+			}, p.Hash()))
+			for day := range 7 {
+				target := "/recipes?location=" + id + "&date=" + monday.AddDate(0, 0, day).Format(time.DateOnly)
+				rr := httptest.NewRecorder()
+				s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, target, nil))
+				require.Equal(t, http.StatusSeeOther, rr.Code)
+				canonical, err := url.Parse(rr.Header().Get("Location"))
+				require.NoError(t, err)
+				assert.Equal(t, p.Hash(), canonical.Query().Get(queryArgHash))
+				page := httptest.NewRecorder()
+				s.handleRecipes(page, httptest.NewRequest(http.MethodGet, canonical.String(), nil))
+				require.Equal(t, http.StatusOK, page.Code)
+				assert.Contains(t, page.Body.String(), "Monday supper")
+				assert.NotContains(t, page.Body.String(), "Generate my shopping list")
+			}
+			select {
+			case <-generator.called:
+				t.Fatal("weekly lookups should reuse the cached Monday list")
+			default:
+			}
+		})
+	}
+}
+
 func TestHandleRecipes_ReadySpinnerPollRedirectsToFullPage(t *testing.T) {
 	t.Parallel()
 	p := DefaultParams(&locations.Location{ID: "70100024", Name: "Test Store"}, time.Now())

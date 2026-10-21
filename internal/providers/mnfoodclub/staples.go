@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 )
@@ -22,6 +23,12 @@ func NewIdentityProvider() identityProvider { return identityProvider{} }
 
 func (identityProvider) IsID(locationID string) bool {
 	return strings.HasPrefix(locationID, LocationIDPrefix)
+}
+
+// RecipeDate shares Monday's recipes throughout the local store week.
+func (identityProvider) RecipeDate(date time.Time) time.Time {
+	daysSinceMonday := (int(date.Weekday()) + 6) % 7
+	return date.AddDate(0, 0, -daysSinceMonday)
 }
 
 func (identityProvider) Signature() string {

@@ -57,7 +57,7 @@ func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
 	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
 	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	return &generatorParams{
-		Date:     date, // shave time
+		Date:     recipeDate(l.ID, date),
 		Location: l,
 	}
 }

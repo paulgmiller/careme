@@ -2,6 +2,7 @@ package providerregistry
 
 import (
 	"testing"
+	"time"
 
 	"careme/internal/farmersmarket"
 	"careme/internal/heb"
@@ -14,12 +15,32 @@ import (
 	"careme/internal/providers/smithbrothersfarms"
 	"careme/internal/providers/walmart"
 	"careme/internal/providers/wholefoods"
+	"careme/internal/recipes"
 )
 
 // this is pretty hacky but if we don't do this we have to pass something to every recipes.IO
 // so it can hash params correctly. Open to better methods.
 func init() {
 	cachekey.RegisterStaplesSignature(StaplesSignature)
+	recipes.RegisterRecipeDate(RecipeDate)
+}
+
+type recipeDateProvider interface {
+	RecipeDate(time.Time) time.Time
+}
+
+// RecipeDate applies a provider's recipe cadence to a resolved local store day.
+// Providers without a date policy keep daily recipes.
+func RecipeDate(locationID string, date time.Time) time.Time {
+	for _, provider := range staplesIdentities() {
+		if provider.IsID(locationID) {
+			if policy, ok := provider.(recipeDateProvider); ok {
+				return policy.RecipeDate(date)
+			}
+			return date
+		}
+	}
+	return date
 }
 
 type staplesIdentity interface {

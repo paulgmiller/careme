@@ -33,6 +33,18 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 
 ## Key Prefixes
 
+New recipe parameters for `mnfoodclub_delivery`, `mnfoodclub_tcfarm_delivery`,
+and `mnfoodclub_nelsongrassfarm_delivery` use the Monday of their local store
+week as the date. All seven days therefore resolve to the same default shopping
+hash and Monday ingredient snapshot for each storefront. The existing 9 AM
+store-day boundary applies first, so Monday before 9 AM still uses the previous
+week. Explicit dates are normalized to their week's Monday as well. Other stores
+retain daily dates. Cache prefixes and hash algorithms are unchanged; direct
+links to previously saved daily hashes continue to load their original lists.
+The MNFoodClub identity provider owns this weekly date policy; the provider
+registry registers its lookup with recipes alongside the staples-signature lookup.
+Providers without a recipe date policy keep their daily dates.
+
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
