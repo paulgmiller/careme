@@ -43,7 +43,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
-  {{with .Order}}
+  {{range .Orders}}
   {{template "shopping_order_form" .}}
   {{else}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
@@ -72,7 +72,7 @@
   {{end}}
   {{end}}
   {{template "shopping_list_share_button" .}}
-  {{with .Order}}
+  {{range .Orders}}
   {{if .Description}}<p class="basis-full text-xs text-ink-600">{{.Description}}</p>{{end}}
   {{end}}
   {{if not .HasSavedRecipes}}
@@ -362,7 +362,7 @@
 {{define "shopping_purchase_section"}}
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-  {{with .Order}}
+  {{range .Orders}}
   {{if .Notice}}<p role="status" class="mt-4 text-sm text-ink-700">{{.Notice}}</p>{{end}}
   {{if .ReviewURL}}<a href="{{.ReviewURL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{.ReviewLabel}}</a>{{end}}
   {{end}}

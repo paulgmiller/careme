@@ -34,6 +34,8 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `INSTACART_API_KEY` - Instacart Developer Platform key enabling shopping-list handoff from any source store. Users choose a retailer and review items on Instacart.
+- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com`. Use `https://connect.dev.instacart.tools` with a development key.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
@@ -99,12 +101,13 @@ The shopping list submits its displayed items, store hints, stable list key,
 and return URL. The destination owns authentication, matching, cart writes,
 duplicate prevention, and the redirect back with a review link and brief status.
 Register its routes independently of the recipe handler in `cmd/careme/web.go`.
-Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
+Add its location-ID match and form builder to `providerregistry.Factory.OrderViews`;
 the recipe page renders the returned action, fields, and copy generically.
 
-Kroger is currently the only ordering destination. Future destinations can own
-routes such as `/instacart/order` or `/bigcommerce/order` without implementing
-a shared Go provider interface. Users review and complete checkout with the
+Kroger and Instacart register their own ordering routes without implementing
+a shared Go provider interface. Instacart accepts lists from any source store;
+configured Kroger stores show both actions when Instacart is enabled. Instacart
+creates a shopping-list link and reuses it until its content changes or it expires. Users review and complete checkout with the
 provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
 and OAuth continuation behavior.
 

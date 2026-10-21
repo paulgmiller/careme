@@ -83,7 +83,7 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
-	Order                *ordertypes.OrderView
+	Orders               []*ordertypes.OrderView
 }
 
 type shoppingListViewInput struct {
@@ -218,7 +218,7 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 
 type shoppingFinalizeView struct {
 	// Selection changes require rebuilding before another order can be submitted.
-	Order           *ordertypes.OrderView
+	Orders          []*ordertypes.OrderView
 	Hash            string
 	HasSavedRecipes bool
 }

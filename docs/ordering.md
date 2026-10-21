@@ -2,16 +2,17 @@
 
 Each ordering destination owns an HTTP workflow. Recipes submits shopping items
 and displays the return status and review link; it has no ordering service or
-provider workflow interface. Kroger is the only implemented destination.
+provider workflow interface. Kroger and Instacart are implemented destinations.
 Application startup calls `providerregistry.Factory.RegisterOrders` with the
 shared application routes; it constructs each configured destination and registers
 its routes directly, preserving application middleware.
 
 The recipe handler depends on an `OrderViewBuilder` interface. The provider
-registry factory implements its `OrderView` method and receives the displayed
-items and location. The registry matches `location.ID` against configured
-providers. The matching provider returns a form action, hidden fields, labels,
-and return notice as `orders/types.OrderView`; recipes renders those generically.
+registry factory implements its `OrderViews` method and receives the displayed
+items and location. The registry returns an ordered slice of `orders/types.OrderView`, each with a form
+action, hidden fields, labels, and a return notice. Configured Kroger stores receive
+the Kroger action first; every source store receives Instacart when configured.
+Recipes renders each destination generically.
 Ordering destinations share the `OrderFields` form struct, which may be extended
 when an integration needs additional shopping-list information. Kroger owns its
 status interpretation and cart-link validation.
@@ -97,6 +98,32 @@ known statuses. Counts must both be nonnegative integers to appear in the
 fields control presentation only and never authorize a cart write. Duplicate
 protection relies on the server-side transfer record, not the URL.
 
+## Instacart shopping lists
+
+`POST /instacart/order` uses the same form fields as Kroger and accepts any source
+store ID. Authentication and same-origin protection are required. The handler
+sends every displayed item, including pantry items and selected wines, to
+`POST /idp/v1/products/products_link` using a server-side API key. Source product
+IDs and catalog package multiples (`buy`) are not Instacart identifiers or amounts.
+
+Each line item uses the name for matching and retains the original `needed` amount
+in display text. Positive numeric amounts with recognized units are sent as
+`line_item_measurements`; this includes fractions and common Unicode fractions.
+Ranges, combined amounts, preparation notes, and unsupported units remain text
+for user review. No weight-to-volume or source-package conversion is inferred.
+
+Links expire after 30 days. Successful links are cached per user and outbound
+payload (including the API environment) and reused until content changes or the
+link expires. Concurrent first requests can create equivalent links; creating a
+link does not add items to a cart. Cache and API failures return to the local list
+with `instacart_status=failed` and a fixed notice. Success redirects directly to
+the validated HTTPS Instacart shopping-list URL.
+
+Users select a supported retailer, review matched products and quantities, and
+add items to their cart on Instacart. The source store is not automatically selected.
+No user OAuth tokens are needed. Configure `INSTACART_API_KEY` and optionally
+`INSTACART_BASE_URL`; see [Instacart's shopping-list API](https://docs.instacart.com/developer_platform_api/api/products/create_shopping_list_page).
+
 ## Future destinations
 
 The [MN Food Club cart handoff proposal](mnfoodclub-ordering.md) includes an
@@ -109,6 +136,5 @@ A separate [mock API and walkthrough](mnfoodclub-mock.md) is available at
 fictional products and simulated storefront login; it is not a recipe ordering
 destination or a production partner integration.
 
-An Instacart or BigCommerce integration can register its own `/instacart/order`
-or `/bigcommerce/order` route and own its complete workflow. No common provider
-interface or future destination schema is introduced here.
+Additional destinations can register their own route and own their complete
+workflow without implementing a common provider interface.
