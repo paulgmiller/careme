@@ -272,6 +272,8 @@ func TestLoadOnlyProvidersIgnoresAppConfiguration(t *testing.T) {
 	resetStoreEnvs(t)
 	t.Setenv("KROGER_CLIENT_ID", "test-client")
 	t.Setenv("KROGER_CLIENT_SECRET", "test-secret")
+	t.Setenv("INSTACART_API_KEY", "test-instacart-key")
+	t.Setenv("INSTACART_BASE_URL", "https://connect.dev.instacart.tools")
 	t.Setenv("CLERK_SECRET_KEY", "")
 	t.Setenv("CLERK_PUBLISHABLE_KEY", "")
 	t.Setenv("CLERK_DOMAIN", "")
@@ -287,6 +289,7 @@ func TestLoadOnlyProvidersIgnoresAppConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test-client", cfg.Kroger.ClientID)
 	assert.Equal(t, "test-secret", cfg.Kroger.ClientSecret)
+	assert.Equal(t, InstacartConfig{APIKey: "test-instacart-key", BaseURL: "https://connect.dev.instacart.tools"}, cfg.Instacart)
 	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
 	assert.Equal(t, "test-consumer", cfg.Walmart.ConsumerID)
 	assert.Equal(t, "test-key", cfg.Walmart.PrivateKey)
@@ -323,4 +326,14 @@ func TestLoadOnlyProvidersRequiresKrogerUnlessMocked(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestLoadInstacart(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("INSTACART_API_KEY", "test-key")
+	t.Setenv("INSTACART_BASE_URL", "https://connect.dev.instacart.tools")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, InstacartConfig{APIKey: "test-key", BaseURL: "https://connect.dev.instacart.tools"}, cfg.Instacart)
 }

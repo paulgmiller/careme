@@ -34,7 +34,7 @@ func TestKrogerOrderReturnNoticeAndCartLink(t *testing.T) {
 			input := ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, Query: httptest.NewRequest("GET", "/recipes?"+scenario.query, nil).URL.Query()}
 			order, err := OrderView(input)
 			require.NoError(t, err)
-			view := map[string]any{"Order": order, "Purchases": nil, "HasSavedRecipes": true, "Hash": "list"}
+			view := map[string]any{"Orders": []*ordertypes.OrderView{order}, "Purchases": nil, "HasSavedRecipes": true, "Hash": "list"}
 			assert.Equal(t, scenario.link, order.ReviewURL)
 			if scenario.want != "" {
 				assert.Contains(t, order.Notice, scenario.want)
