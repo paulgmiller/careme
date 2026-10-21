@@ -90,7 +90,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	s, g, images := testService()
 	waited := false
 	s.wait = func() { waited = true }
-	require.NoError(t, s.runOnce(t.Context(), campaignTestTime))
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
 	require.True(t, waited)
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	require.Equal(t, len(g.params), images.calls)
@@ -116,7 +116,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		assert.Equal(t, "campaign-image", string(data))
 	}
 	assert.ElementsMatch(t, generatedCampaignLocationIDs, generatedIDs)
-	require.NoError(t, s.runOnce(t.Context(), campaignTestTime))
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
 	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
 	assert.Equal(t, len(g.params), images.calls)
 }
@@ -125,7 +125,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	campaignTestTime := time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC) // Monday, 9 AM Central.
 	s, g, _ := testService()
 	g.err = errors.New("flex unavailable")
-	require.ErrorContains(t, s.runOnce(t.Context(), campaignTestTime), "flex unavailable")
+	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
 		state, err := s.statuses.Load(t.Context(), p.Hash())
@@ -133,7 +133,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 		assert.Contains(t, state.Failed, "flex unavailable")
 	}
 	g.err = nil
-	require.NoError(t, s.runOnce(t.Context(), campaignTestTime))
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
 	assert.Len(t, g.params, 2*len(generatedCampaignLocationIDs))
 }
 
@@ -141,9 +141,9 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 	campaignTestTime := time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC) // Monday, 9 AM Central.
 	s, g, images := testService()
 	images.err = errors.New("image unavailable")
-	require.ErrorContains(t, s.runOnce(t.Context(), campaignTestTime), "image unavailable")
+	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "image unavailable")
 	images.err = nil
-	require.NoError(t, s.runOnce(t.Context(), campaignTestTime))
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
 	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
 	assert.Equal(t, 2*len(g.params), images.calls)
 	for _, p := range g.params {
@@ -200,7 +200,7 @@ func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
 			s, g, images := testService()
 			now, err := time.Parse(time.RFC3339, tt.now)
 			require.NoError(t, err)
-			require.NoError(t, s.runOnce(t.Context(), now))
+			require.NoError(t, s.RunOnce(t.Context(), now))
 			var gotIDs []string
 			for _, p := range g.params {
 				gotIDs = append(gotIDs, p.Location.ID)
@@ -216,7 +216,7 @@ func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
 			if len(tt.wantIDs) > 0 {
 				retryAt = now.Add(10 * time.Minute)
 			}
-			require.NoError(t, s.runOnce(t.Context(), retryAt))
+			require.NoError(t, s.RunOnce(t.Context(), retryAt))
 			assert.Len(t, g.params, len(tt.wantIDs))
 			assert.Equal(t, len(tt.wantIDs), images.calls)
 		})

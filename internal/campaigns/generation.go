@@ -96,11 +96,7 @@ func NewService(cfg *config.Config, providers providerFactory) (*Service, error)
 }
 
 // RunOnce waits for required recipes and images, returning failures to the cronjob.
-func (s *Service) RunOnce(ctx context.Context) error {
-	return s.runOnce(ctx, time.Now())
-}
-
-func (s *Service) runOnce(ctx context.Context, now time.Time) error {
+func (s *Service) RunOnce(ctx context.Context, now time.Time) error {
 	defer s.wait()
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
