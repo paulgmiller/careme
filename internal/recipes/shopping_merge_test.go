@@ -303,9 +303,6 @@ func TestShoppingMergeFiltersCatalogBeforeCallAndCache(t *testing.T) {
 	assert.Equal(t, 1, calls, "unmatched catalog metadata does not invalidate the merge")
 }
 
-//go:fix inline
-func buyNumber(n float64) *float64 { return new(n) }
-
 func cachedShoppingItems(t *testing.T, s *server, hash string) []ai.ShoppingItem {
 	t.Helper()
 	groups, err := s.cachedShoppingPurchases(t.Context(), hash)

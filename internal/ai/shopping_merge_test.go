@@ -69,9 +69,6 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	assert.Equal(t, IngredientEmbedding{1, 2}, catalog[0].Embedding)
 }
 
-//go:fix inline
-func buyNumber(n float64) *float64 { return new(n) }
-
 func TestMergeShoppingPurchaseResults(t *testing.T) {
 	for _, tc := range []struct {
 		name, output, size, wantErr string

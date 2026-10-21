@@ -8,9 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:fix inline
-func pricePointer(price float32) *float32 { return new(price) }
-
 func TestCatalogStockAndPrices(t *testing.T) {
 	for _, test := range []struct {
 		name          string
