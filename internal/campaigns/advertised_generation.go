@@ -45,6 +45,14 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			Location: locations.Location{ID: "mnfoodclub_delivery"},
 			Generate: false,
 		},
+		"tcfarm": {
+			Location: locations.Location{ID: "mnfoodclub_tcfarm_delivery"},
+			Generate: false,
+		},
+		"nelsongrassfarm": {
+			Location: locations.Location{ID: "mnfoodclub_nelsongrassfarm_delivery"},
+			Generate: false,
+		},
 		/* Too close to fred meyers
 		bellevue_wf": {
 			Location:    locations.Location{ID: "wholefoods_10153", ZipCode: "98004"},
