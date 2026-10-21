@@ -6,6 +6,7 @@ import (
 
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/mnfoodclub"
@@ -14,6 +15,30 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestRegisteredRecipeDateUsesProviderPolicy(t *testing.T) {
+	t.Parallel()
+	date := time.Date(2026, 10, 21, 0, 0, 0, 0, time.FixedZone("store", -5*60*60))
+	for _, tt := range []struct {
+		id   string
+		want time.Time
+	}{
+		{"mnfoodclub_delivery", date.AddDate(0, 0, -2)},
+		{"mnfoodclub_tcfarm_delivery", date.AddDate(0, 0, -2)},
+		{"mnfoodclub_nelsongrassfarm_delivery", date.AddDate(0, 0, -2)},
+		// New MNFoodClub storefronts inherit the provider's weekly cadence.
+		{"mnfoodclub_other", date.AddDate(0, 0, -2)},
+		{"70100023", date},
+		{"smithbrothersfarms_delivery", date},
+		{"wholefoods_10216", date},
+		{"unknown", date},
+	} {
+		t.Run(tt.id, func(t *testing.T) {
+			assert.Equal(t, tt.want, providerregistry.RecipeDate(tt.id, date))
+			assert.Equal(t, tt.want, recipes.DefaultParams(&locations.Location{ID: tt.id}, date).Date)
+		})
+	}
+}
 
 func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
 	t.Parallel()

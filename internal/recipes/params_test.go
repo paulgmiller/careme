@@ -7,10 +7,76 @@ import (
 	"time"
 
 	"careme/internal/locations"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type staticLocationLookup struct {
 	location *locations.Location
+}
+
+func TestDefaultParamsMNFoodClubUsesMondayForWholeWeek(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		t.Run(id, func(t *testing.T) {
+			location := &locations.Location{ID: id}
+			// Include month/year boundaries and both daylight saving transitions.
+			for _, monday := range []time.Time{
+				time.Date(2026, 10, 19, 0, 0, 0, 0, zone),
+				time.Date(2025, 12, 29, 0, 0, 0, 0, zone),
+				time.Date(2026, 3, 2, 0, 0, 0, 0, zone),
+				time.Date(2026, 10, 26, 0, 0, 0, 0, zone),
+			} {
+				base := DefaultParams(location, monday)
+				for day := range 7 {
+					p := DefaultParams(location, monday.AddDate(0, 0, day).Add(12*time.Hour))
+					assert.True(t, monday.Equal(p.Date), "input date %s", monday.AddDate(0, 0, day))
+					assert.Equal(t, base.Hash(), p.Hash())
+					assert.Equal(t, base.LocationHash(), p.LocationHash())
+				}
+				assert.NotEqual(t, base.Hash(), DefaultParams(location, monday.AddDate(0, 0, 7)).Hash())
+			}
+		})
+	}
+}
+
+func TestDefaultParamsOtherStoresKeepDailyDates(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"70100023", "wholefoods_10216", "smithbrothersfarms_delivery"} {
+		location := &locations.Location{ID: id}
+		monday := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+		for day := range 7 {
+			date := monday.AddDate(0, 0, day)
+			p := DefaultParams(location, date.Add(12*time.Hour))
+			assert.Equal(t, date, p.Date)
+			assert.NotEqual(t, p.Hash(), DefaultParams(location, date.AddDate(0, 0, 1)).Hash())
+		}
+	}
+}
+
+func TestParseGenerationFormMNFoodClubWeekStartsMonday9AM(t *testing.T) {
+	previousNow := nowFn
+	t.Cleanup(func() { nowFn = previousNow })
+	lat, lon := 45.152, -93.194
+	location := &locations.Location{ID: "mnfoodclub_delivery", Lat: &lat, Lon: &lon}
+	for _, tt := range []struct{ now, monday string }{
+		{"2026-10-19T13:59:00Z", "2026-10-12"},
+		{"2026-10-19T14:00:00Z", "2026-10-19"},
+		{"2026-10-25T23:59:00Z", "2026-10-19"},
+		{"2026-10-26T13:59:00Z", "2026-10-19"},
+		{"2026-10-26T14:00:00Z", "2026-10-26"},
+	} {
+		now, err := time.Parse(time.RFC3339, tt.now)
+		require.NoError(t, err)
+		nowFn = func() time.Time { return now }
+		p, err := ParseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+location.ID, nil), staticLocationLookup{location: location})
+		require.NoError(t, err)
+		assert.Equal(t, tt.monday, p.Date.Format(time.DateOnly))
+		assert.Equal(t, "America/Chicago", p.Date.Location().String())
+	}
 }
 
 func (s staticLocationLookup) GetLocationByID(_ context.Context, _ string) (*locations.Location, error) {
