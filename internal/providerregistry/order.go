@@ -68,7 +68,7 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 }
 
 // OrderView finds the configured ordering destination for the source location.
-// Each destination owns its form contract and return presentation.
+// Each destination supplies the shared transfer UI with its endpoints and copy.
 func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
 		return kroger.OrderView(input)

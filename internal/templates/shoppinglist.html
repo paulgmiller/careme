@@ -391,8 +391,19 @@
 {{end}}
 
 {{define "shopping_order_form"}}
+<div id="shopping-cart-transfer"
+     {{if .StatusURL}}hx-get="{{.StatusURL}}" hx-target="this" hx-swap="outerHTML"
+     hx-sync="#shopping-cart-transfer:replace"
+     {{if not .Transfer}}hx-trigger="load"{{else if eq .Transfer.Status "pending"}}hx-trigger="load delay:5s"{{else}}hx-trigger="none"{{end}}{{end}}
+     hx-on::after-request="if (!event.detail.successful) { this.querySelector('[data-transfer-error]').hidden = false; this.querySelectorAll('button[type=submit]').forEach(button => button.disabled = true); }">
+  <!-- HTMX leaves error responses unswapped. This hook also covers network failures:
+       show the local error and disable submission until the shopper reloads status.
+       Transfer state, polling, and OAuth navigation are handled by the server/HTMX. -->
+  {{if or (not .Transfer) (eq .Transfer.Status "failed")}}
   {{if .ActionURL}}
-  <form method="POST" action="{{.ActionURL}}">
+  <form method="POST" action="{{.ActionURL}}"
+        hx-post="{{.ActionURL}}" hx-target="#shopping-cart-transfer" hx-swap="outerHTML"
+        hx-disabled-elt="find button[type=submit]">
     <input type="hidden" name="items" value="{{.Fields.Items}}">
     <input type="hidden" name="location" value="{{.Fields.Location}}">
     <input type="hidden" name="list_key" value="{{.Fields.ListKey}}">
@@ -400,4 +411,12 @@
     <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
   </form>
   {{end}}
+  {{end}}
+  {{with .Transfer}}
+  <p role="status" class="mt-4 text-sm text-ink-700">{{.Message}}</p>
+  <a href="{{.CartURL}}" {{if ne .Status "pending_login"}}target="_blank"{{end}} rel="noopener noreferrer"
+     class="mt-3 inline-flex rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{if eq .Status "pending_login"}}Connect account{{else}}Review cart (opens a new tab){{end}}</a>
+  {{end}}
+  <p data-transfer-error hidden role="alert" class="mt-4 text-sm text-action-red-700">Could not check your cart transfer. Reload to check again before sending products.</p>
+</div>
 {{end}}

@@ -3,12 +3,11 @@ package kroger
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	ordertypes "careme/internal/orders/types"
 )
 
-// OrderView builds Kroger's form and interprets its informational return fields.
+// OrderView supplies the generic cart-transfer UI with Kroger endpoints.
 func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	body, err := json.Marshal(input.Items)
 	if err != nil {
@@ -23,7 +22,8 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		brand = "Kroger"
 	}
 	order := &ordertypes.OrderView{
-		ActionURL:   "/kroger/order",
+		ActionURL:   "/kroger/cart-transfers",
+		StatusURL:   "/kroger/cart-transfers/" + ordertypes.TransferID(input.ListKey),
 		ActionLabel: "Add to " + brand + " cart",
 		Description: "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		ReviewLabel: "Review cart (opens a new tab)",
@@ -32,30 +32,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 			ListKey: input.ListKey, ReturnURL: input.ReturnURL,
 		},
 	}
-	status := input.Query.Get("kroger_status")
-	order.Notice = krogerOrderNotice(status)
-	if status == "complete" {
-		order.ActionURL = ""
-		order.ActionLabel = ""
-		order.Description = ""
-		added, addedErr := strconv.Atoi(input.Query.Get("kroger_added"))
-		unmatched, unmatchedErr := strconv.Atoi(input.Query.Get("kroger_unmatched"))
-		if addedErr == nil && unmatchedErr == nil && added >= 0 && unmatched >= 0 {
-			order.Notice = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", added)
-			if unmatched > 0 {
-				if unmatched == 1 {
-					order.Notice += " 1 item could not be matched and was not sent."
-				} else {
-					order.Notice += fmt.Sprintf(" %d items could not be matched and were not sent.", unmatched)
-				}
-			}
-		}
-	}
-	if order.Notice != "" {
-		if destination := input.Query.Get("kroger_cart"); validCartURL(destination) {
-			order.ReviewURL = destination
-		}
-	}
+
 	return order, nil
 }
 

@@ -94,19 +94,20 @@ Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Give each destination its own HTTP workflow, such as `POST /kroger/order`.
-The shopping list submits its displayed items, store hints, stable list key,
-and return URL. The destination owns authentication, matching, cart writes,
-duplicate prevention, and the redirect back with a review link and brief status.
-Register its routes independently of the recipe handler in `cmd/careme/web.go`.
-Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
-the recipe page renders the returned action, fields, and copy generically.
+Implement `POST /<destination>/cart-transfers` and read-only
+`GET /<destination>/cart-transfers/{transfer_id}` using the shared
+`orders/types.TransferRequest` and `Transfer` contract. The shopping list submits
+its displayed items, source location, stable list key, and local return URL.
+The destination owns authentication, matching, cart writes, and duplicate
+prevention. POST returns a saved transfer with an ID, status, and cart or login
+link; OAuth callbacks remain destination-owned.
 
-Kroger is currently the only ordering destination. Future destinations can own
-routes such as `/instacart/order` or `/bigcommerce/order` without implementing
-a shared Go provider interface. Users review and complete checkout with the
-provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
-and OAuth continuation behavior.
+Register routes in `providerregistry.Factory.RegisterOrders`, then add the
+location match and view builder to `Factory.OrderView`. Supply creation and
+status URLs so the shared recipe UI can submit and later query the transfer.
+Kroger is currently the only destination; future integrations can adapt their
+upstream APIs to the same contract. Users review and complete checkout with the
+provider. See [Cart transfers](docs/ordering.md) for API and OAuth details.
 
 ### Verify the integration
 

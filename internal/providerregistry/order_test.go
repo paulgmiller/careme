@@ -2,6 +2,7 @@ package providerregistry
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,7 +31,7 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
 	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	for _, path := range []string{"/kroger/order", "/kroger/callback"} {
+	for _, path := range []string{"/kroger/cart-transfers", "/kroger/callback"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)
@@ -71,10 +72,16 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
 	form := url.Values{"list_key": {"list"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`}, "return_url": {"/recipes?h=list"}, "items": {`[{"id":"milk","name":"Milk"}]`}}
-	request := httptest.NewRequest(http.MethodPost, "/kroger/order", strings.NewReader(form.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	var transfer ordertypes.Transfer
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &transfer))
+	assert.Equal(t, "pending_login", transfer.Status)
+	response = httptest.NewRecorder()
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, transfer.CartURL, nil))
 	require.Equal(t, http.StatusSeeOther, response.Code)
 	assert.Equal(t, "applied", response.Header().Get("X-Order-Middleware"))
 	destination, err := url.Parse(response.Header().Get("Location"))
@@ -104,7 +111,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
-				assert.Equal(t, "/kroger/order", view.ActionURL)
+				assert.Equal(t, "/kroger/cart-transfers", view.ActionURL)
 				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
 			} else {
 				assert.Nil(t, view)

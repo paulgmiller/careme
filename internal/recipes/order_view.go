@@ -13,7 +13,7 @@ type OrderViewBuilder interface {
 	OrderView(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 }
 
-func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) error {
+func (s *server) populateOrderView(view *shoppingListPageView, _ *http.Request) error {
 	var items []ai.ShoppingItem
 	for _, group := range view.Purchases {
 		for _, item := range group.Items {
@@ -23,7 +23,6 @@ func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) 
 	order, err := s.orderView.OrderView(ordertypes.OrderViewInput{
 		Location: view.Location, Items: items, ListKey: view.Hash,
 		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
-		Query:     r.URL.Query(),
 	})
 	if err != nil {
 		return err
