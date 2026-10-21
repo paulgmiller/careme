@@ -39,7 +39,8 @@ fi
 
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
-advertised_recipes_schedule="0 9 * * *"
+# 9 AM Eastern through Pacific, plus one hour afterward (Pacific time).
+advertised_recipes_schedule="0 6-10 * * *"
 advertised_recipes_suspend="false"
 aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
@@ -54,7 +55,7 @@ if [[ "${namespace}" == "caremetest" ]]; then
   store_disable_env_yaml='
             - name: WEGMANS_ENABLE
               value: "false"'
-  advertised_recipes_schedule="0 9 1,15 * *"
+  advertised_recipes_schedule="0 6-10 1,15 * *"
   # Keep the job available for manual runs while automatic test runs are paused.
   advertised_recipes_suspend="true"
   aldi_scrape_schedule="45 6 1,15 * *"

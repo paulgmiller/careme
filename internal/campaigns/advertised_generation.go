@@ -2,8 +2,11 @@ package campaigns
 
 import (
 	"fmt"
+	"time"
 
 	"careme/internal/locations"
+
+	"github.com/samber/lo"
 )
 
 // Campaign is a promoted store plus campaign-specific page context.
@@ -11,6 +14,9 @@ type campaign struct {
 	Location    locations.Location
 	HelpMessage string
 	Generate    bool
+	// GenerateWeekday limits generation to this weekday in the store's timezone.
+	// A nil value allows generation every day.
+	GenerateWeekday *time.Weekday
 }
 
 func genericLocationHelp(location string) string {
@@ -36,22 +42,25 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			HelpMessage: genericLocationHelp("Westlake Whole Foods"),
 			Generate:    true,
 		},
-		// These delivery campaigns should probably only generate weekly.
+		// Smith Brothers Farms generation remains disabled.
 		"smithbrothersfarms": {
 			Location: locations.Location{ID: "smithbrothersfarms_delivery"},
 			Generate: false,
 		},
 		"mnfoodclub": {
-			Location: locations.Location{ID: "mnfoodclub_delivery"},
-			Generate: false,
+			Location:        locations.Location{ID: "mnfoodclub_delivery"},
+			Generate:        true,
+			GenerateWeekday: lo.ToPtr(time.Monday),
 		},
 		"tcfarm": {
-			Location: locations.Location{ID: "mnfoodclub_tcfarm_delivery"},
-			Generate: false,
+			Location:        locations.Location{ID: "mnfoodclub_tcfarm_delivery"},
+			Generate:        true,
+			GenerateWeekday: lo.ToPtr(time.Monday),
 		},
 		"nelsongrassfarm": {
-			Location: locations.Location{ID: "mnfoodclub_nelsongrassfarm_delivery"},
-			Generate: false,
+			Location:        locations.Location{ID: "mnfoodclub_nelsongrassfarm_delivery"},
+			Generate:        true,
+			GenerateWeekday: lo.ToPtr(time.Monday),
 		},
 		/* Too close to fred meyers
 		bellevue_wf": {
