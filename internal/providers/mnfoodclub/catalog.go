@@ -36,6 +36,7 @@ type catalogProduct struct {
 //
 // https://docs.bigcommerce.com/developer/api-reference/rest/admin/catalog/product-variants/get-product-variants
 type catalogVariant struct {
+	ID                 int      `json:"id"`
 	Price              *float32 `json:"price"`
 	CalculatedPrice    float32  `json:"calculated_price"`
 	InventoryLevel     int      `json:"inventory_level"`
@@ -82,7 +83,9 @@ func mapCatalog(products []catalogProduct, categories []catalogCategory, brands 
 // productIngredient maps a product to one ingredient, keeping the parent product ID.
 // BigCommerce includes a base variant even for products without options; products
 // with options can have variants with different prices and stock levels. We choose
-// the cheapest purchasable variant and use its regular and selling prices together.
+// the purchasable variant with the highest inventory and use its regular and selling
+// prices together. Inventory ties keep the first eligible variant in catalog order.
+// The selected variant ID is retained separately for the cart-transfer API.
 // It returns eligible=false with no error when every variant is purchasing-disabled
 // or, with variant-level inventory tracking, out of stock. Missing variant data is
 // an error rather than an ineligible product.
@@ -98,12 +101,15 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 		if variant.PurchasingDisabled || (product.InventoryTracking == "variant" && variant.InventoryLevel <= 0) {
 			continue
 		}
-		if selected == nil || variant.CalculatedPrice < selected.CalculatedPrice {
+		if selected == nil || variant.InventoryLevel > selected.InventoryLevel {
 			selected = &variant
 		}
 	}
 	if selected == nil {
 		return ai.InputIngredient{}, false, nil
+	}
+	if selected.ID <= 0 {
+		return ai.InputIngredient{}, false, fmt.Errorf("missing selected variant ID")
 	}
 	regular := product.Price
 	if selected.Price != nil {
@@ -121,7 +127,7 @@ func productIngredient(product catalogProduct, categories map[int]catalogCategor
 		regular = current
 	}
 	ingredient := ai.InputIngredient{
-		ProductID: strconv.Itoa(product.ID), Description: product.Name,
+		ProductID: strconv.Itoa(product.ID), VariantID: strconv.Itoa(selected.ID), Description: product.Name,
 		Size: catalogSizeFromDescription(product.Name), PriceRegular: &regular,
 	}
 	// PriceSale represents a discount for PercentOff(), rather than every selling

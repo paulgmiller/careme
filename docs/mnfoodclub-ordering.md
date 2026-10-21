@@ -42,6 +42,13 @@ or cannot be purchased, reject the item's quantity without substituting another
 variant. Each transfer may request only one variant per product, consistent
 with the duplicate-product rule.
 
+Careme selects the purchasable catalog variant with the highest inventory level,
+keeping the first eligible variant in catalog order on ties. Its ID is saved as
+`variant_id` on the cached input ingredient, alongside the parent product `id`
+and the selected variant's prices. A later cart-transfer client can look up the
+shopping item's product ID in that saved catalog and send both `product_id` and
+`variant_id`. Older cached catalogs lack `variant_id` until refreshed.
+
 All identity hints are optional. Emails can identify a customer without a prior
 connection. MN Food Club owns matching, including conflicts between a saved ID
 and emails, ambiguous matches, and unknown hints. An unresolved customer gets a

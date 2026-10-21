@@ -74,7 +74,8 @@ const ingredientGradeSystemInstruction = ingredientGradeRubric + "\n\nReturn JSO
 
 type InputIngredient struct {
 	ProductID    string              `json:"id,omitempty"`
-	AisleNumber  string              `json:"number,omitempty"` // this is a dumb json name fix it later
+	VariantID    string              `json:"variant_id,omitempty"` // Selected provider variant, retained for ordering.
+	AisleNumber  string              `json:"number,omitempty"`     // this is a dumb json name fix it later
 	Brand        string              `json:"brand,omitempty"`
 	Description  string              `json:"description,omitempty"`
 	Size         string              `json:"size,omitempty"`

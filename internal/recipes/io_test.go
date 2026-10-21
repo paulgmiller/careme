@@ -157,6 +157,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	ingredients := []ai.InputIngredient{
 		{
 			ProductID:   "chicken-1",
+			VariantID:   "variant-42",
 			Description: "Chicken Breast",
 			Size:        "1 lb",
 		},
@@ -177,7 +178,7 @@ func TestSaveIngredients_UsesPrefixedKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngredientsFromCache failed: %v", err)
 	}
-	if len(got) != 1 || got[0].Description != "Chicken Breast" {
+	if len(got) != 1 || got[0].Description != "Chicken Breast" || got[0].ProductID != "chicken-1" || got[0].VariantID != "variant-42" {
 		t.Fatalf("unexpected ingredients payload: %+v", got)
 	}
 }
