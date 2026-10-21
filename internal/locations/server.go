@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"careme/internal/auth"
 	"careme/internal/httpx"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/samber/lo"
 )
+
+const ZipCodeCookieName = "careme_zip_code"
 
 type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
@@ -72,6 +75,17 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 			slog.InfoContext(ctx, "invalid location search", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+		if zip := strings.TrimSpace(r.URL.Query().Get("zip")); zip != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     ZipCodeCookieName,
+				Value:    zip,
+				Path:     "/",
+				MaxAge:   int((90 * 24 * time.Hour).Seconds()),
+				HttpOnly: true,
+				Secure:   r.TLS != nil,
+				SameSite: http.SameSiteLaxMode,
+			})
 		}
 		var favoriteStore string
 		if currentUser != nil {
