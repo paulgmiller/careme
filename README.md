@@ -237,8 +237,13 @@ export MNFOODCLUB_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' se
 
 Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.
 The provider fetches every page (up to 250 products per request), resolves brands
-and category names, and uses the lowest-priced purchasable variant for each
-product. Zero stock excludes items only when inventory tracking is enabled.
+and category names, and uses the purchasable variant with the highest inventory
+level for each product. Ties keep the first eligible variant in catalog order.
+Zero stock excludes items only when inventory tracking is enabled. The selected
+variant's prices and `variant_id` are saved alongside the parent product `id` in
+cached ingredient data; the TSV includes only the parent product ID. Older
+cached catalogs need refreshing to populate `variant_id`. The saved IDs support
+the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 
 For a test-site cart handoff walkthrough and standalone mock API, see
 [MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
