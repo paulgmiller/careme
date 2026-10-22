@@ -33,17 +33,22 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 
 ## Key Prefixes
 
-New recipe parameters for `mnfoodclub_delivery`, `mnfoodclub_tcfarm_delivery`,
-and `mnfoodclub_nelsongrassfarm_delivery` use the Monday of their local store
-week as the date. All seven days therefore resolve to the same default shopping
-hash and Monday ingredient snapshot for each storefront. The existing 9 AM
-store-day boundary applies first, so Monday before 9 AM still uses the previous
-week. Explicit dates are normalized to their week's Monday as well. Other stores
-retain daily dates. Cache prefixes and hash algorithms are unchanged; direct
-links to previously saved daily hashes continue to load their original lists.
-The MNFoodClub identity provider owns this weekly date policy; the provider
-registry registers its lookup with recipes alongside the staples-signature lookup.
-Providers without a recipe date policy keep their daily dates.
+New recipe parameters retain the actual store-local timestamp, including its time
+of day. Timezone resolution preserves the instant; it does not select a shopping
+day. Each provider registers its cache hashing implementation with `cachekey`.
+Hashing applies the 9 AM local shopping-day boundary first. Daily providers hash
+that day; all `mnfoodclub_*` storefronts hash the Monday of that shopping week.
+Monday before 9 AM therefore still uses the previous week's key. Each storefront
+retains its own key. Explicit date-only input represents 9 AM in the store timezone
+so it belongs to the selected shopping day.
+
+New params have `date_hash_version: 1`. Saved params without that marker retain
+legacy calendar-date hashing without applying the cutoff or weekly cadence again,
+including older daily MNFoodClub records. Regeneration preserves the version.
+The marker itself is not hashed. Cache prefixes, signatures, FNV byte order, and
+Base64 encoding are unchanged, so equivalent shopping days retain existing keys
+and saved links continue to work. Wine cache keys keep their existing calendar-date
+and style hashing formula.
 
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |

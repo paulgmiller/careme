@@ -167,12 +167,12 @@ func (s *Store) loadCatalog(ctx context.Context, id string) (*catalogEntry, erro
 	if err != nil {
 		return nil, fmt.Errorf("load store %q: %w", id, err)
 	}
-	date, err := locations.StoreToDate(ctx, s.now(), location)
+	date, err := locations.StoreTime(ctx, s.now(), location)
 	if err != nil {
 		return nil, fmt.Errorf("resolve store date: %w", err)
 	}
 	for _, day := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		ingredients, err := s.ingredients.IngredientsFromCache(ctx, cachekey.ForStore(location.ID, day, cachekey.StaplesSignature(location.ID)))
+		ingredients, err := s.ingredients.IngredientsFromCache(ctx, cachekey.ForStore(location.ID, day))
 		if err == nil {
 			entry := &catalogEntry{location: location, ingredients: ingredients}
 			s.entries[id] = entry

@@ -204,7 +204,7 @@ func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
 			var gotIDs []string
 			for _, p := range g.params {
 				gotIDs = append(gotIDs, p.Location.ID)
-				assert.Equal(t, now.In(p.Date.Location()).Format(time.DateOnly), p.Date.Format(time.DateOnly))
+				assert.True(t, now.Equal(p.Date), "campaign params must preserve the generation instant")
 				if strings.HasPrefix(p.Location.ID, mnfoodclub.LocationIDPrefix) {
 					assert.Equal(t, "America/Chicago", p.Date.Location().String())
 				}

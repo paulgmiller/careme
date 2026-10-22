@@ -392,7 +392,7 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 		t.Fatalf("location lookup calls = %d, want %d", len(locationLookup.calls), len(StaplesWatchdogLocationIDs()))
 	}
 
-	previousPacificDay := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.UTC)
+	previousPacificDay := time.Date(2026, time.January, 14, 9, 0, 0, 0, time.UTC)
 	params := DefaultParams(&locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}, previousPacificDay)
 	cached, err := IO(cacheStore).IngredientsFromCache(t.Context(), params.LocationHash())
 	if err != nil {
@@ -402,7 +402,7 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 		t.Fatalf("unexpected cached ingredients: %+v", cached)
 	}
 
-	currentUTCDay := DefaultParams(&locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}, time.Date(2026, time.January, 15, 0, 0, 0, 0, time.UTC))
+	currentUTCDay := DefaultParams(&locations.Location{ID: "wholefoods_10153", ZipCode: "97209"}, time.Date(2026, time.January, 15, 9, 0, 0, 0, time.UTC))
 	if _, err := IO(cacheStore).IngredientsFromCache(t.Context(), currentUTCDay.LocationHash()); !errors.Is(err, cache.ErrNotFound) {
 		t.Fatalf("expected no cache for UTC day, got err=%v", err)
 	}

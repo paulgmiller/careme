@@ -17,6 +17,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/guest"
 	"careme/internal/httpx"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/feedback"
@@ -704,11 +705,15 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 }
 
 func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
-	today, err := locations.StoreToDate(ctx, nowFn(), p.Location)
+	today, err := locations.StoreTime(ctx, nowFn(), p.Location)
 	if err != nil {
 		return false
 	}
-	return today.Sub(p.Date) > 24*time.Hour
+	day := p.Date
+	if p.DateHashVersion != 0 {
+		day = cachekey.StoreDay(day.In(today.Location()))
+	}
+	return cachekey.StoreDay(today).Sub(day) > 24*time.Hour
 }
 
 func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input shoppingListViewInput) {

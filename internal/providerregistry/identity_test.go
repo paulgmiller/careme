@@ -1,12 +1,13 @@
 package providerregistry_test
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
-	"careme/internal/providerregistry"
+	_ "careme/internal/providerregistry"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/mnfoodclub"
@@ -16,58 +17,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegisteredRecipeDateUsesProviderPolicy(t *testing.T) {
+func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 	t.Parallel()
-	date := time.Date(2026, 10, 21, 0, 0, 0, 0, time.FixedZone("store", -5*60*60))
+	date := time.Date(2026, 10, 21, 14, 35, 27, 123, time.FixedZone("store", -5*60*60))
 	for _, tt := range []struct {
-		id   string
-		want time.Time
+		id       string
+		provider cachekey.StoreHasher
 	}{
-		{"mnfoodclub_delivery", date.AddDate(0, 0, -2)},
-		{"mnfoodclub_tcfarm_delivery", date.AddDate(0, 0, -2)},
-		{"mnfoodclub_nelsongrassfarm_delivery", date.AddDate(0, 0, -2)},
-		// New MNFoodClub storefronts inherit the provider's weekly cadence.
-		{"mnfoodclub_other", date.AddDate(0, 0, -2)},
-		{"70100023", date},
-		{"smithbrothersfarms_delivery", date},
-		{"wholefoods_10216", date},
-		{"unknown", date},
+		{"safeway_1142", albertsons.NewIdentityProvider()},
+		{"aldi_F100", aldi.NewIdentityProvider()},
+		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},
+		{"mnfoodclub_other", mnfoodclub.NewIdentityProvider()},
+		{"smithbrothersfarms_delivery", smithbrothersfarms.NewIdentityProvider()},
 	} {
 		t.Run(tt.id, func(t *testing.T) {
-			assert.Equal(t, tt.want, providerregistry.RecipeDate(tt.id, date))
-			assert.Equal(t, tt.want, recipes.DefaultParams(&locations.Location{ID: tt.id}, date).Date)
+			want := base64.RawURLEncoding.EncodeToString(tt.provider.HashForStore(tt.id, date).Sum(nil))
+			assert.Equal(t, want, cachekey.ForStore(tt.id, date))
+			params := recipes.DefaultParams(&locations.Location{ID: tt.id}, date)
+			assert.Equal(t, date, params.Date)
+			assert.Equal(t, want, params.Hash())
+			assert.Equal(t, want, params.LocationHash())
 		})
 	}
-}
-
-func TestStaplesSignatureForLocation_UsesAlbertsonsIdentityProvider(t *testing.T) {
-	t.Parallel()
-
-	got := cachekey.StaplesSignature("safeway_1142")
-	want := albertsons.NewIdentityProvider().Signature()
-	if got != want {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
-}
-
-func TestStaplesSignatureForLocation_UsesAldiIdentityProvider(t *testing.T) {
-	t.Parallel()
-
-	got := cachekey.StaplesSignature("aldi_F100")
-	want := aldi.NewIdentityProvider().Signature()
-	if got != want {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
-}
-
-func TestStaplesSignatureForLocation_PanicsForUnknownLocation(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic for unknown location")
-		}
-	}()
-
-	_ = cachekey.StaplesSignature("loc-unknown")
+	assert.Panics(t, func() { cachekey.ForStore("loc-unknown", date) })
 }
 
 func TestForStorePreservesExistingHashes(t *testing.T) {
@@ -79,35 +51,33 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 	}
 	for id, want := range hashes {
 		t.Run(id, func(t *testing.T) {
-			for _, hour := range []int{0, 12, 23} {
+			legacy := &recipes.GeneratorParams{Location: &locations.Location{ID: id}, Date: time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)}
+			assert.Equal(t, want, legacy.Hash())
+			assert.Equal(t, want, legacy.LocationHash())
+			for _, hour := range []int{9, 12, 23} {
 				date := time.Date(2025, 9, 17, hour, 0, 0, 0, time.FixedZone("store", -7*60*60))
-				signature := cachekey.StaplesSignature(id)
-				assert.Equal(t, want, cachekey.ForStore(id, date, signature))
+				assert.Equal(t, want, cachekey.ForStore(id, date))
 				params := recipes.DefaultParams(&locations.Location{ID: id}, date)
 				assert.Equal(t, want, params.LocationHash())
 				assert.Equal(t, want, params.Hash())
-				assert.NotEqual(t, want, cachekey.ForStore(id, date.AddDate(0, 0, 1), signature))
+				assert.NotEqual(t, want, cachekey.ForStore(id, date.AddDate(0, 0, 1)))
 			}
 		})
 	}
 }
 
-func TestMNFoodClubSignature(t *testing.T) {
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
-		assert.Equal(t, mnfoodclub.NewIdentityProvider().Signature(), cachekey.StaplesSignature(id))
+func TestMNFoodClubHashesWeekly(t *testing.T) {
+	date := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery", "mnfoodclub_other"} {
+		assert.Equal(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 1)))
+		assert.NotEqual(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 7)))
+		assert.Equal(t, base64.RawURLEncoding.EncodeToString(cachekey.NewHash(id, date.AddDate(0, 0, -1), mnfoodclub.NewIdentityProvider().Signature()).Sum(nil)), cachekey.ForStore(id, date))
 	}
-	date := time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)
-	signature := cachekey.StaplesSignature("mnfoodclub_delivery")
-	assert.NotPanics(t, func() { _ = cachekey.ForStore("mnfoodclub_delivery", date, signature) })
-	assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", date, signature), cachekey.ForStore("mnfoodclub_other", date, signature))
-	assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", date, signature), cachekey.ForStore("mnfoodclub_delivery", date.AddDate(0, 0, 1), signature))
+	assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", date), cachekey.ForStore("mnfoodclub_other", date))
 }
 
-func TestSmithBrothersFarmsSignature(t *testing.T) {
-	assert.Equal(t, smithbrothersfarms.NewIdentityProvider().Signature(), cachekey.StaplesSignature("smithbrothersfarms_delivery"))
-	date := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	signature := cachekey.StaplesSignature("smithbrothersfarms_delivery")
-	assert.NotPanics(t, func() { _ = cachekey.ForStore("smithbrothersfarms_delivery", date, signature) })
-	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date, signature), cachekey.ForStore("smithbrothersfarms_other", date, signature))
-	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date, signature), cachekey.ForStore("smithbrothersfarms_delivery", date.AddDate(0, 0, 1), signature))
+func TestSmithBrothersFarmsHashesDaily(t *testing.T) {
+	date := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date), cachekey.ForStore("smithbrothersfarms_other", date))
+	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date), cachekey.ForStore("smithbrothersfarms_delivery", date.AddDate(0, 0, 1)))
 }

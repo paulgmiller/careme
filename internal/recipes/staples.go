@@ -314,7 +314,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 		if err != nil {
 			return 0, err
 		}
-		date, err := locations.StoreToDate(ctx, nowFn(), store)
+		date, err := locations.StoreTime(ctx, nowFn(), store)
 		if err != nil {
 			return 0, err
 		}
