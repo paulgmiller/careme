@@ -33,21 +33,18 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, p.Signature())
-}
-
-func NewIdentityProvider() identityProvider { return identityProvider{} }
-
-func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, LocationIDPrefix) }
-
-func (identityProvider) Signature() string {
 	parts := append([]string{}, stapleURLs...)
 	for _, box := range harvestBoxes {
 		parts = append(parts, baseURL+"/"+box.slug)
 	}
 	parts = append(parts, parserVersion)
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	return cachekey.NewHash(locationID, date, signature)
 }
+
+func NewIdentityProvider() identityProvider { return identityProvider{} }
+
+func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, LocationIDPrefix) }
 
 type ingredientClient interface {
 	Fetch(context.Context, string) ([]ai.InputIngredient, error)

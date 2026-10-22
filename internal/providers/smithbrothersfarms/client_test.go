@@ -2,11 +2,16 @@ package smithbrothersfarms
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"careme/internal/ingredients/cachekey"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -130,18 +135,25 @@ func TestIdentityAndWineLookup(t *testing.T) {
 	for _, id := range []string{"", "smithbrothersfarms", "other_smithbrothersfarms_delivery"} {
 		assert.False(t, identity.IsID(id))
 	}
-	original := identity.Signature()
-	assert.Len(t, original, 64)
-	assert.Equal(t, original, identity.Signature())
+	date := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	original := identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil)
+	parts := append([]string{}, stapleURLs...)
+	for _, box := range harvestBoxes {
+		parts = append(parts, baseURL+"/"+box.slug)
+	}
+	parts = append(parts, parserVersion)
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	assert.Equal(t, cachekey.NewHash("smithbrothersfarms_delivery", date, signature).Sum(nil), original)
+	assert.Equal(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	saved := stapleURLs[0]
 	t.Cleanup(func() { stapleURLs[0] = saved })
 	stapleURLs[0] += "?changed=1"
-	assert.NotEqual(t, original, identity.Signature())
+	assert.NotEqual(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	stapleURLs[0] = saved
 	box := harvestBoxes[0].slug
 	t.Cleanup(func() { harvestBoxes[0].slug = box })
 	harvestBoxes[0].slug += "-changed"
-	assert.NotEqual(t, original, identity.Signature())
+	assert.NotEqual(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	client, calls, _ := fixtureClient(t, "", 0, nil)
 	provider := NewStaplesProvider(client)
 	_, err := provider.FetchWines(t.Context(), "smithbrothersfarms_delivery", nil)

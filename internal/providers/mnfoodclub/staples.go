@@ -24,21 +24,18 @@ type identityProvider struct{}
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
 	date = date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
-	return cachekey.NewHash(locationID, date, p.Signature())
+	signatureParts := []string{catalogVersion}
+	for _, ingredient := range produceShareIngredients() {
+		signatureParts = append(signatureParts, ingredient.Description)
+	}
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	return cachekey.NewHash(locationID, date, signature)
 }
 
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 
 func (identityProvider) IsID(locationID string) bool {
 	return strings.HasPrefix(locationID, LocationIDPrefix)
-}
-
-func (identityProvider) Signature() string {
-	signatureParts := []string{catalogVersion}
-	for _, ingredient := range produceShareIngredients() {
-		signatureParts = append(signatureParts, ingredient.Description)
-	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
 }
 
 type ingredientClient interface {

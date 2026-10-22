@@ -61,7 +61,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, p.Signature())
+	return cachekey.NewHash(locationID, date, string(defaultHEBStaplesSignature))
 }
 
 type StaplesProvider struct {
@@ -108,10 +108,6 @@ func newStaplesProviderWithDeps(client hebQueryClient, loadReese84 loadReese84) 
 		client:      client,
 		loadReese84: loadReese84,
 	}
-}
-
-func (p identityProvider) Signature() string {
-	return string(defaultHEBStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {

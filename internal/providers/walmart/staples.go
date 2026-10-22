@@ -17,7 +17,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, p.Signature())
+	return cachekey.NewHash(locationID, date, UnsupportedStaplesSignature)
 }
 
 func NewStaplesProvider() StaplesProvider {
@@ -50,10 +50,6 @@ func (c identityProvider) IsID(locationID string) bool {
 
 func (*identityProvider) HasInventory(locationID string) bool {
 	return false
-}
-
-func (p identityProvider) Signature() string {
-	return UnsupportedStaplesSignature
 }
 
 func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]ai.InputIngredient, error) {

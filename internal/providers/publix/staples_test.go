@@ -12,19 +12,21 @@ import (
 	"time"
 
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityProviderSignature_UsesStapleCategories(t *testing.T) {
+func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	t.Parallel()
-
-	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(StapleCategories())
-	if err != nil {
-		t.Fatalf("marshal staple categories: %v", err)
-	}
-	if got != string(want) {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
+	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
+	const locationID = "publix_1847"
+	raw, err := json.Marshal(StapleCategories())
+	require.NoError(t, err)
+	signature := string(raw)
+	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
 func TestStapleCategories_IncludesKnownPublixStaples(t *testing.T) {

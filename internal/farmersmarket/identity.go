@@ -12,7 +12,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, p.Signature())
+	return cachekey.NewHash(locationID, date, signature)
 }
 
 func NewIdentityProvider() identityProvider {
@@ -21,10 +21,6 @@ func NewIdentityProvider() identityProvider {
 
 func (s identityProvider) IsID(locationID string) bool {
 	return isID(locationID)
-}
-
-func (s identityProvider) Signature() string {
-	return signature
 }
 
 func isID(locationID string) bool {

@@ -28,7 +28,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, p.Signature())
+	return cachekey.NewHash(locationID, date, string(defaultStaplesSignature))
 }
 
 type StaplesProvider struct {
@@ -42,10 +42,6 @@ func NewStaplesProvider(client CategoryClient) StaplesProvider {
 
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}
-}
-
-func (p identityProvider) Signature() string {
-	return string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {

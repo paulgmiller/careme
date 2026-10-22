@@ -12,6 +12,8 @@ import (
 	"github.com/samber/lo"
 )
 
+const storeDayStartHour = 9
+
 // StoreHasher owns a provider's cache cadence and staple version.
 type StoreHasher interface {
 	IsID(string) bool
@@ -56,7 +58,7 @@ func StoreDay(date time.Time) time.Time {
 	if hour == 0 && minute == 0 && second == 0 && date.Nanosecond() == 0 {
 		return date
 	}
-	if hour < 9 {
+	if hour < storeDayStartHour {
 		date = date.AddDate(0, 0, -1)
 	}
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
@@ -73,8 +75,7 @@ func NewHash(locationID string, date time.Time, signature string) hash.Hash {
 
 type testProvider struct{}
 
-func (testProvider) IsID(string) bool  { return true }
-func (testProvider) Signature() string { return "test" }
+func (testProvider) IsID(string) bool { return true }
 func (p testProvider) HashForStore(id string, date time.Time) hash.Hash {
-	return NewHash(id, StoreDay(date), p.Signature())
+	return NewHash(id, StoreDay(date), "test")
 }

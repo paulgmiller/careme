@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +41,10 @@ func TestMNFoodClubIdentity(t *testing.T) {
 	for _, ingredient := range produceShareIngredients() {
 		parts = append(parts, ingredient.Description)
 	}
-	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n")))), identity.Signature())
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	want := cachekey.NewHash("mnfoodclub_delivery", monday, signature).Sum(nil)
+	assert.Equal(t, want, identity.HashForStore("mnfoodclub_delivery", monday.AddDate(0, 0, 2).Add(12*time.Hour)).Sum(nil))
 }
 
 func TestMNFoodClubFetchStaples(t *testing.T) {

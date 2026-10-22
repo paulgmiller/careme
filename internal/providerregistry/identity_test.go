@@ -71,7 +71,7 @@ func TestMNFoodClubHashesWeekly(t *testing.T) {
 	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery", "mnfoodclub_other"} {
 		assert.Equal(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 1)))
 		assert.NotEqual(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 7)))
-		assert.Equal(t, base64.RawURLEncoding.EncodeToString(cachekey.NewHash(id, date.AddDate(0, 0, -1), mnfoodclub.NewIdentityProvider().Signature()).Sum(nil)), cachekey.ForStore(id, date))
+		assert.Equal(t, base64.RawURLEncoding.EncodeToString(mnfoodclub.NewIdentityProvider().HashForStore(id, date.AddDate(0, 0, -1)).Sum(nil)), cachekey.ForStore(id, date))
 	}
 	assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", date), cachekey.ForStore("mnfoodclub_other", date))
 }
