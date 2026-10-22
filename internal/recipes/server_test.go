@@ -20,6 +20,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
@@ -367,6 +368,54 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+}
+
+func TestHandleRecipes_MissingShoppingListRefreshesClerkSession(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	require.NoError(t, templates.Init(cfg))
+	t.Cleanup(func() { require.NoError(t, templates.Init(&config.Config{})) })
+
+	for _, tt := range []struct {
+		name     string
+		clerk    auth.AuthClient
+		signedIn bool
+	}{
+		{name: "expired server session after Clerk redirect", clerk: noSessionAuth{}},
+		{name: "valid server session", clerk: auth.DefaultMock(), signedIn: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+			s := newTestServer(t,
+				withTestClerk(tt.clerk),
+				withTestGenerator(generator),
+				withTestLocationServer(staticLocationLookup{location: &locations.Location{
+					ID: "70001001", Name: "Test Store", ZipCode: "94105",
+				}}),
+			)
+			req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-10-22&instructions=make+it+vegetarian", nil)
+			req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
+			rr := httptest.NewRecorder()
+
+			s.handleRecipes(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+			body := rr.Body.String()
+			assert.Contains(t, body, "Let&#39;s get cooking")
+			assert.Contains(t, body, `data-clerk-publishable-key="pk_test_123"`)
+			assert.Regexp(t, fmt.Sprintf(`const serverSignedIn =\s*%t\s*;`, tt.signedIn), body)
+			assert.Contains(t, body, `await Clerk.load()`)
+			assert.Contains(t, body, `!serverSignedIn && clerkSignedIn && !sessionStorage.getItem(key)`)
+			assert.Contains(t, body, `location.reload()`)
+			assert.Contains(t, body, `name="instructions" value="make it vegetarian"`)
+			assert.Contains(t, rr.Header().Get("Cache-Control"), "no-store")
+			select {
+			case <-generator.called:
+				t.Fatal("restoring a session must not start generation on GET")
+			default:
+			}
+		})
 	}
 }
 
