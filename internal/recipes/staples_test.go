@@ -25,10 +25,6 @@ func (s *stubStaplesProvider) IsID(locationID string) bool {
 	return s.ids[locationID]
 }
 
-func (s *stubStaplesProvider) Signature() string {
-	return "stub-staples-v1"
-}
-
 func (s *stubStaplesProvider) FetchStaples(_ context.Context, _ string) ([]ai.InputIngredient, error) {
 	s.calls++
 	if s.err != nil {

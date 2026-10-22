@@ -65,6 +65,8 @@ func TestParseGenerationFormMNFoodClubWeekStartsMonday9AM(t *testing.T) {
 	lat, lon := 45.152, -93.194
 	location := &locations.Location{ID: "mnfoodclub_delivery", Lat: &lat, Lon: &lon}
 	for _, tt := range []struct{ now, monday string }{
+		{"2026-10-19T05:00:00Z", "2026-10-19"}, // Midnight represents a resolved store day.
+		{"2026-10-19T05:00:00.000000001Z", "2026-10-12"},
 		{"2026-10-19T13:59:00Z", "2026-10-12"},
 		{"2026-10-19T14:00:00Z", "2026-10-19"},
 		{"2026-10-25T23:59:00Z", "2026-10-19"},
@@ -160,7 +162,6 @@ func TestDefaultParamsPreservesTimestamp(t *testing.T) {
 	input := time.Date(2026, 10, 21, 8, 17, 42, 123456789, time.FixedZone("store", -7*60*60))
 	p := DefaultParams(&locations.Location{ID: "70500874"}, input)
 	assert.Equal(t, input, p.Date)
-	assert.Equal(t, 1, p.DateHashVersion)
 }
 
 func TestParseGenerationFormExplicitDateUsesSelectedShoppingDay(t *testing.T) {
@@ -171,9 +172,10 @@ func TestParseGenerationFormExplicitDateUsesSelectedShoppingDay(t *testing.T) {
 			p, err := ParseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+id+"&date="+date, nil), staticLocationLookup{location: location})
 			require.NoError(t, err)
 			assert.Equal(t, date, p.Date.Format(time.DateOnly))
-			assert.Equal(t, 9, p.Date.Hour())
+			assert.Equal(t, 0, p.Date.Hour())
 			assert.Equal(t, "America/Chicago", p.Date.Location().String())
-			assert.Equal(t, cachekey.ForStore(id, p.Date.Add(time.Hour)), p.LocationHash())
+			shoppingTime := time.Date(p.Date.Year(), p.Date.Month(), p.Date.Day(), 9, 0, 0, 0, p.Date.Location())
+			assert.Equal(t, cachekey.ForStore(id, shoppingTime), p.LocationHash())
 		}
 	}
 }

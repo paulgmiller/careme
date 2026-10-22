@@ -54,7 +54,7 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 			legacy := &recipes.GeneratorParams{Location: &locations.Location{ID: id}, Date: time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)}
 			assert.Equal(t, want, legacy.Hash())
 			assert.Equal(t, want, legacy.LocationHash())
-			for _, hour := range []int{9, 12, 23} {
+			for _, hour := range []int{0, 9, 12, 23} {
 				date := time.Date(2025, 9, 17, hour, 0, 0, 0, time.FixedZone("store", -7*60*60))
 				assert.Equal(t, want, cachekey.ForStore(id, date))
 				params := recipes.DefaultParams(&locations.Location{ID: id}, date)

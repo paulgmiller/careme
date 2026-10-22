@@ -36,19 +36,22 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 New recipe parameters retain the actual store-local timestamp, including its time
 of day. Timezone resolution preserves the instant; it does not select a shopping
 day. Each provider registers its cache hashing implementation with `cachekey`.
-Hashing applies the 9 AM local shopping-day boundary first. Daily providers hash
-that day; all `mnfoodclub_*` storefronts hash the Monday of that shopping week.
-Monday before 9 AM therefore still uses the previous week's key. Each storefront
-retains its own key. Explicit date-only input represents 9 AM in the store timezone
-so it belongs to the selected shopping day.
+Hashing applies the 9 AM local shopping-day boundary to timestamps with a nonzero
+time component (hours, minutes, seconds, or nanoseconds). Exact midnight is treated
+as an already resolved store day: legacy params stored dates this way, so daily
+provider hashes remain stable without version metadata or a separate legacy path.
+An actual timestamp at exactly midnight follows the same date-only rule.
 
-New params have `date_hash_version: 1`. Saved params without that marker retain
-legacy calendar-date hashing without applying the cutoff or weekly cadence again,
-including older daily MNFoodClub records. Regeneration preserves the version.
-The marker itself is not hashed. Cache prefixes, signatures, FNV byte order, and
-Base64 encoding are unchanged, so equivalent shopping days retain existing keys
-and saved links continue to work. Wine cache keys keep their existing calendar-date
-and style hashing formula.
+Daily providers hash the resolved day; all `mnfoodclub_*` storefronts hash the
+Monday of that shopping week. Monday before 9 AM uses the previous week's key,
+except for exact midnight, which represents a date-only Monday. Each storefront
+retains its own key. Explicit date-only input remains midnight in the store timezone
+and belongs to the selected shopping day. Older daily MNFoodClub params now use
+weekly hashing too; their recomputed hashes can change.
+
+Cache prefixes, signatures, FNV byte order, and Base64 encoding are unchanged.
+Params retain their supplied timestamps and have no date-hash version marker.
+Wine cache keys keep their existing calendar-date and style hashing formula.
 
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |

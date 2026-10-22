@@ -13,11 +13,9 @@ import (
 )
 
 // StoreHasher owns a provider's cache cadence and staple version.
-// Signature is retained for hashing previously saved calendar-date params.
 type StoreHasher interface {
 	IsID(string) bool
 	HashForStore(string, time.Time) hash.Hash
-	Signature() string
 }
 
 var providers []StoreHasher
@@ -49,14 +47,16 @@ func HashForStore(locationID string, date time.Time) hash.Hash {
 	return providerFor(locationID).HashForStore(locationID, date)
 }
 
-// HashForLegacyStoreDate preserves the calendar-date identity of saved params.
-func HashForLegacyStoreDate(locationID string, date time.Time) hash.Hash {
-	return NewHash(locationID, date, providerFor(locationID).Signature())
-}
-
 // StoreDay resolves a store-local timestamp using the 9 AM shopping-day boundary.
+// A date with no time component is already a resolved store day.
 func StoreDay(date time.Time) time.Time {
-	if date.Hour() < 9 {
+	hour, minute, second := date.Clock()
+	// Legacy params stored resolved store days at midnight. Preserve those dates
+	// so existing daily cache hashes stay stable without a separate legacy path.
+	if hour == 0 && minute == 0 && second == 0 && date.Nanosecond() == 0 {
+		return date
+	}
+	if hour < 9 {
 		date = date.AddDate(0, 0, -1)
 	}
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())

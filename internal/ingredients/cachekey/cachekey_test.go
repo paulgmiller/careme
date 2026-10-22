@@ -36,8 +36,29 @@ func TestStoreDayUsesLocal9AMBoundary(t *testing.T) {
 	}
 }
 
-func TestLegacyHashDoesNotApplyCutoff(t *testing.T) {
-	date := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
-	assert.Equal(t, NewHash("loc-123", date, "test").Sum(nil), HashForLegacyStoreDate("loc-123", date).Sum(nil))
-	assert.NotEqual(t, HashForLegacyStoreDate("loc-123", date).Sum(nil), HashForStore("loc-123", date).Sum(nil))
+func TestStoreDayPreservesZeroTimeForLegacyDates(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	date := time.Date(2026, 10, 21, 0, 0, 0, 0, zone)
+	for _, tt := range []struct {
+		name        string
+		input, want time.Time
+	}{
+		{"date only", date, date},
+		{"nanoseconds", date.Add(time.Nanosecond), date.AddDate(0, 0, -1)},
+		{"seconds", date.Add(time.Second), date.AddDate(0, 0, -1)},
+		{"minutes", date.Add(time.Minute), date.AddDate(0, 0, -1)},
+		{"hours", date.Add(time.Hour), date.AddDate(0, 0, -1)},
+		{"before boundary", date.Add(9*time.Hour - time.Nanosecond), date.AddDate(0, 0, -1)},
+		{"at boundary", date.Add(9 * time.Hour), date},
+		{"after boundary", date.Add(12 * time.Hour), date},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			day := StoreDay(tt.input)
+			assert.Equal(t, tt.want, day)
+			assert.Equal(t, day, StoreDay(day), "a resolved store day must not shift again")
+			assert.Equal(t, base64.RawURLEncoding.EncodeToString(NewHash("loc-123", tt.want, "test").Sum(nil)), ForStore("loc-123", tt.input))
+		})
+	}
 }

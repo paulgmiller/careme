@@ -1,12 +1,9 @@
 package recipes
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,9 +12,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
-	"careme/internal/providers/mnfoodclub"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -256,58 +251,38 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	}
 }
 
-func TestParamsDateHashVersionsRoundTrip(t *testing.T) {
+func TestParamsStoreDatesRoundTrip(t *testing.T) {
 	t.Parallel()
 	zone, err := time.LoadLocation("America/Chicago")
 	require.NoError(t, err)
 	for _, id := range []string{"70500874", "mnfoodclub_delivery"} {
 		for _, day := range []int{19, 20} {
-			for _, version := range []int{0, 1} {
-				t.Run(fmt.Sprintf("%s/day%d/version%d", id, day, version), func(t *testing.T) {
-					date := time.Date(2026, 10, day, 0, 0, 0, 0, zone)
-					p := &generatorParams{
-						Location: &locations.Location{ID: id}, Date: date, DateHashVersion: version,
-						Instructions: "vegetarian", Directive: "seasonal",
-						Saved: []ai.Recipe{{Title: "Saved recipe"}}, Dismissed: []ai.Recipe{{Title: "Dismissed recipe"}},
-					}
-					var expected hash.Hash
-					if version == 0 {
-						expected = cachekey.HashForLegacyStoreDate(id, date)
-						if id == "mnfoodclub_delivery" {
-							expected = cachekey.NewHash(id, date, mnfoodclub.NewIdentityProvider().Signature())
-						}
-					} else {
-						expected = cachekey.HashForStore(id, date)
-					}
-					locationHash := base64.RawURLEncoding.EncodeToString(expected.Sum(nil))
-					for _, input := range []string{p.Instructions, p.Directive, "saved" + p.Saved[0].ComputeHash(), "dismissed" + p.Dismissed[0].ComputeHash()} {
-						_, err := io.WriteString(expected, input)
-						require.NoError(t, err)
-					}
-					expectedHash := base64.RawURLEncoding.EncodeToString(expected.Sum(nil))
+			for _, clock := range []time.Duration{0, 8*time.Hour + 123*time.Nanosecond} {
+				t.Run(fmt.Sprintf("%s/day%d/time%s", id, day, clock), func(t *testing.T) {
+					date := time.Date(2026, 10, day, 0, 0, 0, 0, zone).Add(clock)
+					p := DefaultParams(&locations.Location{ID: id}, date)
+					p.Instructions = "vegetarian"
+					p.Directive = "seasonal"
+					p.Saved = []ai.Recipe{{Title: "Saved recipe"}}
+					p.Dismissed = []ai.Recipe{{Title: "Dismissed recipe"}}
+					expectedHash, locationHash := p.Hash(), p.LocationHash()
 					rio := IO(cache.NewFileCache(t.TempDir()))
 					require.NoError(t, rio.SaveParams(t.Context(), p))
 					loaded, err := rio.ParamsFromCache(t.Context(), expectedHash)
 					require.NoError(t, err)
 					assert.True(t, date.Equal(loaded.Date))
 					assert.Equal(t, date.Format(time.RFC3339Nano), loaded.Date.Format(time.RFC3339Nano))
-					assert.Equal(t, version, loaded.DateHashVersion)
 					assert.Equal(t, expectedHash, loaded.Hash())
 					assert.Equal(t, locationHash, loaded.LocationHash())
 					blob, err := json.Marshal(loaded)
 					require.NoError(t, err)
-					if version == 0 {
-						assert.NotContains(t, string(blob), "date_hash_version")
-					} else {
-						assert.Contains(t, string(blob), `"date_hash_version":1`)
-					}
+					assert.NotContains(t, string(blob), "date_hash_version")
 					loaded.Directive = "make it spicy"
 					assert.NotEqual(t, expectedHash, loaded.Hash())
 					assert.Equal(t, locationHash, loaded.LocationHash())
 					require.NoError(t, rio.SaveParams(t.Context(), loaded))
 					regenerated, err := rio.ParamsFromCache(t.Context(), loaded.Hash())
 					require.NoError(t, err)
-					assert.Equal(t, version, regenerated.DateHashVersion)
 					assert.Equal(t, loaded.Hash(), regenerated.Hash())
 				})
 			}

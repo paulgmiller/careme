@@ -754,17 +754,16 @@ func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		now, date time.Time
-		version   int
 		old       bool
 	}{
-		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), 1, false},
-		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), 1, true},
-		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), 0, false},
-		{"timestamp midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), 1, true},
+		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), false},
+		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), true},
+		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), false},
+		{"just after midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 1, zone), true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			withNow(t, tt.now)
-			p := &generatorParams{Location: location, Date: tt.date, DateHashVersion: tt.version}
+			p := &generatorParams{Location: location, Date: tt.date}
 			assert.Equal(t, tt.old, shoppingListIsOlderThanFreshIngredientsWindow(t.Context(), p))
 		})
 	}

@@ -32,7 +32,6 @@ func init() {
 type testKrogerIdentity struct{}
 
 func (testKrogerIdentity) IsID(id string) bool { return id == "loc-123" }
-func (testKrogerIdentity) Signature() string   { return kroger.NewIdentityProvider().Signature() }
 func (testKrogerIdentity) HashForStore(id string, date time.Time) hash.Hash {
 	return kroger.NewIdentityProvider().HashForStore(id, date)
 }
