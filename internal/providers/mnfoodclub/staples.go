@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
 const LocationIDPrefix = "mnfoodclub_"
@@ -17,6 +20,12 @@ const catalogVersion = "mnfoodclub-bigcommerce-v1"
 const wineCategoryID = 178
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	date = date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 

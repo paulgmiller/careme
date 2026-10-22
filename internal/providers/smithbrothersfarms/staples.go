@@ -5,9 +5,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
 const (
@@ -27,6 +30,11 @@ var harvestBoxes = []struct {
 }
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 

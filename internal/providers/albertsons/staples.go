@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 	"careme/internal/providers/albertsons/query"
 
@@ -32,6 +35,11 @@ type searchClient interface {
 type searchClientFactory func(baseURL string) (searchClient, error)
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 type StaplesProvider struct {
 	identityProvider

@@ -1,8 +1,19 @@
 package farmersmarket
 
-import "strings"
+import (
+	"hash"
+	"strings"
+	"time"
+
+	"careme/internal/ingredients/cachekey"
+)
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}

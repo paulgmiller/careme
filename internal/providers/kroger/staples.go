@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/config"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 	"careme/internal/providers/kroger/products"
 
@@ -26,6 +29,11 @@ type staplesFilter struct {
 }
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}

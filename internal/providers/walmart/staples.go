@@ -3,14 +3,22 @@ package walmart
 import (
 	"context"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
 const UnsupportedStaplesSignature = "unsupported-staples-v1"
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 func NewStaplesProvider() StaplesProvider {
 	return StaplesProvider{}

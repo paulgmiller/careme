@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 	"careme/internal/providers/aldi/query"
 
@@ -38,6 +40,11 @@ type productClient interface {
 }
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 type staplesProvider struct {
 	identityProvider

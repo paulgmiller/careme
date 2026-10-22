@@ -5,11 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"log/slog"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -22,6 +25,11 @@ type CategoryClient interface {
 }
 
 type identityProvider struct{}
+
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, p.Signature())
+}
 
 type StaplesProvider struct {
 	identityProvider
