@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
 const LocationIDPrefix = "mnfoodclub_"
@@ -19,24 +21,21 @@ const wineCategoryID = 178
 
 type identityProvider struct{}
 
-func NewIdentityProvider() identityProvider { return identityProvider{} }
-
-func (identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix)
-}
-
-// RecipeDate shares Monday's recipes throughout the local store week.
-func (identityProvider) RecipeDate(date time.Time) time.Time {
-	daysSinceMonday := (int(date.Weekday()) + 6) % 7
-	return date.AddDate(0, 0, -daysSinceMonday)
-}
-
-func (identityProvider) Signature() string {
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	date = date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
 	signatureParts := []string{catalogVersion}
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	return cachekey.NewHash(locationID, date, signature)
+}
+
+func NewIdentityProvider() identityProvider { return identityProvider{} }
+
+func (identityProvider) IsID(locationID string) bool {
+	return strings.HasPrefix(locationID, LocationIDPrefix)
 }
 
 type ingredientClient interface {

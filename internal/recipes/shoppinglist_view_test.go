@@ -745,3 +745,26 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 		})
 	}
 }
+
+func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
+	zone, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+	lat, lon := 47.61, -122.33
+	location := &locations.Location{ID: "70000001", Lat: &lat, Lon: &lon}
+	for _, tt := range []struct {
+		name      string
+		now, date time.Time
+		old       bool
+	}{
+		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), false},
+		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), true},
+		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), false},
+		{"just after midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 1, zone), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			withNow(t, tt.now)
+			p := &generatorParams{Location: location, Date: tt.date}
+			assert.Equal(t, tt.old, shoppingListIsOlderThanFreshIngredientsWindow(t.Context(), p))
+		})
+	}
+}

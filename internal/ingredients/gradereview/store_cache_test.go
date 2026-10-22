@@ -57,9 +57,9 @@ func TestCachedCatalogUsesStoreDayAndYesterday(t *testing.T) {
 	location := &locations.Location{ID: "70100023", Name: "Test store", Lat: &lat, Lon: &lon}
 	// 8 am local time: the produce score still uses the previous store day.
 	now := time.Date(2026, 10, 8, 13, 0, 0, 0, time.UTC)
-	day, err := locations.StoreToDate(t.Context(), now, location)
+	day, err := locations.StoreTime(t.Context(), now, location)
 	require.NoError(t, err)
-	require.Equal(t, "2026-10-07", day.Format("2006-01-02"))
+	require.Equal(t, "2026-10-07", cachekey.StoreDay(day).Format("2006-01-02"))
 	today := []ai.InputIngredient{{ProductID: "today", Grade: &ai.IngredientGrade{Score: 9, Reason: "cached grade"}}, {ProductID: "ungraded"}}
 	yesterday := []ai.InputIngredient{{ProductID: "yesterday", Grade: &ai.IngredientGrade{Score: 7, Reason: "previous day"}}}
 	for _, tt := range []struct {
@@ -73,10 +73,10 @@ func TestCachedCatalogUsesStoreDayAndYesterday(t *testing.T) {
 			c := cache.NewInMemoryCache()
 			rio := recipes.IO(c)
 			if tt.seedToday {
-				require.NoError(t, rio.SaveIngredients(t.Context(), cachekey.ForStore(location.ID, day, cachekey.StaplesSignature(location.ID)), today))
+				require.NoError(t, rio.SaveIngredients(t.Context(), cachekey.ForStore(location.ID, day), today))
 			}
 			if tt.seedYesterday {
-				require.NoError(t, rio.SaveIngredients(t.Context(), cachekey.ForStore(location.ID, day.AddDate(0, 0, -1), cachekey.StaplesSignature(location.ID)), yesterday))
+				require.NoError(t, rio.SaveIngredients(t.Context(), cachekey.ForStore(location.ID, day.AddDate(0, 0, -1)), yesterday))
 			}
 			catalog := NewStore(cache.NewInMemoryCache(), fakeLocationLookup{location: location}, rio)
 			catalog.now = func() time.Time { return now }

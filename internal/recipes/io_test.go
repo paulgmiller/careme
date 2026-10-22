@@ -1,7 +1,9 @@
 package recipes
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +13,8 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSaveParams_IsAtomic(t *testing.T) {
@@ -244,5 +248,44 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 	}
 	if got.Commentary != "Try a tempranillo." {
 		t.Fatalf("unexpected cached wine recommendation: got %q", got)
+	}
+}
+
+func TestParamsStoreDatesRoundTrip(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	for _, id := range []string{"70500874", "mnfoodclub_delivery"} {
+		for _, day := range []int{19, 20} {
+			for _, clock := range []time.Duration{0, 8*time.Hour + 123*time.Nanosecond} {
+				t.Run(fmt.Sprintf("%s/day%d/time%s", id, day, clock), func(t *testing.T) {
+					date := time.Date(2026, 10, day, 0, 0, 0, 0, zone).Add(clock)
+					p := DefaultParams(&locations.Location{ID: id}, date)
+					p.Instructions = "vegetarian"
+					p.Directive = "seasonal"
+					p.Saved = []ai.Recipe{{Title: "Saved recipe"}}
+					p.Dismissed = []ai.Recipe{{Title: "Dismissed recipe"}}
+					expectedHash, locationHash := p.Hash(), p.LocationHash()
+					rio := IO(cache.NewFileCache(t.TempDir()))
+					require.NoError(t, rio.SaveParams(t.Context(), p))
+					loaded, err := rio.ParamsFromCache(t.Context(), expectedHash)
+					require.NoError(t, err)
+					assert.True(t, date.Equal(loaded.Date))
+					assert.Equal(t, date.Format(time.RFC3339Nano), loaded.Date.Format(time.RFC3339Nano))
+					assert.Equal(t, expectedHash, loaded.Hash())
+					assert.Equal(t, locationHash, loaded.LocationHash())
+					blob, err := json.Marshal(loaded)
+					require.NoError(t, err)
+					assert.NotContains(t, string(blob), "date_hash_version")
+					loaded.Directive = "make it spicy"
+					assert.NotEqual(t, expectedHash, loaded.Hash())
+					assert.Equal(t, locationHash, loaded.LocationHash())
+					require.NoError(t, rio.SaveParams(t.Context(), loaded))
+					regenerated, err := rio.ParamsFromCache(t.Context(), loaded.Hash())
+					require.NoError(t, err)
+					assert.Equal(t, loaded.Hash(), regenerated.Hash())
+				})
+			}
+		}
 	}
 }

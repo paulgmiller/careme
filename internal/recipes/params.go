@@ -53,13 +53,7 @@ func (g *generatorParams) previousMenuPlanResponse() ai.ResponseRef {
 type GeneratorParams = generatorParams
 
 func DefaultParams(l *locations.Location, date time.Time) *generatorParams {
-	// normalize to midnight (shave hours, minutes, seconds, nanoseconds)
-	// rethink this can we use this to restart if we don't normalize and hash still just looks at right part?
-	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-	return &generatorParams{
-		Date:     recipeDate(l.ID, date),
-		Location: l,
-	}
+	return &generatorParams{Date: date, Location: l}
 }
 
 func (g *generatorParams) String() string {
@@ -69,7 +63,7 @@ func (g *generatorParams) String() string {
 // Hash this is how we find shoppinglists and params
 // intentionally not including ResponseID to preserve old hashes
 func (g *generatorParams) Hash() string {
-	fnv := cachekey.HashForStore(g.Location.ID, g.Date, cachekey.StaplesSignature(g.Location.ID))
+	fnv := cachekey.HashForStore(g.Location.ID, g.Date)
 	lo.Must(io.WriteString(fnv, g.Instructions)) // rethink this? if they're all in convo should we have one id and ability to walk back?
 	lo.Must(io.WriteString(fnv, g.Directive))
 	for _, saved := range g.Saved {
@@ -82,7 +76,7 @@ func (g *generatorParams) Hash() string {
 }
 
 func (g *generatorParams) LocationHash() string {
-	return cachekey.ForStore(g.Location.ID, g.Date, cachekey.StaplesSignature(g.Location.ID))
+	return cachekey.ForStore(g.Location.ID, g.Date)
 }
 
 func legacyHashToCurrent(hash string, seed string) (string, bool) {
@@ -110,7 +104,7 @@ func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*g
 	if err != nil {
 		return nil, err
 	}
-	date, err := locations.StoreToDate(ctx, nowFn(), l)
+	date, err := locations.StoreTime(ctx, nowFn(), l)
 	if err != nil {
 		return nil, err
 	}

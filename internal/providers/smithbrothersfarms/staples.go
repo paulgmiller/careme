@@ -5,9 +5,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
 const (
@@ -28,18 +31,20 @@ var harvestBoxes = []struct {
 
 type identityProvider struct{}
 
-func NewIdentityProvider() identityProvider { return identityProvider{} }
-
-func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, LocationIDPrefix) }
-
-func (identityProvider) Signature() string {
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
 	parts := append([]string{}, stapleURLs...)
 	for _, box := range harvestBoxes {
 		parts = append(parts, baseURL+"/"+box.slug)
 	}
 	parts = append(parts, parserVersion)
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	return cachekey.NewHash(locationID, date, signature)
 }
+
+func NewIdentityProvider() identityProvider { return identityProvider{} }
+
+func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, LocationIDPrefix) }
 
 type ingredientClient interface {
 	Fetch(context.Context, string) ([]ai.InputIngredient, error)

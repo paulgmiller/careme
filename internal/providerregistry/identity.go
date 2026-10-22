@@ -1,6 +1,7 @@
 package providerregistry
 
 import (
+	"hash"
 	"testing"
 	"time"
 
@@ -15,55 +16,28 @@ import (
 	"careme/internal/providers/smithbrothersfarms"
 	"careme/internal/providers/walmart"
 	"careme/internal/providers/wholefoods"
-	"careme/internal/recipes"
 )
 
-// this is pretty hacky but if we don't do this we have to pass something to every recipes.IO
-// so it can hash params correctly. Open to better methods.
+// Register cache identities without coupling cache consumers to provider construction.
 func init() {
-	cachekey.RegisterStaplesSignature(StaplesSignature)
-	recipes.RegisterRecipeDate(RecipeDate)
-}
-
-type recipeDateProvider interface {
-	RecipeDate(time.Time) time.Time
-}
-
-// RecipeDate applies a provider's recipe cadence to a resolved local store day.
-// Providers without a date policy keep daily recipes.
-func RecipeDate(locationID string, date time.Time) time.Time {
 	for _, provider := range staplesIdentities() {
-		if provider.IsID(locationID) {
-			if policy, ok := provider.(recipeDateProvider); ok {
-				return policy.RecipeDate(date)
-			}
-			return date
-		}
+		cachekey.RegisterProvider(provider)
 	}
-	return date
+	if testing.Testing() {
+		cachekey.RegisterProvider(testKrogerIdentity{})
+	}
 }
 
-type staplesIdentity interface {
-	IsID(string) bool
-	Signature() string
+// Preserve the established synthetic Kroger ID used by integration fixtures.
+type testKrogerIdentity struct{}
+
+func (testKrogerIdentity) IsID(id string) bool { return id == "loc-123" }
+func (testKrogerIdentity) HashForStore(id string, date time.Time) hash.Hash {
+	return kroger.NewIdentityProvider().HashForStore(id, date)
 }
 
-// StaplesSignature returns the provider version used for a store's recipe and
-// ingredient cache keys.
-func StaplesSignature(locationID string) string {
-	for _, provider := range staplesIdentities() {
-		if provider.IsID(locationID) {
-			return provider.Signature()
-		}
-	}
-	if testing.Testing() && locationID == "loc-123" {
-		return kroger.NewIdentityProvider().Signature()
-	}
-	panic("unknown staples provider for location " + locationID)
-}
-
-func staplesIdentities() []staplesIdentity {
-	return []staplesIdentity{
+func staplesIdentities() []cachekey.StoreHasher {
+	return []cachekey.StoreHasher{
 		kroger.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
 		heb.NewIdentityProvider(),

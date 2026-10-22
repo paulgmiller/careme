@@ -6,21 +6,25 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"careme/internal/cache"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/aldi/query"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityProviderSignatureUsesStapleCategories(t *testing.T) {
+func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	t.Parallel()
-
-	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(StapleCategories())
+	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
+	const locationID = "aldi_F100"
+	raw, err := json.Marshal(StapleCategories())
 	require.NoError(t, err)
-	assert.Equal(t, string(want), got)
+	signature := string(raw)
+	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
 func TestIdentityProviderIsID(t *testing.T) {

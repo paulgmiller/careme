@@ -33,17 +33,25 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 
 ## Key Prefixes
 
-New recipe parameters for `mnfoodclub_delivery`, `mnfoodclub_tcfarm_delivery`,
-and `mnfoodclub_nelsongrassfarm_delivery` use the Monday of their local store
-week as the date. All seven days therefore resolve to the same default shopping
-hash and Monday ingredient snapshot for each storefront. The existing 9 AM
-store-day boundary applies first, so Monday before 9 AM still uses the previous
-week. Explicit dates are normalized to their week's Monday as well. Other stores
-retain daily dates. Cache prefixes and hash algorithms are unchanged; direct
-links to previously saved daily hashes continue to load their original lists.
-The MNFoodClub identity provider owns this weekly date policy; the provider
-registry registers its lookup with recipes alongside the staples-signature lookup.
-Providers without a recipe date policy keep their daily dates.
+New recipe parameters retain the actual store-local timestamp, including its time
+of day. Timezone resolution preserves the instant; it does not select a shopping
+day. Each provider registers its cache hashing implementation with `cachekey`.
+Hashing applies the 9 AM local shopping-day boundary to timestamps with a nonzero
+time component (hours, minutes, seconds, or nanoseconds). Exact midnight is treated
+as an already resolved store day: legacy params stored dates this way, so daily
+provider hashes remain stable without version metadata or a separate legacy path.
+An actual timestamp at exactly midnight follows the same date-only rule.
+
+Daily providers hash the resolved day; all `mnfoodclub_*` storefronts hash the
+Monday of that shopping week. Monday before 9 AM uses the previous week's key,
+except for exact midnight, which represents a date-only Monday. Each storefront
+retains its own key. Explicit date-only input remains midnight in the store timezone
+and belongs to the selected shopping day. Older daily MNFoodClub params now use
+weekly hashing too; their recomputed hashes can change.
+
+Cache prefixes, signatures, FNV byte order, and Base64 encoding are unchanged.
+Params retain their supplied timestamps and have no date-hash version marker.
+Wine cache keys keep their existing calendar-date and style hashing formula.
 
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |

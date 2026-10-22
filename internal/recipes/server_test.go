@@ -204,7 +204,7 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 		withTestGenerator(generator),
 		withTestLocationServer(staticLocationLookup{location: location}),
 	)
-	p := DefaultParams(location, time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(location, time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC))
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70100023&date=2026-07-29&help=Save+two+dinners", nil)
@@ -235,7 +235,7 @@ func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
 	t.Parallel()
 	zone, err := time.LoadLocation("America/Chicago")
 	require.NoError(t, err)
-	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, zone)
+	monday := time.Date(2026, 10, 19, 9, 0, 0, 0, zone)
 	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
 		t.Run(id, func(t *testing.T) {
 			lat, lon := 45.152, -93.194
@@ -762,7 +762,7 @@ func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 		}}),
 	)
 
-	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 9, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
 	p.Instructions = "make it vegetarian"
 	hash := p.Hash()
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
