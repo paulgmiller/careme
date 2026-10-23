@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"careme/internal/config"
-	"careme/internal/httpretry"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -203,6 +202,8 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 
 func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
 	attempt, _ := strconv.Atoi(req.Header.Get("X-Stainless-Retry-Count"))
-	httpretry.LogRetry("openai")(nil, req, attempt)
+	if attempt > 0 {
+		slog.InfoContext(req.Context(), "Retrying HTTP request", "source", "openai", "url", req.URL.String(), "attempt", attempt+1)
+	}
 	return next(req)
 }
