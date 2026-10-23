@@ -188,8 +188,8 @@ MNFoodClub catalog: MN Food Club (`mnfood.club`), TC Farm (`tc.farm`), and
 Nelson Grass Farm (`nelsongrassfarm.com`). All three appear within an approximate
 rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
 -94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
-Search results use stable IDs `mnfoodclub_delivery`, `mnfoodclub_tcfarm_delivery`,
-and `mnfoodclub_nelsongrassfarm_delivery`, respectively. Each result retains the
+Search results use stable IDs `mnfoodclub_delivery`, `tcfarm_delivery`,
+and `nelsongrassfarm_delivery`, respectively. Each result retains the
 search coordinates for distance filtering; lookup by ID uses the shared Blaine
 coordinates for store dates. Location results are not cached.
 

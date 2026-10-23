@@ -8,6 +8,13 @@ import (
 	locationtypes "careme/internal/locations/types"
 )
 
+// Delivery location IDs are shared by provider routing and campaigns.
+const (
+	MNFoodClubLocationID      = "mnfoodclub_delivery"
+	TCFarmLocationID          = "tcfarm_delivery"
+	NelsonGrassFarmLocationID = "nelsongrassfarm_delivery"
+)
+
 // Rough rectangle around the supplied delivery map, not its exact service polygon.
 // It includes St. Cloud, the Twin Cities, Hudson, and Rochester.
 // https://mnfood.club/About/ see Delivery Deails.
@@ -25,9 +32,9 @@ type storefront struct {
 }
 
 var storefronts = [...]storefront{
-	{id: LocationIDPrefix + "delivery", name: "MN Food Club", url: "https://mnfood.club/"},
-	{id: LocationIDPrefix + "tcfarm_delivery", name: "TC Farm", url: "https://tc.farm/"},
-	{id: LocationIDPrefix + "nelsongrassfarm_delivery", name: "Nelson Grass Farm", url: "https://nelsongrassfarm.com/"},
+	{id: MNFoodClubLocationID, name: "MN Food Club", url: "https://mnfood.club/"},
+	{id: TCFarmLocationID, name: "TC Farm", url: "https://tc.farm/"},
+	{id: NelsonGrassFarmLocationID, name: "Nelson Grass Farm", url: "https://nelsongrassfarm.com/"},
 }
 
 // LocationBackend exposes MNFoodClub home delivery within the approximate area.

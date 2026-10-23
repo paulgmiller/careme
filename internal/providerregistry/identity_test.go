@@ -27,7 +27,8 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 		{"safeway_1142", albertsons.NewIdentityProvider()},
 		{"aldi_F100", aldi.NewIdentityProvider()},
 		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},
-		{"mnfoodclub_other", mnfoodclub.NewIdentityProvider()},
+		{"tcfarm_delivery", mnfoodclub.NewIdentityProvider()},
+		{"nelsongrassfarm_delivery", mnfoodclub.NewIdentityProvider()},
 		{"smithbrothersfarms_delivery", smithbrothersfarms.NewIdentityProvider()},
 	} {
 		t.Run(tt.id, func(t *testing.T) {
@@ -67,13 +68,32 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 }
 
 func TestMNFoodClubHashesWeekly(t *testing.T) {
-	date := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery", "mnfoodclub_other"} {
-		assert.Equal(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 1)))
-		assert.NotEqual(t, cachekey.ForStore(id, date), cachekey.ForStore(id, date.AddDate(0, 0, 7)))
-		assert.Equal(t, base64.RawURLEncoding.EncodeToString(mnfoodclub.NewIdentityProvider().HashForStore(id, date.AddDate(0, 0, -1)).Sum(nil)), cachekey.ForStore(id, date))
+	zone, err := time.LoadLocation("America/Chicago")
+	assert.NoError(t, err)
+	// Include year boundaries and both daylight saving transitions.
+	for _, monday := range []time.Time{
+		time.Date(2026, 10, 19, 9, 0, 0, 0, zone),
+		time.Date(2025, 12, 29, 9, 0, 0, 0, zone),
+		time.Date(2026, 3, 2, 9, 0, 0, 0, zone),
+		time.Date(2026, 10, 26, 9, 0, 0, 0, zone),
+	} {
+		for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+			want := cachekey.ForStore(id, monday)
+			for day := range 7 {
+				date := monday.AddDate(0, 0, day)
+				assert.Equal(t, want, cachekey.ForStore(id, date))
+				params := recipes.DefaultParams(&locations.Location{ID: id}, date)
+				assert.Equal(t, want, params.Hash())
+				assert.Equal(t, want, params.LocationHash())
+			}
+			assert.Equal(t, want, cachekey.ForStore(id, monday.AddDate(0, 0, 7).Add(-time.Nanosecond)))
+			assert.NotEqual(t, want, cachekey.ForStore(id, monday.AddDate(0, 0, 7)))
+			assert.NotEqual(t, want, cachekey.ForStore(id, monday.Add(-time.Nanosecond)))
+		}
+		assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", monday), cachekey.ForStore("tcfarm_delivery", monday))
+		assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", monday), cachekey.ForStore("nelsongrassfarm_delivery", monday))
+		assert.NotEqual(t, cachekey.ForStore("tcfarm_delivery", monday), cachekey.ForStore("nelsongrassfarm_delivery", monday))
 	}
-	assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", date), cachekey.ForStore("mnfoodclub_other", date))
 }
 
 func TestSmithBrothersFarmsHashesDaily(t *testing.T) {

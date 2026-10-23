@@ -21,7 +21,7 @@ func TestDefaultParamsMNFoodClubUsesMondayForWholeWeek(t *testing.T) {
 	t.Parallel()
 	zone, err := time.LoadLocation("America/Chicago")
 	require.NoError(t, err)
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		t.Run(id, func(t *testing.T) {
 			location := &locations.Location{ID: id}
 			// Include month/year boundaries and both daylight saving transitions.

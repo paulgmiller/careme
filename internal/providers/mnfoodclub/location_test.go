@@ -30,8 +30,8 @@ func TestLocationsWithinDeliveryBox(t *testing.T) {
 			require.Len(t, got, 3)
 			for i, want := range []struct{ id, name, url string }{
 				{"mnfoodclub_delivery", "MN Food Club", "https://mnfood.club/"},
-				{"mnfoodclub_tcfarm_delivery", "TC Farm", "https://tc.farm/"},
-				{"mnfoodclub_nelsongrassfarm_delivery", "Nelson Grass Farm", "https://nelsongrassfarm.com/"},
+				{"tcfarm_delivery", "TC Farm", "https://tc.farm/"},
+				{"nelsongrassfarm_delivery", "Nelson Grass Farm", "https://nelsongrassfarm.com/"},
 			} {
 				location := got[i]
 				assert.Equal(t, want.id, location.ID)

@@ -505,8 +505,8 @@ func TestLocationsPageShowsAllMNFoodClubStorefronts(t *testing.T) {
 	assert.Equal(t, 3, strings.Count(body, `<li class=`))
 	for _, store := range []struct{ id, name string }{
 		{"mnfoodclub_delivery", "MN Food Club delivery"},
-		{"mnfoodclub_tcfarm_delivery", "TC Farm delivery"},
-		{"mnfoodclub_nelsongrassfarm_delivery", "Nelson Grass Farm delivery"},
+		{"tcfarm_delivery", "TC Farm delivery"},
+		{"nelsongrassfarm_delivery", "Nelson Grass Farm delivery"},
 	} {
 		assert.Contains(t, body, "<span>"+store.name+"</span>")
 		assert.Contains(t, body, `<input type="hidden" name="location" value="`+store.id+`" />`)

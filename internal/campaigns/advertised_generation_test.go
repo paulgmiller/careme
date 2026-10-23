@@ -27,7 +27,7 @@ func (advertisedLocationStoreStub) GetLocationByID(ctx context.Context, id strin
 	if id == "smithbrothersfarms_delivery" {
 		return nil, errors.New("disabled campaign should not hydrate its location")
 	}
-	if strings.HasPrefix(id, mnfoodclub.LocationIDPrefix) {
+	if mnfoodclub.NewIdentityProvider().IsID(id) {
 		return mnfoodclub.NewLocationBackend().GetLocationByID(ctx, id)
 	}
 	lat, lon := 47.61, -122.33
@@ -168,7 +168,7 @@ func (f failingCampaignStore) FromCache(context.Context, string) (*ai.ShoppingLi
 }
 
 func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
-	mnfoodclubIDs := []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"}
+	mnfoodclubIDs := []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"}
 	for _, tt := range []struct {
 		name    string
 		now     string
@@ -205,7 +205,7 @@ func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
 			for _, p := range g.params {
 				gotIDs = append(gotIDs, p.Location.ID)
 				assert.True(t, now.Equal(p.Date), "campaign params must preserve the generation instant")
-				if strings.HasPrefix(p.Location.ID, mnfoodclub.LocationIDPrefix) {
+				if mnfoodclub.NewIdentityProvider().IsID(p.Location.ID) {
 					assert.Equal(t, "America/Chicago", p.Date.Location().String())
 				}
 			}

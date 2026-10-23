@@ -12,7 +12,8 @@ import (
 	"careme/internal/ingredients/cachekey"
 )
 
-const LocationIDPrefix = "mnfoodclub_"
+// WeekStartDay anchors weekly cache keys and campaign generation.
+const WeekStartDay = time.Monday
 
 const catalogVersion = "mnfoodclub-bigcommerce-v1"
 
@@ -23,7 +24,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	date = date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
+	date = date.AddDate(0, 0, -int((date.Weekday()-WeekStartDay+7)%7))
 	signatureParts := []string{catalogVersion}
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
@@ -35,7 +36,9 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 
 func (identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix)
+	return locationID == MNFoodClubLocationID ||
+		locationID == TCFarmLocationID ||
+		locationID == NelsonGrassFarmLocationID
 }
 
 type ingredientClient interface {
@@ -43,7 +46,7 @@ type ingredientClient interface {
 }
 
 // StaplesProvider serves the API catalog and static produce shares for every
-// location ID beginning with mnfoodclub_.
+// MN Food Club, TC Farm, and Nelson Grass Farm delivery location.
 type StaplesProvider struct {
 	identityProvider
 	client ingredientClient
