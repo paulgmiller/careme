@@ -10,7 +10,7 @@ import (
 
 // Delivery location IDs are shared by provider routing and campaigns.
 const (
-	MNFoodClubLocationID      = LocationIDPrefix + "delivery"
+	MNFoodClubLocationID      = "mnfoodclub_delivery"
 	TCFarmLocationID          = "tcfarm_delivery"
 	NelsonGrassFarmLocationID = "nelsongrassfarm_delivery"
 )

@@ -12,8 +12,6 @@ import (
 	"careme/internal/ingredients/cachekey"
 )
 
-const LocationIDPrefix = "mnfoodclub_"
-
 // WeekStartDay anchors weekly cache keys and campaign generation.
 const WeekStartDay = time.Monday
 
@@ -38,8 +36,9 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 
 func (identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix) ||
-		locationID == TCFarmLocationID || locationID == NelsonGrassFarmLocationID
+	return locationID == MNFoodClubLocationID ||
+		locationID == TCFarmLocationID ||
+		locationID == NelsonGrassFarmLocationID
 }
 
 type ingredientClient interface {

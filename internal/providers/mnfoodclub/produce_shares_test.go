@@ -23,7 +23,7 @@ func TestProduceShareIngredients(t *testing.T) {
 		byShare[share] = append(byShare[share], strings.TrimPrefix(ingredient.Description, "Produce share "+strings.ToLower(share)+" "))
 		assert.False(t, ids[ingredient.ProductID], "duplicate ID %s", ingredient.ProductID)
 		ids[ingredient.ProductID] = true
-		assert.True(t, strings.HasPrefix(ingredient.ProductID, LocationIDPrefix))
+		assert.True(t, strings.HasPrefix(ingredient.ProductID, "mnfoodclub"))
 		assert.Nil(t, ingredient.PriceRegular)
 		assert.Nil(t, ingredient.PriceSale)
 		require.NotNil(t, ingredient.Grade)

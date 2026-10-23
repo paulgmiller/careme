@@ -29,7 +29,6 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},
 		{"tcfarm_delivery", mnfoodclub.NewIdentityProvider()},
 		{"nelsongrassfarm_delivery", mnfoodclub.NewIdentityProvider()},
-		{"mnfoodclub_other", mnfoodclub.NewIdentityProvider()},
 		{"smithbrothersfarms_delivery", smithbrothersfarms.NewIdentityProvider()},
 	} {
 		t.Run(tt.id, func(t *testing.T) {

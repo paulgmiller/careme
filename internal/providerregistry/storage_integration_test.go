@@ -11,6 +11,7 @@ import (
 	"careme/internal/locations/geo"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/smithbrothersfarms"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,19 +61,19 @@ func TestMNFoodClubLocationByIDIgnoresCache(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
 	backend := mnfoodclub.NewLocationBackend()
 	server := newProviderLocationStore(t, backend, fc)
-	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery", "mnfoodclub_44.98_-93.27"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery", "mnfoodclub_invalid"} {
 		t.Run(id, func(t *testing.T) {
 			putProviderLocationInCache(t, fc, locationCachePrefix+id, locations.Location{
 				ID: id, Name: "Stale search point", Lat: new(44.98), Lon: new(-93.27),
 			})
 			got, err := server.GetLocationByID(t.Context(), id)
-			if id != "mnfoodclub_44.98_-93.27" {
+			if id != "mnfoodclub_invalid" {
 				require.NoError(t, err)
 				want, err := backend.GetLocationByID(t.Context(), id)
 				require.NoError(t, err)
 				assert.Equal(t, want, got)
 			} else {
-				require.ErrorContains(t, err, "invalid MNFoodClub location ID")
+				require.ErrorContains(t, err, "not supported by any backend")
 				assert.Nil(t, got)
 			}
 		})

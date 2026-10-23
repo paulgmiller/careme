@@ -31,7 +31,7 @@ func (c *stubIngredientClient) Fetch(ctx context.Context, categoryID int) ([]ai.
 
 func TestMNFoodClubIdentity(t *testing.T) {
 	identity := NewIdentityProvider()
-	for _, id := range []string{"mnfoodclub_", "mnfoodclub_1", "mnfoodclub_delivery", "mnfoodclub_any_store", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		assert.True(t, identity.IsID(id), id)
 	}
 	for _, id := range []string{"", "mnfoodclub", "other_mnfoodclub_1", "wholefoods_1", "tcfarm_other", "nelsongrassfarm_other"} {
@@ -78,7 +78,7 @@ func TestMNFoodClubFetchStaples(t *testing.T) {
 	want := []ai.InputIngredient{{ProductID: "194", Description: "Avocados - qty 3"}, {ProductID: "195", Description: "Ground beef"}}
 	client := &stubIngredientClient{ingredients: want}
 	provider := NewStaplesProvider(client)
-	for _, id := range []string{"mnfoodclub_", "mnfoodclub_1", "mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		client.calls = nil
 		got, err := provider.FetchStaples(t.Context(), id)
 		require.NoError(t, err)
