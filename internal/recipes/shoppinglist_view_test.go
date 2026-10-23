@@ -15,6 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
@@ -166,6 +167,41 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	assert.NotContains(t, html, "Try again, chef")
 	assert.NotContains(t, html, `Older list`)
 	assert.NotContains(t, html, `/regenerate"`)
+}
+
+func TestFormatShoppingListHTML_WeeklyIngredientsStayFreshUntilNextWeek(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	monday := time.Date(2026, time.October, 19, 9, 0, 0, 0, zone)
+	backend := mnfoodclub.NewLocationBackend()
+	for _, id := range []string{mnfoodclub.MNFoodClubLocationID, mnfoodclub.TCFarmLocationID, mnfoodclub.NelsonGrassFarmLocationID} {
+		t.Run(id, func(t *testing.T) {
+			location, err := backend.GetLocationByID(t.Context(), id)
+			require.NoError(t, err)
+			p := DefaultParams(location, monday)
+			for _, tt := range []struct {
+				name string
+				now  time.Time
+				old  bool
+			}{
+				{"Friday", monday.AddDate(0, 0, 4), false},
+				{"before next Monday cutoff", monday.AddDate(0, 0, 7).Add(-time.Minute), false},
+				{"next Monday cutoff", monday.AddDate(0, 0, 7), true},
+				{"future plan", monday.AddDate(0, 0, -7), true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					withNow(t, tt.now)
+					w := httptest.NewRecorder()
+					formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+					html := assertHTTPSuccess(t, w)
+					assert.Equal(t, tt.old, strings.Contains(html, "Using ingredients from"))
+					assert.Equal(t, tt.old, strings.Contains(html, "Use today's ingredients"))
+					assert.Equal(t, !tt.old, strings.Contains(html, "Try again, chef"))
+				})
+			}
+		})
+	}
 }
 
 func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
@@ -756,9 +792,9 @@ func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
 		now, date time.Time
 		old       bool
 	}{
-		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), false},
-		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 13, 9, 0, 0, 0, zone), true},
-		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), false},
+		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), false},
+		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), true},
+		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), true},
 		{"just after midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 1, zone), true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
