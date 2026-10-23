@@ -242,7 +242,7 @@ func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
 			location := &locations.Location{ID: id, Name: "Weekly delivery", Lat: &lat, Lon: &lon}
 			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 			s := newTestServer(t, withTestGenerator(generator), withTestLocationServer(staticLocationLookup{location: location}))
-			p := DefaultParams(location, monday)
+			p := DefaultParams(&locations.Location{ID: "mnfoodclub_delivery", Name: "MN Food Club", Lat: &lat, Lon: &lon}, monday)
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 				Recipes: []ai.Recipe{{Title: "Monday supper"}},

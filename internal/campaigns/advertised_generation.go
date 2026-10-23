@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"careme/internal/locations"
+	"careme/internal/providers/mnfoodclub"
 
 	"github.com/samber/lo"
 )
@@ -50,17 +51,17 @@ func AdvertisedRecipeLocations() map[string]campaign {
 		"mnfoodclub": {
 			Location:        locations.Location{ID: "mnfoodclub_delivery"},
 			Generate:        true,
-			GenerateWeekday: lo.ToPtr(time.Monday),
+			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},
 		"tcfarm": {
 			Location:        locations.Location{ID: "mnfoodclub_tcfarm_delivery"},
 			Generate:        true,
-			GenerateWeekday: lo.ToPtr(time.Monday),
+			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},
 		"nelsongrassfarm": {
 			Location:        locations.Location{ID: "mnfoodclub_nelsongrassfarm_delivery"},
 			Generate:        true,
-			GenerateWeekday: lo.ToPtr(time.Monday),
+			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},
 		/* Too close to fred meyers
 		bellevue_wf": {

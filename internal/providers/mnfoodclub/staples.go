@@ -14,6 +14,9 @@ import (
 
 const LocationIDPrefix = "mnfoodclub_"
 
+// WeekStartDay anchors weekly cache keys and campaign generation.
+const WeekStartDay = time.Monday
+
 const catalogVersion = "mnfoodclub-bigcommerce-v1"
 
 // The existing storefront's Wine & Wine Alternatives category.
@@ -23,12 +26,17 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	date = date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
+	date = date.AddDate(0, 0, -int((date.Weekday()-WeekStartDay+7)%7))
 	signatureParts := []string{catalogVersion}
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	// These storefronts sell the same catalog and share weekly recipe plans.
+	switch locationID {
+	case "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery":
+		locationID = "mnfoodclub_delivery"
+	}
 	return cachekey.NewHash(locationID, date, signature)
 }
 
