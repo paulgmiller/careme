@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"careme/internal/config"
+	"careme/internal/httpretry"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -61,10 +64,10 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
 	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
-		httpClient = flexHTTPClient(httpClient)
-		// The HTTP client owns retries so SDK retries cannot multiply them.
-		opts = append(opts, option.WithMaxRetries(0))
+		// Allow capacity to recover while keeping retries inside the job deadline.
+		opts = append(opts, option.WithMaxRetries(10), option.WithMaxRetryDelay(time.Minute))
 	}
+	opts = append(opts, option.WithMiddleware(logOpenAIRetry))
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
@@ -196,4 +199,10 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
 		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
 	}
+}
+
+func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	attempt, _ := strconv.Atoi(req.Header.Get("X-Stainless-Retry-Count"))
+	httpretry.LogRetry("openai")(nil, req, attempt)
+	return next(req)
 }
