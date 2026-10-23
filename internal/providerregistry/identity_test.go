@@ -27,6 +27,8 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 		{"safeway_1142", albertsons.NewIdentityProvider()},
 		{"aldi_F100", aldi.NewIdentityProvider()},
 		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},
+		{"tcfarm_delivery", mnfoodclub.NewIdentityProvider()},
+		{"nelsongrassfarm_delivery", mnfoodclub.NewIdentityProvider()},
 		{"mnfoodclub_other", mnfoodclub.NewIdentityProvider()},
 		{"smithbrothersfarms_delivery", smithbrothersfarms.NewIdentityProvider()},
 	} {
@@ -77,7 +79,7 @@ func TestMNFoodClubHashesWeekly(t *testing.T) {
 		time.Date(2026, 10, 26, 9, 0, 0, 0, zone),
 	} {
 		want := cachekey.ForStore("mnfoodclub_delivery", monday)
-		for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 			for day := range 7 {
 				date := monday.AddDate(0, 0, day)
 				assert.Equal(t, want, cachekey.ForStore(id, date))

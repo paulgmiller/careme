@@ -34,8 +34,8 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
 	// These storefronts sell the same catalog and share weekly recipe plans.
 	switch locationID {
-	case "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery":
-		locationID = "mnfoodclub_delivery"
+	case TCFarmLocationID, NelsonGrassFarmLocationID:
+		locationID = MNFoodClubLocationID
 	}
 	return cachekey.NewHash(locationID, date, signature)
 }
@@ -43,7 +43,8 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 func NewIdentityProvider() identityProvider { return identityProvider{} }
 
 func (identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix)
+	return strings.HasPrefix(locationID, LocationIDPrefix) ||
+		locationID == TCFarmLocationID || locationID == NelsonGrassFarmLocationID
 }
 
 type ingredientClient interface {
@@ -51,7 +52,7 @@ type ingredientClient interface {
 }
 
 // StaplesProvider serves the API catalog and static produce shares for every
-// location ID beginning with mnfoodclub_.
+// MN Food Club, TC Farm, and Nelson Grass Farm delivery location.
 type StaplesProvider struct {
 	identityProvider
 	client ingredientClient

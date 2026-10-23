@@ -49,17 +49,17 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			Generate: false,
 		},
 		"mnfoodclub": {
-			Location:        locations.Location{ID: "mnfoodclub_delivery"},
+			Location:        locations.Location{ID: mnfoodclub.MNFoodClubLocationID},
 			Generate:        true,
 			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},
 		"tcfarm": {
-			Location:        locations.Location{ID: "mnfoodclub_tcfarm_delivery"},
+			Location:        locations.Location{ID: mnfoodclub.TCFarmLocationID},
 			Generate:        true,
 			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},
 		"nelsongrassfarm": {
-			Location:        locations.Location{ID: "mnfoodclub_nelsongrassfarm_delivery"},
+			Location:        locations.Location{ID: mnfoodclub.NelsonGrassFarmLocationID},
 			Generate:        true,
 			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
 		},

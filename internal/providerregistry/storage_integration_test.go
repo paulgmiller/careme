@@ -44,7 +44,7 @@ func TestMNFoodClubLocationsByCoordinatesAreNotCached(t *testing.T) {
 		locations, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
 		require.NoError(t, err)
 		require.Len(t, locations, 3)
-		for i, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+		for i, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 			assert.Equal(t, id, locations[i].ID)
 			assert.Equal(t, coordinates, locations[i].Coordinate())
 		}
@@ -60,7 +60,7 @@ func TestMNFoodClubLocationByIDIgnoresCache(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
 	backend := mnfoodclub.NewLocationBackend()
 	server := newProviderLocationStore(t, backend, fc)
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery", "mnfoodclub_44.98_-93.27"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery", "mnfoodclub_44.98_-93.27"} {
 		t.Run(id, func(t *testing.T) {
 			putProviderLocationInCache(t, fc, locationCachePrefix+id, locations.Location{
 				ID: id, Name: "Stale search point", Lat: new(44.98), Lon: new(-93.27),
@@ -82,7 +82,7 @@ func TestMNFoodClubLocationByIDIgnoresCache(t *testing.T) {
 func TestMNFoodClubLocationByIDDoesNotWriteCache(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
 	server := newProviderLocationStore(t, mnfoodclub.NewLocationBackend(), fc)
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		got, err := server.GetLocationByID(t.Context(), id)
 		require.NoError(t, err)
 		assert.Equal(t, id, got.ID)

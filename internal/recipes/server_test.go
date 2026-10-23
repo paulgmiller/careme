@@ -236,7 +236,7 @@ func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
 	zone, err := time.LoadLocation("America/Chicago")
 	require.NoError(t, err)
 	monday := time.Date(2026, 10, 19, 9, 0, 0, 0, zone)
-	for _, id := range []string{"mnfoodclub_delivery", "mnfoodclub_tcfarm_delivery", "mnfoodclub_nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		t.Run(id, func(t *testing.T) {
 			lat, lon := 45.152, -93.194
 			location := &locations.Location{ID: id, Name: "Weekly delivery", Lat: &lat, Lon: &lon}
