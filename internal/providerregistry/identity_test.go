@@ -78,8 +78,8 @@ func TestMNFoodClubHashesWeekly(t *testing.T) {
 		time.Date(2026, 3, 2, 9, 0, 0, 0, zone),
 		time.Date(2026, 10, 26, 9, 0, 0, 0, zone),
 	} {
-		want := cachekey.ForStore("mnfoodclub_delivery", monday)
 		for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+			want := cachekey.ForStore(id, monday)
 			for day := range 7 {
 				date := monday.AddDate(0, 0, day)
 				assert.Equal(t, want, cachekey.ForStore(id, date))
@@ -91,7 +91,9 @@ func TestMNFoodClubHashesWeekly(t *testing.T) {
 			assert.NotEqual(t, want, cachekey.ForStore(id, monday.AddDate(0, 0, 7)))
 			assert.NotEqual(t, want, cachekey.ForStore(id, monday.Add(-time.Nanosecond)))
 		}
-		assert.NotEqual(t, want, cachekey.ForStore("mnfoodclub_other", monday))
+		assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", monday), cachekey.ForStore("tcfarm_delivery", monday))
+		assert.NotEqual(t, cachekey.ForStore("mnfoodclub_delivery", monday), cachekey.ForStore("nelsongrassfarm_delivery", monday))
+		assert.NotEqual(t, cachekey.ForStore("tcfarm_delivery", monday), cachekey.ForStore("nelsongrassfarm_delivery", monday))
 	}
 }
 

@@ -239,10 +239,10 @@ func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
 	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
 		t.Run(id, func(t *testing.T) {
 			lat, lon := 45.152, -93.194
-			location := &locations.Location{ID: id, Name: "Weekly delivery", Lat: &lat, Lon: &lon}
+			location := &locations.Location{ID: id, Name: id + " storefront", Lat: &lat, Lon: &lon}
 			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
 			s := newTestServer(t, withTestGenerator(generator), withTestLocationServer(staticLocationLookup{location: location}))
-			p := DefaultParams(&locations.Location{ID: "mnfoodclub_delivery", Name: "MN Food Club", Lat: &lat, Lon: &lon}, monday)
+			p := DefaultParams(location, monday)
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
 				Recipes: []ai.Recipe{{Title: "Monday supper"}},
@@ -259,6 +259,7 @@ func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
 				s.handleRecipes(page, httptest.NewRequest(http.MethodGet, canonical.String(), nil))
 				require.Equal(t, http.StatusOK, page.Code)
 				assert.Contains(t, page.Body.String(), "Monday supper")
+				assert.Contains(t, page.Body.String(), "Recipes for "+location.Name)
 				assert.NotContains(t, page.Body.String(), "Generate my shopping list")
 			}
 			select {

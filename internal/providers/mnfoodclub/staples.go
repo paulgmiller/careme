@@ -32,11 +32,6 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
-	// These storefronts sell the same catalog and share weekly recipe plans.
-	switch locationID {
-	case TCFarmLocationID, NelsonGrassFarmLocationID:
-		locationID = MNFoodClubLocationID
-	}
 	return cachekey.NewHash(locationID, date, signature)
 }
 
