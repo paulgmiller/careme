@@ -30,6 +30,8 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	// We could generate recipes once and copy them to all three storefront hashes,
+	// but each hash needs its own params object to preserve the store name and ID.
 	return cachekey.NewHash(locationID, date, signature)
 }
 

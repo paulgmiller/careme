@@ -709,7 +709,7 @@ func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *gener
 	if err != nil {
 		return false
 	}
-	return cachekey.StoreDay(today).Sub(cachekey.StoreDay(p.Date)) > 24*time.Hour
+	return cachekey.ForStore(p.Location.ID, today) != p.LocationHash()
 }
 
 func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input shoppingListViewInput) {
