@@ -60,6 +60,11 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
+	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
+		httpClient = flexHTTPClient(httpClient)
+		// The HTTP client owns retries so SDK retries cannot multiply them.
+		opts = append(opts, option.WithMaxRetries(0))
+	}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
