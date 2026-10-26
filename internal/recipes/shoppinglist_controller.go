@@ -362,7 +362,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
-				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
+				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp), currentUser != nil)
 				return
 			}
 			slog.ErrorContext(ctx, "failed to check recipe parameters", "error", err)
