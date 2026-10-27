@@ -27,6 +27,8 @@ func TestCartTransferBrowserLoginRedirect(t *testing.T) {
 }
 
 func TestCartTransferBrowserFailurePage(t *testing.T) {
+	t.Setenv("CLARITY_PROJECT_ID", "test-project")
+	t.Setenv("GOOGLE_TAG_MANAGER_ID", "GTM-TEST")
 	for _, code := range []string{"uncertain", "lookup_failed", "denied", "no_matches"} {
 		t.Run(code, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("rendering must not write cart"); return nil, nil })
@@ -42,6 +44,8 @@ func TestCartTransferBrowserFailurePage(t *testing.T) {
 			assert.Equal(t, retryableTransfer(code), strings.Contains(response.Body.String(), "Try again, chef"))
 			assert.NotContains(t, response.Body.String(), "Connect account")
 			assert.NotContains(t, response.Body.String(), "hx-post")
+			assert.NotContains(t, response.Body.String(), "clarity.ms")
+			assert.NotContains(t, response.Body.String(), "googletagmanager.com")
 		})
 	}
 }

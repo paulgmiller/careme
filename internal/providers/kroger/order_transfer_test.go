@@ -42,7 +42,7 @@ func TestCartTransferFormPersistsRequestAndRedirectsToCart(t *testing.T) {
 	var saved cartTransfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID)+"/state", &saved))
 	assert.Equal(t, input, saved.Request, "the full shared request survives the transfer handoff")
-	assert.Equal(t, transfer, saved.Result, "the saved result uses the same contract as the API")
+	assert.Equal(t, transfer, saved.Result, "the lifecycle result matches the durable cart submission")
 	var submission ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), submissionKey(saved), &submission))
 	assert.Equal(t, transfer, submission)

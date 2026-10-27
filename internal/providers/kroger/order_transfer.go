@@ -9,6 +9,7 @@ import (
 
 	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
+	"careme/internal/seasons"
 	"careme/internal/templates"
 )
 
@@ -45,8 +46,8 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 			writeTransferError(w, http.StatusConflict, "This list already has a different cart transfer.")
 			return
 		}
-		// Product lookup failed before any cart mutation. Retrying the same
-		// transfer is safe; order still conditionally reserves the cart write.
+		// Preparation or account connection failed before a cart mutation.
+		// Retrying still conditionally reserves the only cart write.
 		if retryableTransfer(previous.Result.Code) {
 			previous.Result = a.order(r.Context(), previous, true)
 			if !a.saveTransfer(w, r, previous) {
@@ -77,7 +78,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
 	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, transfer.IdempotencyKey)+"/state", transfer, cache.Unconditional()); err != nil {
-		writeTransferError(w, http.StatusInternalServerError, "Unable to save cart transfer. Check its status before trying again.")
+		writeTransferError(w, http.StatusInternalServerError, "Unable to save your cart result. Review your cart before trying again.")
 		return false
 	}
 	return true
@@ -121,10 +122,10 @@ type transferFailureView struct {
 
 func (a *OrderHandler) writeTransferFailure(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
 	view := transferFailureView{
-		Page: templates.NewPage(r.Context()), Message: transfer.Result.Message,
+		Page:      templates.Page{Title: "Cart transfer needs attention", Style: seasons.GetCurrentStyle()},
+		Message:   transfer.Result.Message,
 		ReturnURL: transfer.Request.ReturnURL, CartURL: cartURL(transfer.Request.Location.Chain),
 	}
-	view.Page.Title = "Cart transfer needs attention"
 	if retryableTransfer(transfer.Result.Code) {
 		retry, err := OrderView(ordertypes.OrderViewInput{Location: transfer.Request.Location, Items: transfer.Request.Items, ListKey: transfer.IdempotencyKey, ReturnURL: transfer.Request.ReturnURL})
 		if err != nil {
