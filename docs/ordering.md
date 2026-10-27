@@ -65,9 +65,10 @@ the same shape and with `Cache-Control: no-store`. It requires the same shopper
 authentication as POST. Unknown IDs and IDs belonging to another shopper return
 404. GET never resolves products, starts OAuth, or writes to the cart.
 
-Kroger IDs are stable SHA-256 digests of the finalized list key, scoped to the
-requesting shopper. Clients must treat them as opaque, not as credentials. The
-provider's `OrderView.TransferURL` supplies the transfer POST route, and
+Kroger uses the idempotency key directly as the transfer ID, scoped to the
+authenticated shopper. Status and connection URLs escape it as a path segment;
+the ID is not an authorization credential. `OrderView.TransferURL` supplies
+the transfer POST route, and
 `OrderView.TransferStatusURL` supplies the GET route for its saved result. This
 lets the recipe page check a saved list on later visits without local storage
 or URL outcome fields.

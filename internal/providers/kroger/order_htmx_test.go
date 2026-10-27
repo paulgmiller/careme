@@ -37,11 +37,11 @@ func TestCartTransferHTMXRendersSavedStatus(t *testing.T) {
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	mux := orderMux(a)
-	path := "/kroger/cart-transfers/" + ordertypes.TransferID("list-hash")
+	path := "/kroger/cart-transfers/" + "list-hash"
 	empty := htmxOrderRequest(mux, http.MethodGet, path, nil)
 	assert.Equal(t, http.StatusNoContent, empty.Code)
 	assert.Empty(t, empty.Body.String())
-	assert.Equal(t, http.StatusNotFound, getTransfer(mux, ordertypes.TransferID("list-hash")).Code)
+	assert.Equal(t, http.StatusNotFound, getTransfer(mux, "list-hash").Code)
 	posted := htmxOrderRequest(mux, http.MethodPost, "/kroger/cart-transfers", orderForm())
 	require.Equal(t, http.StatusOK, posted.Code)
 	assert.Equal(t, "text/html; charset=utf-8", posted.Header().Get("Content-Type"))
@@ -53,7 +53,7 @@ func TestCartTransferHTMXRendersSavedStatus(t *testing.T) {
 	assert.NotContains(t, posted.Body.String(), `hx-trigger="load delay:5s"`)
 	reloaded := htmxOrderRequest(mux, http.MethodGet, path, nil)
 	assert.Equal(t, posted.Body.String(), reloaded.Body.String())
-	result := transferResponse(t, getTransfer(mux, ordertypes.TransferID("list-hash")))
+	result := transferResponse(t, getTransfer(mux, "list-hash"))
 	assert.Equal(t, "applied", result.Status)
 	assert.Equal(t, 1, calls)
 }
@@ -62,7 +62,7 @@ func TestCartTransferHTMXLoginRemainsProviderOwned(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("must connect first"); return nil, nil })
 	mux := orderMux(a)
-	path := "/kroger/cart-transfers/" + ordertypes.TransferID("list-hash")
+	path := "/kroger/cart-transfers/" + "list-hash"
 	posted := htmxOrderRequest(mux, http.MethodPost, "/kroger/cart-transfers", orderForm())
 	assert.Equal(t, http.StatusNoContent, posted.Code)
 	assert.Equal(t, path+"/connect", posted.Header().Get("HX-Redirect"))

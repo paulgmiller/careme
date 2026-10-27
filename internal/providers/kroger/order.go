@@ -42,7 +42,7 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func validIdempotencyKey(key string) bool {
-	return strings.TrimSpace(key) != "" && len(key) <= 256 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".."
+	return strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".."
 }
 
 func localReturnURL(raw string) bool {

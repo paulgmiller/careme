@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	ordertypes "careme/internal/orders/types"
-
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
@@ -34,7 +32,7 @@ func TestKrogerStatusIsQueriedOnShoppingListReload(t *testing.T) {
 			require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil)))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
-			assert.Contains(t, page.String(), `hx-get="/kroger/cart-transfers/`+ordertypes.TransferID(p.Hash())+`"`)
+			assert.Contains(t, page.String(), `hx-get="/kroger/cart-transfers/`+p.Hash()+`"`)
 			assert.NotContains(t, page.String(), "cart-transfer.js")
 			assert.Contains(t, page.String(), `hx-trigger="load"`)
 			assert.NotContains(t, page.String(), "Kroger connection was not approved")

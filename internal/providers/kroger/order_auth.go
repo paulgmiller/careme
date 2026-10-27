@@ -116,7 +116,7 @@ func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)
 		return
 	}
-	state := ordertypes.TransferID(transfer.IdempotencyKey) + "." + base64.RawURLEncoding.EncodeToString(nonce)
+	state := base64.RawURLEncoding.EncodeToString([]byte(transfer.IdempotencyKey)) + "." + base64.RawURLEncoding.EncodeToString(nonce)
 	transfer.Authorization = &transferAuthorization{State: state, IssuedAt: time.Now()}
 	if !a.saveTransfer(w, r, transfer) {
 		return
@@ -144,12 +144,14 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Path: "/kroger/callback", MaxAge: -1, HttpOnly: true})
 	state := cookie.Value
-	if len(state) != 108 || state[64] != '.' || strings.ContainsAny(state, "/\\") || subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
+	encodedKey, _, found := strings.Cut(state, ".")
+	key, decodeErr := base64.RawURLEncoding.DecodeString(encodedKey)
+	if !found || decodeErr != nil || !validIdempotencyKey(string(key)) || subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
 		http.Error(w, "Invalid Kroger connection", http.StatusBadRequest)
 		return
 	}
 	var transfer cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, state[:64])+"/state", &transfer); err != nil || transfer.UserID != userID || transfer.Authorization == nil {
+	if err := a.loadJSON(r.Context(), transferKey(userID, string(key))+"/state", &transfer); err != nil || transfer.UserID != userID || transfer.Authorization == nil {
 		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
 		return
 	}

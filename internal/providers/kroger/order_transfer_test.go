@@ -37,7 +37,7 @@ func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
 	require.NoError(t, err)
 	form := url.Values{"items": {string(items)}, "location": {string(location)}, "return_url": {input.ReturnURL}}
 	mux := orderMux(a)
-	assert.Equal(t, http.StatusNotFound, getTransfer(mux, ordertypes.TransferID("list-hash")).Code)
+	assert.Equal(t, http.StatusNotFound, getTransfer(mux, "list-hash").Code)
 	response := postOrder(mux, form)
 	transfer := transferResponse(t, response)
 	assert.Equal(t, "applied", transfer.Status)
@@ -77,7 +77,7 @@ func TestCartTransferPendingLoginCanBeQueried(t *testing.T) {
 	assert.Equal(t, posted, transferResponse(t, getTransfer(mux, posted.TransferID)))
 	assert.Equal(t, posted, transferResponse(t, postOrder(mux, orderForm())))
 	assert.Zero(t, posted.Added)
-	for _, id := range []string{"!invalid", ordertypes.TransferID("../private"), ordertypes.TransferID("unknown")} {
+	for _, id := range []string{"!invalid", "../private", "unknown"} {
 		assert.Equal(t, http.StatusNotFound, getTransfer(mux, id).Code)
 	}
 }
@@ -89,10 +89,10 @@ func TestCartTransferLifecycleSaveFailureKeepsSubmissionResult(t *testing.T) {
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
-	a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/state", confirmation: true}
+	a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/state", confirmation: true}
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
-	result := transferResponse(t, getTransfer(mux, ordertypes.TransferID("list-hash")))
+	result := transferResponse(t, getTransfer(mux, "list-hash"))
 	assert.Equal(t, "applied", result.Status)
 	assert.Equal(t, 2, result.Added)
 	assert.Equal(t, result, transferResponse(t, postOrder(mux, orderForm())))
@@ -129,7 +129,7 @@ func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
 	a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/"}
 	assert.Equal(t, http.StatusInternalServerError, postOrder(orderMux(a), orderForm()).Code)
 	var result ordertypes.Transfer
-	assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/submission", &result), cache.ErrNotFound)
+	assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash")+"/submission", &result), cache.ErrNotFound)
 }
 
 func TestCartTransferRetriesProductLookupWithSameID(t *testing.T) {
@@ -189,7 +189,7 @@ func TestCartTransferNewConnectionReplacesOAuthState(t *testing.T) {
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, callback)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Equal(t, "pending_login", transferResponse(t, getTransfer(mux, ordertypes.TransferID("list-hash"))).Status)
+	assert.Equal(t, "pending_login", transferResponse(t, getTransfer(mux, "list-hash")).Status)
 }
 
 func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
@@ -241,4 +241,55 @@ func TestCartTransferConcurrentOAuthCallbacksWriteOnce(t *testing.T) {
 	assert.Equal(t, "uncertain", pending.Status)
 	assert.Equal(t, "applied", callbackTransfer(t, mux, <-completed).Status)
 	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
+	for _, key := range []string{"list-hash", "list.with.dots", "list?query#fragment%+&="} {
+		t.Run(key, func(t *testing.T) {
+			calls := 0
+			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+				calls++
+				return cartResponse(http.StatusNoContent, ""), nil
+			})
+			a.cache = cache.NewFileCache(t.TempDir())
+			mux := orderMux(a)
+			post := func() *httptest.ResponseRecorder {
+				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(orderForm().Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				request.Header.Set("Idempotency-Key", key)
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, request)
+				return response
+			}
+			response := post()
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			var transfer ordertypes.Transfer
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &transfer))
+			assert.Equal(t, key, transfer.TransferID)
+			assert.Equal(t, "pending_login", transfer.Status)
+			assert.Equal(t, "/kroger/cart-transfers/"+url.PathEscape(key)+"/connect", transfer.CartURL)
+			assert.JSONEq(t, response.Body.String(), getTransfer(mux, key).Body.String())
+			view, err := OrderView(ordertypes.OrderViewInput{ListKey: key})
+			require.NoError(t, err)
+			assert.Equal(t, "/kroger/cart-transfers/"+url.PathEscape(key), view.TransferStatusURL)
+			start := httptest.NewRecorder()
+			mux.ServeHTTP(start, httptest.NewRequest(http.MethodGet, transfer.CartURL, nil))
+			require.Equal(t, http.StatusSeeOther, start.Code)
+			cookie := start.Result().Cookies()[0]
+			callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+url.QueryEscape(cookie.Value)+"&code=code", nil)
+			callback.AddCookie(cookie)
+			completed := httptest.NewRecorder()
+			mux.ServeHTTP(completed, callback)
+			require.Equal(t, http.StatusSeeOther, completed.Code, completed.Body.String())
+			status := getTransfer(mux, key)
+			require.Equal(t, http.StatusOK, status.Code)
+			require.NoError(t, json.Unmarshal(status.Body.Bytes(), &transfer))
+			assert.Equal(t, key, transfer.TransferID)
+			assert.Equal(t, "applied", transfer.Status)
+			assert.JSONEq(t, status.Body.String(), post().Body.String())
+			assert.Equal(t, 1, calls)
+			a.auth = transferUser{AuthClient: auth.DefaultMock(), id: "another-user"}
+			assert.Equal(t, http.StatusNotFound, getTransfer(mux, key).Code)
+		})
+	}
 }

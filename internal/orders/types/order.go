@@ -1,9 +1,6 @@
 package types
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-
 	"careme/internal/ai"
 	locationtypes "careme/internal/locations/types"
 )
@@ -55,6 +52,7 @@ type TransferRequest struct {
 // CartURL opens login while pending_login, or the destination cart otherwise.
 // Added counts packages sent; Unmatched counts shopping items not sent.
 type Transfer struct {
+	// TransferID is the original idempotency key, scoped to the authenticated user and destination.
 	TransferID string `json:"transfer_id"`
 	Status     string `json:"status"`
 	CartURL    string `json:"cart_url"`
@@ -62,11 +60,4 @@ type Transfer struct {
 	Unmatched  int    `json:"unmatched"`
 	Code       string `json:"code,omitempty"`
 	Message    string `json:"message"`
-}
-
-// TransferID is stable for a finalized list. IDs are scoped to the authenticated
-// user and destination; possessing an ID never grants access.
-func TransferID(idempotencyKey string) string {
-	sum := sha256.Sum256([]byte(idempotencyKey))
-	return hex.EncodeToString(sum[:])
 }

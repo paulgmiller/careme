@@ -50,13 +50,13 @@ func transferResponse(t *testing.T, response *httptest.ResponseRecorder) orderty
 	assert.Empty(t, response.Header().Get("Location"))
 	var result ordertypes.Transfer
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
-	assert.Equal(t, ordertypes.TransferID("list-hash"), result.TransferID)
+	assert.Equal(t, "list-hash", result.TransferID)
 	return result
 }
 
 func getTransfer(handler http.Handler, id string) *httptest.ResponseRecorder {
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+id, nil))
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+url.PathEscape(id), nil))
 	return response
 }
 
@@ -73,7 +73,7 @@ func callbackTransfer(t *testing.T, handler http.Handler, response *httptest.Res
 	t.Helper()
 	require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
 	assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
-	return transferResponse(t, getTransfer(handler, ordertypes.TransferID("list-hash")))
+	return transferResponse(t, getTransfer(handler, "list-hash"))
 }
 
 func orderFixture(t *testing.T, add func(*http.Request) (*http.Response, error)) *OrderHandler {
@@ -194,7 +194,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 			cookie := start.Result().Cookies()[0]
 			state := cookie.Value
 			var continuation cartTransfer
-			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/state", &continuation))
+			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash")+"/state", &continuation))
 			switch scenario {
 			case "wrong state":
 				state = "wrong"
@@ -214,7 +214,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 				a.cache = cache.NewInMemoryCache()
 			}
 			if scenario != "missing request" {
-				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/state", continuation, cache.Unconditional()))
+				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash")+"/state", continuation, cache.Unconditional()))
 			}
 			if scenario == "exchange failure" {
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
@@ -271,7 +271,7 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			saveShopper(t, a, time.Now().Add(time.Hour))
 			expected := "uncertain"
 			if scenario == "confirmation failed" {
-				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/submission", confirmation: true}
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/submission", confirmation: true}
 				expected = "uncertain"
 			}
 			mux := orderMux(a)
@@ -371,14 +371,14 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				expected = "connect_failed"
 			case "reservation failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/submission"}
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/submission"}
 				expected = "start_failed"
 			}
 			response := postOrder(orderMux(a), form)
 			if scenario == "request save failure" {
 				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/", confirmation: true}
 				response = httptest.NewRecorder()
-				orderMux(a).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+ordertypes.TransferID("list-hash")+"/connect", nil))
+				orderMux(a).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+"list-hash"+"/connect", nil))
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
@@ -388,7 +388,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 }
 
 func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
-	for _, key := range []string{"", "   ", strings.Repeat("x", 257), "../other"} {
+	for _, key := range []string{"", "   ", strings.Repeat("x", 256), "../other"} {
 		t.Run(key, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 				t.Fatal("invalid header must not write cart")

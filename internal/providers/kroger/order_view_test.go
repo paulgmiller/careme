@@ -23,7 +23,7 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", map[string]any{"Order": order, "HasSavedRecipes": true}))
 	assert.Contains(t, page.String(), `action="/kroger/cart-transfers"`)
-	assert.Contains(t, page.String(), `hx-get="/kroger/cart-transfers/`+ordertypes.TransferID("list")+`"`)
+	assert.Contains(t, page.String(), `hx-get="/kroger/cart-transfers/`+"list"+`"`)
 	assert.Contains(t, page.String(), `hx-post="/kroger/cart-transfers"`)
 	assert.Contains(t, page.String(), `hx-trigger="load"`)
 	assert.Contains(t, page.String(), `hx-disabled-elt="find button[type=submit]"`)

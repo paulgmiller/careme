@@ -2,11 +2,11 @@ package kroger
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"careme/internal/cache"
@@ -31,7 +31,7 @@ type transferAuthorization struct {
 }
 
 func submissionKey(transfer cartTransfer) string {
-	return transferKey(transfer.UserID, ordertypes.TransferID(transfer.IdempotencyKey)) + "/submission"
+	return transferKey(transfer.UserID, transfer.IdempotencyKey) + "/submission"
 }
 
 func transferKey(userID, id string) string {
@@ -40,7 +40,7 @@ func transferKey(userID, id string) string {
 
 func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
 	request := transfer.Request
-	id := ordertypes.TransferID(transfer.IdempotencyKey)
+	id := transfer.IdempotencyKey
 	key := transferKey(transfer.UserID, id) + "/state"
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
@@ -79,7 +79,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 }
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
-	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, ordertypes.TransferID(transfer.IdempotencyKey))+"/state", transfer, cache.Unconditional()); err != nil {
+	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, transfer.IdempotencyKey)+"/state", transfer, cache.Unconditional()); err != nil {
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to save cart transfer. Check its status before trying again.")
 		return false
 	}
@@ -94,8 +94,7 @@ func (a *OrderHandler) requestedTransfer(w http.ResponseWriter, r *http.Request)
 		return cartTransfer{}, false
 	}
 	id := r.PathValue("transfer_id")
-	decoded, err := hex.DecodeString(id)
-	if err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != id {
+	if !validIdempotencyKey(id) {
 		writeTransferError(w, http.StatusNotFound, "transfer_not_found", "Transfer not found.")
 		return cartTransfer{}, false
 	}
@@ -183,7 +182,7 @@ func (a *OrderHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Transfer {
 	result := ordertypes.Transfer{
-		TransferID: ordertypes.TransferID(t.IdempotencyKey),
+		TransferID: t.IdempotencyKey,
 		Status:     "failed", CartURL: cartURL(t.Request.Location.Chain),
 		Added: added, Unmatched: unmatched,
 		Code: code, Message: krogerOrderNotice(code),
@@ -195,7 +194,7 @@ func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Trans
 		result.Status = "uncertain"
 	case "pending_login", "denied", "missing_code", "connect_failed", "save_failed":
 		result.Status = "pending_login"
-		result.CartURL = "/kroger/cart-transfers/" + result.TransferID + "/connect"
+		result.CartURL = "/kroger/cart-transfers/" + url.PathEscape(result.TransferID) + "/connect"
 	}
 	if code == "pending_login" {
 		result.Message = "Connect your Kroger account to send this shopping list."
