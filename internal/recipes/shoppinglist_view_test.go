@@ -15,6 +15,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
@@ -166,6 +167,41 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	assert.NotContains(t, html, "Try again, chef")
 	assert.NotContains(t, html, `Older list`)
 	assert.NotContains(t, html, `/regenerate"`)
+}
+
+func TestFormatShoppingListHTML_WeeklyIngredientsStayFreshUntilNextWeek(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	monday := time.Date(2026, time.October, 19, 9, 0, 0, 0, zone)
+	backend := mnfoodclub.NewLocationBackend()
+	for _, id := range []string{mnfoodclub.MNFoodClubLocationID, mnfoodclub.TCFarmLocationID, mnfoodclub.NelsonGrassFarmLocationID} {
+		t.Run(id, func(t *testing.T) {
+			location, err := backend.GetLocationByID(t.Context(), id)
+			require.NoError(t, err)
+			p := DefaultParams(location, monday)
+			for _, tt := range []struct {
+				name string
+				now  time.Time
+				old  bool
+			}{
+				{"Friday", monday.AddDate(0, 0, 4), false},
+				{"before next Monday cutoff", monday.AddDate(0, 0, 7).Add(-time.Minute), false},
+				{"next Monday cutoff", monday.AddDate(0, 0, 7), true},
+				{"future plan", monday.AddDate(0, 0, -7), true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					withNow(t, tt.now)
+					w := httptest.NewRecorder()
+					formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+					html := assertHTTPSuccess(t, w)
+					assert.Equal(t, tt.old, strings.Contains(html, "Using ingredients from"))
+					assert.Equal(t, tt.old, strings.Contains(html, "Use today's ingredients"))
+					assert.Equal(t, !tt.old, strings.Contains(html, "Try again, chef"))
+				})
+			}
+		})
+	}
 }
 
 func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
@@ -699,7 +735,7 @@ func TestFinalizedShoppingListRendersMergedQuantities(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: id}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
-			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Garlic", Needed: "1 clove"}}}}}})
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Garlic", Needed: "1 clove"}}}}})
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -717,7 +753,7 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 	recipe := ai.Recipe{Title: "Dinner"}
 	otherRecipe := ai.Recipe{Title: "Unsaved dinner"}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Pork", Needed: "24 oz"}}}}}
+	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Pork", Needed: "24 oz"}}}}
 	for _, tc := range []struct {
 		name            string
 		purchases       []shoppingPurchaseGroup
@@ -742,6 +778,29 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 			require.Len(t, got[1].Items, 1)
 			assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, got[1].Items[0].ShoppingItem)
 			assert.Equal(t, food, tc.purchases, "rendering must preserve the cached food groups")
+		})
+	}
+}
+
+func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
+	zone, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+	lat, lon := 47.61, -122.33
+	location := &locations.Location{ID: "70000001", Lat: &lat, Lon: &lon}
+	for _, tt := range []struct {
+		name      string
+		now, date time.Time
+		old       bool
+	}{
+		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), false},
+		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), true},
+		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), true},
+		{"just after midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 1, zone), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			withNow(t, tt.now)
+			p := &generatorParams{Location: location, Date: tt.date}
+			assert.Equal(t, tt.old, shoppingListIsOlderThanFreshIngredientsWindow(t.Context(), p))
 		})
 	}
 }

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"careme/internal/config"
 
@@ -60,6 +62,11 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
+	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
+		// Allow capacity to recover while keeping retries inside the job deadline.
+		opts = append(opts, option.WithMaxRetries(10), option.WithMaxRetryDelay(time.Minute))
+	}
+	opts = append(opts, option.WithMiddleware(logOpenAIRetry))
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
@@ -191,4 +198,12 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
 		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
 	}
+}
+
+func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	attempt, _ := strconv.Atoi(req.Header.Get("X-Stainless-Retry-Count"))
+	if attempt > 0 {
+		slog.InfoContext(req.Context(), "Retrying HTTP request", "source", "openai", "url", req.URL.String(), "attempt", attempt+1)
+	}
+	return next(req)
 }

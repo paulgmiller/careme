@@ -17,7 +17,7 @@
               </h1>
               <p class="mt-2 text-ink-600">
                 Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-                <span class="text-sm text-ink-500">({{.Location.Address}})</span>
+                <span class="text-sm text-ink-500">{{template "location_details" .Location}}</span>
               </p>
             </div>
             {{template "account_widget" .}}

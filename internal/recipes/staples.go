@@ -24,7 +24,6 @@ import (
 // StaplesBackend is the provider contract consumed by recipe sourcing.
 type StaplesBackend interface {
 	IsID(string) bool
-	Signature() string
 	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
 	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
 }
@@ -314,7 +313,7 @@ func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
 		if err != nil {
 			return 0, err
 		}
-		date, err := locations.StoreToDate(ctx, nowFn(), store)
+		date, err := locations.StoreTime(ctx, nowFn(), store)
 		if err != nil {
 			return 0, err
 		}

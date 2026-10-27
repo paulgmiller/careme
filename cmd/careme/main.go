@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"time"
 
 	"careme/internal/campaigns"
 	"careme/internal/config"
@@ -57,7 +58,7 @@ func main() {
 	if campaignJob {
 		job, err := campaigns.NewService(cfg, providerregistry.NewFactory(cfg))
 		if err == nil {
-			err = job.RunOnce(ctx)
+			err = job.RunOnce(ctx, time.Now())
 		}
 		if err != nil {
 			slog.ErrorContext(ctx, "campaign generation failed", "error", err)

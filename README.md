@@ -119,6 +119,14 @@ and rendered results. Use deterministic fixtures and explicit fake clients.
 Run `./task.sh verify-go -- -cover`; run `./task.sh verify-ui` and inspect the UI
 when templates change.
 
+Run `./task.sh k8s-secrets` to check that every Deployment and CronJob using the
+`careme` or `careme-ingredientreview` image imports its required secrets through
+`envFrom`. Maintain the provider and full-config secret lists and image mapping
+in `deploy/secrets_test.go` when configuration or deployed binaries change.
+Secrets remain separate; the check reads manifests without accessing credentials
+or Kubernetes. It also runs in `k8s-lint`, which gates publishing and deployment
+in CI. It checks secret references, not the keys or values stored in the cluster.
+
 ## Mail placement tests
 
 Send today's real recipe email through the production sender to test Gmail placement:
@@ -160,9 +168,11 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 ### Advertised recipe cronjob
 
-Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true` once. Smith Brothers Farms and MNFoodClub generation is disabled for now while we consider a weekly schedule; their campaign redirects remain active. The job creates its own flex AI client and exits with an error if any enabled store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true` that are due during their local 9 AM hour. MN Food Club, TC Farm, and Nelson Grass Farm generate weekly on Monday in their local timezone (`America/Chicago`); other enabled stores generate daily at 9 AM local time. Smith Brothers Farms generation remains disabled, with its campaign redirect active. The job creates its own flex AI client and exits with an error if any due store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
 
-`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
+For the three MNFoodClub storefronts and Smith Brothers Farms, recipe requests throughout the week resolve to Monday's list, including explicit dates within that week. The week switches on Monday at the existing 9 AM local store-day boundary. Previously shared hash links keep their original lists.
+
+`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, at the top of each hour from 6–10 AM Pacific in production (`0 6-10 * * *`, `America/Los_Angeles`), with the same store, AI, auth, storage, and telemetry credentials used by the mail job. These five daily starts cover 9 AM in the Eastern, Central, Mountain, and Pacific timezones, plus one hour afterward. Each store's timezone determines when it is due, including daylight saving changes; runs with no due stores exit without generating. Delayed starts and retries are eligible throughout the local 9 AM hour, with cached output preventing duplicate generation. The extra scheduled hours do not extend that eligibility window. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
 
 Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run generation-enabled advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
 
@@ -174,11 +184,20 @@ Manual Jobs do not change the suspension and are not protected by the CronJob's 
 
 ### MNFoodClub ingredients
 
-Nearby location search includes MNFoodClub home delivery within an approximate
+Nearby location search includes three home-delivery storefronts sharing the
+MNFoodClub catalog: MN Food Club (`mnfood.club`), TC Farm (`tc.farm`), and
+Nelson Grass Farm (`nelsongrassfarm.com`). All three appear within an approximate
 rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
 -94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
-Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
-coordinates retained for distance filtering and store dates.
+Search results use stable IDs `mnfoodclub_delivery`, `tcfarm_delivery`,
+and `nelsongrassfarm_delivery`, respectively. Each result retains the
+search coordinates for distance filtering; lookup by ID uses the shared Blaine
+coordinates for store dates. Location results are not cached.
+
+Online delivery locations include their storefront URL, displayed instead of
+the address in location search and as a link in shopping list and recipe headers.
+Smith Brothers Farms uses the same display behavior. Previously saved recipe
+parameters retain their original location details.
 
 Fetch all visible, available, in-stock catalog products across every category,
 plus the static weekly produce-share contents, and display their prices:
@@ -221,8 +240,13 @@ export MNFOODCLUB_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' se
 
 Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.
 The provider fetches every page (up to 250 products per request), resolves brands
-and category names, and uses the lowest-priced purchasable variant for each
-product. Zero stock excludes items only when inventory tracking is enabled.
+and category names, and uses the purchasable variant with the highest inventory
+level for each product. Ties keep the first eligible variant in catalog order.
+Zero stock excludes items only when inventory tracking is enabled. The selected
+variant's prices and `variant_id` are saved alongside the parent product `id` in
+cached ingredient data; the TSV includes only the parent product ID. Older
+cached catalogs need refreshing to populate `variant_id`. The saved IDs support
+the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 
 For a test-site cart handoff walkthrough and standalone mock API, see
 [MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
@@ -253,13 +277,15 @@ uses the Kent headquarters coordinates.
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location smithbrothersfarms_delivery -verbose
 ```
 
-The provider fetches the public produce and meat/poultry pages through the existing
-Bright Data client. The organic and standard produce-box products are replaced
-with individual ingredients from the live bullet lists on their product pages.
+The provider fetches the public produce, meat/poultry, dairy/eggs, and yogurt pages
+through the existing Bright Data client. The organic and standard produce-box products
+are replaced with individual ingredients from the live bullet lists on their
+product pages.
 Each box ingredient includes its box name and a preassigned 10/10 produce-share
 grade; individual quantities and prices are unspecified. Seasonal contents update
-on the next uncached store-day ingredient fetch. No Smith Brothers Farms account
-credentials are required. Wine lookup is unsupported.
+on the next uncached weekly ingredient fetch. Ingredient and recipe hashes use
+Monday's date, switching weeks at 9 AM local time on Monday. No Smith Brothers
+Farms account credentials are required. Wine lookup is unsupported.
 
 ### Ingredient embedding lookup
 

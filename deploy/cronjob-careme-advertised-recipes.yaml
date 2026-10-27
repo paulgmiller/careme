@@ -33,11 +33,15 @@ spec:
                 - secretRef:
                     name: ai
                 - secretRef:
+                    name: albertsons
+                - secretRef:
                     name: auth
                 - secretRef:
                     name: grafana
                 - secretRef:
                     name: kroger
+                - secretRef:
+                    name: mnfoodclub
                 - secretRef:
                     name: storage
                 - secretRef:

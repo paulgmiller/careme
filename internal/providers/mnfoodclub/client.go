@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -89,9 +90,7 @@ func catalogItems[T any](ctx context.Context, c *Client, base *url.URL, resource
 		u := *base
 		u.Path += resource
 		query := url.Values{"limit": {"250"}, "page": {strconv.Itoa(page)}}
-		for key, values := range filters {
-			query[key] = values
-		}
+		maps.Copy(query, filters)
 		u.RawQuery = query.Encode()
 		var result catalogPage[T]
 		if err := c.getPage(ctx, u.String(), &result); err != nil {

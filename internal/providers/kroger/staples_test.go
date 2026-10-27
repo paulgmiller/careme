@@ -8,18 +8,22 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/kroger/products"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
-	got := NewIdentityProvider().Signature()
-	want := mustJSONSignature(defaultStaples())
-
-	assert.Equal(t, want, got)
+func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
+	t.Parallel()
+	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
+	const locationID = "70500874"
+	signature := mustJSONSignature(defaultStaples())
+	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
 func TestParseProductGetResponse_KeepsJSON400Body(t *testing.T) {

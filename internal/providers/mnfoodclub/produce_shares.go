@@ -59,7 +59,7 @@ func produceShareIngredients() []ai.InputIngredient {
 		for _, name := range append(share.items, share.substitutions...) {
 			description := "Produce share " + strings.ToLower(share.name) + " " + name
 			ingredient := ai.InputIngredient{
-				ProductID:   LocationIDPrefix + strings.ToLower(strings.ReplaceAll(description, " ", "-")),
+				ProductID:   "mnfoodclub" + strings.ToLower(strings.ReplaceAll(description, " ", "-")),
 				Description: description,
 				Brand:       "mnfood.club",
 				Categories:  []string{"Produce", share.name},

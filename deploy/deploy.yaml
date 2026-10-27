@@ -144,9 +144,17 @@ spec:
               name: http
           envFrom:
             - secretRef:
+                name: albertsons
+            - secretRef:
+                name: brightdata-proxy
+            - secretRef:
                 name: kroger
             - secretRef:
+                name: mnfoodclub
+            - secretRef:
                 name: storage
+            - secretRef:
+                name: walmart
           readinessProbe:
             httpGet:
               path: /healthz
