@@ -32,6 +32,8 @@ func fixtureClient(t *testing.T, failURL string, status int, failure error) (*Cl
 	t.Helper()
 	pages := map[string]string{
 		stapleURLs[0]: fixture(t, "produce"), stapleURLs[1]: fixture(t, "meat"),
+		baseURL + "/dairy-eggs":              fixture(t, "dairy-eggs"),
+		baseURL + "/yogurt":                  fixture(t, "yogurt"),
 		baseURL + "/" + harvestBoxes[0].slug: fixture(t, "organic-box"),
 		baseURL + "/" + harvestBoxes[1].slug: fixture(t, "standard-box"),
 	}
@@ -62,10 +64,12 @@ func TestFetchStaples(t *testing.T) {
 	client, calls, bodies := fixtureClient(t, "", 0, nil)
 	got, err := NewStaplesProvider(client).FetchStaples(t.Context(), "smithbrothersfarms_delivery")
 	require.NoError(t, err)
-	require.Len(t, got, 25)
-	assert.Equal(t, []string{stapleURLs[0], stapleURLs[1], baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}, *calls)
-	assert.Equal(t, "Organic Produce Box — Local Organic Sugar Bee Apples", got[6].Description)
-	assert.Equal(t, "Produce Box — Avocados", got[18].Description)
+	require.Len(t, got, 28)
+	assert.Equal(t, []string{stapleURLs[0], stapleURLs[1], baseURL + "/dairy-eggs", baseURL + "/yogurt", baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}, *calls)
+	assert.Equal(t, "Organic Produce Box — Local Organic Sugar Bee Apples", got[9].Description)
+	assert.Equal(t, "Produce Box — Avocados", got[21].Description)
+	assert.Equal(t, "Smith Brothers Whole Milk - half gallon", got[7].Description)
+	assert.Equal(t, "Chobani 20g Protein Plain Greek Yogurt - 32 oz", got[8].Description)
 	for _, body := range *bodies {
 		assert.True(t, body.closed)
 	}
@@ -77,7 +81,7 @@ func TestFetchStaples(t *testing.T) {
 }
 
 func TestFetchStaplesFailures(t *testing.T) {
-	urls := []string{stapleURLs[0], stapleURLs[1], baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}
+	urls := []string{stapleURLs[0], stapleURLs[1], baseURL + "/dairy-eggs", baseURL + "/yogurt", baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}
 	wantErr := errors.New("network failed")
 	for i, url := range urls {
 		for _, failure := range []struct {
@@ -143,7 +147,8 @@ func TestIdentityAndWineLookup(t *testing.T) {
 	}
 	parts = append(parts, parserVersion)
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
-	assert.Equal(t, cachekey.NewHash("smithbrothersfarms_delivery", date, signature).Sum(nil), original)
+	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, cachekey.NewHash("smithbrothersfarms_delivery", monday, signature).Sum(nil), original)
 	assert.Equal(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	saved := stapleURLs[0]
 	t.Cleanup(func() { stapleURLs[0] = saved })

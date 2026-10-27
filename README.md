@@ -169,7 +169,7 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true` that are due during their local 9 AM hour. MN Food Club, TC Farm, and Nelson Grass Farm generate weekly on Monday in their local timezone (`America/Chicago`); other enabled stores generate daily at 9 AM local time. Smith Brothers Farms generation remains disabled, with its campaign redirect active. The job creates its own flex AI client and exits with an error if any due store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
 
-For the three MNFoodClub storefronts, recipe requests throughout the week resolve to Monday's list, including explicit dates within that week. The week switches on Monday at the existing 9 AM local store-day boundary. Previously shared hash links keep their original lists.
+For the three MNFoodClub storefronts and Smith Brothers Farms, recipe requests throughout the week resolve to Monday's list, including explicit dates within that week. The week switches on Monday at the existing 9 AM local store-day boundary. Previously shared hash links keep their original lists.
 
 `deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, at the top of each hour from 6–10 AM Pacific in production (`0 6-10 * * *`, `America/Los_Angeles`), with the same store, AI, auth, storage, and telemetry credentials used by the mail job. These five daily starts cover 9 AM in the Eastern, Central, Mountain, and Pacific timezones, plus one hour afterward. Each store's timezone determines when it is due, including daylight saving changes; runs with no due stores exit without generating. Delayed starts and retries are eligible throughout the local 9 AM hour, with cached output preventing duplicate generation. The extra scheduled hours do not extend that eligibility window. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
 
@@ -276,13 +276,15 @@ uses the Kent headquarters coordinates.
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location smithbrothersfarms_delivery -verbose
 ```
 
-The provider fetches the public produce and meat/poultry pages through the existing
-Bright Data client. The organic and standard produce-box products are replaced
-with individual ingredients from the live bullet lists on their product pages.
+The provider fetches the public produce, meat/poultry, dairy/eggs, and yogurt pages
+through the existing Bright Data client. The organic and standard produce-box products
+are replaced with individual ingredients from the live bullet lists on their
+product pages.
 Each box ingredient includes its box name and a preassigned 10/10 produce-share
 grade; individual quantities and prices are unspecified. Seasonal contents update
-on the next uncached store-day ingredient fetch. No Smith Brothers Farms account
-credentials are required. Wine lookup is unsupported.
+on the next uncached weekly ingredient fetch. Ingredient and recipe hashes use
+Monday's date, switching weeks at 9 AM local time on Monday. No Smith Brothers
+Farms account credentials are required. Wine lookup is unsupported.
 
 ### Ingredient embedding lookup
 
