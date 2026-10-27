@@ -363,8 +363,6 @@
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
   {{with .Order}}
-  {{if .Notice}}<p role="status" class="mt-4 text-sm text-ink-700">{{.Notice}}</p>{{end}}
-  {{if .ReviewURL}}<a href="{{.ReviewURL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{.ReviewLabel}}</a>{{end}}
   {{end}}
   <div class="mt-4 space-y-5 text-ink-700">
     {{range .Purchases}}
@@ -391,29 +389,11 @@
 {{end}}
 
 {{define "shopping_order_form"}}
-<div id="shopping-cart-transfer"
-     {{if .TransferStatusURL}}hx-get="{{.TransferStatusURL}}" hx-target="this" hx-swap="outerHTML"
-     hx-sync="#shopping-cart-transfer:replace"
-     {{if not .Transfer}}hx-trigger="load"{{else}}hx-trigger="none"{{end}}{{end}}
-     hx-on::after-request="if (!event.detail.successful) { this.querySelector('[data-transfer-error]').hidden = false; this.querySelectorAll('button[type=submit]').forEach(button => button.disabled = true); }">
-  <!-- HTMX leaves error responses unswapped. This hook also covers network failures:
-       show the local error and disable submission until the shopper reloads status.
-       Transfer results and OAuth navigation are handled by the server/HTMX. -->
-  {{if or (not .Transfer) (eq .Transfer.Status "failed")}}
-  {{if .TransferURL}}
-  <form method="POST" action="{{.TransferURL}}"
-        hx-post="{{.TransferURL}}" hx-target="#shopping-cart-transfer" hx-swap="outerHTML"
-        hx-disabled-elt="find button[type=submit]" hx-headers='{"Idempotency-Key": {{JSONString .IdempotencyKey}}}'>
-    <input type="hidden" name="transfer_request" value="{{.TransferRequestJSON}}">
-    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
-  </form>
-  {{end}}
-  {{end}}
-  {{with .Transfer}}
-  <p role="status" class="mt-4 text-sm text-ink-700">{{.Message}}</p>
-  <a href="{{.CartURL}}" {{if ne .Status "pending_login"}}target="_blank"{{end}} rel="noopener noreferrer"
-     class="mt-3 inline-flex rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{if eq .Status "pending_login"}}Connect account{{else}}Review cart (opens a new tab){{end}}</a>
-  {{end}}
-  <p data-transfer-error hidden role="alert" class="mt-4 text-sm text-action-red-700">Could not check your cart transfer. Reload to check again before sending products.</p>
-</div>
+{{if .TransferURL}}
+<form method="POST" action="{{.TransferURL}}" hx-boost="false">
+  <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+  <input type="hidden" name="transfer_request" value="{{.TransferRequestJSON}}">
+  <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
+</form>
+{{end}}
 {{end}}

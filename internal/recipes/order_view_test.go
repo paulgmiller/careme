@@ -26,13 +26,13 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
-		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", ActionLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`, Description: "Destination instructions", Notice: "Ready to review", ReviewURL: "https://destination.example/cart", ReviewLabel: "Review groceries"}, nil
+		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", ActionLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`, Description: "Destination instructions"}, nil
 	})
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
-	for _, want := range []string{`action="/destination/order"`, `name="transfer_request"`, `hx-headers=`, `Idempotency-Key`, `Food &amp; Wine`, "Send groceries", "Destination instructions", "Ready to review", "Review groceries"} {
+	for _, want := range []string{`action="/destination/order"`, `name="transfer_request"`, `name="idempotency_key" value="list"`, `Food &amp; Wine`, "Send groceries", "Destination instructions"} {
 		assert.Contains(t, page.String(), want)
 	}
 	assert.NotContains(t, page.String(), "Kroger")

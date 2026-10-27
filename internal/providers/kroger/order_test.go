@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {
@@ -34,10 +34,16 @@ func setOrderField(t *testing.T, form url.Values, field string, value any) {
 	form.Set("transfer_request", string(body))
 }
 
+func mustOrderRequest(t *testing.T) ordertypes.TransferRequest {
+	t.Helper()
+	var request ordertypes.TransferRequest
+	require.NoError(t, json.Unmarshal([]byte(orderForm().Get("transfer_request")), &request))
+	return request
+}
+
 func postOrder(handler http.Handler, form url.Values) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("Idempotency-Key", "list-hash")
 	result := httptest.NewRecorder()
 	handler.ServeHTTP(result, request)
 	return result
@@ -49,38 +55,47 @@ func orderMux(a *OrderHandler) *http.ServeMux {
 	return mux
 }
 
-func transferResponse(t *testing.T, response *httptest.ResponseRecorder) ordertypes.Transfer {
+func savedResult(t *testing.T, a *OrderHandler, key string) ordertypes.Transfer {
 	t.Helper()
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
-	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	assert.Empty(t, response.Header().Get("Location"))
 	var result ordertypes.Transfer
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
-	assert.Equal(t, "list-hash", result.TransferID)
+	err := a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key)+"/submission", &result)
+	if errors.Is(err, cache.ErrNotFound) {
+		var transfer cartTransfer
+		require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key)+"/state", &transfer))
+		return transfer.Result
+	}
+	require.NoError(t, err)
 	return result
 }
 
-func getTransfer(handler http.Handler, id string) *httptest.ResponseRecorder {
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+url.PathEscape(id), nil))
-	return response
+func transferResponse(t *testing.T, a *OrderHandler, response *httptest.ResponseRecorder) ordertypes.Transfer {
+	t.Helper()
+	result := savedResult(t, a, "list-hash")
+	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	switch result.Code {
+	case "complete":
+		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
+		assert.Equal(t, result.CartURL, response.Header().Get("Location"))
+	case "pending_login":
+		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
+		destination, err := url.Parse(response.Header().Get("Location"))
+		require.NoError(t, err)
+		assert.Equal(t, "https", destination.Scheme)
+		assert.NotEmpty(t, destination.Query().Get("state"))
+	default:
+		assert.GreaterOrEqual(t, response.Code, 400, response.Body.String())
+		assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
+		assert.Contains(t, response.Body.String(), result.Message)
+	}
+	return result
 }
 
 func connectOrder(t *testing.T, handler http.Handler, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
-	transfer := transferResponse(t, postOrder(handler, form))
-	require.Equal(t, "pending_login", transfer.Status)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, transfer.CartURL, nil))
-	return response
-}
-
-func callbackTransfer(t *testing.T, handler http.Handler, response *httptest.ResponseRecorder) ordertypes.Transfer {
-	t.Helper()
+	response := postOrder(handler, form)
 	require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
-	assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
-	return transferResponse(t, getTransfer(handler, "list-hash"))
+	require.NotEmpty(t, response.Result().Cookies())
+	return response
 }
 
 func orderFixture(t *testing.T, add func(*http.Request) (*http.Response, error)) *OrderHandler {
@@ -133,13 +148,13 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	// A posted user ID cannot choose another shopper's credentials or transfer key.
 	setOrderField(t, form, "user_id", "someone-else")
 	result := postOrder(mux, form)
-	query := transferResponse(t, result)
+	query := transferResponse(t, a, result)
 	assert.Equal(t, "complete", query.Code)
 	assert.Equal(t, 2, query.Added)
 	assert.Equal(t, 2, query.Unmatched)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
-	assert.Equal(t, "complete", transferResponse(t, postOrder(mux, form)).Code)
+	assert.Equal(t, "complete", transferResponse(t, a, postOrder(mux, form)).Code)
 	setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"New product"}]`))
 	assert.Equal(t, http.StatusConflict, postOrder(mux, form).Code)
 	assert.Equal(t, 1, calls)
@@ -183,7 +198,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			callback.AddCookie(cookies[0])
 			result := httptest.NewRecorder()
 			mux.ServeHTTP(result, callback)
-			query := callbackTransfer(t, mux, result)
+			query := transferResponse(t, a, result)
 			assert.Equal(t, "complete", query.Code)
 			assert.Equal(t, scenario.cart, query.CartURL)
 			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
@@ -246,7 +261,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 			mux.ServeHTTP(result, callback)
 			expected := map[string]string{"denied": "denied", "missing code": "missing_code", "exchange failure": "connect_failed", "save failure": "save_failed"}[scenario]
 			if expected != "" {
-				assert.Equal(t, expected, callbackTransfer(t, mux, result).Code)
+				assert.Equal(t, expected, transferResponse(t, a, result).Code)
 			} else {
 				assert.Equal(t, http.StatusBadRequest, result.Code)
 			}
@@ -282,8 +297,8 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 				expected = "uncertain"
 			}
 			mux := orderMux(a)
-			assert.Equal(t, expected, transferResponse(t, postOrder(mux, orderForm())).Code)
-			repeat := transferResponse(t, postOrder(mux, orderForm())).Code
+			assert.Equal(t, expected, transferResponse(t, a, postOrder(mux, orderForm())).Code)
+			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Code
 			if scenario == "confirmation failed" {
 				assert.Equal(t, "uncertain", repeat)
 			} else {
@@ -310,8 +325,8 @@ func TestKrogerOrderConcurrentSubmission(t *testing.T) {
 	<-entered
 	second := postOrder(mux, orderForm())
 	close(release)
-	assert.Equal(t, "uncertain", transferResponse(t, second).Code)
-	assert.Equal(t, "complete", transferResponse(t, <-completed).Code)
+	assert.Equal(t, "uncertain", transferResponse(t, a, second).Code)
+	assert.Equal(t, "complete", transferResponse(t, a, <-completed).Code)
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -342,13 +357,12 @@ func TestKrogerOrderValidation(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
 	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(orderForm().Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("Idempotency-Key", "list-hash")
 	request.Header.Set("Origin", "https://evil.test")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)
 	assert.Equal(t, http.StatusForbidden, response.Code)
 	a.auth = orderNoSession{AuthClient: auth.DefaultMock()}
-	assert.Equal(t, http.StatusUnauthorized, postOrder(orderMux(a), orderForm()).Code)
+	assert.Equal(t, http.StatusSeeOther, postOrder(orderMux(a), orderForm()).Code)
 }
 
 type orderNoSession struct{ auth.AuthClient }
@@ -387,17 +401,16 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 			response := postOrder(orderMux(a), form)
 			if scenario == "request save failure" {
 				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/", confirmation: true}
-				response = httptest.NewRecorder()
-				orderMux(a).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+"list-hash"+"/connect", nil))
+				response = postOrder(orderMux(a), form)
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
-			assert.Equal(t, expected, transferResponse(t, response).Code)
+			assert.Equal(t, expected, transferResponse(t, a, response).Code)
 		})
 	}
 }
 
-func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
+func TestKrogerOrderRequiresIdempotencyField(t *testing.T) {
 	for _, key := range []string{"", "   ", strings.Repeat("x", 256), "../other"} {
 		t.Run(key, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
@@ -405,10 +418,10 @@ func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
 				return nil, nil
 			})
 			form := orderForm()
-			form.Set("idempotency_key", "form-field-is-not-used")
+			form.Set("idempotency_key", key)
 			request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			request.Header.Set("Idempotency-Key", key)
+			request.Header.Set("Idempotency-Key", "header-is-not-used")
 			response := httptest.NewRecorder()
 			orderMux(a).ServeHTTP(response, request)
 			assert.Equal(t, http.StatusBadRequest, response.Code)
@@ -420,7 +433,6 @@ func TestKrogerOrderRejectsMalformedForm(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
 	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader("transfer_request=%"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("Idempotency-Key", "list-hash")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)
 	assert.Equal(t, http.StatusBadRequest, response.Code)

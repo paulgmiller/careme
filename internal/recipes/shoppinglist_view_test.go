@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKrogerStatusIsQueriedOnShoppingListReload(t *testing.T) {
+func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
 	s := newTestServer(t)
 	s.orderView = orderViewBuilderFunc(kroger.OrderView)
 	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}, time.Now())
@@ -32,9 +32,10 @@ func TestKrogerStatusIsQueriedOnShoppingListReload(t *testing.T) {
 			require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil)))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
-			assert.Contains(t, page.String(), `hx-get="/kroger/cart-transfers/`+p.Hash()+`"`)
+			assert.NotContains(t, page.String(), `hx-get="/kroger/cart-transfers/`)
+			assert.Contains(t, page.String(), `action="/kroger/cart-transfers"`)
 			assert.NotContains(t, page.String(), "cart-transfer.js")
-			assert.Contains(t, page.String(), `hx-trigger="load"`)
+			assert.NotContains(t, page.String(), `id="shopping-cart-transfer"`)
 			assert.NotContains(t, page.String(), "Kroger connection was not approved")
 			assert.NotContains(t, page.String(), "alert(1)")
 		})

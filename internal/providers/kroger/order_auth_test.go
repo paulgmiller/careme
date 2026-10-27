@@ -8,6 +8,8 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/config"
+	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +17,7 @@ import (
 
 func newTestOrderHandler(t *testing.T, client *CartClient) *OrderHandler {
 	t.Helper()
+	require.NoError(t, templates.Init(&config.Config{}))
 	adapter, err := NewOrderHandler(OrderOptions{Cache: cache.NewInMemoryCache(), Client: client, TokenKey: []byte(strings.Repeat("k", 32)), Origin: "https://careme.test", Auth: auth.DefaultMock()})
 	require.NoError(t, err)
 	return adapter

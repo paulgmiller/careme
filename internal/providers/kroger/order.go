@@ -19,23 +19,23 @@ import (
 
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	userID, ok := a.cartUser(w, r)
-	if !ok {
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
-		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
 		return
 	}
 	var input ordertypes.TransferRequest
 	if err := json.Unmarshal([]byte(r.PostForm.Get("transfer_request")), &input); err != nil {
-		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
 		return
 	}
-	idempotencyKey := r.Header.Get("Idempotency-Key")
+	idempotencyKey := r.PostForm.Get("idempotency_key")
 	if !localReturnURL(input.ReturnURL) || !validIdempotencyKey(idempotencyKey) || !NewIdentityProvider().IsID(input.Location.ID) || len(input.Items) == 0 {
-		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
+		return
+	}
+	userID, ok := a.cartUser(w, r, input.ReturnURL)
+	if !ok {
 		return
 	}
 	a.createTransfer(w, r, cartTransfer{UserID: userID, IdempotencyKey: idempotencyKey, Request: input})

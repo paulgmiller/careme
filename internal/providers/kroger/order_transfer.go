@@ -2,15 +2,12 @@ package kroger
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/httpx"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/templates"
 )
@@ -45,21 +42,21 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
 		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Location.Chain != request.Location.Chain || previous.Request.ReturnURL != request.ReturnURL {
-			writeTransferError(w, http.StatusConflict, "idempotency_conflict", "This list already has a different cart transfer.")
+			writeTransferError(w, http.StatusConflict, "This list already has a different cart transfer.")
 			return
 		}
 		// Product lookup failed before any cart mutation. Retrying the same
 		// transfer is safe; order still conditionally reserves the cart write.
-		if previous.Result.Code == "lookup_failed" {
+		if retryableTransfer(previous.Result.Code) {
 			previous.Result = a.order(r.Context(), previous, true)
 			if !a.saveTransfer(w, r, previous) {
 				return
 			}
 		}
-		a.writeCurrentTransfer(w, r, previous)
+		a.finishTransfer(w, r, previous)
 		return
 	} else if !errors.Is(err, cache.ErrNotFound) {
-		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart transfer.")
+		writeTransferError(w, http.StatusInternalServerError, "Unable to read cart transfer.")
 		return
 	}
 	transfer.Result = transfer.result("uncertain", 0, 0)
@@ -68,116 +65,94 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 			a.createTransfer(w, r, transfer)
 			return
 		}
-		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to reserve cart transfer.")
+		writeTransferError(w, http.StatusInternalServerError, "Unable to reserve cart transfer.")
 		return
 	}
 	transfer.Result = a.order(r.Context(), transfer, true)
 	if !a.saveTransfer(w, r, transfer) {
 		return
 	}
-	a.writeCurrentTransfer(w, r, transfer)
+	a.finishTransfer(w, r, transfer)
 }
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
 	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, transfer.IdempotencyKey)+"/state", transfer, cache.Unconditional()); err != nil {
-		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to save cart transfer. Check its status before trying again.")
+		writeTransferError(w, http.StatusInternalServerError, "Unable to save cart transfer. Check its status before trying again.")
 		return false
 	}
 	return true
 }
 
-func (a *OrderHandler) requestedTransfer(w http.ResponseWriter, r *http.Request) (cartTransfer, bool) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Vary", "HX-Request")
-	userID, ok := a.cartUser(w, r)
-	if !ok {
-		return cartTransfer{}, false
-	}
-	id := r.PathValue("transfer_id")
-	if !validIdempotencyKey(id) {
-		writeTransferError(w, http.StatusNotFound, "transfer_not_found", "Transfer not found.")
-		return cartTransfer{}, false
-	}
-	var transfer cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, id)+"/state", &transfer); err != nil {
-		if errors.Is(err, cache.ErrNotFound) && httpx.IsHTMX(r) {
-			// The initial status check leaves the existing form in place.
-			w.WriteHeader(http.StatusNoContent)
-		} else if errors.Is(err, cache.ErrNotFound) {
-			writeTransferError(w, http.StatusNotFound, "transfer_not_found", "Transfer not found.")
-		} else {
-			writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart transfer.")
-		}
-		return cartTransfer{}, false
-	}
-	return transfer, true
-}
-
-func (a *OrderHandler) handleTransfer(w http.ResponseWriter, r *http.Request) {
-	transfer, ok := a.requestedTransfer(w, r)
-	if ok {
-		a.writeCurrentTransfer(w, r, transfer)
-	}
-}
-
-func (a *OrderHandler) writeCurrentTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	w.Header().Set("Vary", "HX-Request")
-	// The write reservation remains authoritative if the lifecycle save fails
-	// or an OAuth callback arrives after the cart was already submitted.
+// Browser navigation stays on the provider route until it can open the cart.
+// The durable submission wins over a failed state save or a late OAuth callback.
+func (a *OrderHandler) finishTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
 	var result ordertypes.Transfer
-	err := a.loadJSON(r.Context(), submissionKey(transfer), &result)
-	if err == nil {
+	if err := a.loadJSON(r.Context(), submissionKey(transfer), &result); err == nil {
 		transfer.Result = result
 	} else if !errors.Is(err, cache.ErrNotFound) {
-		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart result.")
+		writeTransferError(w, http.StatusInternalServerError, "Unable to read cart result.")
 		return
 	}
-	if httpx.IsHTMX(r) {
-		a.writeTransferView(w, r, transfer)
-		return
+	switch transfer.Result.Code {
+	case "pending_login":
+		a.startAuthorization(w, r, transfer)
+	case "complete":
+		http.Redirect(w, r, transfer.Result.CartURL, http.StatusSeeOther)
+	default:
+		a.writeTransferFailure(w, r, transfer)
 	}
-	writeTransferJSON(w, http.StatusOK, transfer.Result)
 }
 
-// The API still returns JSON to ordinary clients. HTMX requests use the same
-// saved result but receive the shared shopping-list fragment instead.
-func (a *OrderHandler) writeTransferView(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	result := transfer.Result
-	w.Header().Set("Vary", "HX-Request")
-	if r.Method == http.MethodPost && result.Status == "pending_login" {
-		w.Header().Set("HX-Redirect", result.CartURL)
-		w.WriteHeader(http.StatusNoContent)
-		return
+func retryableTransfer(code string) bool {
+	switch code {
+	case "lookup_failed", "denied", "missing_code", "connect_failed", "save_failed":
+		return true
 	}
-	request := transfer.Request
-	view, err := OrderView(ordertypes.OrderViewInput{
-		Location: request.Location,
-		Items:    request.Items, ListKey: transfer.IdempotencyKey, ReturnURL: request.ReturnURL,
-	})
-	if err != nil {
-		http.Error(w, "Unable to render cart transfer", http.StatusInternalServerError)
-		return
+	return false
+}
+
+type transferFailureView struct {
+	Page      templates.Page
+	Message   string
+	ReturnURL string
+	CartURL   string
+	Retry     *ordertypes.OrderView
+}
+
+func (a *OrderHandler) writeTransferFailure(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
+	view := transferFailureView{
+		Page: templates.NewPage(r.Context()), Message: transfer.Result.Message,
+		ReturnURL: transfer.Request.ReturnURL, CartURL: cartURL(transfer.Request.Location.Chain),
 	}
-	view.Transfer = &result
+	view.Page.Title = "Cart transfer needs attention"
+	if retryableTransfer(transfer.Result.Code) {
+		retry, err := OrderView(ordertypes.OrderViewInput{Location: transfer.Request.Location, Items: transfer.Request.Items, ListKey: transfer.IdempotencyKey, ReturnURL: transfer.Request.ReturnURL})
+		if err != nil {
+			writeTransferError(w, http.StatusInternalServerError, "Unable to render cart transfer.")
+			return
+		}
+		retry.ActionLabel = "Try again, chef"
+		view.Retry = retry
+	}
 	var body bytes.Buffer
-	if err := templates.ShoppingList.ExecuteTemplate(&body, "shopping_order_form", view); err != nil {
-		http.Error(w, "Unable to render cart transfer", http.StatusInternalServerError)
+	if err := templates.OrderTransfer.Execute(&body, view); err != nil {
+		writeTransferError(w, http.StatusInternalServerError, "Unable to render cart transfer.")
 		return
+	}
+	status := http.StatusBadGateway
+	switch transfer.Result.Code {
+	case "uncertain", "start_failed", "confirmation_failed":
+		status = http.StatusConflict
+	case "denied", "missing_code":
+		status = http.StatusBadRequest
+	case "save_failed":
+		status = http.StatusInternalServerError
+	case "no_matches":
+		status = http.StatusUnprocessableEntity
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	_, _ = w.Write(body.Bytes())
-}
-
-func (a *OrderHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
-	transfer, ok := a.requestedTransfer(w, r)
-	if !ok {
-		return
-	}
-	if transfer.Result.Status != "pending_login" {
-		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
-		return
-	}
-	a.startAuthorization(w, r, transfer)
 }
 
 func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Transfer {
@@ -194,7 +169,6 @@ func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Trans
 		result.Status = "uncertain"
 	case "pending_login", "denied", "missing_code", "connect_failed", "save_failed":
 		result.Status = "pending_login"
-		result.CartURL = "/kroger/cart-transfers/" + url.PathEscape(result.TransferID) + "/connect"
 	}
 	if code == "pending_login" {
 		result.Message = "Connect your Kroger account to send this shopping list."
@@ -210,17 +184,7 @@ func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Trans
 	return result
 }
 
-func writeTransferJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
+func writeTransferError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Vary", "HX-Request")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
-}
-
-func writeTransferError(w http.ResponseWriter, status int, code, message string) {
-	writeTransferJSON(w, status, struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}{code, message})
+	http.Error(w, message, status)
 }

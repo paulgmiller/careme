@@ -2,7 +2,6 @@ package providerregistry
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -71,18 +70,11 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 	})
 	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
-	form := url.Values{"transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list","items":[{"id":"milk","name":"Milk"}]}`}}
+	form := url.Values{"idempotency_key": {"list"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list","items":[{"id":"milk","name":"Milk"}]}`}}
 	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.Header.Set("Idempotency-Key", "list")
 	response := httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
-	require.Equal(t, http.StatusOK, response.Code)
-	var transfer ordertypes.Transfer
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &transfer))
-	assert.Equal(t, "pending_login", transfer.Status)
-	response = httptest.NewRecorder()
-	routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, transfer.CartURL, nil))
 	require.Equal(t, http.StatusSeeOther, response.Code)
 	assert.Equal(t, "applied", response.Header().Get("X-Order-Middleware"))
 	destination, err := url.Parse(response.Header().Get("Location"))

@@ -19,7 +19,6 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
-	"careme/internal/httpx"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/routing"
 )
@@ -133,7 +132,7 @@ func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request
 func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	userID, ok := a.cartUser(w, r)
+	userID, ok := a.cartUser(w, r, r.URL.RequestURI())
 	if !ok {
 		return
 	}
@@ -182,44 +181,28 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	a.completeAuthorization(w, r, transfer, a.order(r.Context(), transfer, false))
 }
 
-func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request, returnURL string) (string, bool) {
 	userID, err := a.auth.GetUserIDFromRequest(r)
 	if err == nil {
 		return userID, true
 	}
 	if errors.Is(err, auth.ErrNoSession) {
-		redirectToOrderingSignIn(w, r)
+		http.Redirect(w, r, "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(returnURL))), http.StatusSeeOther)
 	} else {
 		http.Error(w, "Unable to load account", http.StatusInternalServerError)
 	}
 	return "", false
 }
 
-func redirectToOrderingSignIn(w http.ResponseWriter, r *http.Request) {
-	if httpx.IsHTMX(r) {
-		destination := httpx.RequestPath(r)
-		// A fragment request should return to the shopping page after sign-in,
-		// not the transfer API. Only accept the current page on this host.
-		if current, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil && current.Host == r.Host && localReturnURL(current.RequestURI()) {
-			destination = current.RequestURI()
-		}
-		w.Header().Set("HX-Redirect", "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(destination))))
-	}
-	http.Error(w, "must be logged in", http.StatusUnauthorized)
-}
-
 func (a *OrderHandler) Register(routes routing.Registrar) {
 	routes.Handle("POST /kroger/cart-transfers", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
 	routes.HandleFunc("GET /kroger/callback", a.handleCallback)
-	routes.HandleFunc("GET /kroger/cart-transfers/{transfer_id}", a.handleTransfer)
-	routes.HandleFunc("GET /kroger/cart-transfers/{transfer_id}/connect", a.handleConnect)
 }
 
-// OAuth redirects return to the original page without encoding outcome fields.
-// The page retrieves the transfer through the same API used after POST.
+// OAuth resumes the saved transfer and navigates to the cart or a provider error page.
 func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer, result ordertypes.Transfer) {
 	transfer.Result = result
 	if a.saveTransfer(w, r, transfer) {
-		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
+		a.finishTransfer(w, r, transfer)
 	}
 }

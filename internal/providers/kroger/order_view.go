@@ -3,7 +3,6 @@ package kroger
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 
 	ordertypes "careme/internal/orders/types"
 )
@@ -21,10 +20,8 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	order := &ordertypes.OrderView{
 		IdempotencyKey:      input.ListKey,
 		TransferURL:         "/kroger/cart-transfers",
-		TransferStatusURL:   "/kroger/cart-transfers/" + url.PathEscape(input.ListKey),
 		ActionLabel:         "Add to " + brand + " cart",
 		Description:         "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
-		ReviewLabel:         "Review cart (opens a new tab)",
 		TransferRequestJSON: string(body),
 	}
 

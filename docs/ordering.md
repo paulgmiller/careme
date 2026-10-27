@@ -1,132 +1,89 @@
 # Cart transfers
 
-Recipes sends its displayed shopping list through a shared cart-transfer HTTP
-contract. Destinations own authentication, product matching, cart writes, and
-idempotency. The recipe page only needs creation and status URLs; it does not
-interpret provider query parameters or implement provider OAuth flows.
+Careme's shopping list submits a normal browser form to its ordering destination.
+The destination handler owns authentication, product matching, cart writes,
+idempotency, redirects, and any failure page. The shopping list only renders an
+“Add to cart” form; it never fetches or displays transfer states.
 
-Kroger is the first implementation. MN Food Club, Instacart, and other future
-providers can implement the same Careme-facing contract while adapting their own
-upstream APIs. The [MN Food Club proposal](mnfoodclub-ordering.openapi.yaml) is an
-upstream partner contract, not a deployed ordering integration.
+This browser contract differs from the [MN Food Club proposal](mnfoodclub-ordering.openapi.yaml),
+which describes a server-to-server JSON API. A future Food Club provider would
+receive Careme's form, call that upstream API, and redirect the browser to its
+returned cart or account-connection URL. Upstream states stay inside the adapter.
 
-## Request and response
+## Browser form
 
-`POST /<destination>/cart-transfers` accepts the shopping page's URL-encoded
-HTMX form. Its single `transfer_request` hidden input contains the complete
-JSON-serialized `orders/types.TransferRequest`: `items`, `location`, and
-`return_url`. The handler decodes this field once.
-`OrderView.IdempotencyKey` supplies the `Idempotency-Key` header rendered by
-the template, typically using the finalized shopping-list hash. JSON request bodies are not supported.
+`POST /<destination>/cart-transfers` accepts two URL-encoded hidden inputs:
 
-- `items` is a nonempty array of `ai.ShoppingItem`. Recipes includes the merged
-  food list and selected wines without regenerating quantities.
-- `location` is the full source location, used as a destination store hint.
-- The `Idempotency-Key` header identifies one intended addition for the authenticated shopper and
-  destination. Reuse it for retries. Changing items, store ID, chain, or return URL under an existing key
-  returns HTTP 409 with `code: idempotency_conflict`. It is not an order number.
-- `return_url` is an application-local path, query, and optional fragment. It is
-  used only after browser account connection; POST itself never redirects.
-- The shopper identity comes from Careme authentication, never the request body.
+- `transfer_request`: the complete JSON-serialized `orders/types.TransferRequest`,
+  containing the displayed `items`, source `location`, and local `return_url`.
+- `idempotency_key`: identifies one intended addition for this shopper and
+  destination, normally the finalized shopping-list hash. Reuse it for retries.
+  Changing items, store ID, chain, or return URL under an existing key returns 409.
 
-A successful POST returns HTTP 200, `Cache-Control: no-store`, and a shared
-`orders/types.Transfer` object:
+`OrderView` supplies the POST URL, serialized request, idempotency key, and button
+copy. The template uses a native form with `hx-boost="false"`. There is no HTMX
+transfer request, status URL, polling, JSON response, or connect-account control.
+A native form cannot set a custom header; an adapter calling Food Club would
+forward the form's key in the upstream `Idempotency-Key` header.
 
-```json
-{
-  "transfer_id": "opaque-transfer-id",
-  "status": "applied",
-  "cart_url": "https://www.qfc.com/cart",
-  "added": 17,
-  "unmatched": 3,
-  "code": "complete",
-  "message": "Sent 17 products to your cart. Review amounts before checkout. 3 items could not be matched and were not sent."
-}
-```
+The authenticated shopper comes from the verified Careme session, never from
+submitted JSON. A shopper whose session has expired is redirected to sign in,
+then back to the shopping list to submit again. `return_url` must be an
+application-local path; it is used for sign-in return and the failure page's back
+link, not for cart-transfer status messages.
 
-`added` counts packages sent; `unmatched` counts submitted shopping items that
-could not be matched. `message` is destination-owned display text. `code` is an
-optional destination-specific detail; the generic UI uses `status`:
+## Kroger navigation
 
-| Status | Meaning |
-| --- | --- |
-| `pending_login` | Follow `cart_url` to connect the shopper's account and resume the saved list |
-| `applied` | Processing completed; inspect counts and review the destination cart, including when no products matched |
-| `failed` | Preparation failed before a cart write; retry the same request and list key |
-| `uncertain` | The transfer has no confirmed result; it may still be running or a cart write may have occurred. Reload to check status and review the cart before taking further action |
+1. The POST saves the request before preparing the cart addition.
+2. If a Kroger connection is needed, it immediately returns a 303 redirect to
+   Kroger OAuth. The shopper does not have to click a separate connect button.
+3. `/kroger/callback` validates the state cookie, authenticated ownership, stored
+   nonce, and ten-minute age. It exchanges the authorization code, saves the
+   encrypted token, and resumes the saved request.
+4. A completed addition returns a 303 redirect directly to the provider's cart.
+   Expired access tokens are refreshed internally.
 
-An applied transfer means a cart handoff completed, **not** that checkout occurred
-or an order was placed. Kroger does not expose checkout confirmation through this
-integration. Cart edits after a transfer do not change its saved counts.
+No products are added on shopping-list page load. There are no transfer-status
+or separate connection GET routes. Reloading the shopping list renders the same
+form; reposting it consults the saved transfer and cannot add the same list twice.
 
-## Status and browser behavior
+Kroger sends one package per unique matched UPC. Unmatched items are counted in
+the saved result; the shopper reviews amounts and checkout in Kroger's cart.
+A cart transfer never checks out or places an order.
 
-`GET /<destination>/cart-transfers/{transfer_id}` returns the current transfer in
-the same shape and with `Cache-Control: no-store`. It requires the same shopper
-authentication as POST. Unknown IDs and IDs belonging to another shopper return
-404. GET never resolves products, starts OAuth, or writes to the cart.
+## Failures and duplicate protection
 
-Kroger uses the idempotency key directly as the transfer ID, scoped to the
-authenticated shopper. Status and connection URLs escape it as a path segment;
-the ID is not an authorization credential. `OrderView.TransferURL` supplies
-the transfer POST route, and
-`OrderView.TransferStatusURL` supplies the GET route for its saved result. This
-lets the recipe page check a saved list on later visits without local storage
-or URL outcome fields.
-The POST waits for Kroger and returns its result directly.
+Failures remain on the provider route as a full HTML page. The page offers links
+to review the cart or return to the shopping list. OAuth denial, connection
+errors, and product-lookup failures also offer a native “Try again, chef” form
+with the same request and idempotency key. A transfer with no matches shows this
+page without claiming that products were added.
 
-The shared shopping-list template uses HTMX to submit the form and request
-status on page load. The template renders `OrderView.IdempotencyKey` in
-`hx-headers` for the POST. With `HX-Request: true`, the same endpoints render HTML
-fragments from the saved transfer; ordinary API requests still return JSON.
-An initial HTMX status lookup with no saved transfer returns 204, leaving the
-form in place. Saved results do not poll or schedule further GETs. POST uses
-`HX-Redirect` when the shopper needs to connect their account. The OAuth callback returns to the clean
-shopping page, whose load-triggered GET retrieves the saved outcome.
-
-There is no custom transfer JavaScript asset. One commented inline HTMX error
-hook shows a message and disables submission when a request fails, including a
-network failure; the shopper reloads to check status before trying again.
-Neither a failed lookup nor a missing transfer automatically submits products.
-
-Kroger POST retries return the **current** saved transfer. This intentionally
-differs from the Food Club proposal's immutable original POST response. Both Careme and the upstream Food Club API use the `Idempotency-Key` header.
-Kroger continues adding one package per unique matched UPC; the shared request's
-`buy` value is descriptive. Food Club's per-product accepted/rejected quantities
-and reusable partner customer ID are not promised by the Kroger adapter.
-
-## Kroger OAuth and duplicate protection
-
-`POST /kroger/cart-transfers` persists the request before preparing an addition.
-If account connection is needed, it returns `pending_login` and a same-origin
-`/kroger/cart-transfers/{transfer_id}/connect` link. Visiting that link starts
-Kroger OAuth; the destination handler owns all OAuth redirects.
-
-`/kroger/callback` verifies the state cookie, authenticated shopper, and the
-transfer's stored OAuth state and ten-minute expiry, exchanges the code, saves
-encrypted tokens, and resumes the saved list. It then redirects to the original
-`return_url` unchanged. The recipe page retrieves the result through GET. OAuth
-denials and connection errors are saved and offer a new connection attempt.
-Expired access tokens are refreshed internally.
+An unconfirmed write, concurrent submission, or failed write-reservation check
+shows a conflict page without a retry button. The shopper must review the cart;
+the server does not automatically replay an addition. Invalid forms and cache
+failures return HTTP errors on the provider route, without putting error state
+into the shopping-list page or its URL.
 
 Before any cart write, Kroger conditionally creates a `/submission` subrecord
-under the authenticated user's transfer key. Uncertain and completed submissions
-prevent another write. The submission remains authoritative even if
-saving the lifecycle record fails or an old OAuth callback arrives late. A failed
-confirmation save leaves the reservation uncertain, preventing automatic replay. Failed product
-lookup can be retried with the same key because no cart write occurred.
+under the authenticated user's transfer key. Its saved result is authoritative
+if the lifecycle save fails or an OAuth callback arrives late. Uncertain and
+completed submissions prevent another write. Failed product lookup can be
+retried because it occurs before this reservation and before any cart change.
 
-Records currently have no automatic expiry. OAuth continuations expire logically
-after ten minutes. See [cache layout](cache-layout.md) for storage details.
+The shared `TransferRequest` and `Transfer` types describe the saved request and
+result inside the handler; they are not a browser JSON API. Transfer IDs use the
+idempotency key directly, scoped to the authenticated user and destination.
+Records have no automatic expiry; OAuth state expires logically after ten minutes.
+See [cache layout](cache-layout.md) for storage details.
 
 ## Adding a destination
 
-Register its routes through `providerregistry.Factory.RegisterOrders`, implement
-creation and read-only status using the shared request/response types, and add
-its location match and `OrderView` builder. Supply an action URL, a status URL,
-form fields, and destination copy. Authentication links and callbacks stay with
-the destination. No provider-specific logic belongs in the recipe handler or
-shared browser code.
+Register its POST and authentication callback routes through
+`providerregistry.Factory.RegisterOrders`, then supply its location match and
+`OrderView` builder. The adapter translates the shared request to the upstream
+API and owns redirects and failure handling. Provider state does not belong in
+the recipe handler or shared shopping-list UI.
 
 The [MN Food Club mock walkthrough](mnfoodclub-mock.md) remains available at
 `/mnfoodclub-demo/` with mocks enabled. It demonstrates the proposed upstream

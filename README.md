@@ -94,20 +94,21 @@ Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Implement `POST /<destination>/cart-transfers` and read-only
-`GET /<destination>/cart-transfers/{transfer_id}` using the shared
-`orders/types.TransferRequest` and `Transfer` contract. The shopping list submits
-its displayed items, source location, stable list key, and local return URL.
-The destination owns authentication, matching, cart writes, and duplicate
-prevention. POST returns a saved transfer with an ID, status, and cart or login
-link; OAuth callbacks remain destination-owned.
+Implement `POST /<destination>/cart-transfers` as a browser navigation using
+`orders/types.TransferRequest`. The shopping list submits the serialized request
+and a stable idempotency key in hidden form fields. The destination owns
+authentication, matching, cart writes, duplicate prevention, redirects, and error
+pages. It redirects directly to account connection when needed and to the
+provider's cart when the addition completes.
 
 Register routes in `providerregistry.Factory.RegisterOrders`, then add the
-location match and view builder to `Factory.OrderView`. Supply creation and
-status URLs so the shared recipe UI can submit and later query the transfer.
+location match and view builder to `Factory.OrderView`. The shopping-list UI
+only needs the form's POST URL, payload, idempotency key, and button copy. It
+does not fetch transfer status or render connection and failure states.
 Kroger is currently the only destination; future integrations can adapt their
-upstream APIs to the same contract. Users review and complete checkout with the
-provider. See [Cart transfers](docs/ordering.md) for API and OAuth details.
+upstream APIs behind the same browser handoff. Users review amounts and complete
+checkout with the provider. See [Cart transfers](docs/ordering.md) for browser
+navigation and OAuth details.
 
 ### Verify the integration
 

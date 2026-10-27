@@ -15,23 +15,17 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	// IdempotencyKey identifies one intended addition and is rendered as the Idempotency-Key header.
+	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
 	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
-	TransferURL string
-	// TransferStatusURL loads the saved cart-transfer result once when the page opens.
-	TransferStatusURL   string
-	Transfer            *Transfer
+	TransferURL         string
 	ActionLabel         string
 	TransferRequestJSON string
 	Description         string
-	Notice              string
-	ReviewURL           string
-	ReviewLabel         string
 }
 
 // TransferRequest sends the displayed shopping list to a destination.
-// The browser submits the idempotency key separately in the Idempotency-Key header.
+// The browser submits the idempotency key separately in the idempotency_key form field.
 type TransferRequest struct {
 	Items     []ai.ShoppingItem      `json:"items"`
 	Location  locationtypes.Location `json:"location"`
@@ -39,7 +33,7 @@ type TransferRequest struct {
 }
 
 // Transfer describes a cart handoff, never checkout or a placed order.
-// CartURL opens login while pending_login, or the destination cart otherwise.
+// CartURL opens the destination cart; the provider handler owns login redirects.
 // Added counts packages sent; Unmatched counts shopping items not sent.
 type Transfer struct {
 	// TransferID is the original idempotency key, scoped to the authenticated user and destination.

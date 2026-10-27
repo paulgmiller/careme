@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
+func TestCartTransferFormPersistsRequestAndRedirectsToCart(t *testing.T) {
 	calls := 0
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 		calls++
@@ -33,11 +33,10 @@ func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
 	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
-	form := url.Values{"transfer_request": {string(body)}}
+	form := url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {string(body)}}
 	mux := orderMux(a)
-	assert.Equal(t, http.StatusNotFound, getTransfer(mux, "list-hash").Code)
 	response := postOrder(mux, form)
-	transfer := transferResponse(t, response)
+	transfer := transferResponse(t, a, response)
 	assert.Equal(t, "applied", transfer.Status)
 	assert.Equal(t, 1, transfer.Added)
 	var saved cartTransfer
@@ -50,13 +49,11 @@ func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
 	assert.Equal(t, "mock-clerk-user-id", saved.UserID)
 	assert.Equal(t, "list-hash", saved.IdempotencyKey)
 	for range 3 {
-		assert.Equal(t, transfer, transferResponse(t, getTransfer(mux, transfer.TransferID)))
+		assert.Equal(t, transfer, transferResponse(t, a, postOrder(mux, form)))
 	}
 	assert.Equal(t, 1, calls)
-	a.auth = transferUser{AuthClient: auth.DefaultMock(), id: "another-user"}
-	assert.Equal(t, http.StatusNotFound, getTransfer(mux, transfer.TransferID).Code)
 	a.auth = orderNoSession{AuthClient: auth.DefaultMock()}
-	assert.Equal(t, http.StatusUnauthorized, getTransfer(mux, transfer.TransferID).Code)
+	assert.Equal(t, http.StatusSeeOther, postOrder(mux, form).Code)
 }
 
 type transferUser struct {
@@ -66,17 +63,18 @@ type transferUser struct {
 
 func (a transferUser) GetUserIDFromRequest(*http.Request) (string, error) { return a.id, nil }
 
-func TestCartTransferPendingLoginCanBeQueried(t *testing.T) {
+func TestCartTransferPendingLoginRedirectsDirectlyToOAuth(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("GET must not write cart"); return nil, nil })
 	mux := orderMux(a)
-	posted := transferResponse(t, postOrder(mux, orderForm()))
+	posted := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, "pending_login", posted.Status)
-	assert.Equal(t, "/kroger/cart-transfers/"+posted.TransferID+"/connect", posted.CartURL)
-	assert.Equal(t, posted, transferResponse(t, getTransfer(mux, posted.TransferID)))
-	assert.Equal(t, posted, transferResponse(t, postOrder(mux, orderForm())))
+	assert.Equal(t, "https://www.qfc.com/cart", posted.CartURL)
+	assert.Equal(t, posted, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Zero(t, posted.Added)
-	for _, id := range []string{"!invalid", "../private", "unknown"} {
-		assert.Equal(t, http.StatusNotFound, getTransfer(mux, id).Code)
+	for _, path := range []string{"/kroger/cart-transfers/list-hash", "/kroger/cart-transfers/list-hash/connect"} {
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, http.StatusNotFound, response.Code)
 	}
 }
 
@@ -90,10 +88,10 @@ func TestCartTransferLifecycleSaveFailureKeepsSubmissionResult(t *testing.T) {
 	a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/state", confirmation: true}
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
-	result := transferResponse(t, getTransfer(mux, "list-hash"))
+	result := savedResult(t, a, "list-hash")
 	assert.Equal(t, "applied", result.Status)
 	assert.Equal(t, 2, result.Added)
-	assert.Equal(t, result, transferResponse(t, postOrder(mux, orderForm())))
+	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }
 
@@ -113,11 +111,11 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	form := orderForm()
 	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
-	result := transferResponse(t, postOrder(mux, form))
+	result := transferResponse(t, a, postOrder(mux, form))
 	assert.Equal(t, "applied", result.Status)
 	assert.Zero(t, result.Added)
 	assert.Equal(t, 2, result.Unmatched)
-	assert.Equal(t, result, transferResponse(t, getTransfer(mux, result.TransferID)))
+	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
 }
 
 func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
@@ -141,11 +139,11 @@ func TestCartTransferRetriesProductLookupWithSameID(t *testing.T) {
 		return cartResponse(http.StatusServiceUnavailable, ""), nil
 	})}
 	mux := orderMux(a)
-	failure := transferResponse(t, postOrder(mux, orderForm()))
+	failure := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, "failed", failure.Status)
 	assert.Zero(t, calls)
 	a.client.HTTPClient = client
-	completed := transferResponse(t, postOrder(mux, orderForm()))
+	completed := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, failure.TransferID, completed.TransferID)
 	assert.Equal(t, "applied", completed.Status)
 	assert.Equal(t, 1, calls)
@@ -165,7 +163,7 @@ func TestLateOAuthDenialDoesNotHideCompletedCartTransfer(t *testing.T) {
 		callback.AddCookie(cookie)
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, callback)
-		result := callbackTransfer(t, mux, response)
+		result := transferResponse(t, a, response)
 		assert.Equal(t, "applied", result.Status)
 		assert.Equal(t, 2, result.Added)
 	}
@@ -186,7 +184,7 @@ func TestCartTransferNewConnectionReplacesOAuthState(t *testing.T) {
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, callback)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Equal(t, "pending_login", transferResponse(t, getTransfer(mux, "list-hash")).Status)
+	assert.Equal(t, "pending_login", savedResult(t, a, "list-hash").Status)
 }
 
 func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
@@ -203,10 +201,10 @@ func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
 	callback.AddCookie(cookie)
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, callback)
-	result := callbackTransfer(t, mux, response)
+	result := transferResponse(t, a, response)
 	assert.Equal(t, "applied", result.Status)
 	assert.Equal(t, 2, result.Added)
-	assert.Equal(t, result, transferResponse(t, postOrder(mux, orderForm())))
+	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }
 
@@ -233,10 +231,10 @@ func TestCartTransferConcurrentOAuthCallbacksWriteOnce(t *testing.T) {
 	go func() { completed <- callback() }()
 	<-entered
 	second := callback()
-	pending := callbackTransfer(t, mux, second)
+	pending := transferResponse(t, a, second)
 	close(release)
 	assert.Equal(t, "uncertain", pending.Status)
-	assert.Equal(t, "applied", callbackTransfer(t, mux, <-completed).Status)
+	assert.Equal(t, "applied", transferResponse(t, a, <-completed).Status)
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -250,44 +248,27 @@ func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
 			})
 			a.cache = cache.NewFileCache(t.TempDir())
 			mux := orderMux(a)
-			post := func() *httptest.ResponseRecorder {
-				form := orderForm()
-				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
-				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				request.Header.Set("Idempotency-Key", key)
-				response := httptest.NewRecorder()
-				mux.ServeHTTP(response, request)
-				return response
-			}
-			response := post()
-			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-			var transfer ordertypes.Transfer
-			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &transfer))
-			assert.Equal(t, key, transfer.TransferID)
-			assert.Equal(t, "pending_login", transfer.Status)
-			assert.Equal(t, "/kroger/cart-transfers/"+url.PathEscape(key)+"/connect", transfer.CartURL)
-			assert.JSONEq(t, response.Body.String(), getTransfer(mux, key).Body.String())
-			view, err := OrderView(ordertypes.OrderViewInput{ListKey: key})
-			require.NoError(t, err)
-			assert.Equal(t, "/kroger/cart-transfers/"+url.PathEscape(key), view.TransferStatusURL)
-			start := httptest.NewRecorder()
-			mux.ServeHTTP(start, httptest.NewRequest(http.MethodGet, transfer.CartURL, nil))
-			require.Equal(t, http.StatusSeeOther, start.Code)
+			form := orderForm()
+			form.Set("idempotency_key", key)
+			start := connectOrder(t, mux, form)
+			result := savedResult(t, a, key)
+			assert.Equal(t, key, result.TransferID)
 			cookie := start.Result().Cookies()[0]
 			callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+url.QueryEscape(cookie.Value)+"&code=code", nil)
 			callback.AddCookie(cookie)
 			completed := httptest.NewRecorder()
 			mux.ServeHTTP(completed, callback)
 			require.Equal(t, http.StatusSeeOther, completed.Code, completed.Body.String())
-			status := getTransfer(mux, key)
-			require.Equal(t, http.StatusOK, status.Code)
-			require.NoError(t, json.Unmarshal(status.Body.Bytes(), &transfer))
-			assert.Equal(t, key, transfer.TransferID)
-			assert.Equal(t, "applied", transfer.Status)
-			assert.JSONEq(t, status.Body.String(), post().Body.String())
+			assert.Equal(t, "https://www.qfc.com/cart", completed.Header().Get("Location"))
+			assert.Equal(t, "applied", savedResult(t, a, key).Status)
+			repeated := postOrder(mux, form)
+			assert.Equal(t, http.StatusSeeOther, repeated.Code)
+			assert.Equal(t, "https://www.qfc.com/cart", repeated.Header().Get("Location"))
 			assert.Equal(t, 1, calls)
 			a.auth = transferUser{AuthClient: auth.DefaultMock(), id: "another-user"}
-			assert.Equal(t, http.StatusNotFound, getTransfer(mux, key).Code)
+			another := connectOrder(t, mux, form)
+			assert.NotEqual(t, "https://www.qfc.com/cart", another.Header().Get("Location"))
+			assert.Equal(t, 1, calls)
 		})
 	}
 }
