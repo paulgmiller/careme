@@ -96,8 +96,26 @@ func TestMNFoodClubHashesWeekly(t *testing.T) {
 	}
 }
 
-func TestSmithBrothersFarmsHashesDaily(t *testing.T) {
-	date := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date), cachekey.ForStore("smithbrothersfarms_other", date))
-	assert.NotEqual(t, cachekey.ForStore("smithbrothersfarms_delivery", date), cachekey.ForStore("smithbrothersfarms_delivery", date.AddDate(0, 0, 1)))
+func TestSmithBrothersFarmsHashesWeekly(t *testing.T) {
+	zone, err := time.LoadLocation("America/Los_Angeles")
+	assert.NoError(t, err)
+	for _, monday := range []time.Time{
+		time.Date(2026, 10, 19, 9, 0, 0, 0, zone),
+		time.Date(2025, 12, 29, 9, 0, 0, 0, zone),
+		time.Date(2026, 3, 2, 9, 0, 0, 0, zone),
+		time.Date(2026, 10, 26, 9, 0, 0, 0, zone),
+	} {
+		want := cachekey.ForStore("smithbrothersfarms_delivery", monday)
+		for day := range 7 {
+			date := monday.AddDate(0, 0, day)
+			assert.Equal(t, want, cachekey.ForStore("smithbrothersfarms_delivery", date))
+			params := recipes.DefaultParams(&locations.Location{ID: "smithbrothersfarms_delivery"}, date)
+			assert.Equal(t, want, params.Hash())
+			assert.Equal(t, want, params.LocationHash())
+		}
+		assert.Equal(t, want, cachekey.ForStore("smithbrothersfarms_delivery", monday.AddDate(0, 0, 7).Add(-time.Nanosecond)))
+		assert.NotEqual(t, want, cachekey.ForStore("smithbrothersfarms_delivery", monday.AddDate(0, 0, 7)))
+		assert.NotEqual(t, want, cachekey.ForStore("smithbrothersfarms_delivery", monday.Add(-time.Nanosecond)))
+		assert.NotEqual(t, want, cachekey.ForStore("smithbrothersfarms_other", monday))
+	}
 }

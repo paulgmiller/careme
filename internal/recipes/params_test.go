@@ -17,11 +17,11 @@ type staticLocationLookup struct {
 	location *locations.Location
 }
 
-func TestDefaultParamsMNFoodClubUsesMondayForWholeWeek(t *testing.T) {
+func TestDefaultParamsWeeklyStoresUseMondayForWholeWeek(t *testing.T) {
 	t.Parallel()
 	zone, err := time.LoadLocation("America/Chicago")
 	require.NoError(t, err)
-	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery", "smithbrothersfarms_delivery"} {
 		t.Run(id, func(t *testing.T) {
 			location := &locations.Location{ID: id}
 			// Include month/year boundaries and both daylight saving transitions.
@@ -47,7 +47,7 @@ func TestDefaultParamsMNFoodClubUsesMondayForWholeWeek(t *testing.T) {
 
 func TestDefaultParamsOtherStoresKeepDailyDates(t *testing.T) {
 	t.Parallel()
-	for _, id := range []string{"70100023", "wholefoods_10216", "smithbrothersfarms_delivery"} {
+	for _, id := range []string{"70100023", "wholefoods_10216"} {
 		location := &locations.Location{ID: id}
 		monday := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
 		for day := range 7 {

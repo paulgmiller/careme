@@ -19,7 +19,7 @@ const (
 	parserVersion    = "v1"
 )
 
-var stapleURLs = []string{baseURL + "/produce", baseURL + "/meat-poultry"}
+var stapleURLs = []string{baseURL + "/produce", baseURL + "/meat-poultry", baseURL + "/dairy-eggs", baseURL + "/yogurt"}
 
 var harvestBoxes = []struct {
 	slug string
@@ -33,6 +33,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
+	date = date.AddDate(0, 0, -int((date.Weekday()-time.Monday+7)%7))
 	parts := append([]string{}, stapleURLs...)
 	for _, box := range harvestBoxes {
 		parts = append(parts, baseURL+"/"+box.slug)

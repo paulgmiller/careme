@@ -21,7 +21,7 @@ func (f smithBrothersTransport) RoundTrip(r *http.Request) (*http.Response, erro
 
 func TestSmithBrothersFarmsStaplesRouting(t *testing.T) {
 	pages := map[string]string{
-		"/produce": "produce", "/meat-poultry": "meat",
+		"/produce": "produce", "/meat-poultry": "meat", "/dairy-eggs": "dairy-eggs", "/yogurt": "yogurt",
 		"/smith-brothers-organic-harvest-box": "organic-box", "/harvest-produce-box": "standard-box",
 	}
 	client := &http.Client{Transport: smithBrothersTransport(func(req *http.Request) (*http.Response, error) {
@@ -35,12 +35,15 @@ func TestSmithBrothersFarmsStaplesRouting(t *testing.T) {
 	provider := recipes.NewStaplesProvider([]recipes.StaplesBackend{backend})
 	got, err := provider.FetchStaples(t.Context(), "smithbrothersfarms_delivery")
 	require.NoError(t, err)
-	require.Len(t, got, 25)
+	require.Len(t, got, 28)
 	var rendered bytes.Buffer
 	require.NoError(t, ai.InputIngredientsToTSV(got, &rendered))
 	assert.Contains(t, rendered.String(), "Organic Produce Box — Local Organic Sugar Bee Apples")
 	assert.Contains(t, rendered.String(), "Produce Box — Avocados")
 	assert.Contains(t, rendered.String(), "Organic Bartlett Pears - 2 lbs")
+	assert.Contains(t, rendered.String(), "Smith Brothers Whole Milk - half gallon")
+	assert.Contains(t, rendered.String(), "Smith Brothers Eggnog - quart")
+	assert.Contains(t, rendered.String(), "Chobani 20g Protein Plain Greek Yogurt - 32 oz")
 	for _, item := range got {
 		assert.NotEqual(t, "4975", item.ProductID)
 		assert.NotEqual(t, "2997", item.ProductID)
