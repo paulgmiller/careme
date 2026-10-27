@@ -31,11 +31,9 @@ func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
 		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC", Name: "My QFC", Address: "123 Store Street"},
 		Items:     []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
 	}
-	items, err := json.Marshal(input.Items)
+	body, err := json.Marshal(input)
 	require.NoError(t, err)
-	location, err := json.Marshal(input.Location)
-	require.NoError(t, err)
-	form := url.Values{"items": {string(items)}, "location": {string(location)}, "return_url": {input.ReturnURL}}
+	form := url.Values{"transfer_request": {string(body)}}
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusNotFound, getTransfer(mux, "list-hash").Code)
 	response := postOrder(mux, form)
@@ -104,7 +102,6 @@ func TestCartTransferRejectsJSONBody(t *testing.T) {
 	body := `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes"}`
 	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Idempotency-Key", "list-hash")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
@@ -114,7 +111,7 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("no matching products"); return nil, nil })
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	form := orderForm()
-	form.Set("items", `[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`)
+	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, postOrder(mux, form))
 	assert.Equal(t, "applied", result.Status)
@@ -254,7 +251,8 @@ func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
 			a.cache = cache.NewFileCache(t.TempDir())
 			mux := orderMux(a)
 			post := func() *httptest.ResponseRecorder {
-				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(orderForm().Encode()))
+				form := orderForm()
+				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 				request.Header.Set("Idempotency-Key", key)
 				response := httptest.NewRecorder()

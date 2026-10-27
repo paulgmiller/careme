@@ -10,33 +10,22 @@ import (
 
 // OrderView supplies the generic cart-transfer UI with Kroger endpoints.
 func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	body, err := json.Marshal(input.Items)
+	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
 	if err != nil {
-		return nil, fmt.Errorf("encode shopping items for Kroger: %w", err)
-	}
-	location, err := json.Marshal(input.Location)
-	if err != nil {
-		return nil, fmt.Errorf("encode ordering location: %w", err)
-	}
-	headers, err := json.Marshal(map[string]string{"Idempotency-Key": input.ListKey})
-	if err != nil {
-		return nil, fmt.Errorf("encode cart transfer headers: %w", err)
+		return nil, fmt.Errorf("encode Kroger transfer request: %w", err)
 	}
 	brand := input.Location.Chain
 	if brand == "" {
 		brand = "Kroger"
 	}
 	order := &ordertypes.OrderView{
-		TransferHeadersJSON: string(headers),
+		IdempotencyKey:      input.ListKey,
 		TransferURL:         "/kroger/cart-transfers",
 		TransferStatusURL:   "/kroger/cart-transfers/" + url.PathEscape(input.ListKey),
 		ActionLabel:         "Add to " + brand + " cart",
 		Description:         "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		ReviewLabel:         "Review cart (opens a new tab)",
-		Fields: ordertypes.OrderFields{
-			Items: string(body), Location: string(location),
-			ReturnURL: input.ReturnURL,
-		},
+		TransferRequestJSON: string(body),
 	}
 
 	return order, nil

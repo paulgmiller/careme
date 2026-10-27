@@ -28,8 +28,8 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}
-	input := ordertypes.TransferRequest{ReturnURL: r.PostForm.Get("return_url")}
-	if json.Unmarshal([]byte(r.PostForm.Get("location")), &input.Location) != nil || json.Unmarshal([]byte(r.PostForm.Get("items")), &input.Items) != nil {
+	var input ordertypes.TransferRequest
+	if err := json.Unmarshal([]byte(r.PostForm.Get("transfer_request")), &input); err != nil {
 		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}

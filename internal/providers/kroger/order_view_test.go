@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 
 	ordertypes "careme/internal/orders/types"
@@ -14,6 +15,7 @@ import (
 	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/html"
 )
 
 func TestKrogerOrderTransferTemplate(t *testing.T) {
@@ -34,7 +36,7 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 func TestKrogerOrderViewRejectsInvalidItems(t *testing.T) {
 	invalid := math.NaN()
 	_, err := OrderView(ordertypes.OrderViewInput{Items: []ai.ShoppingItem{{Name: "Invalid", Buy: &invalid}}})
-	require.ErrorContains(t, err, "encode shopping items for Kroger")
+	require.ErrorContains(t, err, "encode Kroger transfer request")
 }
 
 func TestKrogerOrderViewForm(t *testing.T) {
@@ -48,19 +50,19 @@ func TestKrogerOrderViewForm(t *testing.T) {
 			brand = "Kroger"
 		}
 		assert.Equal(t, "Add to "+brand+" cart", view.ActionLabel)
-		var location locationtypes.Location
-		require.NoError(t, json.Unmarshal([]byte(view.Fields.Location), &location))
-		assert.Equal(t, "70500874", location.ID)
-		assert.Equal(t, chain, location.Chain)
-		assert.JSONEq(t, `{"Idempotency-Key":"list"}`, view.TransferHeadersJSON)
-		assert.Equal(t, "/recipes?h=list", view.Fields.ReturnURL)
+		var request ordertypes.TransferRequest
+		require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &request))
+		assert.Equal(t, "70500874", request.Location.ID)
+		assert.Equal(t, chain, request.Location.Chain)
+		assert.Equal(t, "list", view.IdempotencyKey)
+		assert.Equal(t, "/recipes?h=list", request.ReturnURL)
 	}
 }
 
 func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
 	invalid := math.NaN()
 	_, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{Lat: &invalid}})
-	require.ErrorContains(t, err, "encode ordering location")
+	require.ErrorContains(t, err, "encode Kroger transfer request")
 }
 
 func TestKrogerTransferUsesChainCart(t *testing.T) {
@@ -68,5 +70,36 @@ func TestKrogerTransferUsesChainCart(t *testing.T) {
 		response := (cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{Chain: banner}}}).result("complete", 0, 0)
 		assert.Equal(t, "https://www."+domain+"/cart", response.CartURL)
 		assert.Equal(t, "applied", response.Status)
+	}
+}
+
+func TestKrogerOrderTemplateRendersIdempotencyHeader(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	for _, key := range []string{"list", `list"quoted'&<tag>`} {
+		t.Run(key, func(t *testing.T) {
+			view, err := OrderView(ordertypes.OrderViewInput{ListKey: key})
+			require.NoError(t, err)
+			var page bytes.Buffer
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+			document, err := html.Parse(strings.NewReader(page.String()))
+			require.NoError(t, err)
+			var headers map[string]string
+			var inspect func(*html.Node)
+			inspect = func(node *html.Node) {
+				if node.Type == html.ElementNode && node.Data == "form" {
+					for _, attr := range node.Attr {
+						if attr.Key == "hx-headers" {
+							require.NoError(t, json.Unmarshal([]byte(attr.Val), &headers))
+						}
+					}
+				}
+				for child := node.FirstChild; child != nil; child = child.NextSibling {
+					inspect(child)
+				}
+			}
+			inspect(document)
+			assert.Equal(t, map[string]string{"Idempotency-Key": key}, headers)
+			assert.NotContains(t, page.String(), `name="idempotency_key"`)
+		})
 	}
 }

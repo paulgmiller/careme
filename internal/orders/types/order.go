@@ -15,33 +15,23 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	// TransferHeadersJSON supplies HTMX request headers for the transfer POST, including Idempotency-Key.
-	TransferHeadersJSON string
+	// IdempotencyKey identifies one intended addition and is rendered as the Idempotency-Key header.
+	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
 	TransferURL string
 	// TransferStatusURL loads the saved cart-transfer result once when the page opens.
-	TransferStatusURL string
-	Transfer          *Transfer
-	ActionLabel       string
-	Fields            OrderFields
-	Description       string
-	Notice            string
-	ReviewURL         string
-	ReviewLabel       string
-}
-
-// OrderFields is the shared form contract for ordering destinations.
-// Items and Location are JSON encoded for hidden form inputs. Location is a source
-// store hint; each destination decides how to select its destination store.
-// Extend this struct when an integration needs more shopping-list information.
-type OrderFields struct {
-	Items     string
-	Location  string
-	ReturnURL string
+	TransferStatusURL   string
+	Transfer            *Transfer
+	ActionLabel         string
+	TransferRequestJSON string
+	Description         string
+	Notice              string
+	ReviewURL           string
+	ReviewLabel         string
 }
 
 // TransferRequest sends the displayed shopping list to a destination.
-// Supply the idempotency key separately in the Idempotency-Key header.
+// The browser submits the idempotency key separately in the Idempotency-Key header.
 type TransferRequest struct {
 	Items     []ai.ShoppingItem      `json:"items"`
 	Location  locationtypes.Location `json:"location"`

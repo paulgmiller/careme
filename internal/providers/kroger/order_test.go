@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,11 +21,17 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{
-		"location":   {`{"id":"70500874","name":"QFC","chain":"QFC"}`},
-		"return_url": {"/recipes?h=list-hash#shopping-list-section"},
-		"items":      {`[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]`},
-	}
+	return url.Values{"transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
+}
+
+func setOrderField(t *testing.T, form url.Values, field string, value any) {
+	t.Helper()
+	var input map[string]any
+	require.NoError(t, json.Unmarshal([]byte(form.Get("transfer_request")), &input))
+	input[field] = value
+	body, err := json.Marshal(input)
+	require.NoError(t, err)
+	form.Set("transfer_request", string(body))
 }
 
 func postOrder(handler http.Handler, form url.Values) *httptest.ResponseRecorder {
@@ -124,7 +131,7 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	mux := orderMux(a)
 	form := orderForm()
 	// A posted user ID cannot choose another shopper's credentials or transfer key.
-	form.Set("user_id", "someone-else")
+	setOrderField(t, form, "user_id", "someone-else")
 	result := postOrder(mux, form)
 	query := transferResponse(t, result)
 	assert.Equal(t, "complete", query.Code)
@@ -133,7 +140,7 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
 	assert.Equal(t, "complete", transferResponse(t, postOrder(mux, form)).Code)
-	form.Set("items", `[{"id":"new","name":"New product"}]`)
+	setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"New product"}]`))
 	assert.Equal(t, http.StatusConflict, postOrder(mux, form).Code)
 	assert.Equal(t, 1, calls)
 }
@@ -158,7 +165,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			})
 			mux := orderMux(a)
 			form := orderForm()
-			form.Set("location", `{"id":"70500874","chain":"`+scenario.chain+`"}`)
+			setOrderField(t, form, "location", map[string]string{"id": "70500874", "chain": scenario.chain})
 			response := connectOrder(t, mux, form)
 			require.Equal(t, http.StatusSeeOther, response.Code)
 			destination, err := url.Parse(response.Header().Get("Location"))
@@ -171,7 +178,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			assert.True(t, cookies[0].HttpOnly)
 			assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
 			// No recipes, location lookup, or shopping merger exists in this fixture.
-			form.Set("items", `[{"id":"new","name":"Changed after authorization started"}]`)
+			setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"Changed after authorization started"}]`))
 			callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?code=code&state="+url.QueryEscape(destination.Query().Get("state")), nil)
 			callback.AddCookie(cookies[0])
 			result := httptest.NewRecorder()
@@ -309,23 +316,26 @@ func TestKrogerOrderConcurrentSubmission(t *testing.T) {
 }
 
 func TestKrogerOrderValidation(t *testing.T) {
-	for _, change := range []struct{ field, value string }{
+	for _, change := range []struct {
+		field string
+		value any
+	}{
 		{"return_url", "https://evil.test/"},
 		{"return_url", "//evil.test/"},
 		{"return_url", "/\\evil.test"},
 		{"return_url", ""},
-		{"location", `{"id":"walmart_123"}`},
+		{"location", json.RawMessage(`{"id":"walmart_123"}`)},
 		{"location", "broken"},
-		{"location", "null"},
-		{"location", "{}"},
+		{"location", nil},
+		{"location", json.RawMessage(`{}`)},
 		{"items", "broken"},
-		{"items", "[]"},
-		{"items", "null"},
+		{"items", json.RawMessage(`[]`)},
+		{"items", nil},
 	} {
-		t.Run(change.field+change.value, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/%v", change.field, change.value), func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
 			form := orderForm()
-			form.Set(change.field, change.value)
+			setOrderField(t, form, change.field, change.value)
 			assert.Equal(t, http.StatusBadRequest, postOrder(orderMux(a), form).Code)
 		})
 	}
@@ -358,7 +368,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				saveShopper(t, a, time.Now().Add(-time.Minute))
 			case "no matches":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				form.Set("items", `[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`)
+				setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
 				expected = "no_matches"
 			case "lookup failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
@@ -391,11 +401,11 @@ func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
 	for _, key := range []string{"", "   ", strings.Repeat("x", 256), "../other"} {
 		t.Run(key, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
-				t.Fatal("invalid header must not write cart")
+				t.Fatal("invalid key must not write cart")
 				return nil, nil
 			})
 			form := orderForm()
-			form.Set("list_key", "body-key-is-not-used")
+			form.Set("idempotency_key", "form-field-is-not-used")
 			request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			request.Header.Set("Idempotency-Key", key)
@@ -408,10 +418,20 @@ func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
 
 func TestKrogerOrderRejectsMalformedForm(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
-	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader("items=%"))
+	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader("transfer_request=%"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Idempotency-Key", "list-hash")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
+}
+
+func TestKrogerOrderRejectsInvalidTransferPayload(t *testing.T) {
+	for _, payload := range []string{"", "broken", "{", "null", "[]", "{}", "{} {}"} {
+		t.Run(payload, func(t *testing.T) {
+			a := newTestOrderHandler(t, &CartClient{})
+			form := url.Values{"transfer_request": {payload}}
+			assert.Equal(t, http.StatusBadRequest, postOrder(orderMux(a), form).Code)
+		})
+	}
 }

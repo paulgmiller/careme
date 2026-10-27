@@ -13,10 +13,11 @@ upstream partner contract, not a deployed ordering integration.
 ## Request and response
 
 `POST /<destination>/cart-transfers` accepts the shopping page's URL-encoded
-HTMX form. The `items` and `location` hidden inputs contain JSON; `return_url`
-is a local URL. The handler decodes these fields into `orders/types.TransferRequest`.
-The form supplies `Idempotency-Key` through `hx-headers`, typically set to the
-finalized shopping-list hash. JSON request bodies are not supported.
+HTMX form. Its single `transfer_request` hidden input contains the complete
+JSON-serialized `orders/types.TransferRequest`: `items`, `location`, and
+`return_url`. The handler decodes this field once.
+`OrderView.IdempotencyKey` supplies the `Idempotency-Key` header rendered by
+the template, typically using the finalized shopping-list hash. JSON request bodies are not supported.
 
 - `items` is a nonempty array of `ai.ShoppingItem`. Recipes includes the merged
   food list and selected wines without regenerating quantities.
@@ -75,9 +76,8 @@ or URL outcome fields.
 The POST waits for Kroger and returns its result directly.
 
 The shared shopping-list template uses HTMX to submit the form and request
-status on page load. `OrderView.TransferHeadersJSON` supplies the POST headers
-through `hx-headers`, including `Idempotency-Key`;
-the key is not a form field. With `HX-Request: true`, the same endpoints render HTML
+status on page load. The template renders `OrderView.IdempotencyKey` in
+`hx-headers` for the POST. With `HX-Request: true`, the same endpoints render HTML
 fragments from the saved transfer; ordinary API requests still return JSON.
 An initial HTMX status lookup with no saved transfer returns 204, leaving the
 form in place. Saved results do not poll or schedule further GETs. POST uses
@@ -90,7 +90,7 @@ network failure; the shopper reloads to check status before trying again.
 Neither a failed lookup nor a missing transfer automatically submits products.
 
 Kroger POST retries return the **current** saved transfer. This intentionally
-differs from the Food Club proposal's immutable original POST response. Both APIs use the `Idempotency-Key` header.
+differs from the Food Club proposal's immutable original POST response. Both Careme and the upstream Food Club API use the `Idempotency-Key` header.
 Kroger continues adding one package per unique matched UPC; the shared request's
 `buy` value is descriptive. Food Club's per-product accepted/rejected quantities
 and reusable partner customer ID are not promised by the Kroger adapter.

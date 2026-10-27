@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -57,6 +58,10 @@ var Home,
 func Init(config *config.Config) error {
 	publicOrigin := config.ResolvedPublicOrigin()
 	funcs := template.FuncMap{
+		"JSONString": func(value string) (string, error) {
+			encoded, err := json.Marshal(value)
+			return string(encoded), err
+		},
 		"ClerkEnabled":        func() bool { return config.Clerk.PublishableKey != "" },
 		"ClerkPublishableKey": func() string { return config.Clerk.PublishableKey },
 		"ClerkJSVersion":      func() string { return clerkJSVersion },

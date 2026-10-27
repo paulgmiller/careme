@@ -21,8 +21,8 @@ import (
 func htmxOrderRequest(handler http.Handler, method, path string, form url.Values) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))
 	request.Header.Set("HX-Request", "true")
-	request.Header.Set("Idempotency-Key", "list-hash")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Idempotency-Key", "list-hash")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	return response
