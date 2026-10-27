@@ -52,7 +52,7 @@ func TestKrogerOrderViewForm(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(view.Fields.Location), &location))
 		assert.Equal(t, "70500874", location.ID)
 		assert.Equal(t, chain, location.Chain)
-		assert.Equal(t, "list", view.Fields.ListKey)
+		assert.JSONEq(t, `{"Idempotency-Key":"list"}`, view.Headers)
 		assert.Equal(t, "/recipes?h=list", view.Fields.ReturnURL)
 	}
 }
@@ -65,7 +65,7 @@ func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
 
 func TestKrogerTransferUsesChainCart(t *testing.T) {
 	for banner, domain := range chainDomains {
-		response := (cartTransfer{Request: orderRequest{Chain: banner, ListKey: "list"}, Result: orderResult{Status: "complete"}}).response()
+		response := (cartTransfer{Request: orderRequest{Chain: banner, IdempotencyKey: "list"}, Result: orderResult{Status: "complete"}}).response()
 		assert.Equal(t, "https://www."+domain+"/cart", response.CartURL)
 		assert.Equal(t, "applied", response.Status)
 	}

@@ -18,6 +18,7 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
+	Headers     string
 	ActionURL   string
 	StatusURL   string
 	Transfer    *Transfer
@@ -36,16 +37,14 @@ type OrderView struct {
 type OrderFields struct {
 	Items     string
 	Location  string
-	ListKey   string
 	ReturnURL string
 }
 
-// TransferRequest sends the displayed shopping list to a destination. ListKey is
-// the idempotency key for this user's intended addition, not an order number.
+// TransferRequest sends the displayed shopping list to a destination.
+// Supply the idempotency key separately in the Idempotency-Key header.
 type TransferRequest struct {
 	Items     []ai.ShoppingItem      `json:"items"`
 	Location  locationtypes.Location `json:"location"`
-	ListKey   string                 `json:"list_key"`
 	ReturnURL string                 `json:"return_url"`
 }
 
@@ -64,7 +63,7 @@ type Transfer struct {
 
 // TransferID is stable for a finalized list. IDs are scoped to the authenticated
 // user and destination; possessing an ID never grants access.
-func TransferID(listKey string) string {
-	sum := sha256.Sum256([]byte(listKey))
+func TransferID(idempotencyKey string) string {
+	sum := sha256.Sum256([]byte(idempotencyKey))
 	return hex.EncodeToString(sum[:])
 }

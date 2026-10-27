@@ -71,9 +71,10 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 	})
 	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
-	form := url.Values{"list_key": {"list"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`}, "return_url": {"/recipes?h=list"}, "items": {`[{"id":"milk","name":"Milk"}]`}}
+	form := url.Values{"location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`}, "return_url": {"/recipes?h=list"}, "items": {`[{"id":"milk","name":"Milk"}]`}}
 	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Idempotency-Key", "list")
 	response := httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code)

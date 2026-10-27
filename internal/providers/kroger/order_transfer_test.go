@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,16 +26,17 @@ func TestCartTransferJSONAndReadOnlyStatus(t *testing.T) {
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	input := ordertypes.TransferRequest{
-		ListKey: "list-hash", ReturnURL: "/recipes?h=list-hash#shopping-list-section",
-		Location: locationtypes.Location{ID: "70500874", Chain: "QFC"},
-		Items:    []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
+		ReturnURL: "/recipes?h=list-hash#shopping-list-section",
+		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC"},
+		Items:     []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
 	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
 	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(string(body)))
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "list-hash")
 	mux := orderMux(a)
-	assert.Equal(t, http.StatusNotFound, getTransfer(mux, ordertypes.TransferID(input.ListKey)).Code)
+	assert.Equal(t, http.StatusNotFound, getTransfer(mux, ordertypes.TransferID("list-hash")).Code)
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, request)
 	transfer := transferResponse(t, response)
@@ -71,14 +73,14 @@ func TestCartTransferPendingLoginCanBeQueried(t *testing.T) {
 	}
 }
 
-func TestCartTransferLifecycleSaveFailureKeepsCartResult(t *testing.T) {
+func TestCartTransferLifecycleSaveFailureKeepsSubmissionResult(t *testing.T) {
 	calls := 0
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 		calls++
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
-	a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/", confirmation: true}
+	a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/state", confirmation: true}
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
 	result := transferResponse(t, getTransfer(mux, ordertypes.TransferID("list-hash")))
@@ -91,9 +93,10 @@ func TestCartTransferLifecycleSaveFailureKeepsCartResult(t *testing.T) {
 func TestCartTransferJSONValidation(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
 	mux := orderMux(a)
-	for _, body := range []string{`{`, `null`, `{}`, `{"list_key":"list","user_id":"someone-else"}`, `{} {}`} {
+	for _, body := range []string{`{`, `null`, `{}`, `{"list_key":"list","user_id":"someone-else"}`, `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes","list_key":"body-key"}`, `{} {}`} {
 		request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
 		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Idempotency-Key", "list-hash")
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, request)
 		assert.Equal(t, http.StatusBadRequest, response.Code)
@@ -120,7 +123,7 @@ func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
 	a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/"}
 	assert.Equal(t, http.StatusInternalServerError, postOrder(orderMux(a), orderForm()).Code)
 	var result orderResult
-	assert.ErrorIs(t, a.loadJSON(t.Context(), "kroger_cart_transfers/mock-clerk-user-id/list-hash", &result), cache.ErrNotFound)
+	assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/submission", &result), cache.ErrNotFound)
 }
 
 func TestCartTransferRetriesProductLookupWithSameID(t *testing.T) {
@@ -164,4 +167,72 @@ func TestLateOAuthDenialDoesNotHideCompletedCartTransfer(t *testing.T) {
 		assert.Equal(t, 2, result.Added)
 	}
 	assert.Equal(t, 1, calls)
+}
+
+func TestCartTransferNewConnectionReplacesOAuthState(t *testing.T) {
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("replaced OAuth state must not write cart")
+		return nil, nil
+	})
+	mux := orderMux(a)
+	first := connectOrder(t, mux, orderForm()).Result().Cookies()[0]
+	second := connectOrder(t, mux, orderForm()).Result().Cookies()[0]
+	require.NotEqual(t, first.Value, second.Value)
+	callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+first.Value+"&code=code", nil)
+	callback.AddCookie(first)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, callback)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assert.Equal(t, "pending_login", transferResponse(t, getTransfer(mux, ordertypes.TransferID("list-hash"))).Status)
+}
+
+func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
+	calls := 0
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		calls++
+		return cartResponse(http.StatusNoContent, ""), nil
+	})
+	a.cache = cache.NewFileCache(t.TempDir())
+	mux := orderMux(a)
+	start := connectOrder(t, mux, orderForm())
+	cookie := start.Result().Cookies()[0]
+	callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+cookie.Value+"&code=code", nil)
+	callback.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, callback)
+	result := callbackTransfer(t, mux, response)
+	assert.Equal(t, "applied", result.Status)
+	assert.Equal(t, 2, result.Added)
+	assert.Equal(t, result, transferResponse(t, postOrder(mux, orderForm())))
+	assert.Equal(t, 1, calls)
+}
+
+func TestCartTransferConcurrentOAuthCallbacksWriteOnce(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		calls.Add(1)
+		close(entered)
+		<-release
+		return cartResponse(http.StatusNoContent, ""), nil
+	})
+	mux := orderMux(a)
+	start := connectOrder(t, mux, orderForm())
+	cookie := start.Result().Cookies()[0]
+	callback := func() *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+cookie.Value+"&code=code", nil)
+		request.AddCookie(cookie)
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, request)
+		return response
+	}
+	completed := make(chan *httptest.ResponseRecorder, 1)
+	go func() { completed <- callback() }()
+	<-entered
+	second := callback()
+	pending := callbackTransfer(t, mux, second)
+	close(release)
+	assert.Equal(t, "pending", pending.Status)
+	assert.Equal(t, "applied", callbackTransfer(t, mux, <-completed).Status)
+	assert.Equal(t, int32(1), calls.Load())
 }

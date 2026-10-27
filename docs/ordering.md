@@ -14,13 +14,13 @@ upstream partner contract, not a deployed ordering integration.
 
 `POST /<destination>/cart-transfers` accepts JSON using
 `orders/types.TransferRequest`. URL-encoded forms with JSON `items` and `location`
-are also accepted by Kroger.
+are also accepted by Kroger. Both require an `Idempotency-Key` header, typically
+set to the finalized shopping-list hash.
 
 ```json
 {
   "items": [{"id": "product-123", "name": "Milk", "needed": "2 cups", "buy": 1}],
   "location": {"id": "70500874", "chain": "QFC"},
-  "list_key": "finalized-shopping-list-hash",
   "return_url": "/recipes?h=finalized-shopping-list-hash#shopping-list-section"
 }
 ```
@@ -28,7 +28,7 @@ are also accepted by Kroger.
 - `items` is a nonempty array of `ai.ShoppingItem`. Recipes includes the merged
   food list and selected wines without regenerating quantities.
 - `location` is the full source location, used as a destination store hint.
-- `list_key` identifies one intended addition for the authenticated shopper and
+- The `Idempotency-Key` header identifies one intended addition for the authenticated shopper and
   destination. Reuse it for retries. Changing items, store ID, chain, or return URL under an existing key
   returns HTTP 409 with `code: idempotency_conflict`. It is not an order number.
 - `return_url` is an application-local path, query, and optional fragment. It is
@@ -80,7 +80,8 @@ check a saved list on later visits without local storage or URL outcome fields.
 After POST, the browser uses the returned ID for subsequent status requests.
 
 The shared shopping-list template uses HTMX to submit the form and request
-status on page load. With `HX-Request: true`, the same endpoints render HTML
+status on page load. Its `hx-headers` attribute supplies `Idempotency-Key`;
+the key is not a form field. With `HX-Request: true`, the same endpoints render HTML
 fragments from the saved transfer; ordinary API requests still return JSON.
 An initial HTMX status lookup with no saved transfer returns 204, leaving the
 form in place. Pending fragments schedule another GET after five seconds;
@@ -94,8 +95,7 @@ network failure; the shopper reloads to check status before trying again.
 Neither a failed lookup nor a missing transfer automatically submits products.
 
 Kroger POST retries return the **current** saved transfer. This intentionally
-differs from the Food Club proposal's immutable original POST response. No
-separate `Idempotency-Key` header is required: `list_key` fills that role here.
+differs from the Food Club proposal's immutable original POST response. Both APIs use the `Idempotency-Key` header.
 Kroger continues adding one package per unique matched UPC; the shared request's
 `buy` value is descriptive. Food Club's per-product accepted/rejected quantities
 and reusable partner customer ID are not promised by the Kroger adapter.
@@ -108,16 +108,17 @@ If account connection is needed, it returns `pending_login` and a same-origin
 Kroger OAuth; the destination handler owns all OAuth redirects.
 
 `/kroger/callback` verifies the state cookie, authenticated shopper, and the
-server-stored ten-minute continuation expiry, exchanges the code, saves encrypted
-tokens, and resumes the saved list. It then redirects to the original
+transfer's stored OAuth state and ten-minute expiry, exchanges the code, saves
+encrypted tokens, and resumes the saved list. It then redirects to the original
 `return_url` unchanged. The recipe page retrieves the result through GET. OAuth
 denials and connection errors are saved and offer a new connection attempt.
 Expired access tokens are refreshed internally.
 
-Before any cart write, Kroger conditionally reserves the original user/list cart
-key. Pending, uncertain, completed, and legacy records prevent another write.
-The cart reservation remains authoritative even if saving the newer lifecycle
-record fails or an old OAuth callback arrives late. A failed confirmation save
+Before any cart write, Kroger conditionally creates a `/submission` subrecord
+under the authenticated user's transfer key. Pending, uncertain, and completed
+submissions prevent another write. The submission remains authoritative even if
+saving the lifecycle record fails or an old OAuth callback arrives late. A failed
+confirmation save
 leaves the reservation pending, preventing automatic replay. Failed product
 lookup can be retried with the same key because no cart write occurred.
 

@@ -20,6 +20,7 @@ import (
 func htmxOrderRequest(handler http.Handler, method, path string, form url.Values) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))
 	request.Header.Set("HX-Request", "true")
+	request.Header.Set("Idempotency-Key", "list-hash")
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -80,7 +81,7 @@ func TestCartTransferHTMXPollingAndRetryPresentation(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/transfer", nil)
 			request.Header.Set("HX-Request", "true")
-			a.writeTransferView(response, request, cartTransfer{Request: orderRequest{ListKey: "list", StoreID: "70500874", Chain: "QFC"}, Result: orderResult{Status: status}})
+			a.writeTransferView(response, request, cartTransfer{Request: orderRequest{IdempotencyKey: "list", StoreID: "70500874", Chain: "QFC"}, Result: orderResult{Status: status}})
 			require.Equal(t, http.StatusOK, response.Code)
 			assert.Equal(t, status == "pending", strings.Contains(response.Body.String(), `hx-trigger="load delay:5s"`))
 			assert.Equal(t, status == "lookup_failed", strings.Contains(response.Body.String(), `type="submit"`))

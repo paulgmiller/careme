@@ -21,7 +21,7 @@ import (
 
 func orderForm() url.Values {
 	return url.Values{
-		"list_key": {"list-hash"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`},
+		"location":   {`{"id":"70500874","name":"QFC","chain":"QFC"}`},
 		"return_url": {"/recipes?h=list-hash#shopping-list-section"},
 		"items":      {`[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]`},
 	}
@@ -30,6 +30,7 @@ func orderForm() url.Values {
 func postOrder(handler http.Handler, form url.Values) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Idempotency-Key", "list-hash")
 	result := httptest.NewRecorder()
 	handler.ServeHTTP(result, request)
 	return result
@@ -185,29 +186,35 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 }
 
 func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
-	for _, scenario := range []string{"wrong state", "missing cookie", "different user", "expired", "future", "missing request", "denied", "missing code", "exchange failure", "save failure"} {
+	for _, scenario := range []string{"wrong state", "missing cookie", "different user", "expired", "future", "missing timestamp", "different stored state", "missing authorization", "missing request", "denied", "missing code", "exchange failure", "save failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("must not write cart"); return nil, nil })
 			mux := orderMux(a)
 			start := connectOrder(t, mux, orderForm())
 			cookie := start.Result().Cookies()[0]
 			state := cookie.Value
-			var continuation orderContinuation
-			require.NoError(t, a.loadJSON(t.Context(), "kroger_order_requests/"+state, &continuation))
+			var continuation cartTransfer
+			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/state", &continuation))
 			switch scenario {
 			case "wrong state":
 				state = "wrong"
 			case "different user":
 				continuation.Request.UserID = "another-user"
 			case "expired":
-				continuation.IssuedAt = time.Now().Add(-11 * time.Minute)
+				continuation.Authorization.IssuedAt = time.Now().Add(-11 * time.Minute)
 			case "future":
-				continuation.IssuedAt = time.Now().Add(2 * time.Minute)
+				continuation.Authorization.IssuedAt = time.Now().Add(2 * time.Minute)
+			case "missing timestamp":
+				continuation.Authorization.IssuedAt = time.Time{}
+			case "different stored state":
+				continuation.Authorization.State = "different-state"
+			case "missing authorization":
+				continuation.Authorization = nil
 			case "missing request":
 				a.cache = cache.NewInMemoryCache()
 			}
 			if scenario != "missing request" {
-				require.NoError(t, a.saveJSON(t.Context(), "kroger_order_requests/"+cookie.Value, continuation, cache.Unconditional()))
+				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/state", continuation, cache.Unconditional()))
 			}
 			if scenario == "exchange failure" {
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
@@ -254,7 +261,7 @@ func (c orderFailCache) Put(ctx context.Context, key, value string, options cach
 }
 
 func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
-	for _, scenario := range []string{"uncertain", "confirmation failed", "legacy complete", "legacy pending", "legacy uncertain"} {
+	for _, scenario := range []string{"uncertain", "confirmation failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			calls := 0
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
@@ -263,16 +270,8 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			})
 			saveShopper(t, a, time.Now().Add(time.Hour))
 			expected := "uncertain"
-			if after, ok := strings.CutPrefix(scenario, "legacy "); ok {
-				status := after
-				require.NoError(t, a.cache.Put(t.Context(), "kroger_cart_transfers/mock-clerk-user-id/list-hash", `{"status":"`+status+`","added":1,"sent":[{"id":"food","quantity":"1 cup"}]}`, cache.Unconditional()))
-				expected = status
-				if status == "complete" {
-					expected = "changed"
-				}
-			}
 			if scenario == "confirmation failed" {
-				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_cart_transfers/", confirmation: true}
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/submission", confirmation: true}
 				expected = "pending"
 			}
 			mux := orderMux(a)
@@ -283,11 +282,7 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			} else {
 				assert.Equal(t, expected, repeat)
 			}
-			if strings.HasPrefix(scenario, "legacy ") {
-				assert.Zero(t, calls)
-			} else {
-				assert.Equal(t, 1, calls)
-			}
+			assert.Equal(t, 1, calls)
 		})
 	}
 }
@@ -323,8 +318,6 @@ func TestKrogerOrderValidation(t *testing.T) {
 		{"location", "broken"},
 		{"location", "null"},
 		{"location", "{}"},
-		{"list_key", "../other"},
-		{"list_key", ""},
 		{"items", "broken"},
 		{"items", "[]"},
 		{"items", "null"},
@@ -339,6 +332,7 @@ func TestKrogerOrderValidation(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
 	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(orderForm().Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Idempotency-Key", "list-hash")
 	request.Header.Set("Origin", "https://evil.test")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)
@@ -377,18 +371,43 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				expected = "connect_failed"
 			case "reservation failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_cart_transfers/"}
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/submission"}
 				expected = "start_failed"
-			case "request save failure":
-				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_requests/"}
 			}
 			response := postOrder(orderMux(a), form)
 			if scenario == "request save failure" {
-				response = connectOrder(t, orderMux(a), form)
+				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/", confirmation: true}
+				response = httptest.NewRecorder()
+				orderMux(a).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/"+ordertypes.TransferID("list-hash")+"/connect", nil))
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
 			assert.Equal(t, expected, transferResponse(t, response).Code)
 		})
+	}
+}
+
+func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
+	for _, contentType := range []string{"application/json", "application/x-www-form-urlencoded"} {
+		for _, key := range []string{"", "   ", strings.Repeat("x", 257), "../other"} {
+			t.Run(contentType+"/"+key, func(t *testing.T) {
+				a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+					t.Fatal("invalid header must not write cart")
+					return nil, nil
+				})
+				form := orderForm()
+				form.Set("list_key", "body-key-is-not-used")
+				body := form.Encode()
+				if contentType == "application/json" {
+					body = `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes"}`
+				}
+				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
+				request.Header.Set("Content-Type", contentType)
+				request.Header.Set("Idempotency-Key", key)
+				response := httptest.NewRecorder()
+				orderMux(a).ServeHTTP(response, request)
+				assert.Equal(t, http.StatusBadRequest, response.Code)
+			})
+		}
 	}
 }

@@ -40,8 +40,16 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	document, err := html.Parse(strings.NewReader(page.String()))
 	require.NoError(t, err)
 	values := map[string]string{}
+	var headers map[string]string
 	var inspect func(*html.Node)
 	inspect = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "form" {
+			for _, attr := range n.Attr {
+				if attr.Key == "hx-headers" {
+					require.NoError(t, json.Unmarshal([]byte(attr.Val), &headers))
+				}
+			}
+		}
 		if n.Type == html.ElementNode && n.Data == "input" {
 			attrs := map[string]string{}
 			for _, a := range n.Attr {
@@ -64,7 +72,8 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	assert.Equal(t, *p.Location, location)
 	assert.NotContains(t, values, "store_id")
 	assert.NotContains(t, values, "chain")
-	assert.Equal(t, p.Hash(), values["list_key"])
+	assert.NotContains(t, values, "list_key")
+	assert.Equal(t, p.Hash(), headers["Idempotency-Key"])
 	assert.Contains(t, values["return_url"], "#shopping-list-section")
 	assert.Contains(t, page.String(), `action="/kroger/cart-transfers"`)
 	assert.NotContains(t, page.String(), `target="_blank"`)

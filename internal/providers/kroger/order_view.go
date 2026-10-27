@@ -17,11 +17,16 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode ordering location: %w", err)
 	}
+	headers, err := json.Marshal(map[string]string{"Idempotency-Key": input.ListKey})
+	if err != nil {
+		return nil, fmt.Errorf("encode cart transfer headers: %w", err)
+	}
 	brand := input.Location.Chain
 	if brand == "" {
 		brand = "Kroger"
 	}
 	order := &ordertypes.OrderView{
+		Headers:     string(headers),
 		ActionURL:   "/kroger/cart-transfers",
 		StatusURL:   "/kroger/cart-transfers/" + ordertypes.TransferID(input.ListKey),
 		ActionLabel: "Add to " + brand + " cart",
@@ -29,7 +34,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		ReviewLabel: "Review cart (opens a new tab)",
 		Fields: ordertypes.OrderFields{
 			Items: string(body), Location: string(location),
-			ListKey: input.ListKey, ReturnURL: input.ReturnURL,
+			ReturnURL: input.ReturnURL,
 		},
 	}
 
@@ -40,7 +45,6 @@ func krogerOrderNotice(code string) string {
 	return map[string]string{
 		"complete":            "Your products were sent to your cart. Review amounts before checkout.",
 		"no_matches":          "No products could be matched. Nothing was sent to Kroger.",
-		"changed":             "Your list changed after it was sent. Review your cart; earlier items will not be sent twice.",
 		"pending":             "Your cart update is in progress or could not be confirmed. Review your cart before adding missing items.",
 		"uncertain":           "Careme could not confirm what Kroger added. Review your cart before adding missing items.",
 		"denied":              "Kroger connection was not approved. Try again, chef.",

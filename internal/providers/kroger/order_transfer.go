@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"careme/internal/cache"
 	"careme/internal/httpx"
@@ -15,11 +16,21 @@ import (
 	"careme/internal/templates"
 )
 
-// The lifecycle record exists before login or product resolution. The original
-// cart reservation remains the authority for whether a cart write was attempted.
+// The lifecycle record owns the request, OAuth state, and preparation result.
+// Its submission subrecord reserves and records the only cart write.
 type cartTransfer struct {
-	Request orderRequest `json:"request"`
-	Result  orderResult  `json:"result"`
+	Request       orderRequest           `json:"request"`
+	Result        orderResult            `json:"result"`
+	Authorization *transferAuthorization `json:"authorization,omitempty"`
+}
+
+type transferAuthorization struct {
+	State    string    `json:"state"`
+	IssuedAt time.Time `json:"issued_at"`
+}
+
+func submissionKey(request orderRequest) string {
+	return transferKey(request.UserID, ordertypes.TransferID(request.IdempotencyKey)) + "/submission"
 }
 
 func transferKey(userID, id string) string {
@@ -27,8 +38,8 @@ func transferKey(userID, id string) string {
 }
 
 func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, request orderRequest) {
-	id := ordertypes.TransferID(request.ListKey)
-	key := transferKey(request.UserID, id)
+	id := ordertypes.TransferID(request.IdempotencyKey)
+	key := transferKey(request.UserID, id) + "/state"
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
 		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Chain != request.Chain || previous.Request.ReturnURL != request.ReturnURL {
@@ -66,7 +77,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, re
 }
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
-	if err := a.saveJSON(r.Context(), transferKey(transfer.Request.UserID, ordertypes.TransferID(transfer.Request.ListKey)), transfer, cache.Unconditional()); err != nil {
+	if err := a.saveJSON(r.Context(), transferKey(transfer.Request.UserID, ordertypes.TransferID(transfer.Request.IdempotencyKey))+"/state", transfer, cache.Unconditional()); err != nil {
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to save cart transfer. Check its status before trying again.")
 		return false
 	}
@@ -87,7 +98,7 @@ func (a *OrderHandler) requestedTransfer(w http.ResponseWriter, r *http.Request)
 		return cartTransfer{}, false
 	}
 	var transfer cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, id), &transfer); err != nil {
+	if err := a.loadJSON(r.Context(), transferKey(userID, id)+"/state", &transfer); err != nil {
 		if errors.Is(err, cache.ErrNotFound) && httpx.IsHTMX(r) {
 			// The initial status check leaves the existing form in place.
 			w.WriteHeader(http.StatusNoContent)
@@ -110,15 +121,12 @@ func (a *OrderHandler) handleTransfer(w http.ResponseWriter, r *http.Request) {
 
 func (a *OrderHandler) writeCurrentTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
 	w.Header().Set("Vary", "HX-Request")
-	// A cart confirmation can outlive a failed lifecycle save or a late OAuth
-	// callback. Always prefer the durable write reservation when it exists.
+	// The write reservation remains authoritative if the lifecycle save fails
+	// or an OAuth callback arrives after the cart was already submitted.
 	var result orderResult
-	err := a.loadJSON(r.Context(), "kroger_cart_transfers/"+transfer.Request.UserID+"/"+transfer.Request.ListKey, &result)
+	err := a.loadJSON(r.Context(), submissionKey(transfer.Request), &result)
 	if err == nil {
 		transfer.Result = result
-		if result.Status == "complete" && result.Fingerprint != orderFingerprint(transfer.Request) {
-			transfer.Result.Status = "changed"
-		}
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart result.")
 		return
@@ -143,7 +151,7 @@ func (a *OrderHandler) writeTransferView(w http.ResponseWriter, r *http.Request,
 	request := transfer.Request
 	view, err := OrderView(ordertypes.OrderViewInput{
 		Location: locationtypes.Location{ID: request.StoreID, Chain: request.Chain},
-		Items:    request.Items, ListKey: request.ListKey, ReturnURL: request.ReturnURL,
+		Items:    request.Items, ListKey: request.IdempotencyKey, ReturnURL: request.ReturnURL,
 	})
 	if err != nil {
 		http.Error(w, "Unable to render cart transfer", http.StatusInternalServerError)
@@ -168,18 +176,18 @@ func (a *OrderHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
 		return
 	}
-	a.startAuthorization(w, r, transfer.Request)
+	a.startAuthorization(w, r, transfer)
 }
 
 func (t cartTransfer) response() ordertypes.Transfer {
 	result := ordertypes.Transfer{
-		TransferID: ordertypes.TransferID(t.Request.ListKey),
+		TransferID: ordertypes.TransferID(t.Request.IdempotencyKey),
 		Status:     "failed", CartURL: cartURL(t.Request.Chain),
 		Added: t.Result.Added, Unmatched: len(t.Result.Gaps),
 		Code: t.Result.Status, Message: krogerOrderNotice(t.Result.Status),
 	}
 	switch t.Result.Status {
-	case "complete", "no_matches", "changed":
+	case "complete", "no_matches":
 		result.Status = "applied"
 	case "pending":
 		result.Status = "pending"

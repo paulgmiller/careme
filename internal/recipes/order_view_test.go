@@ -26,13 +26,13 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
-		return &ordertypes.OrderView{ActionURL: "/destination/order", ActionLabel: "Send groceries", Fields: ordertypes.OrderFields{Items: `Food & "Wine"`, Location: `{"id":"other-store"}`, ListKey: input.ListKey, ReturnURL: input.ReturnURL}, Description: "Destination instructions", Notice: "Ready to review", ReviewURL: "https://destination.example/cart", ReviewLabel: "Review groceries"}, nil
+		return &ordertypes.OrderView{Headers: `{"Idempotency-Key":"list"}`, ActionURL: "/destination/order", ActionLabel: "Send groceries", Fields: ordertypes.OrderFields{Items: `Food & "Wine"`, Location: `{"id":"other-store"}`, ReturnURL: input.ReturnURL}, Description: "Destination instructions", Notice: "Ready to review", ReviewURL: "https://destination.example/cart", ReviewLabel: "Review groceries"}, nil
 	})
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
-	for _, want := range []string{`action="/destination/order"`, `name="items"`, `name="location"`, `name="list_key"`, `name="return_url"`, `value="Food &amp; &#34;Wine&#34;"`, "Send groceries", "Destination instructions", "Ready to review", "Review groceries"} {
+	for _, want := range []string{`action="/destination/order"`, `name="items"`, `name="location"`, `hx-headers="{&#34;Idempotency-Key&#34;:&#34;list&#34;}"`, `name="return_url"`, `value="Food &amp; &#34;Wine&#34;"`, "Send groceries", "Destination instructions", "Ready to review", "Review groceries"} {
 		assert.Contains(t, page.String(), want)
 	}
 	assert.NotContains(t, page.String(), "Kroger")

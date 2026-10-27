@@ -23,20 +23,18 @@ import (
 // orderRequest is the posted shopping list retained while connecting Kroger.
 // UserID comes exclusively from authentication, never from the submitted form.
 type orderRequest struct {
-	UserID    string
-	ListKey   string
-	StoreID   string
-	Chain     string
-	ReturnURL string
-	Items     []ai.ShoppingItem
+	UserID         string
+	IdempotencyKey string
+	StoreID        string
+	Chain          string
+	ReturnURL      string
+	Items          []ai.ShoppingItem
 }
 
-// Keep the original transfer record fields readable across the HTTP handoff change.
 type orderResult struct {
-	Status      string            `json:"status"`
-	Added       int               `json:"added"`
-	Gaps        []ai.ShoppingItem `json:"gaps,omitempty"`
-	Fingerprint string            `json:"fingerprint,omitempty"`
+	Status string            `json:"status"`
+	Added  int               `json:"added"`
+	Gaps   []ai.ShoppingItem `json:"gaps,omitempty"`
 }
 
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
@@ -70,20 +68,20 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 			return
 		}
-		input.Location, input.ListKey, input.ReturnURL = location, r.PostForm.Get("list_key"), r.PostForm.Get("return_url")
+		input.Location, input.ReturnURL = location, r.PostForm.Get("return_url")
 	default:
 		writeTransferError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Use JSON or a URL-encoded form.")
 		return
 	}
-	request := orderRequest{UserID: userID, ListKey: input.ListKey, StoreID: input.Location.ID, Chain: input.Location.Chain, ReturnURL: input.ReturnURL, Items: input.Items}
-	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || len(request.Items) == 0 {
+	request := orderRequest{UserID: userID, IdempotencyKey: r.Header.Get("Idempotency-Key"), StoreID: input.Location.ID, Chain: input.Location.Chain, ReturnURL: input.ReturnURL, Items: input.Items}
+	if !localReturnURL(request.ReturnURL) || !validIdempotencyKey(request.IdempotencyKey) || !NewIdentityProvider().IsID(request.StoreID) || len(request.Items) == 0 {
 		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}
 	a.createTransfer(w, r, request)
 }
 
-func validListKey(key string) bool {
+func validIdempotencyKey(key string) bool {
 	return strings.TrimSpace(key) != "" && len(key) <= 256 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".."
 }
 
@@ -119,13 +117,9 @@ func orderFingerprint(request orderRequest) string {
 }
 
 func (a *OrderHandler) order(ctx context.Context, request orderRequest, allowAuthorization bool) orderResult {
-	key := "kroger_cart_transfers/" + request.UserID + "/" + request.ListKey
-	fingerprint := orderFingerprint(request)
+	key := submissionKey(request)
 	var previous orderResult
 	if err := a.loadJSON(ctx, key, &previous); err == nil {
-		if previous.Status == "complete" && previous.Fingerprint != fingerprint {
-			previous.Status = "changed"
-		}
 		return previous
 	} else if !errors.Is(err, cache.ErrNotFound) {
 		return orderResult{Status: "start_failed"}
@@ -153,7 +147,7 @@ func (a *OrderHandler) order(ctx context.Context, request orderRequest, allowAut
 	if err != nil {
 		return orderResult{Status: "lookup_failed"}
 	}
-	result := orderResult{Status: "pending", Gaps: gaps, Fingerprint: fingerprint}
+	result := orderResult{Status: "pending", Gaps: gaps}
 	if len(items) == 0 {
 		result.Status = "no_matches"
 		return result

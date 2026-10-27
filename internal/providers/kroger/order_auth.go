@@ -20,6 +20,7 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpx"
+	ordertypes "careme/internal/orders/types"
 	"careme/internal/routing"
 )
 
@@ -49,11 +50,6 @@ func NewOrderHandler(options OrderOptions) (*OrderHandler, error) {
 		return nil, fmt.Errorf("kroger ordering requires cache, client, authentication")
 	}
 	return &OrderHandler{client: options.Client, cache: options.Cache, tokenKey: append([]byte(nil), options.TokenKey...), origin: options.Origin, auth: options.Auth}, nil
-}
-
-type orderContinuation struct {
-	Request  orderRequest
-	IssuedAt time.Time
 }
 
 func (a *OrderHandler) saveToken(ctx context.Context, userID string, token CartToken) error {
@@ -113,16 +109,16 @@ func (a *OrderHandler) loadToken(ctx context.Context, userID string) (CartToken,
 	return token, nil
 }
 
-func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, request orderRequest) {
-	banner := authorizationBanner(request.Chain)
+func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
+	banner := authorizationBanner(transfer.Request.Chain)
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)
 		return
 	}
-	state := base64.RawURLEncoding.EncodeToString(nonce)
-	if err := a.saveJSON(r.Context(), "kroger_order_requests/"+state, orderContinuation{Request: request, IssuedAt: time.Now()}, cache.IfNoneMatch()); err != nil {
-		http.Error(w, "Unable to save Kroger order", http.StatusInternalServerError)
+	state := ordertypes.TransferID(transfer.Request.IdempotencyKey) + "." + base64.RawURLEncoding.EncodeToString(nonce)
+	transfer.Authorization = &transferAuthorization{State: state, IssuedAt: time.Now()}
+	if !a.saveTransfer(w, r, transfer) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Value: state, Path: "/kroger/callback", MaxAge: 600, HttpOnly: true, Secure: strings.HasPrefix(a.origin, "https://"), SameSite: http.SameSiteLaxMode})
@@ -148,36 +144,40 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Path: "/kroger/callback", MaxAge: -1, HttpOnly: true})
 	state := cookie.Value
-	if len(state) != 43 || strings.ContainsAny(state, "/\\") || subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
+	if len(state) != 108 || state[64] != '.' || strings.ContainsAny(state, "/\\") || subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
 		http.Error(w, "Invalid Kroger connection", http.StatusBadRequest)
 		return
 	}
-	var continuation orderContinuation
-	if err := a.loadJSON(r.Context(), "kroger_order_requests/"+state, &continuation); err != nil || continuation.Request.UserID != userID || continuation.IssuedAt.IsZero() || time.Since(continuation.IssuedAt) > 10*time.Minute || time.Until(continuation.IssuedAt) > time.Minute {
+	var transfer cartTransfer
+	if err := a.loadJSON(r.Context(), transferKey(userID, state[:64])+"/state", &transfer); err != nil || transfer.Request.UserID != userID || transfer.Authorization == nil {
 		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
 		return
 	}
-	request := continuation.Request
+	authorization := transfer.Authorization
+	if subtle.ConstantTimeCompare([]byte(authorization.State), []byte(state)) != 1 || authorization.IssuedAt.IsZero() || time.Since(authorization.IssuedAt) > 10*time.Minute || time.Until(authorization.IssuedAt) > time.Minute {
+		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
+		return
+	}
 	if r.URL.Query().Get("error") != "" {
-		a.completeAuthorization(w, r, request, orderResult{Status: "denied"})
+		a.completeAuthorization(w, r, transfer, orderResult{Status: "denied"})
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		a.completeAuthorization(w, r, request, orderResult{Status: "missing_code"})
+		a.completeAuthorization(w, r, transfer, orderResult{Status: "missing_code"})
 		return
 	}
 	token, err := a.client.Exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
-		a.completeAuthorization(w, r, request, orderResult{Status: "connect_failed"})
+		a.completeAuthorization(w, r, transfer, orderResult{Status: "connect_failed"})
 		return
 	}
 	if err := a.saveToken(r.Context(), userID, token); err != nil {
-		a.completeAuthorization(w, r, request, orderResult{Status: "save_failed"})
+		a.completeAuthorization(w, r, transfer, orderResult{Status: "save_failed"})
 		return
 	}
-	a.completeAuthorization(w, r, request, a.order(r.Context(), request, false))
+	a.completeAuthorization(w, r, transfer, a.order(r.Context(), transfer.Request, false))
 }
 
 func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -215,8 +215,9 @@ func (a *OrderHandler) Register(routes routing.Registrar) {
 
 // OAuth redirects return to the original page without encoding outcome fields.
 // The page retrieves the transfer through the same API used after POST.
-func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, request orderRequest, result orderResult) {
-	if a.saveTransfer(w, r, cartTransfer{Request: request, Result: result}) {
-		http.Redirect(w, r, request.ReturnURL, http.StatusSeeOther)
+func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer, result orderResult) {
+	transfer.Result = result
+	if a.saveTransfer(w, r, transfer) {
+		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
 	}
 }
