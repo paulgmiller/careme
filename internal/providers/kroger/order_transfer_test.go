@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCartTransferJSONAndReadOnlyStatus(t *testing.T) {
+func TestCartTransferFormAndReadOnlyStatus(t *testing.T) {
 	calls := 0
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 		calls++
@@ -30,15 +31,14 @@ func TestCartTransferJSONAndReadOnlyStatus(t *testing.T) {
 		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC", Name: "My QFC", Address: "123 Store Street"},
 		Items:     []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
 	}
-	body, err := json.Marshal(input)
+	items, err := json.Marshal(input.Items)
 	require.NoError(t, err)
-	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(string(body)))
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Idempotency-Key", "list-hash")
+	location, err := json.Marshal(input.Location)
+	require.NoError(t, err)
+	form := url.Values{"items": {string(items)}, "location": {string(location)}, "return_url": {input.ReturnURL}}
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusNotFound, getTransfer(mux, ordertypes.TransferID("list-hash")).Code)
-	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, request)
+	response := postOrder(mux, form)
 	transfer := transferResponse(t, response)
 	assert.Equal(t, "applied", transfer.Status)
 	assert.Equal(t, 1, transfer.Added)
@@ -99,18 +99,15 @@ func TestCartTransferLifecycleSaveFailureKeepsSubmissionResult(t *testing.T) {
 	assert.Equal(t, 1, calls)
 }
 
-func TestCartTransferJSONValidation(t *testing.T) {
+func TestCartTransferRejectsJSONBody(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
-	mux := orderMux(a)
-	for _, body := range []string{`{`, `null`, `{}`, `{"list_key":"list","user_id":"someone-else"}`, `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes","list_key":"body-key"}`, `{} {}`} {
-		request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Idempotency-Key", "list-hash")
-		response := httptest.NewRecorder()
-		mux.ServeHTTP(response, request)
-		assert.Equal(t, http.StatusBadRequest, response.Code)
-		assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
-	}
+	body := `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes"}`
+	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "list-hash")
+	response := httptest.NewRecorder()
+	orderMux(a).ServeHTTP(response, request)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
 func TestCartTransferNoMatchesIsSaved(t *testing.T) {

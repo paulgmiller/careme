@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,7 +14,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 )
 
@@ -27,33 +24,13 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	var input ordertypes.TransferRequest
-	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	switch mediaType {
-	case "application/json":
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&input); err != nil {
-			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
-			return
-		}
-		if err := decoder.Decode(new(any)); err != io.EOF {
-			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
-			return
-		}
-	case "application/x-www-form-urlencoded":
-		if err := r.ParseForm(); err != nil {
-			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
-			return
-		}
-		var location locationtypes.Location
-		if json.Unmarshal([]byte(r.PostForm.Get("location")), &location) != nil || json.Unmarshal([]byte(r.PostForm.Get("items")), &input.Items) != nil {
-			writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
-			return
-		}
-		input.Location, input.ReturnURL = location, r.PostForm.Get("return_url")
-	default:
-		writeTransferError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Use JSON or a URL-encoded form.")
+	if err := r.ParseForm(); err != nil {
+		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
+		return
+	}
+	input := ordertypes.TransferRequest{ReturnURL: r.PostForm.Get("return_url")}
+	if json.Unmarshal([]byte(r.PostForm.Get("location")), &input.Location) != nil || json.Unmarshal([]byte(r.PostForm.Get("items")), &input.Items) != nil {
+		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}
 	idempotencyKey := r.Header.Get("Idempotency-Key")

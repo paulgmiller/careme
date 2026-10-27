@@ -388,26 +388,30 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 }
 
 func TestKrogerOrderRequiresIdempotencyHeader(t *testing.T) {
-	for _, contentType := range []string{"application/json", "application/x-www-form-urlencoded"} {
-		for _, key := range []string{"", "   ", strings.Repeat("x", 257), "../other"} {
-			t.Run(contentType+"/"+key, func(t *testing.T) {
-				a := orderFixture(t, func(*http.Request) (*http.Response, error) {
-					t.Fatal("invalid header must not write cart")
-					return nil, nil
-				})
-				form := orderForm()
-				form.Set("list_key", "body-key-is-not-used")
-				body := form.Encode()
-				if contentType == "application/json" {
-					body = `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes"}`
-				}
-				request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
-				request.Header.Set("Content-Type", contentType)
-				request.Header.Set("Idempotency-Key", key)
-				response := httptest.NewRecorder()
-				orderMux(a).ServeHTTP(response, request)
-				assert.Equal(t, http.StatusBadRequest, response.Code)
+	for _, key := range []string{"", "   ", strings.Repeat("x", 257), "../other"} {
+		t.Run(key, func(t *testing.T) {
+			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+				t.Fatal("invalid header must not write cart")
+				return nil, nil
 			})
-		}
+			form := orderForm()
+			form.Set("list_key", "body-key-is-not-used")
+			request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.Header.Set("Idempotency-Key", key)
+			response := httptest.NewRecorder()
+			orderMux(a).ServeHTTP(response, request)
+			assert.Equal(t, http.StatusBadRequest, response.Code)
+		})
 	}
+}
+
+func TestKrogerOrderRejectsMalformedForm(t *testing.T) {
+	a := newTestOrderHandler(t, &CartClient{})
+	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader("items=%"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Idempotency-Key", "list-hash")
+	response := httptest.NewRecorder()
+	orderMux(a).ServeHTTP(response, request)
+	assert.Equal(t, http.StatusBadRequest, response.Code)
 }

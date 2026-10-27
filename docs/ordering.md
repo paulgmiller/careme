@@ -12,18 +12,11 @@ upstream partner contract, not a deployed ordering integration.
 
 ## Request and response
 
-`POST /<destination>/cart-transfers` accepts JSON using
-`orders/types.TransferRequest`. URL-encoded forms with JSON `items` and `location`
-are also accepted by Kroger. Both require an `Idempotency-Key` header, typically
-set to the finalized shopping-list hash.
-
-```json
-{
-  "items": [{"id": "product-123", "name": "Milk", "needed": "2 cups", "buy": 1}],
-  "location": {"id": "70500874", "chain": "QFC"},
-  "return_url": "/recipes?h=finalized-shopping-list-hash#shopping-list-section"
-}
-```
+`POST /<destination>/cart-transfers` accepts the shopping page's URL-encoded
+HTMX form. The `items` and `location` hidden inputs contain JSON; `return_url`
+is a local URL. The handler decodes these fields into `orders/types.TransferRequest`.
+The form supplies `Idempotency-Key` through `hx-headers`, typically set to the
+finalized shopping-list hash. JSON request bodies are not supported.
 
 - `items` is a nonempty array of `ai.ShoppingItem`. Recipes includes the merged
   food list and selected wines without regenerating quantities.
