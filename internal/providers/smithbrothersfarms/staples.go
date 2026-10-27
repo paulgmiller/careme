@@ -13,6 +13,9 @@ import (
 	"careme/internal/ingredients/cachekey"
 )
 
+// RestockDay anchors weekly ingredient and recipe cache keys.
+const RestockDay = time.Monday
+
 const (
 	LocationIDPrefix = "smithbrothersfarms_"
 	baseURL          = "https://www.smithbrothersfarms.com"
@@ -33,7 +36,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	date = date.AddDate(0, 0, -int((date.Weekday()-time.Monday+7)%7))
+	date = date.AddDate(0, 0, -int((date.Weekday()-RestockDay+7)%7))
 	parts := append([]string{}, stapleURLs...)
 	for _, box := range harvestBoxes {
 		parts = append(parts, baseURL+"/"+box.slug)

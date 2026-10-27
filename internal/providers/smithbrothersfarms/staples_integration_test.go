@@ -1,4 +1,4 @@
-package providerregistry_test
+package smithbrothersfarms_test
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ func TestSmithBrothersFarmsStaplesRouting(t *testing.T) {
 	client := &http.Client{Transport: smithBrothersTransport(func(req *http.Request) (*http.Response, error) {
 		file, ok := pages[req.URL.Path]
 		require.True(t, ok, req.URL.String())
-		data, err := os.ReadFile("../providers/smithbrothersfarms/testdata/" + file + ".html")
+		data, err := os.ReadFile("testdata/" + file + ".html")
 		require.NoError(t, err)
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data))}, nil
 	})}
