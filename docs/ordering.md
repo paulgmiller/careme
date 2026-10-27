@@ -50,10 +50,9 @@ optional destination-specific detail; the generic UI uses `status`:
 | Status | Meaning |
 | --- | --- |
 | `pending_login` | Follow `cart_url` to connect the shopper's account and resume the saved list |
-| `pending` | Processing is underway or its completion has not been recorded; do not submit a new addition |
 | `applied` | Processing completed; inspect counts and review the destination cart, including when no products matched |
 | `failed` | Preparation failed before a cart write; retry the same request and list key |
-| `uncertain` | A cart write may have occurred; review the cart before taking further action |
+| `uncertain` | The transfer has no confirmed result; it may still be running or a cart write may have occurred. Reload to check status and review the cart before taking further action |
 
 An applied transfer means a cart handoff completed, **not** that checkout occurred
 or an order was placed. Kroger does not expose checkout confirmation through this
@@ -68,18 +67,20 @@ authentication as POST. Unknown IDs and IDs belonging to another shopper return
 
 Kroger IDs are stable SHA-256 digests of the finalized list key, scoped to the
 requesting shopper. Clients must treat them as opaque, not as credentials. The
-provider's `OrderView` supplies both POST and status URLs so the recipe page can
-check a saved list on later visits without local storage or URL outcome fields.
-After POST, the browser uses the returned ID for subsequent status requests.
+provider's `OrderView.TransferURL` supplies the transfer POST route, and
+`OrderView.TransferStatusURL` supplies the GET route for its saved result. This
+lets the recipe page check a saved list on later visits without local storage
+or URL outcome fields.
+The POST waits for Kroger and returns its result directly.
 
 The shared shopping-list template uses HTMX to submit the form and request
-status on page load. Its `hx-headers` attribute supplies `Idempotency-Key`;
+status on page load. `OrderView.TransferHeadersJSON` supplies the POST headers
+through `hx-headers`, including `Idempotency-Key`;
 the key is not a form field. With `HX-Request: true`, the same endpoints render HTML
 fragments from the saved transfer; ordinary API requests still return JSON.
 An initial HTMX status lookup with no saved transfer returns 204, leaving the
-form in place. Pending fragments schedule another GET after five seconds;
-terminal results contain no polling trigger. POST uses `HX-Redirect` when the
-shopper needs to connect their account. The OAuth callback returns to the clean
+form in place. Saved results do not poll or schedule further GETs. POST uses
+`HX-Redirect` when the shopper needs to connect their account. The OAuth callback returns to the clean
 shopping page, whose load-triggered GET retrieves the saved outcome.
 
 There is no custom transfer JavaScript asset. One commented inline HTMX error
@@ -108,11 +109,10 @@ denials and connection errors are saved and offer a new connection attempt.
 Expired access tokens are refreshed internally.
 
 Before any cart write, Kroger conditionally creates a `/submission` subrecord
-under the authenticated user's transfer key. Pending, uncertain, and completed
-submissions prevent another write. The submission remains authoritative even if
+under the authenticated user's transfer key. Uncertain and completed submissions
+prevent another write. The submission remains authoritative even if
 saving the lifecycle record fails or an old OAuth callback arrives late. A failed
-confirmation save
-leaves the reservation pending, preventing automatic replay. Failed product
+confirmation save leaves the reservation uncertain, preventing automatic replay. Failed product
 lookup can be retried with the same key because no cart write occurred.
 
 Records currently have no automatic expiry. OAuth continuations expire logically

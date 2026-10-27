@@ -107,7 +107,7 @@ func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAu
 	if err != nil {
 		return transfer.result("lookup_failed", 0, 0)
 	}
-	result := transfer.result("pending", 0, len(gaps))
+	result := transfer.result("uncertain", 0, len(gaps))
 	if len(items) == 0 {
 		return transfer.result("no_matches", 0, len(gaps))
 	}

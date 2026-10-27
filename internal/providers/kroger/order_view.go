@@ -26,12 +26,12 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 		brand = "Kroger"
 	}
 	order := &ordertypes.OrderView{
-		Headers:     string(headers),
-		ActionURL:   "/kroger/cart-transfers",
-		StatusURL:   "/kroger/cart-transfers/" + ordertypes.TransferID(input.ListKey),
-		ActionLabel: "Add to " + brand + " cart",
-		Description: "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
-		ReviewLabel: "Review cart (opens a new tab)",
+		TransferHeadersJSON: string(headers),
+		TransferURL:         "/kroger/cart-transfers",
+		TransferStatusURL:   "/kroger/cart-transfers/" + ordertypes.TransferID(input.ListKey),
+		ActionLabel:         "Add to " + brand + " cart",
+		Description:         "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
+		ReviewLabel:         "Review cart (opens a new tab)",
 		Fields: ordertypes.OrderFields{
 			Items: string(body), Location: string(location),
 			ReturnURL: input.ReturnURL,
@@ -45,7 +45,6 @@ func krogerOrderNotice(code string) string {
 	return map[string]string{
 		"complete":            "Your products were sent to your cart. Review amounts before checkout.",
 		"no_matches":          "No products could be matched. Nothing was sent to Kroger.",
-		"pending":             "Your cart update is in progress or could not be confirmed. Review your cart before adding missing items.",
 		"uncertain":           "Careme could not confirm what Kroger added. Review your cart before adding missing items.",
 		"denied":              "Kroger connection was not approved. Try again, chef.",
 		"missing_code":        "Kroger did not finish connecting your account. Try again, chef.",

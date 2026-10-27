@@ -272,13 +272,13 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			expected := "uncertain"
 			if scenario == "confirmation failed" {
 				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash")) + "/submission", confirmation: true}
-				expected = "pending"
+				expected = "uncertain"
 			}
 			mux := orderMux(a)
 			assert.Equal(t, expected, transferResponse(t, postOrder(mux, orderForm())).Code)
 			repeat := transferResponse(t, postOrder(mux, orderForm())).Code
 			if scenario == "confirmation failed" {
-				assert.Equal(t, "pending", repeat)
+				assert.Equal(t, "uncertain", repeat)
 			} else {
 				assert.Equal(t, expected, repeat)
 			}
@@ -303,7 +303,7 @@ func TestKrogerOrderConcurrentSubmission(t *testing.T) {
 	<-entered
 	second := postOrder(mux, orderForm())
 	close(release)
-	assert.Equal(t, "pending", transferResponse(t, second).Code)
+	assert.Equal(t, "uncertain", transferResponse(t, second).Code)
 	assert.Equal(t, "complete", transferResponse(t, <-completed).Code)
 	assert.Equal(t, int32(1), calls.Load())
 }

@@ -74,9 +74,9 @@ func TestCartTransferHTMXLoginRemainsProviderOwned(t *testing.T) {
 	assert.Empty(t, pending.Header().Get("HX-Redirect"), "loading a saved transfer does not start OAuth")
 }
 
-func TestCartTransferHTMXPollingAndRetryPresentation(t *testing.T) {
+func TestCartTransferHTMXResultsDoNotPoll(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
-	for _, status := range []string{"pending", "uncertain", "lookup_failed"} {
+	for _, status := range []string{"uncertain", "lookup_failed", "complete", "pending_login"} {
 		t.Run(status, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
 			response := httptest.NewRecorder()
@@ -86,7 +86,8 @@ func TestCartTransferHTMXPollingAndRetryPresentation(t *testing.T) {
 			transfer.Result = transfer.result(status, 0, 0)
 			a.writeTransferView(response, request, transfer)
 			require.Equal(t, http.StatusOK, response.Code)
-			assert.Equal(t, status == "pending", strings.Contains(response.Body.String(), `hx-trigger="load delay:5s"`))
+			assert.NotContains(t, response.Body.String(), `hx-trigger="load`)
+			assert.Contains(t, response.Body.String(), `hx-trigger="none"`)
 			assert.Equal(t, status == "lookup_failed", strings.Contains(response.Body.String(), `type="submit"`))
 		})
 	}

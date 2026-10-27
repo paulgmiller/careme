@@ -42,7 +42,7 @@ func TestKrogerOrderViewForm(t *testing.T) {
 	for _, chain := range []string{"QFC", ""} {
 		view, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: chain}, ListKey: "list", ReturnURL: "/recipes?h=list"})
 		require.NoError(t, err)
-		assert.Equal(t, "/kroger/cart-transfers", view.ActionURL)
+		assert.Equal(t, "/kroger/cart-transfers", view.TransferURL)
 		brand := chain
 		if brand == "" {
 			brand = "Kroger"
@@ -52,7 +52,7 @@ func TestKrogerOrderViewForm(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(view.Fields.Location), &location))
 		assert.Equal(t, "70500874", location.ID)
 		assert.Equal(t, chain, location.Chain)
-		assert.JSONEq(t, `{"Idempotency-Key":"list"}`, view.Headers)
+		assert.JSONEq(t, `{"Idempotency-Key":"list"}`, view.TransferHeadersJSON)
 		assert.Equal(t, "/recipes?h=list", view.Fields.ReturnURL)
 	}
 }

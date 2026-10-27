@@ -18,16 +18,19 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	Headers     string
-	ActionURL   string
-	StatusURL   string
-	Transfer    *Transfer
-	ActionLabel string
-	Fields      OrderFields
-	Description string
-	Notice      string
-	ReviewURL   string
-	ReviewLabel string
+	// TransferHeadersJSON supplies HTMX request headers for the transfer POST, including Idempotency-Key.
+	TransferHeadersJSON string
+	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
+	TransferURL string
+	// TransferStatusURL loads the saved cart-transfer result once when the page opens.
+	TransferStatusURL string
+	Transfer          *Transfer
+	ActionLabel       string
+	Fields            OrderFields
+	Description       string
+	Notice            string
+	ReviewURL         string
+	ReviewLabel       string
 }
 
 // OrderFields is the shared form contract for ordering destinations.

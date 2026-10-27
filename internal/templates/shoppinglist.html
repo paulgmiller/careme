@@ -392,18 +392,18 @@
 
 {{define "shopping_order_form"}}
 <div id="shopping-cart-transfer"
-     {{if .StatusURL}}hx-get="{{.StatusURL}}" hx-target="this" hx-swap="outerHTML"
+     {{if .TransferStatusURL}}hx-get="{{.TransferStatusURL}}" hx-target="this" hx-swap="outerHTML"
      hx-sync="#shopping-cart-transfer:replace"
-     {{if not .Transfer}}hx-trigger="load"{{else if eq .Transfer.Status "pending"}}hx-trigger="load delay:5s"{{else}}hx-trigger="none"{{end}}{{end}}
+     {{if not .Transfer}}hx-trigger="load"{{else}}hx-trigger="none"{{end}}{{end}}
      hx-on::after-request="if (!event.detail.successful) { this.querySelector('[data-transfer-error]').hidden = false; this.querySelectorAll('button[type=submit]').forEach(button => button.disabled = true); }">
   <!-- HTMX leaves error responses unswapped. This hook also covers network failures:
        show the local error and disable submission until the shopper reloads status.
-       Transfer state, polling, and OAuth navigation are handled by the server/HTMX. -->
+       Transfer results and OAuth navigation are handled by the server/HTMX. -->
   {{if or (not .Transfer) (eq .Transfer.Status "failed")}}
-  {{if .ActionURL}}
-  <form method="POST" action="{{.ActionURL}}"
-        hx-post="{{.ActionURL}}" hx-target="#shopping-cart-transfer" hx-swap="outerHTML"
-        hx-disabled-elt="find button[type=submit]" hx-headers="{{.Headers}}">
+  {{if .TransferURL}}
+  <form method="POST" action="{{.TransferURL}}"
+        hx-post="{{.TransferURL}}" hx-target="#shopping-cart-transfer" hx-swap="outerHTML"
+        hx-disabled-elt="find button[type=submit]" hx-headers="{{.TransferHeadersJSON}}">
     <input type="hidden" name="items" value="{{.Fields.Items}}">
     <input type="hidden" name="location" value="{{.Fields.Location}}">
     <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">

@@ -62,7 +62,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart transfer.")
 		return
 	}
-	transfer.Result = transfer.result("pending", 0, 0)
+	transfer.Result = transfer.result("uncertain", 0, 0)
 	if err := a.saveJSON(r.Context(), key, transfer, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			a.createTransfer(w, r, transfer)
@@ -191,8 +191,6 @@ func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Trans
 	switch code {
 	case "complete", "no_matches":
 		result.Status = "applied"
-	case "pending":
-		result.Status = "pending"
 	case "uncertain", "confirmation_failed", "start_failed":
 		result.Status = "uncertain"
 	case "pending_login", "denied", "missing_code", "connect_failed", "save_failed":

@@ -238,7 +238,7 @@ func TestCartTransferConcurrentOAuthCallbacksWriteOnce(t *testing.T) {
 	second := callback()
 	pending := callbackTransfer(t, mux, second)
 	close(release)
-	assert.Equal(t, "pending", pending.Status)
+	assert.Equal(t, "uncertain", pending.Status)
 	assert.Equal(t, "applied", callbackTransfer(t, mux, <-completed).Status)
 	assert.Equal(t, int32(1), calls.Load())
 }

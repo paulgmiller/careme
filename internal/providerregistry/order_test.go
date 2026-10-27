@@ -112,7 +112,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
-				assert.Equal(t, "/kroger/cart-transfers", view.ActionURL)
+				assert.Equal(t, "/kroger/cart-transfers", view.TransferURL)
 				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
 			} else {
 				assert.Nil(t, view)
