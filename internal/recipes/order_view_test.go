@@ -11,6 +11,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/templates"
+	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +23,16 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		{Items: []shoppingPurchaseItem{{Name: "Wine", Needed: "1 bottle"}}},
 	}}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+		assert.Equal(t, "viewer", input.UserID)
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
 		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", ActionLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`, Description: "Destination instructions"}, nil
 	})
+	if view.User == nil {
+		view.User = &utypes.User{ID: "viewer"}
+	}
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
@@ -44,6 +49,7 @@ func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 		s := newTestServer(t)
 		s.orderView = orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, failure })
 		view := shoppingListPageView{}
+		view.User = &utypes.User{ID: "viewer"}
 		err := s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil))
 		if failure != nil {
 			require.ErrorIs(t, err, failure)

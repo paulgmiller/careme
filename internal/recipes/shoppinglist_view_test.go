@@ -29,6 +29,9 @@ func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
+			if view.User == nil {
+				view.User = &utypes.User{ID: "viewer"}
+			}
 			require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil)))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))

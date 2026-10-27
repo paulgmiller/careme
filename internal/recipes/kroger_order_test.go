@@ -33,6 +33,9 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 		wineRecommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}},
 	})
 	require.NoError(t, err)
+	if view.User == nil {
+		view.User = &utypes.User{ID: "viewer"}
+	}
 	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))

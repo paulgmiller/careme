@@ -389,7 +389,9 @@
 {{end}}
 
 {{define "shopping_order_form"}}
-{{if .TransferURL}}
+{{if .ReviewCartURL}}
+<a href="{{.ReviewCartURL}}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">Review cart (opens a new tab)</a>
+{{else if .TransferURL}}
 <form method="POST" action="{{.TransferURL}}" hx-boost="false">
   <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
   <input type="hidden" name="transfer_request" value="{{.TransferRequestJSON}}">

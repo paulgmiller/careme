@@ -99,12 +99,14 @@ Implement `POST /<destination>/cart-transfers` as a browser navigation using
 and a stable idempotency key in hidden form fields. The destination owns
 authentication, matching, cart writes, duplicate prevention, redirects, and error
 pages. It redirects directly to account connection when needed and to the
-provider's cart when the addition completes.
+shopping list when the addition completes.
 
 Register routes in `providerregistry.Factory.RegisterOrders`, then add the
-location match and view builder to `Factory.OrderView`. The shopping-list UI
-only needs the form's POST URL, payload, idempotency key, and button copy. It
-does not fetch transfer status or render connection and failure states.
+location match and view builder through `Factory.NewOrderViewBuilder(cache)`.
+The shopping-list UI
+asks the provider for the current viewer's saved handoff during server rendering.
+Confirmed or possibly applied writes show a cart link instead of the form;
+transfer-read failures fail the page. There is no browser status fetch.
 Kroger is currently the only destination; future integrations can adapt their
 upstream APIs behind the same browser handoff. Users review amounts and complete
 checkout with the provider. See [Cart transfers](docs/ordering.md) for browser

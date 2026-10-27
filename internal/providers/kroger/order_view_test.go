@@ -2,10 +2,15 @@ package kroger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"math"
 	"strings"
 	"testing"
+
+	"careme/internal/cache"
 
 	ordertypes "careme/internal/orders/types"
 
@@ -103,4 +108,78 @@ func TestKrogerOrderTemplateRendersIdempotencyField(t *testing.T) {
 			assert.NotContains(t, page.String(), "hx-headers")
 		})
 	}
+}
+
+func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
+	for _, tc := range []struct {
+		code, suffix string
+		review       bool
+	}{
+		{"", "", false},
+		{"complete", "/submission", true},
+		{"uncertain", "/submission", true},
+		{"confirmation_failed", "/state", true},
+		{"uncertain", "/state", true},
+		{"lookup_failed", "/state", false},
+		{"start_failed", "/state", false},
+		{"no_matches", "/state", false},
+		{"pending_login", "/state", false},
+	} {
+		t.Run(tc.code+tc.suffix, func(t *testing.T) {
+			a := newTestOrderHandler(t, &CartClient{})
+			transfer := cartTransfer{UserID: "viewer", IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}}
+			transfer.Result = transfer.result(tc.code, 1, 0)
+			if tc.suffix != "" {
+				var value any = transfer
+				if tc.suffix == "/submission" {
+					value = transfer.Result
+				}
+				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list")+tc.suffix, value, cache.Unconditional()))
+			}
+			if tc.suffix == "/submission" {
+				require.NoError(t, a.cache.Put(t.Context(), transferKey("viewer", "list")+"/state", "broken", cache.Unconditional()))
+			}
+			input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: transfer.Request.Location}
+			view, err := OrderViewForUser(t.Context(), a.cache, input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.review, view.ReviewCartURL != "")
+			if tc.review {
+				assert.Equal(t, "https://www.qfc.com/cart", view.ReviewCartURL)
+				assert.Empty(t, view.TransferURL)
+				assert.Empty(t, view.TransferRequestJSON)
+			}
+			input.UserID = "another-viewer"
+			other, err := OrderViewForUser(t.Context(), a.cache, input)
+			require.NoError(t, err)
+			assert.Empty(t, other.ReviewCartURL)
+			assert.NotEmpty(t, other.TransferURL)
+		})
+	}
+}
+
+type failingTransferRead struct{ cache.Cache }
+
+func (c failingTransferRead) Get(context.Context, string) (io.ReadCloser, error) {
+	return nil, errors.New("read failed")
+}
+
+func TestOrderViewForUserReadErrors(t *testing.T) {
+	for _, suffix := range []string{"/submission", "/state"} {
+		c := cache.NewInMemoryCache()
+		require.NoError(t, c.Put(t.Context(), transferKey("viewer", "list")+suffix, "broken", cache.Unconditional()))
+		_, err := OrderViewForUser(t.Context(), c, ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list"})
+		require.ErrorContains(t, err, "decode Kroger transfer")
+	}
+	_, err := OrderViewForUser(t.Context(), failingTransferRead{cache.NewInMemoryCache()}, ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list"})
+	require.ErrorContains(t, err, "read failed")
+}
+
+func TestOrderViewReviewCartReplacesForm(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", ordertypes.OrderView{ReviewCartURL: "https://www.qfc.com/cart"}))
+	assert.Contains(t, page.String(), "Review cart (opens a new tab)")
+	assert.Contains(t, page.String(), `target="_blank" rel="noopener noreferrer"`)
+	assert.NotContains(t, page.String(), "<form")
+	assert.NotContains(t, page.String(), "hx-get")
 }

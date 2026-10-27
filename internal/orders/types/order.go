@@ -7,6 +7,7 @@ import (
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
+	UserID    string
 	Location  locationtypes.Location
 	Items     []ai.ShoppingItem
 	ListKey   string
@@ -15,6 +16,7 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
+	ReviewCartURL string
 	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
 	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.

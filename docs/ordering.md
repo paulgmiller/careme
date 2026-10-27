@@ -2,8 +2,9 @@
 
 Careme's shopping list submits a normal browser form to its ordering destination.
 The destination handler owns authentication, product matching, cart writes,
-idempotency, redirects, and any failure page. The shopping list only renders an
-“Add to cart” form; it never fetches or displays transfer states.
+idempotency, redirects, and any failure page. The shopping list renders either
+an “Add to cart” form or a saved cart link,
+using a provider lookup during server rendering. It never polls from the browser.
 
 This browser contract differs from the [MN Food Club proposal](mnfoodclub-ordering.openapi.yaml),
 which describes a server-to-server JSON API. A future Food Club provider would
@@ -40,12 +41,13 @@ link, not for cart-transfer status messages.
 3. `/kroger/callback` validates the state cookie, authenticated ownership, stored
    nonce, and ten-minute age. It exchanges the authorization code, saves the
    encrypted token, and resumes the saved request.
-4. A completed addition returns a 303 redirect directly to the provider's cart.
+4. A completed addition returns a 303 redirect to the saved local shopping list.
    Expired access tokens are refreshed internally.
 
 No products are added on shopping-list page load. There are no transfer-status
-or separate connection GET routes. Reloading the shopping list renders the same
-form; reposting it consults the saved transfer and cannot add the same list twice.
+or separate connection GET routes. Reloading the shopping list reads the saved
+handoff to choose the form or cart link. Reposting consults the saved transfer
+and cannot add the same list twice.
 
 Kroger sends one package per unique matched UPC. Unmatched items are counted in
 the saved result; the shopper reviews amounts and checkout in Kroger's cart.
@@ -81,10 +83,22 @@ See [cache layout](cache-layout.md) for storage details.
 
 Register its POST and authentication callback routes through
 `providerregistry.Factory.RegisterOrders`, then supply its location match and
-`OrderView` builder. The adapter translates the shared request to the upstream
+cache-bound `OrderView` builder through `Factory.NewOrderViewBuilder(cache)`.
+The adapter translates the shared request to the upstream
 API and owns redirects and failure handling. Provider state does not belong in
 the recipe handler or shared shopping-list UI.
 
 The [MN Food Club mock walkthrough](mnfoodclub-mock.md) remains available at
 `/mnfoodclub-demo/` with mocks enabled. It demonstrates the proposed upstream
 partner API, not a production recipe ordering destination.
+
+## Saved cart link on the shopping list
+
+The server asks the configured provider for this signed-in viewer's saved
+transfer using the finalized list key. Kroger reads the durable submission first,
+then lifecycle state when no submission exists. Confirmed or possibly applied
+writes replace the form with “Review cart (opens a new tab)”; no counts or status
+text are shown. Missing transfers and known pre-write failures keep Add to cart.
+Read or decoding errors fail the page request. There is no browser status fetch.
+The saved handoff remains after checkout or cart edits; this is transfer history,
+not a live cart read. A different finalized list has its own idempotency key.

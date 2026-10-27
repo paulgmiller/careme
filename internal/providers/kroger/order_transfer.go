@@ -98,7 +98,7 @@ func (a *OrderHandler) finishTransfer(w http.ResponseWriter, r *http.Request, tr
 	case "pending_login":
 		a.startAuthorization(w, r, transfer)
 	case "complete":
-		http.Redirect(w, r, transfer.Result.CartURL, http.StatusSeeOther)
+		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
 	default:
 		a.writeTransferFailure(w, r, transfer)
 	}
@@ -106,7 +106,7 @@ func (a *OrderHandler) finishTransfer(w http.ResponseWriter, r *http.Request, tr
 
 func retryableTransfer(code string) bool {
 	switch code {
-	case "lookup_failed", "denied", "missing_code", "connect_failed", "save_failed":
+	case "start_failed", "lookup_failed", "denied", "missing_code", "connect_failed", "save_failed":
 		return true
 	}
 	return false

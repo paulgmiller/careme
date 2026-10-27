@@ -75,7 +75,7 @@ func transferResponse(t *testing.T, a *OrderHandler, response *httptest.Response
 	switch result.Code {
 	case "complete":
 		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
-		assert.Equal(t, result.CartURL, response.Header().Get("Location"))
+		assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
 	case "pending_login":
 		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
 		destination, err := url.Parse(response.Header().Get("Location"))

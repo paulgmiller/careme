@@ -68,6 +68,6 @@ func TestCartTransferNativePostRedirectsToCart(t *testing.T) {
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	response := postOrder(orderMux(a), orderForm())
 	assert.Equal(t, http.StatusSeeOther, response.Code)
-	assert.Equal(t, "https://www.qfc.com/cart", response.Header().Get("Location"))
+	assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
 	assert.Empty(t, response.Header().Get("HX-Redirect"))
 }

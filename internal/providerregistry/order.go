@@ -1,6 +1,7 @@
 package providerregistry
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -67,11 +68,19 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	return handler, nil
 }
 
-// OrderView finds the configured ordering destination for the source location.
-// Each destination supplies the shared transfer UI with its endpoints and copy.
-func (f Factory) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
-		return kroger.OrderView(input)
+// OrderViewBuilder binds provider-owned transfer reads to the application's cache.
+type OrderViewBuilder struct {
+	factory Factory
+	cache   cache.Cache
+}
+
+func (f Factory) NewOrderViewBuilder(c cache.Cache) *OrderViewBuilder {
+	return &OrderViewBuilder{factory: f, cache: c}
+}
+
+func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
+		return kroger.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil
 }

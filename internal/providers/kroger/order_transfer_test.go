@@ -259,11 +259,11 @@ func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
 			completed := httptest.NewRecorder()
 			mux.ServeHTTP(completed, callback)
 			require.Equal(t, http.StatusSeeOther, completed.Code, completed.Body.String())
-			assert.Equal(t, "https://www.qfc.com/cart", completed.Header().Get("Location"))
+			assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", completed.Header().Get("Location"))
 			assert.Equal(t, "applied", savedResult(t, a, key).Status)
 			repeated := postOrder(mux, form)
 			assert.Equal(t, http.StatusSeeOther, repeated.Code)
-			assert.Equal(t, "https://www.qfc.com/cart", repeated.Header().Get("Location"))
+			assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", repeated.Header().Get("Location"))
 			assert.Equal(t, 1, calls)
 			a.auth = transferUser{AuthClient: auth.DefaultMock(), id: "another-user"}
 			another := connectOrder(t, mux, form)

@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -10,17 +11,18 @@ import (
 )
 
 type OrderViewBuilder interface {
-	OrderView(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+	OrderView(context.Context, ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 }
 
-func (s *server) populateOrderView(view *shoppingListPageView, _ *http.Request) error {
+func (s *server) populateOrderView(view *shoppingListPageView, r *http.Request) error {
 	var items []ai.ShoppingItem
 	for _, group := range view.Purchases {
 		for _, item := range group.Items {
 			items = append(items, item.ShoppingItem)
 		}
 	}
-	order, err := s.orderView.OrderView(ordertypes.OrderViewInput{
+	order, err := s.orderView.OrderView(r.Context(), ordertypes.OrderViewInput{
+		UserID:   view.User.ID,
 		Location: view.Location, Items: items, ListKey: view.Hash,
 		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
 	})
