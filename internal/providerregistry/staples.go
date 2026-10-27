@@ -6,9 +6,9 @@ import (
 
 	"careme/internal/brightdata"
 	"careme/internal/farmersmarket"
-	"careme/internal/heb"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"

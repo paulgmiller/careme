@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/heb"
 	"careme/internal/locations"
+	"careme/internal/providers/heb"
 	"careme/internal/sitemapfetch"
 )
 
