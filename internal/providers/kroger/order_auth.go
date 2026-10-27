@@ -110,13 +110,13 @@ func (a *OrderHandler) loadToken(ctx context.Context, userID string) (CartToken,
 }
 
 func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	banner := authorizationBanner(transfer.Request.Chain)
+	banner := authorizationBanner(transfer.Request.Location.Chain)
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)
 		return
 	}
-	state := ordertypes.TransferID(transfer.Request.IdempotencyKey) + "." + base64.RawURLEncoding.EncodeToString(nonce)
+	state := ordertypes.TransferID(transfer.IdempotencyKey) + "." + base64.RawURLEncoding.EncodeToString(nonce)
 	transfer.Authorization = &transferAuthorization{State: state, IssuedAt: time.Now()}
 	if !a.saveTransfer(w, r, transfer) {
 		return
@@ -149,7 +149,7 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var transfer cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, state[:64])+"/state", &transfer); err != nil || transfer.Request.UserID != userID || transfer.Authorization == nil {
+	if err := a.loadJSON(r.Context(), transferKey(userID, state[:64])+"/state", &transfer); err != nil || transfer.UserID != userID || transfer.Authorization == nil {
 		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
 		return
 	}
@@ -159,25 +159,25 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Query().Get("error") != "" {
-		a.completeAuthorization(w, r, transfer, orderResult{Status: "denied"})
+		a.completeAuthorization(w, r, transfer, transfer.result("denied", 0, 0))
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		a.completeAuthorization(w, r, transfer, orderResult{Status: "missing_code"})
+		a.completeAuthorization(w, r, transfer, transfer.result("missing_code", 0, 0))
 		return
 	}
 	token, err := a.client.Exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
-		a.completeAuthorization(w, r, transfer, orderResult{Status: "connect_failed"})
+		a.completeAuthorization(w, r, transfer, transfer.result("connect_failed", 0, 0))
 		return
 	}
 	if err := a.saveToken(r.Context(), userID, token); err != nil {
-		a.completeAuthorization(w, r, transfer, orderResult{Status: "save_failed"})
+		a.completeAuthorization(w, r, transfer, transfer.result("save_failed", 0, 0))
 		return
 	}
-	a.completeAuthorization(w, r, transfer, a.order(r.Context(), transfer.Request, false))
+	a.completeAuthorization(w, r, transfer, a.order(r.Context(), transfer, false))
 }
 
 func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -215,7 +215,7 @@ func (a *OrderHandler) Register(routes routing.Registrar) {
 
 // OAuth redirects return to the original page without encoding outcome fields.
 // The page retrieves the transfer through the same API used after POST.
-func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer, result orderResult) {
+func (a *OrderHandler) completeAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer, result ordertypes.Transfer) {
 	transfer.Result = result
 	if a.saveTransfer(w, r, transfer) {
 		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)

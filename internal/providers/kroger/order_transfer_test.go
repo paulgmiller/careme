@@ -27,7 +27,7 @@ func TestCartTransferJSONAndReadOnlyStatus(t *testing.T) {
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	input := ordertypes.TransferRequest{
 		ReturnURL: "/recipes?h=list-hash#shopping-list-section",
-		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC"},
+		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC", Name: "My QFC", Address: "123 Store Street"},
 		Items:     []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
 	}
 	body, err := json.Marshal(input)
@@ -42,6 +42,15 @@ func TestCartTransferJSONAndReadOnlyStatus(t *testing.T) {
 	transfer := transferResponse(t, response)
 	assert.Equal(t, "applied", transfer.Status)
 	assert.Equal(t, 1, transfer.Added)
+	var saved cartTransfer
+	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID)+"/state", &saved))
+	assert.Equal(t, input, saved.Request, "the full shared request survives the transfer handoff")
+	assert.Equal(t, transfer, saved.Result, "the saved result uses the same contract as the API")
+	var submission ordertypes.Transfer
+	require.NoError(t, a.loadJSON(t.Context(), submissionKey(saved), &submission))
+	assert.Equal(t, transfer, submission)
+	assert.Equal(t, "mock-clerk-user-id", saved.UserID)
+	assert.Equal(t, "list-hash", saved.IdempotencyKey)
 	for range 3 {
 		assert.Equal(t, transfer, transferResponse(t, getTransfer(mux, transfer.TransferID)))
 	}
@@ -122,7 +131,7 @@ func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/"}
 	assert.Equal(t, http.StatusInternalServerError, postOrder(orderMux(a), orderForm()).Code)
-	var result orderResult
+	var result ordertypes.Transfer
 	assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", ordertypes.TransferID("list-hash"))+"/submission", &result), cache.ErrNotFound)
 }
 

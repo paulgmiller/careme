@@ -11,7 +11,6 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/httpx"
-	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/templates"
 )
@@ -19,9 +18,11 @@ import (
 // The lifecycle record owns the request, OAuth state, and preparation result.
 // Its submission subrecord reserves and records the only cart write.
 type cartTransfer struct {
-	Request       orderRequest           `json:"request"`
-	Result        orderResult            `json:"result"`
-	Authorization *transferAuthorization `json:"authorization,omitempty"`
+	UserID         string                     `json:"user_id"`
+	IdempotencyKey string                     `json:"idempotency_key"`
+	Request        ordertypes.TransferRequest `json:"request"`
+	Result         ordertypes.Transfer        `json:"result"`
+	Authorization  *transferAuthorization     `json:"authorization,omitempty"`
 }
 
 type transferAuthorization struct {
@@ -29,27 +30,28 @@ type transferAuthorization struct {
 	IssuedAt time.Time `json:"issued_at"`
 }
 
-func submissionKey(request orderRequest) string {
-	return transferKey(request.UserID, ordertypes.TransferID(request.IdempotencyKey)) + "/submission"
+func submissionKey(transfer cartTransfer) string {
+	return transferKey(transfer.UserID, ordertypes.TransferID(transfer.IdempotencyKey)) + "/submission"
 }
 
 func transferKey(userID, id string) string {
 	return "kroger_order_transfers/" + userID + "/" + id
 }
 
-func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, request orderRequest) {
-	id := ordertypes.TransferID(request.IdempotencyKey)
-	key := transferKey(request.UserID, id) + "/state"
+func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
+	request := transfer.Request
+	id := ordertypes.TransferID(transfer.IdempotencyKey)
+	key := transferKey(transfer.UserID, id) + "/state"
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
-		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Chain != request.Chain || previous.Request.ReturnURL != request.ReturnURL {
+		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Location.Chain != request.Location.Chain || previous.Request.ReturnURL != request.ReturnURL {
 			writeTransferError(w, http.StatusConflict, "idempotency_conflict", "This list already has a different cart transfer.")
 			return
 		}
 		// Product lookup failed before any cart mutation. Retrying the same
 		// transfer is safe; order still conditionally reserves the cart write.
-		if previous.Result.Status == "lookup_failed" {
-			previous.Result = a.order(r.Context(), previous.Request, true)
+		if previous.Result.Code == "lookup_failed" {
+			previous.Result = a.order(r.Context(), previous, true)
 			if !a.saveTransfer(w, r, previous) {
 				return
 			}
@@ -60,16 +62,16 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, re
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to read cart transfer.")
 		return
 	}
-	transfer := cartTransfer{Request: request, Result: orderResult{Status: "pending"}}
+	transfer.Result = transfer.result("pending", 0, 0)
 	if err := a.saveJSON(r.Context(), key, transfer, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
-			a.createTransfer(w, r, request)
+			a.createTransfer(w, r, transfer)
 			return
 		}
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to reserve cart transfer.")
 		return
 	}
-	transfer.Result = a.order(r.Context(), request, true)
+	transfer.Result = a.order(r.Context(), transfer, true)
 	if !a.saveTransfer(w, r, transfer) {
 		return
 	}
@@ -77,7 +79,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, re
 }
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
-	if err := a.saveJSON(r.Context(), transferKey(transfer.Request.UserID, ordertypes.TransferID(transfer.Request.IdempotencyKey))+"/state", transfer, cache.Unconditional()); err != nil {
+	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, ordertypes.TransferID(transfer.IdempotencyKey))+"/state", transfer, cache.Unconditional()); err != nil {
 		writeTransferError(w, http.StatusInternalServerError, "transfer_unavailable", "Unable to save cart transfer. Check its status before trying again.")
 		return false
 	}
@@ -123,8 +125,8 @@ func (a *OrderHandler) writeCurrentTransfer(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Vary", "HX-Request")
 	// The write reservation remains authoritative if the lifecycle save fails
 	// or an OAuth callback arrives after the cart was already submitted.
-	var result orderResult
-	err := a.loadJSON(r.Context(), submissionKey(transfer.Request), &result)
+	var result ordertypes.Transfer
+	err := a.loadJSON(r.Context(), submissionKey(transfer), &result)
 	if err == nil {
 		transfer.Result = result
 	} else if !errors.Is(err, cache.ErrNotFound) {
@@ -135,13 +137,13 @@ func (a *OrderHandler) writeCurrentTransfer(w http.ResponseWriter, r *http.Reque
 		a.writeTransferView(w, r, transfer)
 		return
 	}
-	writeTransferJSON(w, http.StatusOK, transfer.response())
+	writeTransferJSON(w, http.StatusOK, transfer.Result)
 }
 
 // The API still returns JSON to ordinary clients. HTMX requests use the same
 // saved result but receive the shared shopping-list fragment instead.
 func (a *OrderHandler) writeTransferView(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	result := transfer.response()
+	result := transfer.Result
 	w.Header().Set("Vary", "HX-Request")
 	if r.Method == http.MethodPost && result.Status == "pending_login" {
 		w.Header().Set("HX-Redirect", result.CartURL)
@@ -150,8 +152,8 @@ func (a *OrderHandler) writeTransferView(w http.ResponseWriter, r *http.Request,
 	}
 	request := transfer.Request
 	view, err := OrderView(ordertypes.OrderViewInput{
-		Location: locationtypes.Location{ID: request.StoreID, Chain: request.Chain},
-		Items:    request.Items, ListKey: request.IdempotencyKey, ReturnURL: request.ReturnURL,
+		Location: request.Location,
+		Items:    request.Items, ListKey: transfer.IdempotencyKey, ReturnURL: request.ReturnURL,
 	})
 	if err != nil {
 		http.Error(w, "Unable to render cart transfer", http.StatusInternalServerError)
@@ -172,21 +174,21 @@ func (a *OrderHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if transfer.response().Status != "pending_login" {
+	if transfer.Result.Status != "pending_login" {
 		http.Redirect(w, r, transfer.Request.ReturnURL, http.StatusSeeOther)
 		return
 	}
 	a.startAuthorization(w, r, transfer)
 }
 
-func (t cartTransfer) response() ordertypes.Transfer {
+func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Transfer {
 	result := ordertypes.Transfer{
-		TransferID: ordertypes.TransferID(t.Request.IdempotencyKey),
-		Status:     "failed", CartURL: cartURL(t.Request.Chain),
-		Added: t.Result.Added, Unmatched: len(t.Result.Gaps),
-		Code: t.Result.Status, Message: krogerOrderNotice(t.Result.Status),
+		TransferID: ordertypes.TransferID(t.IdempotencyKey),
+		Status:     "failed", CartURL: cartURL(t.Request.Location.Chain),
+		Added: added, Unmatched: unmatched,
+		Code: code, Message: krogerOrderNotice(code),
 	}
-	switch t.Result.Status {
+	switch code {
 	case "complete", "no_matches":
 		result.Status = "applied"
 	case "pending":
@@ -197,10 +199,10 @@ func (t cartTransfer) response() ordertypes.Transfer {
 		result.Status = "pending_login"
 		result.CartURL = "/kroger/cart-transfers/" + result.TransferID + "/connect"
 	}
-	if t.Result.Status == "pending_login" {
+	if code == "pending_login" {
 		result.Message = "Connect your Kroger account to send this shopping list."
 	}
-	if t.Result.Status == "complete" {
+	if code == "complete" {
 		result.Message = fmt.Sprintf("Sent %d products to your cart. Review amounts before checkout.", result.Added)
 		if result.Unmatched == 1 {
 			result.Message += " 1 item could not be matched and was not sent."

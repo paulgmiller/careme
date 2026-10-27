@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
@@ -81,7 +82,9 @@ func TestCartTransferHTMXPollingAndRetryPresentation(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/kroger/cart-transfers/transfer", nil)
 			request.Header.Set("HX-Request", "true")
-			a.writeTransferView(response, request, cartTransfer{Request: orderRequest{IdempotencyKey: "list", StoreID: "70500874", Chain: "QFC"}, Result: orderResult{Status: status}})
+			transfer := cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}}
+			transfer.Result = transfer.result(status, 0, 0)
+			a.writeTransferView(response, request, transfer)
 			require.Equal(t, http.StatusOK, response.Code)
 			assert.Equal(t, status == "pending", strings.Contains(response.Body.String(), `hx-trigger="load delay:5s"`))
 			assert.Equal(t, status == "lookup_failed", strings.Contains(response.Body.String(), `type="submit"`))

@@ -65,7 +65,7 @@ func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
 
 func TestKrogerTransferUsesChainCart(t *testing.T) {
 	for banner, domain := range chainDomains {
-		response := (cartTransfer{Request: orderRequest{Chain: banner, IdempotencyKey: "list"}, Result: orderResult{Status: "complete"}}).response()
+		response := (cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{Chain: banner}}}).result("complete", 0, 0)
 		assert.Equal(t, "https://www."+domain+"/cart", response.CartURL)
 		assert.Equal(t, "applied", response.Status)
 	}

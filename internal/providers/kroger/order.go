@@ -20,23 +20,6 @@ import (
 	ordertypes "careme/internal/orders/types"
 )
 
-// orderRequest is the posted shopping list retained while connecting Kroger.
-// UserID comes exclusively from authentication, never from the submitted form.
-type orderRequest struct {
-	UserID         string
-	IdempotencyKey string
-	StoreID        string
-	Chain          string
-	ReturnURL      string
-	Items          []ai.ShoppingItem
-}
-
-type orderResult struct {
-	Status string            `json:"status"`
-	Added  int               `json:"added"`
-	Gaps   []ai.ShoppingItem `json:"gaps,omitempty"`
-}
-
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	userID, ok := a.cartUser(w, r)
@@ -73,12 +56,12 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		writeTransferError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Use JSON or a URL-encoded form.")
 		return
 	}
-	request := orderRequest{UserID: userID, IdempotencyKey: r.Header.Get("Idempotency-Key"), StoreID: input.Location.ID, Chain: input.Location.Chain, ReturnURL: input.ReturnURL, Items: input.Items}
-	if !localReturnURL(request.ReturnURL) || !validIdempotencyKey(request.IdempotencyKey) || !NewIdentityProvider().IsID(request.StoreID) || len(request.Items) == 0 {
+	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if !localReturnURL(input.ReturnURL) || !validIdempotencyKey(idempotencyKey) || !NewIdentityProvider().IsID(input.Location.ID) || len(input.Items) == 0 {
 		writeTransferError(w, http.StatusBadRequest, "invalid_request", "Invalid cart transfer.")
 		return
 	}
-	a.createTransfer(w, r, request)
+	a.createTransfer(w, r, cartTransfer{UserID: userID, IdempotencyKey: idempotencyKey, Request: input})
 }
 
 func validIdempotencyKey(key string) bool {
@@ -107,73 +90,69 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func orderFingerprint(request orderRequest) string {
+func orderFingerprint(request ordertypes.TransferRequest) string {
 	body, _ := json.Marshal(struct {
 		StoreID string
 		Items   []ai.ShoppingItem
-	}{request.StoreID, request.Items})
+	}{request.Location.ID, request.Items})
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
 }
 
-func (a *OrderHandler) order(ctx context.Context, request orderRequest, allowAuthorization bool) orderResult {
-	key := submissionKey(request)
-	var previous orderResult
+func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAuthorization bool) ordertypes.Transfer {
+	key := submissionKey(transfer)
+	var previous ordertypes.Transfer
 	if err := a.loadJSON(ctx, key, &previous); err == nil {
 		return previous
 	} else if !errors.Is(err, cache.ErrNotFound) {
-		return orderResult{Status: "start_failed"}
+		return transfer.result("start_failed", 0, 0)
 	}
-	token, err := a.loadToken(ctx, request.UserID)
+	token, err := a.loadToken(ctx, transfer.UserID)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return orderResult{Status: "connect_failed"}
+		return transfer.result("connect_failed", 0, 0)
 	}
 	if err == nil && time.Now().After(token.ExpiresAt.Add(-time.Minute)) {
 		token, err = a.client.Refresh(ctx, token.RefreshToken)
 		if err == nil {
-			if err = a.saveToken(ctx, request.UserID, token); err != nil {
-				return orderResult{Status: "save_failed"}
+			if err = a.saveToken(ctx, transfer.UserID, token); err != nil {
+				return transfer.result("save_failed", 0, 0)
 			}
 		}
 	}
 	if err != nil || token.AccessToken == "" {
 		if allowAuthorization {
-			return orderResult{Status: "pending_login"}
+			return transfer.result("pending_login", 0, 0)
 		} else {
-			return orderResult{Status: "connect_failed"}
+			return transfer.result("connect_failed", 0, 0)
 		}
 	}
-	items, gaps, err := a.resolveItems(ctx, request)
+	items, gaps, err := a.resolveItems(ctx, transfer.Request)
 	if err != nil {
-		return orderResult{Status: "lookup_failed"}
+		return transfer.result("lookup_failed", 0, 0)
 	}
-	result := orderResult{Status: "pending", Gaps: gaps}
+	result := transfer.result("pending", 0, len(gaps))
 	if len(items) == 0 {
-		result.Status = "no_matches"
-		return result
+		return transfer.result("no_matches", 0, len(gaps))
 	}
 	if err := a.saveJSON(ctx, key, result, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			// Re-enter the read path; the winner owns the only cart write.
-			return a.order(ctx, request, false)
+			return a.order(ctx, transfer, false)
 		}
-		result.Status = "start_failed"
-		return result
+		return transfer.result("start_failed", 0, len(gaps))
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
-		result.Status = "uncertain"
+		result = transfer.result("uncertain", 0, len(gaps))
 	} else {
-		result.Status = "complete"
-		result.Added = len(items)
+		result = transfer.result("complete", len(items), len(gaps))
 	}
 	if err := a.saveJSON(ctx, key, result, cache.Unconditional()); err != nil {
-		result.Status = "confirmation_failed"
-		return result
+		return transfer.result("confirmation_failed", result.Added, result.Unmatched)
 	}
 	return result
 }
 
-func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) ([]CartItem, []ai.ShoppingItem, error) {
+func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {
 	var items []CartItem
 	var gaps []ai.ShoppingItem
 	seen := make(map[string]bool)
@@ -182,7 +161,7 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) (
 			gaps = append(gaps, item)
 			continue
 		}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, request.StoreID)
+		upc, err := a.client.ProductUPC(ctx, item.ProductID, request.Location.ID)
 		if errors.Is(err, ErrProductUnavailable) {
 			gaps = append(gaps, item)
 			continue

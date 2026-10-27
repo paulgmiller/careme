@@ -199,7 +199,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 			case "wrong state":
 				state = "wrong"
 			case "different user":
-				continuation.Request.UserID = "another-user"
+				continuation.UserID = "another-user"
 			case "expired":
 				continuation.Authorization.IssuedAt = time.Now().Add(-11 * time.Minute)
 			case "future":
