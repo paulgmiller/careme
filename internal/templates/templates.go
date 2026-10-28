@@ -44,7 +44,6 @@ var Home,
 	AccountRequired,
 	User,
 	ShoppingList,
-	OrderTransfer,
 	MissingShoppingList,
 	Recipe,
 	Critique,
@@ -90,7 +89,6 @@ func Init(config *config.Config) error {
 	AccountRequired = ensure(tmpls, "account_required.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
-	OrderTransfer = ensure(tmpls, "ordertransfer.html")
 	MissingShoppingList = ensure(tmpls, "shoppinglist_missing.html")
 	Recipe = ensure(tmpls, "recipe.html")
 	Critique = ensure(tmpls, "critique.html")

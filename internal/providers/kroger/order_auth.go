@@ -190,7 +190,7 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var existing cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, continuation.IdempotencyKey), &existing); err == nil && existing.Result.Status != "failed" {
+	if err := a.loadJSON(r.Context(), transferKey(userID, continuation.IdempotencyKey), &existing); err == nil {
 		a.finishTransfer(w, r, existing)
 		return
 	} else if err != nil && !errors.Is(err, cache.ErrNotFound) {
@@ -219,6 +219,7 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	a.createTransfer(w, r, cartTransfer{UserID: userID, IdempotencyKey: continuation.IdempotencyKey, Request: continuation.Request})
 }
 
+// get user or redirect/error if we can't
 func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request, returnURL string) (string, bool) {
 	userID, err := a.auth.GetUserIDFromRequest(r)
 	if err == nil {

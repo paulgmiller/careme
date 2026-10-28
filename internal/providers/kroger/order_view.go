@@ -28,8 +28,10 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 	if err := json.NewDecoder(reader).Decode(&transfer); err != nil {
 		return nil, fmt.Errorf("decode Kroger transfer: %w", err)
 	}
-	switch transfer.Result.Code {
-	case "complete", "pending", "uncertain":
+	switch transfer.Result.Status {
+	case ordertypes.TransferFailed:
+		return &ordertypes.OrderView{TransferFailed: true}, nil
+	case ordertypes.TransferApplied, ordertypes.TransferPending:
 		return &ordertypes.OrderView{ReviewCartURL: transfer.Result.CartURL}, nil
 	}
 
@@ -54,13 +56,4 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	}
 
 	return order, nil
-}
-
-func krogerOrderNotice(code string) string {
-	return map[string]string{
-		"pending":   "Your transfer is still running or could not be confirmed. Review your cart before trying again.",
-		"failed":    "Could not send your products to Kroger. Try again, chef.",
-		"uncertain": "Careme could not confirm what Kroger added. Review your cart before adding missing items.",
-		"complete":  "Your products were sent to your cart.",
-	}[code]
 }

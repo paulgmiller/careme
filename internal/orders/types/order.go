@@ -17,7 +17,8 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	ReviewCartURL string
+	TransferFailed bool
+	ReviewCartURL  string
 	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
 	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
@@ -39,11 +40,18 @@ type TransferRequest struct {
 // Added counts packages sent; Unmatched counts shopping items not sent.
 type Transfer struct {
 	// TransferID is the original idempotency key, scoped to the authenticated user and destination.
-	TransferID string `json:"transfer_id"`
-	Status     string `json:"status"`
-	CartURL    string `json:"cart_url"`
-	Added      int    `json:"added"`
-	Unmatched  int    `json:"unmatched"`
-	Code       string `json:"code,omitempty"`
-	Message    string `json:"message"`
+	TransferID string         `json:"transfer_id"`
+	Status     TransferStatus `json:"status"`
+	CartURL    string         `json:"cart_url"`
+	Added      int            `json:"added"`
+	Unmatched  int            `json:"unmatched"`
 }
+
+// TransferStatus is the persisted outcome of a cart handoff.
+type TransferStatus string
+
+const (
+	TransferPending TransferStatus = "pending"
+	TransferFailed  TransferStatus = "failed"
+	TransferApplied TransferStatus = "applied"
+)

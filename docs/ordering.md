@@ -2,8 +2,8 @@
 
 Careme's shopping list submits a normal browser form to its ordering destination.
 The destination handler owns authentication, product matching, cart writes,
-idempotency, redirects, and any failure page. The shopping list renders either
-an “Add to cart” form or a saved cart link,
+idempotency and redirects. The shopping list renders an “Add to cart” form,
+a saved cart link, or a failure label,
 using a provider lookup during server rendering. It never polls from the browser.
 
 This browser contract differs from the [MN Food Club proposal](mnfoodclub-ordering.openapi.yaml),
@@ -18,7 +18,7 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
 - `transfer_request`: the complete JSON-serialized `orders/types.TransferRequest`,
   containing the displayed `items`, source `location`, and local `return_url`.
 - `idempotency_key`: identifies one intended addition for this shopper and
-  destination, normally the finalized shopping-list hash. Reuse it for retries.
+  destination, normally the finalized shopping-list hash.
   The finalized key identifies the items and location; repeated posts reuse the
   saved request and result without comparing payloads.
 
@@ -31,8 +31,8 @@ forward the form's key in the upstream `Idempotency-Key` header.
 The authenticated shopper comes from the verified Careme session, never from
 submitted JSON. A shopper whose session has expired is redirected to sign in,
 then back to the shopping list to submit again. `return_url` must be an
-application-local path; it is used for sign-in return and the failure page's back
-link, not for cart-transfer status messages.
+application-local path; it is used for sign-in return and for returning to the
+shopping list after a transfer.
 
 ## Kroger navigation
 
@@ -42,13 +42,13 @@ link, not for cart-transfer status messages.
 3. OAuth continuation data preserves the request separately from order transfers.
    `/kroger/callback` validates the state cookie, ownership, and ten-minute age. It exchanges the authorization code, saves the
    encrypted token, and resumes the saved request.
-4. A completed addition returns a 303 redirect to the saved local shopping list.
+4. A saved outcome returns a 303 redirect to the saved local shopping list.
    Expired access tokens are refreshed internally.
 
 No products are added on shopping-list page load. There are no transfer-status
 or separate connection GET routes. Reloading the shopping list reads the saved
-handoff to choose the form or cart link. Reposting consults the saved transfer
-and cannot add the same list twice.
+handoff to choose the form, cart link, or failure label. Reposting consults the
+saved transfer without resubmitting products.
 
 Kroger sends one package per unique matched UPC. Unmatched items are counted in
 the saved result; the shopper reviews amounts and checkout in Kroger's cart.
@@ -60,15 +60,15 @@ OAuth denial, a missing code, or token exchange/storage errors return ordinary
 HTTP errors on the provider route. They do not create an order transfer.
 
 After authentication succeeds, the handler creates a pending transfer. Product
-lookup and other preparation errors leave it failed and display a simple failure
-page with a “Try again, chef” form. Retrying a failed transfer uses its stored
-request. There is no separate retryable-code list.
+lookup errors, no matched products, and cart write errors are saved as failed.
+Both successful and failed transfers redirect to the saved shopping-list URL.
+The shopping list replaces the form with “Add to cart failed.” for a failed
+transfer. There is no retry control, and repeated posts or OAuth callbacks reuse
+the saved result without another cart submission.
 
-An attempted cart write that errors is uncertain. Pending and uncertain records
-are not resubmitted; their provider page offers cart review rather than retry.
-A failed final save leaves the record pending. Known failures retain Add to cart
-on the shopping list, while pending, uncertain, and complete records show the cart
-link. The back-to-list link stays local and validated.
+Pending and applied records show the cart link. A failed final save returns an
+HTTP error and leaves the record pending. A cart write error can occur after
+Kroger accepts products; failed therefore means success was not confirmed.
 
 The request and result use one transfer record. OAuth continuation data is
 separate authentication state and is never presented as a transfer. Shopper
@@ -79,6 +79,9 @@ TODO: use cache ETags and `IfMatch` for transitions. Updates are unconditional
 for now: concurrent attempts can overwrite results and can duplicate additions.
 A failed final save leaves the record pending. This is not a guarantee of
 at-most-once cart writes across concurrent requests.
+
+The typed `TransferStatus` values are `pending`, `failed`, and `applied`.
+There is no separate provider code or custom JSON decoding.
 
 The shared `TransferRequest` and `Transfer` types describe the saved request and
 result inside the handler; they are not a browser JSON API. Transfer IDs use the
@@ -102,9 +105,9 @@ partner API, not a production recipe ordering destination.
 ## Saved cart link on the shopping list
 
 The server asks the configured provider for this signed-in viewer's saved
-transfer using the finalized list key. Kroger reads one saved transfer record. Completed, pending, or possibly applied
-writes replace the form with “Review cart (opens a new tab)”; no counts or status
-text are shown. Missing transfers and known pre-write failures keep Add to cart.
+transfer using the finalized list key. Kroger reads one saved transfer record.
+Completed and pending writes replace the form with “Review cart (opens a new tab)”. Failed transfers
+show “Add to cart failed.” without a form. Missing transfers keep Add to cart.
 Read or decoding errors fail the page request. There is no browser status fetch.
 The saved handoff remains after checkout or cart edits; this is transfer history,
 not a live cart read. A different finalized list has its own idempotency key.

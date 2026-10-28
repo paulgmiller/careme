@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/auth"
+	ordertypes "careme/internal/orders/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,26 +26,19 @@ func TestCartTransferBrowserLoginRedirect(t *testing.T) {
 	assert.NotContains(t, response.Body.String(), "Connect account")
 }
 
-func TestCartTransferBrowserFailurePage(t *testing.T) {
-	t.Setenv("CLARITY_PROJECT_ID", "test-project")
-	t.Setenv("GOOGLE_TAG_MANAGER_ID", "GTM-TEST")
-	for _, code := range []string{"uncertain", "pending", "failed"} {
-		t.Run(code, func(t *testing.T) {
-			a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("rendering must not write cart"); return nil, nil })
+func TestCartTransferBrowserReturnsToShoppingList(t *testing.T) {
+	for _, status := range []ordertypes.TransferStatus{ordertypes.TransferPending, ordertypes.TransferFailed, ordertypes.TransferApplied} {
+		t.Run(string(status), func(t *testing.T) {
+			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+				t.Fatal("redirecting must not write cart")
+				return nil, nil
+			})
 			transfer := cartTransfer{IdempotencyKey: "list", Request: mustOrderRequest(t)}
-			transfer.Result = transfer.result(code, 0, 1)
+			transfer.Result = transfer.result(status, 0, 1)
 			response := httptest.NewRecorder()
 			a.finishTransfer(response, httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", nil), transfer)
-			assert.GreaterOrEqual(t, response.Code, 400)
-			assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
-			assert.Contains(t, response.Body.String(), "<!doctype html>")
-			assert.Contains(t, response.Body.String(), transfer.Result.Message)
-			assert.Contains(t, response.Body.String(), "Back to shopping list")
-			assert.Equal(t, code == "failed", strings.Contains(response.Body.String(), "Try again, chef"))
-			assert.NotContains(t, response.Body.String(), "Connect account")
-			assert.NotContains(t, response.Body.String(), "hx-post")
-			assert.NotContains(t, response.Body.String(), "clarity.ms")
-			assert.NotContains(t, response.Body.String(), "googletagmanager.com")
+			assert.Equal(t, http.StatusSeeOther, response.Code)
+			assert.Equal(t, transfer.Request.ReturnURL, response.Header().Get("Location"))
 		})
 	}
 }

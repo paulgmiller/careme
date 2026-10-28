@@ -67,17 +67,16 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, token CartToken) (ordertypes.Transfer, error) {
 	items, gaps, err := a.resolveItems(ctx, transfer.Request)
 	if err != nil {
-		return transfer.result("failed", 0, 0), err
+		return transfer.result(ordertypes.TransferFailed, 0, 0), err
 	}
 	if len(items) == 0 {
-		result := transfer.result("failed", 0, len(gaps))
-		result.Message = "No products could be matched. Nothing was sent."
+		result := transfer.result(ordertypes.TransferFailed, 0, len(gaps))
 		return result, nil
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
-		return transfer.result("uncertain", 0, len(gaps)), fmt.Errorf("add Kroger cart products: %w", err)
+		return transfer.result(ordertypes.TransferFailed, 0, len(gaps)), fmt.Errorf("add Kroger cart products: %w", err)
 	}
-	return transfer.result("complete", len(items), len(gaps)), nil
+	return transfer.result(ordertypes.TransferApplied, len(items), len(gaps)), nil
 }
 
 func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {

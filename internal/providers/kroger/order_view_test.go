@@ -73,9 +73,9 @@ func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
 
 func TestKrogerTransferUsesChainCart(t *testing.T) {
 	for banner, domain := range chainDomains {
-		response := (cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{Chain: banner}}}).result("complete", 0, 0)
+		response := (cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{Chain: banner}}}).result("applied", 0, 0)
 		assert.Equal(t, "https://www."+domain+"/cart", response.CartURL)
-		assert.Equal(t, "applied", response.Status)
+		assert.Equal(t, ordertypes.TransferApplied, response.Status)
 	}
 }
 
@@ -115,12 +115,12 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 		code   string
 		review bool
 	}{
-		{"", false}, {"complete", true}, {"pending", true}, {"uncertain", true}, {"failed", false},
+		{"", false}, {"applied", true}, {"pending", true}, {"failed", false},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
 			transfer := cartTransfer{UserID: "viewer", IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}}
-			transfer.Result = transfer.result(tc.code, 1, 0)
+			transfer.Result = transfer.result(ordertypes.TransferStatus(tc.code), 1, 0)
 			if tc.code != "" {
 				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list"), transfer, cache.Unconditional()))
 			}
@@ -128,6 +128,11 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 			view, err := OrderViewForUser(t.Context(), a.cache, input)
 			require.NoError(t, err)
 			assert.Equal(t, tc.review, view.ReviewCartURL != "")
+			assert.Equal(t, tc.code == "failed", view.TransferFailed)
+			if tc.code == "failed" {
+				assert.Empty(t, view.TransferURL)
+				assert.Empty(t, view.TransferRequestJSON)
+			}
 			if tc.review {
 				assert.Equal(t, "https://www.qfc.com/cart", view.ReviewCartURL)
 				assert.Empty(t, view.TransferURL)
@@ -167,4 +172,15 @@ func TestOrderViewReviewCartReplacesForm(t *testing.T) {
 	assert.Contains(t, page.String(), `target="_blank" rel="noopener noreferrer"`)
 	assert.NotContains(t, page.String(), "<form")
 	assert.NotContains(t, page.String(), "hx-get")
+}
+
+func TestOrderViewFailedReplacesForm(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", ordertypes.OrderView{TransferFailed: true}))
+	assert.Contains(t, page.String(), "Add to cart failed.")
+	assert.Contains(t, page.String(), `role="alert"`)
+	assert.NotContains(t, page.String(), "<form")
+	assert.NotContains(t, page.String(), "Review cart")
+	assert.NotContains(t, page.String(), "Try again")
 }

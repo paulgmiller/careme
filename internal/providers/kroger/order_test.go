@@ -66,15 +66,8 @@ func transferResponse(t *testing.T, a *OrderHandler, response *httptest.Response
 	t.Helper()
 	result := savedResult(t, a, "list-hash")
 	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-	switch result.Code {
-	case "complete":
-		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
-		assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
-	default:
-		assert.GreaterOrEqual(t, response.Code, 400, response.Body.String())
-		assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
-		assert.Contains(t, response.Body.String(), result.Message)
-	}
+	require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
+	assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
 	return result
 }
 
@@ -137,12 +130,12 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	setOrderField(t, form, "user_id", "someone-else")
 	result := postOrder(mux, form)
 	query := transferResponse(t, a, result)
-	assert.Equal(t, "complete", query.Code)
+	assert.Equal(t, ordertypes.TransferApplied, query.Status)
 	assert.Equal(t, 2, query.Added)
 	assert.Equal(t, 2, query.Unmatched)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
-	assert.Equal(t, "complete", transferResponse(t, a, postOrder(mux, form)).Code)
+	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, postOrder(mux, form)).Status)
 	var original cartTransfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &original))
 	setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"New product"}]`))
@@ -194,7 +187,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			result := httptest.NewRecorder()
 			mux.ServeHTTP(result, callback)
 			query := transferResponse(t, a, result)
-			assert.Equal(t, "complete", query.Code)
+			assert.Equal(t, ordertypes.TransferApplied, query.Status)
 			assert.Equal(t, scenario.cart, query.CartURL)
 			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
 			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
@@ -274,8 +267,8 @@ func (c orderFailCache) Put(ctx context.Context, key, value string, options cach
 		var transfer cartTransfer
 		_ = json.Unmarshal([]byte(value), &transfer)
 		fail := !c.confirmation && !c.reservation
-		fail = fail || (c.confirmation && options.Condition == cache.PutUnconditional && transfer.Result.Code != "pending")
-		fail = fail || (c.reservation && options.Condition == cache.PutUnconditional && transfer.Result.Code == "pending")
+		fail = fail || (c.confirmation && options.Condition == cache.PutUnconditional && transfer.Result.Status != "pending")
+		fail = fail || (c.reservation && options.Condition == cache.PutUnconditional && transfer.Result.Status == "pending")
 		if fail {
 			return errors.New("cache unavailable")
 		}
@@ -284,7 +277,7 @@ func (c orderFailCache) Put(ctx context.Context, key, value string, options cach
 }
 
 func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
-	for _, scenario := range []string{"uncertain", "confirmation failed"} {
+	for _, scenario := range []string{"cart write failed", "confirmation failed"} {
 		t.Run(scenario, func(t *testing.T) {
 			calls := 0
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
@@ -292,7 +285,7 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 				return cartResponse(http.StatusServiceUnavailable, ""), nil
 			})
 			saveShopper(t, a, time.Now().Add(time.Hour))
-			expected := "uncertain"
+			expected := "failed"
 			if scenario == "confirmation failed" {
 				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash"), confirmation: true}
 				expected = "pending"
@@ -302,13 +295,13 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			if scenario == "confirmation failed" {
 				assert.Equal(t, http.StatusInternalServerError, first.Code)
 			} else {
-				assert.Equal(t, expected, transferResponse(t, a, first).Code)
+				assert.Equal(t, ordertypes.TransferStatus(expected), transferResponse(t, a, first).Status)
 			}
-			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Code
+			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Status
 			if scenario == "confirmation failed" {
-				assert.Equal(t, "pending", repeat)
+				assert.Equal(t, ordertypes.TransferPending, repeat)
 			} else {
-				assert.Equal(t, expected, repeat)
+				assert.Equal(t, ordertypes.TransferStatus(expected), repeat)
 			}
 			assert.Equal(t, 1, calls)
 		})
@@ -331,8 +324,8 @@ func TestKrogerOrderConcurrentSubmission(t *testing.T) {
 	<-entered
 	second := postOrder(mux, orderForm())
 	close(release)
-	assert.Equal(t, "pending", transferResponse(t, a, second).Code)
-	assert.Equal(t, "complete", transferResponse(t, a, <-completed).Code)
+	assert.Equal(t, ordertypes.TransferPending, transferResponse(t, a, second).Status)
+	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, <-completed).Status)
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -382,7 +375,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) { return cartResponse(http.StatusNoContent, ""), nil })
 			form := orderForm()
-			expected := "complete"
+			expected := "applied"
 			switch scenario {
 			case "refresh":
 				saveShopper(t, a, time.Now().Add(-time.Minute))
@@ -409,11 +402,15 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
-			if scenario == "token failure" || scenario == "reservation failure" {
+			if scenario == "reservation failure" {
+				assert.Equal(t, http.StatusConflict, response.Code)
+				return
+			}
+			if scenario == "token failure" {
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
-			assert.Equal(t, expected, transferResponse(t, a, response).Code)
+			assert.Equal(t, ordertypes.TransferStatus(expected), transferResponse(t, a, response).Status)
 		})
 	}
 }

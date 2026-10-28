@@ -37,7 +37,7 @@ func TestCartTransferFormPersistsRequestAndRedirectsToCart(t *testing.T) {
 	mux := orderMux(a)
 	response := postOrder(mux, form)
 	transfer := transferResponse(t, a, response)
-	assert.Equal(t, "applied", transfer.Status)
+	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
 	assert.Equal(t, 1, transfer.Added)
 	var saved cartTransfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), &saved))
@@ -85,7 +85,7 @@ func TestCartTransferSaveFailureLeavesPending(t *testing.T) {
 	mux := orderMux(a)
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
 	result := savedResult(t, a, "list-hash")
-	assert.Equal(t, "pending", result.Status)
+	assert.Equal(t, ordertypes.TransferPending, result.Status)
 	assert.Zero(t, result.Added)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
@@ -108,7 +108,7 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
-	assert.Equal(t, "failed", result.Status)
+	assert.Equal(t, ordertypes.TransferFailed, result.Status)
 	assert.Zero(t, result.Added)
 	assert.Equal(t, 2, result.Unmatched)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
@@ -118,12 +118,12 @@ func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("must reserve transfer first"); return nil, nil })
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/"}
-	assert.Equal(t, http.StatusInternalServerError, postOrder(orderMux(a), orderForm()).Code)
+	assert.Equal(t, http.StatusConflict, postOrder(orderMux(a), orderForm()).Code)
 	var result ordertypes.Transfer
 	assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &result), cache.ErrNotFound)
 }
 
-func TestCartTransferRetriesProductLookupWithSameID(t *testing.T) {
+func TestCartTransferFailedLookupIsNotRetried(t *testing.T) {
 	calls := 0
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 		calls++
@@ -136,34 +136,43 @@ func TestCartTransferRetriesProductLookupWithSameID(t *testing.T) {
 	})}
 	mux := orderMux(a)
 	failure := transferResponse(t, a, postOrder(mux, orderForm()))
-	assert.Equal(t, "failed", failure.Status)
+	assert.Equal(t, ordertypes.TransferFailed, failure.Status)
 	assert.Zero(t, calls)
 	a.client.HTTPClient = client
 	completed := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, failure.TransferID, completed.TransferID)
-	assert.Equal(t, "applied", completed.Status)
-	assert.Equal(t, 1, calls)
+	assert.Equal(t, failure, completed)
+	assert.Zero(t, calls)
 }
 
-func TestLateOAuthDenialDoesNotHideCompletedCartTransfer(t *testing.T) {
-	calls := 0
-	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
-		calls++
-		return cartResponse(http.StatusNoContent, ""), nil
-	})
-	mux := orderMux(a)
-	start := connectOrder(t, mux, orderForm())
-	cookie := start.Result().Cookies()[0]
-	for _, outcome := range []string{"code=code", "error=access_denied", "code=replayed"} {
-		callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+cookie.Value+"&"+outcome, nil)
-		callback.AddCookie(cookie)
-		response := httptest.NewRecorder()
-		mux.ServeHTTP(response, callback)
-		result := transferResponse(t, a, response)
-		assert.Equal(t, "applied", result.Status)
-		assert.Equal(t, 2, result.Added)
+func TestOAuthCallbackReusesSavedOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		status  int
+		outcome ordertypes.TransferStatus
+	}{
+		{http.StatusNoContent, ordertypes.TransferApplied},
+		{http.StatusServiceUnavailable, ordertypes.TransferFailed},
+	} {
+		t.Run(string(tc.outcome), func(t *testing.T) {
+			calls := 0
+			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+				calls++
+				return cartResponse(tc.status, ""), nil
+			})
+			mux := orderMux(a)
+			start := connectOrder(t, mux, orderForm())
+			cookie := start.Result().Cookies()[0]
+			for _, query := range []string{"code=code", "error=access_denied", "code=replayed"} {
+				callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+cookie.Value+"&"+query, nil)
+				callback.AddCookie(cookie)
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, callback)
+				result := transferResponse(t, a, response)
+				assert.Equal(t, tc.outcome, result.Status)
+			}
+			assert.Equal(t, 1, calls)
+		})
 	}
-	assert.Equal(t, 1, calls)
 }
 
 func TestCartTransferNewConnectionReplacesOAuthState(t *testing.T) {
@@ -200,7 +209,7 @@ func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, callback)
 	result := transferResponse(t, a, response)
-	assert.Equal(t, "applied", result.Status)
+	assert.Equal(t, ordertypes.TransferApplied, result.Status)
 	assert.Equal(t, 2, result.Added)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
@@ -231,8 +240,8 @@ func TestCartTransferCallbackObservingPendingDoesNotResubmit(t *testing.T) {
 	second := callback()
 	pending := transferResponse(t, a, second)
 	close(release)
-	assert.Equal(t, "pending", pending.Status)
-	assert.Equal(t, "applied", transferResponse(t, a, <-completed).Status)
+	assert.Equal(t, ordertypes.TransferPending, pending.Status)
+	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, <-completed).Status)
 	assert.Equal(t, int32(1), calls.Load())
 }
 
@@ -259,7 +268,7 @@ func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
 			mux.ServeHTTP(completed, callback)
 			require.Equal(t, http.StatusSeeOther, completed.Code, completed.Body.String())
 			assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", completed.Header().Get("Location"))
-			assert.Equal(t, "applied", savedResult(t, a, key).Status)
+			assert.Equal(t, ordertypes.TransferApplied, savedResult(t, a, key).Status)
 			repeated := postOrder(mux, form)
 			assert.Equal(t, http.StatusSeeOther, repeated.Code)
 			assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", repeated.Header().Get("Location"))

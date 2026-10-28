@@ -359,8 +359,6 @@
 {{define "shopping_purchase_section"}}
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-  {{with .Order}}
-  {{end}}
   <div class="mt-4 space-y-5 text-ink-700">
     {{range .Purchases}}
     <section>
@@ -386,7 +384,9 @@
 {{end}}
 
 {{define "shopping_order_form"}}
-{{if .ReviewCartURL}}
+{{if .TransferFailed}}
+<p role="alert" class="text-sm text-action-red-700">Add to cart failed.</p>
+{{else if .ReviewCartURL}}
 <a href="{{.ReviewCartURL}}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">Review cart (opens a new tab)</a>
 {{else if .TransferURL}}
 <form method="POST" action="{{.TransferURL}}" hx-boost="false">
