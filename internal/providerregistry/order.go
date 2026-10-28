@@ -13,6 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/httpretry"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mockorder"
 	"careme/internal/routing"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -26,6 +27,10 @@ type OrderOptions struct {
 
 // RegisterOrders installs routes for every configured ordering destination.
 func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
+	if f.config.Mocks.Enable {
+		mockorder.NewHandler(options.Cache, options.Auth).Register(routes)
+		return nil
+	}
 	if f.config.Kroger.CartTokenKey != "" {
 		handler, err := f.newKrogerOrder(options)
 		if err != nil {
@@ -79,6 +84,9 @@ func (f Factory) NewOrderViewBuilder(c cache.Cache) *OrderViewBuilder {
 }
 
 func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if b.factory.config.Mocks.Enable {
+		return mockorder.OrderView(ctx, b.cache, input)
+	}
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
 		return kroger.OrderViewForUser(ctx, b.cache, input)
 	}

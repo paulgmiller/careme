@@ -30,11 +30,31 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
 	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback"} {
+	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback", "/mock/order-transfers/list"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)
 	}
+}
+
+func TestMockOrderProviderHandlesEveryLocation(t *testing.T) {
+	factory := NewFactory(&config.Config{Mocks: config.MockConfig{Enable: true}, Kroger: config.KrogerConfig{CartTokenKey: "unused-invalid-key"}})
+	options := orderingTestOptions()
+	routes := http.NewServeMux()
+	require.NoError(t, factory.RegisterOrders(routes, options))
+	for _, id := range []string{"70500874", "walmart_123", "mnfoodclub_1", "unknown"} {
+		view, err := factory.NewOrderViewBuilder(options.Cache).OrderView(t.Context(), ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: locationtypes.Location{ID: id}})
+		require.NoError(t, err)
+		require.NotNil(t, view)
+		assert.Equal(t, "/mock/order-transfers", view.TransferURL)
+		assert.Equal(t, "Add to mock cart", view.TransferLabel)
+	}
+	response := httptest.NewRecorder()
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/mock/order-transfers", nil))
+	assert.Equal(t, http.StatusBadRequest, response.Code, "mock route is installed without credentials")
+	response = httptest.NewRecorder()
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kroger/callback", nil))
+	assert.Equal(t, http.StatusNotFound, response.Code, "real ordering is not registered in mock mode")
 }
 
 func TestRegisterOrdersInvalidKrogerConfig(t *testing.T) {
