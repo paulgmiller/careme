@@ -24,7 +24,6 @@ type OrderView struct {
 	TransferURL         string
 	TransferLabel       string
 	TransferRequestJSON string
-	Description         string
 }
 
 // TransferRequest sends the displayed shopping list to a destination.
