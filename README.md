@@ -94,19 +94,23 @@ Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Give each destination its own HTTP workflow, such as `POST /kroger/order`.
-The shopping list submits its displayed items, store hints, stable list key,
-and return URL. The destination owns authentication, matching, cart writes,
-duplicate prevention, and the redirect back with a review link and brief status.
-Register its routes independently of the recipe handler in `cmd/careme/web.go`.
-Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
-the recipe page renders the returned action, fields, and copy generically.
+Implement `POST /<destination>/order-transfers` as a browser navigation using
+`orders/types.TransferRequest`. The shopping list submits the serialized request
+and a stable idempotency key in hidden form fields. The destination owns
+authentication, matching, cart writes, duplicate prevention, redirects, and error
+pages. It redirects directly to account connection when needed and to the
+shopping list when the addition completes.
 
-Kroger is currently the only ordering destination. Future destinations can own
-routes such as `/instacart/order` or `/bigcommerce/order` without implementing
-a shared Go provider interface. Users review and complete checkout with the
-provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
-and OAuth continuation behavior.
+Register routes in `providerregistry.Factory.RegisterOrders`, then add the
+location match and view builder through `Factory.NewOrderViewBuilder(cache)`.
+The shopping-list UI
+asks the provider for the current viewer's saved handoff during server rendering.
+Confirmed or possibly applied writes show a cart link instead of the form;
+transfer-read failures fail the page. There is no browser status fetch.
+Kroger is currently the only destination; future integrations can adapt their
+upstream APIs behind the same browser handoff. Users review amounts and complete
+checkout with the provider. See [Cart transfers](docs/ordering.md) for browser
+navigation and OAuth details.
 
 ### Verify the integration
 

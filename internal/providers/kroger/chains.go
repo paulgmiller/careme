@@ -58,12 +58,3 @@ func cartURL(chain string) string {
 	}
 	return "https://www." + domain + "/cart"
 }
-
-func validCartURL(destination string) bool {
-	for _, domain := range chainDomains {
-		if destination == "https://www."+domain+"/cart" {
-			return true
-		}
-	}
-	return false
-}

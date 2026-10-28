@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	ordertypes "careme/internal/orders/types"
-
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
@@ -22,23 +20,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
-	_ = newTestServer(t)
+func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
+	s := newTestServer(t)
+	s.orderView = orderViewBuilderFunc(kroger.OrderView)
 	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
 		t.Run(code, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
-			view.Order, err = kroger.OrderView(ordertypes.OrderViewInput{Query: httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).URL.Query()})
-			require.NoError(t, err)
+			if view.User == nil {
+				view.User = &utypes.User{ID: "viewer"}
+			}
+			require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).Context(), &view))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
-			if code == "denied" {
-				assert.Contains(t, page.String(), "Kroger connection was not approved")
-			} else {
-				assert.NotContains(t, page.String(), "alert(1)")
-			}
+			assert.NotContains(t, page.String(), `hx-get="/kroger/order-transfers/`)
+			assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
+			assert.NotContains(t, page.String(), "cart-transfer.js")
+			assert.NotContains(t, page.String(), `id="shopping-cart-transfer"`)
+			assert.NotContains(t, page.String(), "Kroger connection was not approved")
+			assert.NotContains(t, page.String(), "alert(1)")
 		})
 	}
 }

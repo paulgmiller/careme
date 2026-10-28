@@ -10,7 +10,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/locations"
-	locationtypes "careme/internal/locations/types"
+	ordertypes "careme/internal/orders/types"
 	"careme/internal/providers/kroger"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
@@ -33,7 +33,10 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 		wineRecommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}},
 	})
 	require.NoError(t, err)
-	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil)))
+	if view.User == nil {
+		view.User = &utypes.User{ID: "viewer"}
+	}
+	require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes", nil).Context(), &view))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
@@ -54,19 +57,21 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 		}
 	}
 	inspect(document)
-	var posted []ai.ShoppingItem
-	require.NoError(t, json.Unmarshal([]byte(values["items"]), &posted))
-	require.Len(t, posted, 2)
-	assert.Equal(t, food[0].Items[0].ShoppingItem, posted[0])
-	assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, posted[1])
-	var location locationtypes.Location
-	require.NoError(t, json.Unmarshal([]byte(values["location"]), &location))
-	assert.Equal(t, *p.Location, location)
+	var posted ordertypes.TransferRequest
+	require.NoError(t, json.Unmarshal([]byte(values["transfer_request"]), &posted))
+	require.Len(t, posted.Items, 2)
+	assert.Equal(t, food[0].Items[0].ShoppingItem, posted.Items[0])
+	assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, posted.Items[1])
+	assert.Equal(t, *p.Location, posted.Location)
+	assert.NotContains(t, values, "items")
+	assert.NotContains(t, values, "location")
+	assert.NotContains(t, values, "return_url")
 	assert.NotContains(t, values, "store_id")
 	assert.NotContains(t, values, "chain")
-	assert.Equal(t, p.Hash(), values["list_key"])
-	assert.Contains(t, values["return_url"], "#shopping-list-section")
-	assert.Contains(t, page.String(), `action="/kroger/order"`)
+	assert.NotContains(t, values, "list_key")
+	assert.Equal(t, p.Hash(), values["idempotency_key"])
+	assert.Contains(t, posted.ReturnURL, "#shopping-list-section")
+	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 	assert.NotContains(t, page.String(), `target="_blank"`)
 	assert.NotContains(t, page.String(), "other")
 	assert.Len(t, food, 1, "wine is appended without changing cached food")

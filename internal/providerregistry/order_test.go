@@ -30,7 +30,7 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
 	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	for _, path := range []string{"/kroger/order", "/kroger/callback"} {
+	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)
@@ -70,8 +70,11 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 	})
 	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
-	form := url.Values{"list_key": {"list"}, "location": {`{"id":"70500874","name":"QFC","chain":"QFC"}`}, "return_url": {"/recipes?h=list"}, "items": {`[{"id":"milk","name":"Milk"}]`}}
-	request := httptest.NewRequest(http.MethodPost, "/kroger/order", strings.NewReader(form.Encode()))
+	legacy := httptest.NewRecorder()
+	routes.ServeHTTP(legacy, httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", nil))
+	assert.Equal(t, http.StatusNotFound, legacy.Code)
+	form := url.Values{"idempotency_key": {"list"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list","items":[{"id":"milk","name":"Milk"}]}`}}
+	request := httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
@@ -100,15 +103,29 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			factory := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: scenario.key}})
-			view, err := factory.OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
+			view, err := factory.NewOrderViewBuilder(cache.NewInMemoryCache()).OrderView(t.Context(), ordertypes.OrderViewInput{UserID: "viewer", Location: locationtypes.Location{ID: scenario.location, Chain: "QFC"}})
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
-				assert.Equal(t, "/kroger/order", view.ActionURL)
-				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
+				assert.Equal(t, "/kroger/order-transfers", view.TransferURL)
+				assert.Equal(t, "Add to QFC cart", view.TransferLabel)
 			} else {
 				assert.Nil(t, view)
 			}
 		})
 	}
+}
+
+func TestOrderViewBuilderUsesOrderingCache(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	require.NoError(t, c.Put(t.Context(), "kroger_order_transfers/viewer/list", `{"status":"applied","cart_url":"https://www.qfc.com/cart"}`, cache.Unconditional()))
+	builder := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}}).NewOrderViewBuilder(c)
+	input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: locationtypes.Location{ID: "70500874"}}
+	view, err := builder.OrderView(t.Context(), input)
+	require.NoError(t, err)
+	assert.Equal(t, "https://www.qfc.com/cart", view.ReviewCartURL)
+	input.UserID = "someone-else"
+	view, err = builder.OrderView(t.Context(), input)
+	require.NoError(t, err)
+	assert.Empty(t, view.ReviewCartURL)
 }
