@@ -128,7 +128,6 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 }
 
 func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
-	campaignTestTime := time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC) // Monday, 9 AM Central.
 	s, g, _ := testService()
 	g.err = errors.New("flex unavailable")
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
@@ -144,7 +143,6 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 }
 
 func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
-	campaignTestTime := time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC) // Monday, 9 AM Central.
 	s, g, images := testService()
 	images.err = errors.New("image unavailable")
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "image unavailable")
