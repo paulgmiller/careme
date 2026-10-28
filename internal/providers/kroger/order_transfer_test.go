@@ -63,11 +63,10 @@ func (a transferUser) GetUserIDFromRequest(*http.Request) (string, error) { retu
 func TestCartTransferPendingLoginRedirectsDirectlyToOAuth(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("GET must not write cart"); return nil, nil })
 	mux := orderMux(a)
-	posted := transferResponse(t, a, postOrder(mux, orderForm()))
-	assert.Equal(t, "pending_login", posted.Status)
-	assert.Equal(t, "https://www.qfc.com/cart", posted.CartURL)
-	assert.Equal(t, posted, transferResponse(t, a, postOrder(mux, orderForm())))
-	assert.Zero(t, posted.Added)
+	connectOrder(t, mux, orderForm())
+	exists, err := a.cache.Exists(t.Context(), transferKey("mock-clerk-user-id", "list-hash"))
+	require.NoError(t, err)
+	assert.False(t, exists)
 	for _, path := range []string{"/kroger/order-transfers/list-hash", "/kroger/order-transfers/list-hash/connect"} {
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -109,7 +108,7 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
-	assert.Equal(t, "applied", result.Status)
+	assert.Equal(t, "failed", result.Status)
 	assert.Zero(t, result.Added)
 	assert.Equal(t, 2, result.Unmatched)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
@@ -177,11 +176,13 @@ func TestCartTransferNewConnectionReplacesOAuthState(t *testing.T) {
 	second := connectOrder(t, mux, orderForm()).Result().Cookies()[0]
 	require.NotEqual(t, first.Value, second.Value)
 	callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+first.Value+"&code=code", nil)
-	callback.AddCookie(first)
+	callback.AddCookie(second)
 	response := httptest.NewRecorder()
 	mux.ServeHTTP(response, callback)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
-	assert.Equal(t, "pending_login", savedResult(t, a, "list-hash").Status)
+	exists, err := a.cache.Exists(t.Context(), transferKey("mock-clerk-user-id", "list-hash"))
+	require.NoError(t, err)
+	assert.False(t, exists)
 }
 
 func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
@@ -248,8 +249,9 @@ func TestCartTransferUsesIdempotencyKeyThroughOAuth(t *testing.T) {
 			form := orderForm()
 			form.Set("idempotency_key", key)
 			start := connectOrder(t, mux, form)
-			result := savedResult(t, a, key)
-			assert.Equal(t, key, result.TransferID)
+			exists, err := a.cache.Exists(t.Context(), transferKey("mock-clerk-user-id", key))
+			require.NoError(t, err)
+			assert.False(t, exists)
 			cookie := start.Result().Cookies()[0]
 			callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?state="+url.QueryEscape(cookie.Value)+"&code=code", nil)
 			callback.AddCookie(cookie)

@@ -70,12 +70,6 @@ func transferResponse(t *testing.T, a *OrderHandler, response *httptest.Response
 	case "complete":
 		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
 		assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
-	case "pending_login":
-		require.Equal(t, http.StatusSeeOther, response.Code, response.Body.String())
-		destination, err := url.Parse(response.Header().Get("Location"))
-		require.NoError(t, err)
-		assert.Equal(t, "https", destination.Scheme)
-		assert.NotEmpty(t, destination.Query().Get("state"))
 	default:
 		assert.GreaterOrEqual(t, response.Code, 400, response.Body.String())
 		assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
@@ -209,35 +203,31 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 }
 
 func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
-	for _, scenario := range []string{"wrong state", "missing cookie", "different user", "expired", "future", "missing timestamp", "different stored state", "missing authorization", "missing request", "denied", "missing code", "exchange failure", "save failure"} {
+	for _, scenario := range []string{"wrong state", "missing cookie", "different user", "expired", "future", "missing timestamp", "missing request", "denied", "missing code", "exchange failure", "save failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("must not write cart"); return nil, nil })
 			mux := orderMux(a)
 			start := connectOrder(t, mux, orderForm())
 			cookie := start.Result().Cookies()[0]
 			state := cookie.Value
-			var continuation cartTransfer
-			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &continuation))
+			var continuation oauthContinuation
+			require.NoError(t, a.loadJSON(t.Context(), oauthContinuationKey("mock-clerk-user-id", cookie.Value), &continuation))
 			switch scenario {
 			case "wrong state":
 				state = "wrong"
 			case "different user":
 				continuation.UserID = "another-user"
 			case "expired":
-				continuation.Authorization.IssuedAt = time.Now().Add(-11 * time.Minute)
+				continuation.IssuedAt = time.Now().Add(-11 * time.Minute)
 			case "future":
-				continuation.Authorization.IssuedAt = time.Now().Add(2 * time.Minute)
+				continuation.IssuedAt = time.Now().Add(2 * time.Minute)
 			case "missing timestamp":
-				continuation.Authorization.IssuedAt = time.Time{}
-			case "different stored state":
-				continuation.Authorization.State = "different-state"
-			case "missing authorization":
-				continuation.Authorization = nil
+				continuation.IssuedAt = time.Time{}
 			case "missing request":
 				a.cache = cache.NewInMemoryCache()
 			}
 			if scenario != "missing request" {
-				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), continuation, cache.Unconditional()))
+				require.NoError(t, a.saveJSON(t.Context(), oauthContinuationKey("mock-clerk-user-id", cookie.Value), continuation, cache.Unconditional()))
 			}
 			if scenario == "exchange failure" {
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
@@ -260,12 +250,14 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 			}
 			result := httptest.NewRecorder()
 			mux.ServeHTTP(result, callback)
-			expected := map[string]string{"denied": "denied", "missing code": "missing_code", "exchange failure": "connect_failed", "save failure": "save_failed"}[scenario]
-			if expected != "" {
-				assert.Equal(t, expected, transferResponse(t, a, result).Code)
+			if scenario == "exchange failure" || scenario == "save failure" {
+				assert.Equal(t, http.StatusInternalServerError, result.Code)
 			} else {
 				assert.Equal(t, http.StatusBadRequest, result.Code)
 			}
+			exists, err := a.cache.Exists(t.Context(), transferKey("mock-clerk-user-id", "list-hash"))
+			require.NoError(t, err)
+			assert.False(t, exists, "OAuth errors must not create transfers")
 		})
 	}
 }
@@ -397,25 +389,27 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 			case "no matches":
 				saveShopper(t, a, time.Now().Add(time.Hour))
 				setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
-				expected = "no_matches"
+				expected = "failed"
 			case "lookup failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 					return cartResponse(http.StatusServiceUnavailable, ""), nil
 				})}
-				expected = "lookup_failed"
+				expected = "failed"
 			case "token failure":
 				require.NoError(t, a.cache.Put(t.Context(), "kroger_cart_tokens/mock-clerk-user-id", "broken", cache.Unconditional()))
-				expected = "connect_failed"
 			case "reservation failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash"), reservation: true}
-				expected = "start_failed"
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash")}
 			}
 			response := postOrder(orderMux(a), form)
 			if scenario == "request save failure" {
-				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_order_transfers/", confirmation: true}
+				a.cache = orderFailCache{Cache: a.cache, prefix: "kroger_oauth_continuations/"}
 				response = postOrder(orderMux(a), form)
+				assert.Equal(t, http.StatusInternalServerError, response.Code)
+				return
+			}
+			if scenario == "token failure" || scenario == "reservation failure" {
 				assert.Equal(t, http.StatusInternalServerError, response.Code)
 				return
 			}
@@ -460,4 +454,37 @@ func TestKrogerOrderRejectsInvalidTransferPayload(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, postOrder(orderMux(a), form).Code)
 		})
 	}
+}
+
+func TestKrogerShopperTokenIsReusedAcrossTransfers(t *testing.T) {
+	adds, exchanges := 0, 0
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		adds++
+		return cartResponse(http.StatusNoContent, ""), nil
+	})
+	transport := a.client.HTTPClient.Transport
+	a.client.HTTPClient.Transport = cartRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/v1/connect/oauth2/token" {
+			exchanges++
+		}
+		return transport.RoundTrip(r)
+	})
+	mux := orderMux(a)
+	start := connectOrder(t, mux, orderForm())
+	cookie := start.Result().Cookies()[0]
+	callback := httptest.NewRequest(http.MethodGet, "/kroger/callback?code=code&state="+cookie.Value, nil)
+	callback.AddCookie(cookie)
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, callback)
+	require.Equal(t, http.StatusSeeOther, response.Code)
+	second := orderForm()
+	second.Set("idempotency_key", "another-list")
+	response = postOrder(mux, second)
+	assert.Equal(t, http.StatusSeeOther, response.Code)
+	assert.Equal(t, "/recipes?h=list-hash#shopping-list-section", response.Header().Get("Location"))
+	assert.Equal(t, 2, adds)
+	assert.Equal(t, 1, exchanges)
+	token, err := a.loadToken(t.Context(), "mock-clerk-user-id")
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().Add(time.Hour), token.ExpiresAt, time.Minute)
 }

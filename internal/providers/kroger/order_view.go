@@ -29,7 +29,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 		return nil, fmt.Errorf("decode Kroger transfer: %w", err)
 	}
 	switch transfer.Result.Code {
-	case "complete", "pending", "uncertain", "confirmation_failed":
+	case "complete", "pending", "uncertain":
 		return &ordertypes.OrderView{ReviewCartURL: transfer.Result.CartURL}, nil
 	}
 
@@ -58,16 +58,9 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 
 func krogerOrderNotice(code string) string {
 	return map[string]string{
-		"pending":             "Your transfer is still running or could not be confirmed. Review your cart before trying again.",
-		"complete":            "Your products were sent to your cart. Review amounts before checkout.",
-		"no_matches":          "No products could be matched. Nothing was sent to Kroger.",
-		"uncertain":           "Careme could not confirm what Kroger added. Review your cart before adding missing items.",
-		"denied":              "Kroger connection was not approved. Try again, chef.",
-		"missing_code":        "Kroger did not finish connecting your account. Try again, chef.",
-		"connect_failed":      "Unable to connect to Kroger. Try again, chef.",
-		"save_failed":         "Unable to save your Kroger connection. Try again, chef.",
-		"lookup_failed":       "Could not check Kroger products. Nothing was sent. Try again, chef.",
-		"start_failed":        "Could not start your Kroger transfer. Check your cart before trying again.",
-		"confirmation_failed": "Could not save the transfer result. Items may have been sent. Review your Kroger cart.",
+		"pending":   "Your transfer is still running or could not be confirmed. Review your cart before trying again.",
+		"failed":    "Could not send your products to Kroger. Try again, chef.",
+		"uncertain": "Careme could not confirm what Kroger added. Review your cart before adding missing items.",
+		"complete":  "Your products were sent to your cart.",
 	}[code]
 }

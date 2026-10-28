@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -65,47 +64,20 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAuthorization bool) ordertypes.Transfer {
-	token, err := a.loadToken(ctx, transfer.UserID)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return transfer.result("connect_failed", 0, 0)
-	}
-	if err == nil && time.Now().After(token.ExpiresAt.Add(-time.Minute)) {
-		token, err = a.client.Refresh(ctx, token.RefreshToken)
-		if err == nil {
-			if err = a.saveToken(ctx, transfer.UserID, token); err != nil {
-				return transfer.result("save_failed", 0, 0)
-			}
-		}
-	}
-	if err != nil || token.AccessToken == "" {
-		if allowAuthorization {
-			return transfer.result("pending_login", 0, 0)
-		} else {
-			return transfer.result("connect_failed", 0, 0)
-		}
-	}
+func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, token CartToken) (ordertypes.Transfer, error) {
 	items, gaps, err := a.resolveItems(ctx, transfer.Request)
 	if err != nil {
-		return transfer.result("lookup_failed", 0, 0)
+		return transfer.result("failed", 0, 0), err
 	}
-	result := transfer.result("pending", 0, len(gaps))
 	if len(items) == 0 {
-		return transfer.result("no_matches", 0, len(gaps))
-	}
-	transfer.Result = result
-	// TODO: Claim this transition with IfMatch once cache ETag updates are supported.
-	// Until then, competing attempts may overwrite this record and both submit.
-	if err := a.saveJSON(ctx, transferKey(transfer.UserID, transfer.IdempotencyKey), transfer, cache.Unconditional()); err != nil {
-		return transfer.result("start_failed", 0, len(gaps))
+		result := transfer.result("failed", 0, len(gaps))
+		result.Message = "No products could be matched. Nothing was sent."
+		return result, nil
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
-		result = transfer.result("uncertain", 0, len(gaps))
-	} else {
-		result = transfer.result("complete", len(items), len(gaps))
+		return transfer.result("uncertain", 0, len(gaps)), fmt.Errorf("add Kroger cart products: %w", err)
 	}
-
-	return result
+	return transfer.result("complete", len(items), len(gaps)), nil
 }
 
 func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {

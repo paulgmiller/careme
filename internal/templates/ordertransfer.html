@@ -10,7 +10,7 @@
       <p role="alert" class="mt-4 text-sm text-ink-700">{{.Message}}</p>
       <div class="mt-6 flex flex-wrap items-center gap-4">
         {{with .Retry}}{{template "shopping_order_form" .}}{{end}}
-        <a href="{{.CartURL}}" class="font-medium text-brand-600 underline">Review cart</a>
+        {{if .CartURL}}<a href="{{.CartURL}}" class="font-medium text-brand-600 underline">Review cart</a>{{end}}
         <a href="{{.ReturnURL}}" class="font-medium text-brand-600 underline">Back to shopping list</a>
       </div>
     </section>

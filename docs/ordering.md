@@ -36,11 +36,11 @@ link, not for cart-transfer status messages.
 
 ## Kroger navigation
 
-1. The POST saves the request before preparing the cart addition.
+1. The POST checks the shopper’s encrypted per-user token and refreshes it when needed.
 2. If a Kroger connection is needed, it immediately returns a 303 redirect to
    Kroger OAuth. The shopper does not have to click a separate connect button.
-3. `/kroger/callback` validates the state cookie, authenticated ownership, stored
-   nonce, and ten-minute age. It exchanges the authorization code, saves the
+3. OAuth continuation data preserves the request separately from order transfers.
+   `/kroger/callback` validates the state cookie, ownership, and ten-minute age. It exchanges the authorization code, saves the
    encrypted token, and resumes the saved request.
 4. A completed addition returns a 303 redirect to the saved local shopping list.
    Expired access tokens are refreshed internally.
@@ -56,22 +56,24 @@ A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
 
-Failures remain on the provider route as a full HTML page. The page offers links
-to review the cart or return to the shopping list. OAuth denial, connection
-errors, and product-lookup failures also offer a native “Try again, chef” form
-with the same request and idempotency key. A transfer with no matches shows this
-page without claiming that products were added.
+OAuth denial, a missing code, or token exchange/storage errors return ordinary
+HTTP errors on the provider route. They do not create an order transfer.
 
-An unconfirmed write, concurrent submission, or failed write-reservation check
-shows a conflict page without a retry button. The shopper must review the cart;
-the server does not automatically replay an addition. Invalid forms and cache
-failures return HTTP errors on the provider route, without putting error state
-into the shopping-list page or its URL.
+After authentication succeeds, the handler creates a pending transfer. Product
+lookup and other preparation errors leave it failed and display a simple failure
+page with a “Try again, chef” form. Retrying a failed transfer uses its stored
+request. There is no separate retryable-code list.
 
-Kroger stores the request, OAuth state, and result in one transfer record.
-Before a cart write it saves `pending`, then overwrites that record with the
-outcome. Sequential reposts and callbacks consult the saved result. Pending is
-internal state and does not enable browser polling.
+An attempted cart write that errors is uncertain. Pending and uncertain records
+are not resubmitted; their provider page offers cart review rather than retry.
+A failed final save leaves the record pending. Known failures retain Add to cart
+on the shopping list, while pending, uncertain, and complete records show the cart
+link. The back-to-list link stays local and validated.
+
+The request and result use one transfer record. OAuth continuation data is
+separate authentication state and is never presented as a transfer. Shopper
+tokens are encrypted and keyed by Careme user, not transfer. Their expiry comes
+from Kroger’s `expires_in`; the handler refreshes them one minute before expiry.
 
 TODO: use cache ETags and `IfMatch` for transitions. Updates are unconditional
 for now: concurrent attempts can overwrite results and can duplicate additions.

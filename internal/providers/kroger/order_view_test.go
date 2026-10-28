@@ -115,7 +115,7 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 		code   string
 		review bool
 	}{
-		{"", false}, {"complete", true}, {"pending", true}, {"uncertain", true}, {"confirmation_failed", true}, {"lookup_failed", false}, {"start_failed", false}, {"no_matches", false}, {"pending_login", false},
+		{"", false}, {"complete", true}, {"pending", true}, {"uncertain", true}, {"failed", false},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
