@@ -63,6 +63,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
+| `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `kroger_order_transfers/` | Shared `orders/types.Transfer` results keyed by authenticated user and transfer ID | Kroger transfer POST and OAuth callback | Provider browser POST and OAuth callback |
 | `kroger_oauth_continuations/` | Posted request, user ID, idempotency key, and issued timestamp keyed by user and random OAuth state | Kroger authorization start | OAuth callback; accepted for ten minutes |
 | `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
@@ -230,6 +231,8 @@ cached grades and embeddings, embeds the query description, and ranks that
 catalog by cosine similarity. It does not search other stores or filter by grade.
 
 ## Ordering handoffs
+
+- In mock mode, `mock_order_transfers/<user ID>/<idempotency key>` stores a shared `orders/types.Transfer` directly. The mock provider handles every location ID, accepts all displayed items, and exposes a local cart-review route. Creation is conditional and repeated posts reuse the saved result. Records have no automatic expiry. Mock mode registers this provider instead of real ordering routes and requires no external credentials.
 
 - Kroger keeps AES-GCM encrypted shopper tokens at `kroger_cart_tokens/<user ID>`.
 - `kroger_order_transfers/<user ID>/<transfer ID>` stores the shared `orders/types.Transfer` result directly, without a request wrapper or duplicated user ID. It is created only after a valid shopper token is available. The transfer ID is the original idempotency key; ownership is enforced by the authenticated user prefix. Creation is conditional. The finalized list key identifies the items and location; repeated posts reuse the saved result without comparing payloads. Redirects use the current validated request’s return URL or the OAuth continuation’s return URL. Its states are pending, failed, or applied; preparation and cart write errors are saved as failed. Failed transfers show a failure label on the shopping list and cannot be retried. Records have no automatic expiry.

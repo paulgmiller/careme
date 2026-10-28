@@ -50,7 +50,7 @@ The application is configured via environment variables:
 For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry env vars. Grafana's docs provide generated values for `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`.
 
 if you're
-- `ENABLE_MOCKS` - For testing if you have none of the above
+- `ENABLE_MOCKS` - For local testing without external credentials. Includes a mock order provider for every location: Add to mock cart redirects back to the shopping list, then Review cart opens the saved mock result.
 
 ## Adding a provider
 

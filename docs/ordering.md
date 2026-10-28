@@ -91,6 +91,21 @@ idempotency key directly, scoped to the authenticated user and destination.
 Records have no automatic expiry; OAuth state expires logically after ten minutes.
 See [cache layout](cache-layout.md) for storage details.
 
+## Local development and E2E tests
+
+With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
+of registering real ordering providers. No Kroger credentials, cart-token key,
+or OAuth callback registration are needed. Generate and finalize a shopping
+list, then submit “Add to mock cart”. The provider accepts all displayed items,
+saves a shared `Transfer`, and redirects back to the shopping list. “Review cart”
+opens the local `/mock/order-transfers/<id>` endpoint, which displays the saved
+result as JSON. Repeated submissions reuse the result without adding again.
+
+Mock transfers use `mock_order_transfers/<user ID>/<idempotency key>` and remain
+separate from real provider records. The normal web E2E test follows this native
+form POST through the redirect and checks the resulting shopping list and cart.
+Kroger's own tests cover OAuth and upstream API contracts separately.
+
 ## Adding a destination
 
 Register its POST and authentication callback routes through
