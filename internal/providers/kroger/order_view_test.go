@@ -29,7 +29,7 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 	require.NoError(t, err)
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", map[string]any{"Order": order, "HasSavedRecipes": true}))
-	assert.Contains(t, page.String(), `action="/kroger/cart-transfers"`)
+	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 	assert.NotContains(t, page.String(), `hx-get=`)
 	assert.NotContains(t, page.String(), `hx-post=`)
 	assert.NotContains(t, page.String(), `hx-trigger=`)
@@ -50,7 +50,7 @@ func TestKrogerOrderViewForm(t *testing.T) {
 	for _, chain := range []string{"QFC", ""} {
 		view, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: chain}, ListKey: "list", ReturnURL: "/recipes?h=list"})
 		require.NoError(t, err)
-		assert.Equal(t, "/kroger/cart-transfers", view.TransferURL)
+		assert.Equal(t, "/kroger/order-transfers", view.TransferURL)
 		brand := chain
 		if brand == "" {
 			brand = "Kroger"

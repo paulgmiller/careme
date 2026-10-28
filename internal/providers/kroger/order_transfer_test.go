@@ -71,7 +71,7 @@ func TestCartTransferPendingLoginRedirectsDirectlyToOAuth(t *testing.T) {
 	assert.Equal(t, "https://www.qfc.com/cart", posted.CartURL)
 	assert.Equal(t, posted, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Zero(t, posted.Added)
-	for _, path := range []string{"/kroger/cart-transfers/list-hash", "/kroger/cart-transfers/list-hash/connect"} {
+	for _, path := range []string{"/kroger/order-transfers/list-hash", "/kroger/order-transfers/list-hash/connect"} {
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)
@@ -98,7 +98,7 @@ func TestCartTransferLifecycleSaveFailureKeepsSubmissionResult(t *testing.T) {
 func TestCartTransferRejectsJSONBody(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
 	body := `{"items":[{"id":"food"}],"location":{"id":"70500874","chain":"QFC"},"return_url":"/recipes"}`
-	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(body))
+	request := httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)

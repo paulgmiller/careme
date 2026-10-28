@@ -35,7 +35,7 @@ func TestCartTransferBrowserFailurePage(t *testing.T) {
 			transfer := cartTransfer{IdempotencyKey: "list", Request: mustOrderRequest(t)}
 			transfer.Result = transfer.result(code, 0, 1)
 			response := httptest.NewRecorder()
-			a.finishTransfer(response, httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", nil), transfer)
+			a.finishTransfer(response, httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", nil), transfer)
 			assert.GreaterOrEqual(t, response.Code, 400)
 			assert.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
 			assert.Contains(t, response.Body.String(), "<!doctype html>")

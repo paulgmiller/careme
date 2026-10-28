@@ -30,7 +30,7 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
 	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	for _, path := range []string{"/kroger/cart-transfers", "/kroger/callback"} {
+	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)
@@ -70,8 +70,11 @@ func TestRegisterOrdersHTTPRoutes(t *testing.T) {
 	})
 	err := NewFactory(&config.Config{PublicOrigin: "https://careme.test", Kroger: config.KrogerConfig{ClientID: "client", ClientSecret: "secret", CartTokenKey: base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32)))}}).RegisterOrders(appRoutes, orderingTestOptions())
 	require.NoError(t, err)
+	legacy := httptest.NewRecorder()
+	routes.ServeHTTP(legacy, httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", nil))
+	assert.Equal(t, http.StatusNotFound, legacy.Code)
 	form := url.Values{"idempotency_key": {"list"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list","items":[{"id":"milk","name":"Milk"}]}`}}
-	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
@@ -104,7 +107,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 			require.NoError(t, err)
 			if scenario.want {
 				require.NotNil(t, view)
-				assert.Equal(t, "/kroger/cart-transfers", view.TransferURL)
+				assert.Equal(t, "/kroger/order-transfers", view.TransferURL)
 				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
 			} else {
 				assert.Nil(t, view)

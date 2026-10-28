@@ -94,7 +94,7 @@ Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Implement `POST /<destination>/cart-transfers` as a browser navigation using
+Implement `POST /<destination>/order-transfers` as a browser navigation using
 `orders/types.TransferRequest`. The shopping list submits the serialized request
 and a stable idempotency key in hidden form fields. The destination owns
 authentication, matching, cart writes, duplicate prevention, redirects, and error

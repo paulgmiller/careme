@@ -35,8 +35,8 @@ func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
 			require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil)))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
-			assert.NotContains(t, page.String(), `hx-get="/kroger/cart-transfers/`)
-			assert.Contains(t, page.String(), `action="/kroger/cart-transfers"`)
+			assert.NotContains(t, page.String(), `hx-get="/kroger/order-transfers/`)
+			assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 			assert.NotContains(t, page.String(), "cart-transfer.js")
 			assert.NotContains(t, page.String(), `id="shopping-cart-transfer"`)
 			assert.NotContains(t, page.String(), "Kroger connection was not approved")

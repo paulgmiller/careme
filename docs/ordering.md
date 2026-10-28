@@ -13,7 +13,7 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
 
 ## Browser form
 
-`POST /<destination>/cart-transfers` accepts two URL-encoded hidden inputs:
+`POST /<destination>/order-transfers` accepts two URL-encoded hidden inputs:
 
 - `transfer_request`: the complete JSON-serialized `orders/types.TransferRequest`,
   containing the displayed `items`, source `location`, and local `return_url`.

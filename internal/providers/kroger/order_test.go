@@ -42,7 +42,7 @@ func mustOrderRequest(t *testing.T) ordertypes.TransferRequest {
 }
 
 func postOrder(handler http.Handler, form url.Values) *httptest.ResponseRecorder {
-	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(form.Encode()))
+	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/order-transfers", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	result := httptest.NewRecorder()
 	handler.ServeHTTP(result, request)
@@ -355,7 +355,7 @@ func TestKrogerOrderValidation(t *testing.T) {
 		})
 	}
 	a := newTestOrderHandler(t, &CartClient{})
-	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/cart-transfers", strings.NewReader(orderForm().Encode()))
+	request := httptest.NewRequest(http.MethodPost, "https://careme.test/kroger/order-transfers", strings.NewReader(orderForm().Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", "https://evil.test")
 	response := httptest.NewRecorder()
@@ -419,7 +419,7 @@ func TestKrogerOrderRequiresIdempotencyField(t *testing.T) {
 			})
 			form := orderForm()
 			form.Set("idempotency_key", key)
-			request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader(form.Encode()))
+			request := httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", strings.NewReader(form.Encode()))
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			request.Header.Set("Idempotency-Key", "header-is-not-used")
 			response := httptest.NewRecorder()
@@ -431,7 +431,7 @@ func TestKrogerOrderRequiresIdempotencyField(t *testing.T) {
 
 func TestKrogerOrderRejectsMalformedForm(t *testing.T) {
 	a := newTestOrderHandler(t, &CartClient{})
-	request := httptest.NewRequest(http.MethodPost, "/kroger/cart-transfers", strings.NewReader("transfer_request=%"))
+	request := httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", strings.NewReader("transfer_request=%"))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response := httptest.NewRecorder()
 	orderMux(a).ServeHTTP(response, request)

@@ -195,7 +195,7 @@ func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request, returnUR
 }
 
 func (a *OrderHandler) Register(routes routing.Registrar) {
-	routes.Handle("POST /kroger/cart-transfers", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
+	routes.Handle("POST /kroger/order-transfers", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
 	routes.HandleFunc("GET /kroger/callback", a.handleCallback)
 }
 

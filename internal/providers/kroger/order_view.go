@@ -58,7 +58,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	}
 	order := &ordertypes.OrderView{
 		IdempotencyKey:      input.ListKey,
-		TransferURL:         "/kroger/cart-transfers",
+		TransferURL:         "/kroger/order-transfers",
 		ActionLabel:         "Add to " + brand + " cart",
 		Description:         "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		TransferRequestJSON: string(body),
