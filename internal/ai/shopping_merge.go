@@ -13,6 +13,8 @@ import (
 // ShoppingItem separates the recipe amount from a numeric multiple of catalog size.
 // Buy is nil for pantry items, missing sizes, and uncertain conversions.
 type ShoppingItem struct {
+	// VariantID comes from the selected catalog product, not the quantity model.
+	VariantID string   `json:"variant_id,omitempty" jsonschema:"-"`
 	ProductID string   `json:"id"`
 	Name      string   `json:"name"`
 	Needed    string   `json:"needed"`

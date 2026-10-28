@@ -54,9 +54,8 @@ func compareShoppingAisles(a, b string) int {
 
 type shoppingPurchaseItem struct {
 	ai.ShoppingItem
-	VariantID string `json:"variant_id,omitempty"`
-	Size      string
-	Aisle     string
+	Size  string
+	Aisle string
 }
 
 type shoppingPurchaseGroup struct {

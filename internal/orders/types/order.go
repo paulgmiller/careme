@@ -7,11 +7,10 @@ import (
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
-	ListKey    string // shoppinglist hash
-	UserID     string // combines with above to look up
-	Location   locationtypes.Location
-	Items      []ai.ShoppingItem
-	VariantIDs map[string]string // Selected catalog variants, keyed by product ID.
+	ListKey  string // shoppinglist hash
+	UserID   string // combines with above to look up
+	Location locationtypes.Location
+	Items    []ai.ShoppingItem
 
 	ReturnURL string
 }
@@ -31,10 +30,9 @@ type OrderView struct {
 // TransferRequest sends the displayed shopping list to a destination.
 // The browser submits the idempotency key separately in the idempotency_key form field.
 type TransferRequest struct {
-	Items      []ai.ShoppingItem      `json:"items"`
-	Location   locationtypes.Location `json:"location"`
-	ReturnURL  string                 `json:"return_url"`
-	VariantIDs map[string]string      `json:"variant_ids,omitempty"`
+	Items     []ai.ShoppingItem      `json:"items"`
+	Location  locationtypes.Location `json:"location"`
+	ReturnURL string                 `json:"return_url"`
 }
 
 // Transfer describes a cart handoff, never checkout or a placed order.

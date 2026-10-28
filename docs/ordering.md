@@ -17,8 +17,9 @@ Upstream states stay inside the adapter.
 `POST /<destination>/order-transfers` accepts two URL-encoded hidden inputs:
 
 - `transfer_request`: the complete JSON-serialized `orders/types.TransferRequest`,
-  containing the displayed `items`, source `location`, local `return_url`, and
-  optional `variant_ids` keyed by product ID from the saved catalog snapshot.
+  containing the displayed `items`, source `location`, and local `return_url`.
+  Each shopping item includes its optional `variant_id` from the saved catalog
+  snapshot.
 - `idempotency_key`: identifies one intended addition for this shopper and
   destination, normally the finalized shopping-list hash.
   The finalized key identifies the items and location; repeated posts reuse the

@@ -27,8 +27,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
-		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
-		assert.Equal(t, map[string]string{"food": "variant-42"}, input.VariantIDs)
+		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
 		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", TransferLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`}, nil
 	})
 	if view.User == nil {

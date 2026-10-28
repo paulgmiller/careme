@@ -35,8 +35,7 @@ func newOrderTest(t *testing.T, api http.HandlerFunc) (*OrderHandler, *OrderClie
 func orderInput() ordertypes.TransferRequest {
 	return ordertypes.TransferRequest{
 		Location: locationtypes.Location{ID: TCFarmLocationID, Chain: "TC Farm"}, ReturnURL: "/recipes?h=list",
-		Items:      []ai.ShoppingItem{{ProductID: "101", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}, {Name: "Salt", Needed: "1 tsp"}},
-		VariantIDs: map[string]string{"101": "1005"},
+		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}, {Name: "Salt", Needed: "1 tsp"}},
 	}
 }
 
@@ -189,11 +188,14 @@ func TestOrderRejectsInvalidPartnerResponses(t *testing.T) {
 
 func TestOrderItemsUsePackagesAndUniqueProducts(t *testing.T) {
 	input := orderInput()
-	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "101", Name: "More chicken", Buy: new(float64(0.5))})
+	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "101", VariantID: "1005", Name: "More chicken", Buy: new(float64(0.5))})
 	request, unmatched, err := orderItems(input)
 	require.NoError(t, err)
 	assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 4}, {ProductID: "202", Quantity: 1}}, request.Items)
 	assert.Equal(t, 1, unmatched)
+	input.Items[len(input.Items)-1].VariantID = "different-variant"
+	_, _, err = orderItems(input)
+	require.ErrorContains(t, err, "conflicting")
 	input.Items[0].Buy = new(float64(-1))
 	_, _, err = orderItems(input)
 	require.Error(t, err)

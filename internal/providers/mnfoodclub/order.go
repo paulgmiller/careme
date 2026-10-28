@@ -68,7 +68,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	}
 	transfer, err := loadOrderTransfer(ctx, c, input.UserID, input.ListKey)
 	if errors.Is(err, cache.ErrNotFound) {
-		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL, VariantIDs: input.VariantIDs})
+		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
 		if err != nil {
 			return nil, fmt.Errorf("encode MN Food Club transfer request: %w", err)
 		}
@@ -193,6 +193,9 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, int, error) {
 			quantity = int(math.Ceil(*item.Buy))
 		}
 		if index, exists := indices[item.ProductID]; exists {
+			if request.Items[index].VariantID != item.VariantID {
+				return handoffRequest{}, 0, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
+			}
 			if request.Items[index].Quantity > math.MaxInt32-quantity {
 				return handoffRequest{}, 0, fmt.Errorf("MN Food Club package quantity is too large")
 			}
@@ -200,7 +203,7 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, int, error) {
 			continue
 		}
 		indices[item.ProductID] = len(request.Items)
-		request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: input.VariantIDs[item.ProductID], Quantity: quantity})
+		request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})
 	}
 	return request, unmatched, nil
 }

@@ -47,6 +47,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 		assert.JSONEq(t, `{"anyOf":[{"type":"number"},{"type":"null"}]}`, mustJSON(t, schemaProperties(t, item)["buy"]))
 		assert.NotContains(t, schemaProperties(t, item), "aisle_number")
 		assert.NotContains(t, schemaProperties(t, item), "price")
+		assert.NotContains(t, schemaProperties(t, item), "variant_id", "the selected catalog variant is attached by the server")
 		require.Len(t, body.Input, 1)
 		var input struct {
 			Ingredients []Ingredient      `json:"ingredients"`
