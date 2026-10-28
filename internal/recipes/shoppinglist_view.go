@@ -47,7 +47,8 @@ func (v shoppingRecipeView) DOMID() string {
 }
 
 func (v shoppingRecipeView) Image() recipeImageView {
-	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true}
+	// Unsaved suggestions do not start image generation.
+	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true, Poll: v.Saved}
 }
 
 type shoppingProgress struct {

@@ -2127,7 +2127,8 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
 	require.Contains(t, rr.Body.String(), `Dismiss`)
 	require.NotContains(t, rr.Body.String(), `id="recipe-image-panel"`)
-	require.NotContains(t, rr.Body.String(), `hx-swap-oob=`)
+	require.Contains(t, rr.Body.String(), `hx-swap-oob="innerHTML:#recipe-image-panel"`)
+	require.Contains(t, rr.Body.String(), `/recipe/`+recipeHash+`/image`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
@@ -3173,7 +3174,7 @@ func (failingImageExistsStore) Exists(context.Context, string) (bool, error) {
 }
 
 func TestHandleRecipeImagePanel(t *testing.T) {
-	for _, state := range []string{"pending", "ready", "error"} {
+	for _, state := range []string{"pending", "ready", "expired", "legacy", "invalid", "error"} {
 		t.Run(state, func(t *testing.T) {
 			s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
 			if state == "ready" {
@@ -3182,10 +3183,21 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 			if state == "error" {
 				s.images = failingImageExistsStore{ImageStore: s.images}
 			}
-			req := httptest.NewRequest(http.MethodGet, "/recipe/recipe-hash/image-panel", nil)
+			query := url.Values{"view": {"shopping"}, "until": {fmt.Sprint(time.Now().Add(time.Minute).Unix())}}
+			if state == "expired" || state == "ready" {
+				query.Set("until", fmt.Sprint(time.Now().Add(-time.Minute).Unix()))
+			}
+			if state == "legacy" {
+				query.Del("until")
+			}
+			if state == "invalid" {
+				query.Set("until", "invalid")
+			}
+			req := httptest.NewRequest(http.MethodGet, "/recipe/recipe-hash/image-panel?"+query.Encode(), nil)
 			req.SetPathValue("hash", "recipe-hash")
 			rr := httptest.NewRecorder()
 			s.handleRecipeImagePanel(rr, req)
+			require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 			if state == "error" {
 				require.Equal(t, http.StatusInternalServerError, rr.Code)
 				require.NotContains(t, rr.Body.String(), "recipe-image-panel")
@@ -3193,6 +3205,11 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 			}
 			if state == "pending" {
 				require.Equal(t, http.StatusNoContent, rr.Code)
+				require.Empty(t, rr.Body.String())
+				return
+			}
+			if state == "expired" || state == "legacy" || state == "invalid" {
+				require.Equal(t, 286, rr.Code)
 				require.Empty(t, rr.Body.String())
 				return
 			}
@@ -3204,4 +3221,26 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 			require.NotContains(t, body, "<details")
 		})
 	}
+}
+
+func TestHandleRecipeImagePanelStopsPollingWhenImageArrives(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
+	path := "/recipe/recipe-hash/image-panel?view=shopping&until=" + fmt.Sprint(time.Now().Add(time.Minute).Unix())
+	poll := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.SetPathValue("hash", "recipe-hash")
+		rr := httptest.NewRecorder()
+		s.handleRecipeImagePanel(rr, req)
+		return rr
+	}
+	pending := poll()
+	require.Equal(t, http.StatusNoContent, pending.Code)
+	require.Empty(t, pending.Body.String())
+	require.NoError(t, s.images.Save(t.Context(), "recipe-hash", &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
+	ready := poll()
+	require.Equal(t, http.StatusOK, ready.Code)
+	require.Contains(t, ready.Body.String(), `src="/recipe/recipe-hash/image"`)
+	require.NotContains(t, ready.Body.String(), "hx-trigger")
+	require.NotContains(t, ready.Body.String(), "hx-get")
 }

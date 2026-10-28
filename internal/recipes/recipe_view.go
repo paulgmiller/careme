@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"slices"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
@@ -18,6 +19,13 @@ type recipeImageView struct {
 	Hash      string
 	HasImage  bool
 	Thumbnail bool
+	Poll      bool
+}
+
+// PollUntil bounds waiting for optional background image generation, including
+// failed generations and older recipes whose images were never generated.
+func (v recipeImageView) PollUntil() int64 {
+	return time.Now().Add(4 * time.Minute).Unix()
 }
 
 type recipePageView struct {
@@ -111,7 +119,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Thread:                  threadView,
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
-		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage},
+		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage, Poll: true},
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,

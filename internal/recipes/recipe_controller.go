@@ -182,6 +182,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 // A 204 leaves the polling placeholder intact; the ready image replaces it.
 func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	hash := r.PathValue("hash")
 	exists, err := s.images.Exists(r.Context(), hash)
 	if err != nil {
@@ -189,6 +190,12 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !exists {
+		until, err := strconv.ParseInt(r.URL.Query().Get("until"), 10, 64)
+		if err != nil || time.Now().Unix() >= until {
+			// HTMX stops polling on 286 and removes the empty placeholder.
+			w.WriteHeader(286)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
