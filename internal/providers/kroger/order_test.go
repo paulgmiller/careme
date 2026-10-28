@@ -141,10 +141,13 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"New product"}]`))
 	setOrderField(t, form, "location", map[string]string{"id": "01400943", "chain": "FREDMEYER"})
 	setOrderField(t, form, "return_url", "/recipes?h=different")
-	assert.Equal(t, query, transferResponse(t, a, postOrder(mux, form)))
+	repeatResponse := postOrder(mux, form)
+	assert.Equal(t, http.StatusSeeOther, repeatResponse.Code)
+	assert.Equal(t, "/recipes?h=different", repeatResponse.Header().Get("Location"))
+	assert.Equal(t, query, savedResult(t, a, "list-hash"))
 	var repeated ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &repeated))
-	assert.Equal(t, original, repeated, "reposting a key keeps the original request and result")
+	assert.Equal(t, original, repeated, "reposting a key keeps the original result")
 	assert.Equal(t, 1, calls)
 }
 

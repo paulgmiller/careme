@@ -148,6 +148,18 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 
 type failingTransferRead struct{ cache.Cache }
 
+func TestOrderViewForUserRejectsUnknownStatus(t *testing.T) {
+	for _, status := range []ordertypes.TransferStatus{"", "unknown"} {
+		t.Run(string(status), func(t *testing.T) {
+			a := newTestOrderHandler(t, &CartClient{})
+			require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list"), ordertypes.Transfer{TransferID: "list", Status: status}, cache.Unconditional()))
+			view, err := OrderViewForUser(t.Context(), a.cache, ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list"})
+			require.ErrorContains(t, err, "unknown Kroger transfer status")
+			assert.Nil(t, view)
+		})
+	}
+}
+
 func (c failingTransferRead) Get(context.Context, string) (io.ReadCloser, error) {
 	return nil, errors.New("read failed")
 }

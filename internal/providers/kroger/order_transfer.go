@@ -54,4 +54,3 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, us
 	}
 	http.Redirect(w, r, input.ReturnURL, http.StatusSeeOther)
 }
-

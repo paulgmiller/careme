@@ -20,7 +20,8 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
 - `idempotency_key`: identifies one intended addition for this shopper and
   destination, normally the finalized shopping-list hash.
   The finalized key identifies the items and location; repeated posts reuse the
-  saved request and result without comparing payloads.
+  saved result without comparing payloads. Redirects use the current validated
+  request’s return URL; OAuth callbacks use their saved continuation’s return URL.
 
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
 copy. The template uses a native form with `hx-boost="false"`. There is no HTMX
@@ -61,7 +62,7 @@ HTTP errors on the provider route. They do not create an order transfer.
 
 After authentication succeeds, the handler creates a pending transfer. Product
 lookup errors, no matched products, and cart write errors are saved as failed.
-Both successful and failed transfers redirect to the saved shopping-list URL.
+Both successful and failed transfers redirect to the request’s shopping-list URL.
 The shopping list replaces the form with “Add to cart failed.” for a failed
 transfer. There is no retry control, and repeated posts or OAuth callbacks reuse
 the saved result without another cart submission.
@@ -70,8 +71,9 @@ Pending and applied records show the cart link. A failed final save returns an
 HTTP error and leaves the record pending. A cart write error can occur after
 Kroger accepts products; failed therefore means success was not confirmed.
 
-The request and result use one transfer record. OAuth continuation data is
-separate authentication state and is never presented as a transfer. Shopper
+Only the shared `Transfer` result is stored in the transfer record. The request
+is used during submission; OAuth continuation data preserves it separately
+while connecting an account. Shopper
 tokens are encrypted and keyed by Careme user, not transfer. Their expiry comes
 from Kroger’s `expires_in`; the handler refreshes them one minute before expiry.
 
@@ -83,8 +85,8 @@ at-most-once cart writes across concurrent requests.
 The typed `TransferStatus` values are `pending`, `failed`, and `applied`.
 There is no separate provider code or custom JSON decoding.
 
-The shared `TransferRequest` and `Transfer` types describe the saved request and
-result inside the handler; they are not a browser JSON API. Transfer IDs use the
+The shared `TransferRequest` and `Transfer` types describe the submitted request
+and stored result inside the handler; they are not a browser JSON API. Transfer IDs use the
 idempotency key directly, scoped to the authenticated user and destination.
 Records have no automatic expiry; OAuth state expires logically after ten minutes.
 See [cache layout](cache-layout.md) for storage details.

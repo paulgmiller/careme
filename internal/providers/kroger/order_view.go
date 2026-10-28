@@ -31,11 +31,12 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 	switch transfer.Status {
 	case ordertypes.TransferFailed:
 		return &ordertypes.OrderView{TransferFailed: true}, nil
+	// a little wierd to show cart for pending.
 	case ordertypes.TransferApplied, ordertypes.TransferPending:
 		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
+	default:
+		return nil, fmt.Errorf("unknown Kroger transfer status %q", transfer.Status)
 	}
-
-	return OrderView(input)
 }
 
 // OrderView supplies the generic cart-transfer UI with Kroger endpoints.

@@ -190,10 +190,12 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var existing ordertypes.Transfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, continuation.IdempotencyKey), &existing); err == nil {
+	err = a.loadJSON(r.Context(), transferKey(userID, continuation.IdempotencyKey), &existing)
+	if err == nil {
 		http.Redirect(w, r, continuation.Request.ReturnURL, http.StatusSeeOther)
 		return
-	} else if err != nil && !errors.Is(err, cache.ErrNotFound) {
+	}
+	if !errors.Is(err, cache.ErrNotFound) {
 		http.Error(w, "Unable to read cart transfer.", http.StatusInternalServerError)
 		return
 	}
