@@ -18,7 +18,6 @@ import (
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 
-	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -100,12 +99,13 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) error {
 	defer s.wait()
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
-	errs := lop.Map(lo.Values(AdvertisedRecipeLocations()), func(c campaign, _ int) error {
+	var errs []error
+	for _, c := range AdvertisedRecipeLocations() {
 		if !c.Generate {
-			return nil
+			continue
 		}
-		return s.generateLocation(ctx, c, now)
-	})
+		errs = append(errs, s.generateLocation(ctx, c, now))
+	}
 	return errors.Join(errs...)
 }
 
@@ -120,15 +120,6 @@ func (s *Service) generateLocation(ctx context.Context, c campaign, now time.Tim
 	date, err := locations.StoreTime(ctx, now, loc)
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
-	}
-	localNow := now.In(date.Location())
-	// Allow the full hour for delayed starts and retries; cached output makes
-	// repeated runs within this window idempotent.
-	if localNow.Hour() != 9 {
-		return nil
-	}
-	if c.GenerateWeekday != nil && localNow.Weekday() != *c.GenerateWeekday {
-		return nil
 	}
 	if err := s.generate(ctx, recipes.DefaultParams(loc, date)); err != nil {
 		return fmt.Errorf("generate campaign for %s: %w", locationID, err)

@@ -13,6 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	_ "careme/internal/providerregistry"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/recipes"
 	"careme/internal/recipes/status"
@@ -84,7 +85,10 @@ func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
 // Wednesday at the production job hour (9 AM Pacific).
 var campaignTestTime = time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
 
-var generatedCampaignLocationIDs = []string{"wholefoods_10216", "70100023", "70100658"}
+var generatedCampaignLocationIDs = []string{
+	"wholefoods_10216", "70100023", "70100658",
+	"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery",
+}
 
 func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	s, g, images := testService()
@@ -97,7 +101,9 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	var generatedIDs []string
 	for i, p := range g.params {
 		generatedIDs = append(generatedIDs, p.Location.ID)
-		assert.Equal(t, "Hydrated "+p.Location.ID, p.Location.Name)
+		loc, err := s.locations.GetLocationByID(t.Context(), p.Location.ID)
+		require.NoError(t, err)
+		assert.Equal(t, loc.Name, p.Location.Name)
 		session, ok := logsetup.SessionIDFromContext(g.contexts[i])
 		require.True(t, ok)
 		assert.Equal(t, "campaign_ads", session)
@@ -167,34 +173,28 @@ func (f failingCampaignStore) FromCache(context.Context, string) (*ai.ShoppingLi
 	return nil, errors.New("cache unavailable")
 }
 
-func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
-	mnfoodclubIDs := []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"}
+func TestRunOnceGeneratesCampaignsAtAnyHourAndDay(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		now     string
 		wantIDs []string
 	}{
-		{"winter Monday before Central 9 AM", "2026-01-05T14:59:00Z", nil},
-		{"winter Monday Central 9 AM", "2026-01-05T15:00:00Z", mnfoodclubIDs},
-		{"winter Monday Central delayed start", "2026-01-05T15:49:00Z", mnfoodclubIDs},
-		{"winter Monday Central 10 AM", "2026-01-05T16:00:00Z", nil},
-		{"winter Monday Pacific 9 AM", "2026-01-05T17:00:00Z", generatedCampaignLocationIDs},
-		{"winter Monday Pacific delayed start", "2026-01-05T17:49:00Z", generatedCampaignLocationIDs},
-		{"winter Monday Pacific 10 AM", "2026-01-05T18:00:00Z", nil},
-		{"summer Monday before Central 9 AM", "2026-07-06T13:59:00Z", nil},
-		{"summer Monday Central 9 AM", "2026-07-06T14:00:00Z", mnfoodclubIDs},
-		{"summer Monday Central 10 AM", "2026-07-06T15:00:00Z", nil},
-		{"summer Monday Pacific 9 AM", "2026-07-06T16:00:00Z", generatedCampaignLocationIDs},
-		{"summer Monday Pacific 10 AM", "2026-07-06T17:00:00Z", nil},
-		{"Tuesday Central 9 AM", "2026-07-07T14:00:00Z", nil},
-		{"Wednesday Central 9 AM", "2026-07-08T14:00:00Z", nil},
-		{"Thursday Central 9 AM", "2026-07-09T14:00:00Z", nil},
-		{"Friday Central 9 AM", "2026-07-10T14:00:00Z", nil},
-		{"Saturday Central 9 AM", "2026-07-11T14:00:00Z", nil},
-		{"Sunday Central 9 AM", "2026-07-12T14:00:00Z", nil},
-		{"Sunday Pacific 9 AM", "2026-07-12T16:00:00Z", generatedCampaignLocationIDs},
-		{"Monday local midnight", "2026-07-06T05:00:00Z", nil},
-		{"UTC Tuesday local Monday night", "2026-07-07T04:59:00Z", nil},
+		{"winter Monday before Central 9 AM", "2026-01-05T14:59:00Z", generatedCampaignLocationIDs},
+		{"winter Monday Central 9 AM", "2026-01-05T15:00:00Z", generatedCampaignLocationIDs},
+		{"winter Monday Central 10 AM", "2026-01-05T16:00:00Z", generatedCampaignLocationIDs},
+		{"winter Monday Pacific 10 AM", "2026-01-05T18:00:00Z", generatedCampaignLocationIDs},
+		{"summer Monday before Central 9 AM", "2026-07-06T13:59:00Z", generatedCampaignLocationIDs},
+		{"summer Monday Central 9 AM", "2026-07-06T14:00:00Z", generatedCampaignLocationIDs},
+		{"summer Monday Pacific 10 AM", "2026-07-06T17:00:00Z", generatedCampaignLocationIDs},
+		{"Tuesday", "2026-07-07T14:00:00Z", generatedCampaignLocationIDs},
+		{"Wednesday", "2026-07-08T14:00:00Z", generatedCampaignLocationIDs},
+		{"Thursday", "2026-07-09T14:00:00Z", generatedCampaignLocationIDs},
+		{"Friday", "2026-07-10T14:00:00Z", generatedCampaignLocationIDs},
+		{"Saturday", "2026-07-11T14:00:00Z", generatedCampaignLocationIDs},
+		{"Sunday", "2026-07-12T14:00:00Z", generatedCampaignLocationIDs},
+		{"Monday local midnight", "2026-07-06T05:00:00Z", generatedCampaignLocationIDs},
+		{"UTC Monday local Sunday", "2026-07-06T04:59:00Z", generatedCampaignLocationIDs},
+		{"UTC Tuesday local Monday night", "2026-07-07T04:59:00Z", generatedCampaignLocationIDs},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s, g, images := testService()
@@ -211,14 +211,95 @@ func TestRunOnceGeneratesOnlyCampaignsDueAtLocal9AM(t *testing.T) {
 			}
 			assert.ElementsMatch(t, tt.wantIDs, gotIDs)
 			assert.Equal(t, len(tt.wantIDs), images.calls)
-			// Repeated starts in the same local 9 AM hour reuse recipes and images.
-			retryAt := now
-			if len(tt.wantIDs) > 0 {
-				retryAt = now.Add(10 * time.Minute)
-			}
-			require.NoError(t, s.RunOnce(t.Context(), retryAt))
+			// Repeating the same instant reuses each store's current hash, even
+			// when the initial run is immediately before a store-day boundary.
+			require.NoError(t, s.RunOnce(t.Context(), now))
 			assert.Len(t, g.params, len(tt.wantIDs))
 			assert.Equal(t, len(tt.wantIDs), images.calls)
 		})
 	}
+}
+
+type campaignGeneratorFunc func(context.Context, *recipes.GeneratorParams) (*ai.ShoppingList, error)
+
+func (f campaignGeneratorFunc) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	return f(ctx, p)
+}
+
+type blockingCampaignImages struct {
+	recipes.ImageGen
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (g *blockingCampaignImages) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	g.once.Do(func() {
+		close(g.started)
+		<-g.release
+	})
+	return g.ImageGen.GenerateRecipeImage(ctx, recipe)
+}
+
+func TestRunOnceFinishesCampaignImagesBeforeStartingNextCampaign(t *testing.T) {
+	s, generator, images := testService()
+	started := make(chan string, len(generatedCampaignLocationIDs))
+	s.generator = campaignGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+		started <- p.Location.ID
+		return generator.GenerateRecipes(ctx, p)
+	})
+	blocked := &blockingCampaignImages{ImageGen: images, started: make(chan struct{}), release: make(chan struct{})}
+	s.imageGenerator = blocked
+	done := make(chan error, 1)
+	go func() { done <- s.RunOnce(t.Context(), campaignTestTime) }()
+	select {
+	case <-blocked.started:
+	case <-time.After(5 * time.Second):
+		close(blocked.release)
+		t.Fatal("first campaign did not reach image generation")
+	}
+	<-started
+	select {
+	case id := <-started:
+		t.Errorf("campaign %s started before the previous campaign finished its images", id)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(blocked.release)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("campaign generation did not finish")
+	}
+	assert.Len(t, generator.params, len(generatedCampaignLocationIDs))
+	assert.Equal(t, len(generatedCampaignLocationIDs), images.calls)
+}
+
+func TestRunOnceRetriesMissingImagesAfter9AM(t *testing.T) {
+	s, g, images := testService()
+	images.err = errors.New("image unavailable")
+	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "image unavailable")
+	images.err = nil
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime.Add(2*time.Hour)))
+	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
+	assert.Equal(t, 2*len(g.params), images.calls)
+}
+
+func TestRunOnceReusesWeeklyCampaignsOnFollowingDay(t *testing.T) {
+	s, g, images := testService()
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
+	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime.AddDate(0, 0, 1)))
+	counts := make(map[string]int)
+	for _, p := range g.params {
+		counts[p.Location.ID]++
+	}
+	for _, id := range generatedCampaignLocationIDs {
+		want := 2
+		if mnfoodclub.NewIdentityProvider().IsID(id) {
+			want = 1
+		}
+		assert.Equal(t, want, counts[id], "generation count for %s", id)
+	}
+	// The stub returns the same recipes on both days, so images are reused too.
+	assert.Equal(t, len(generatedCampaignLocationIDs), images.calls)
 }
