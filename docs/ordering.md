@@ -19,7 +19,8 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
   containing the displayed `items`, source `location`, and local `return_url`.
 - `idempotency_key`: identifies one intended addition for this shopper and
   destination, normally the finalized shopping-list hash. Reuse it for retries.
-  Changing items, store ID, chain, or return URL under an existing key returns 409.
+  The finalized key identifies the items and location; repeated posts reuse the
+  saved request and result without comparing payloads.
 
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
 copy. The template uses a native form with `hx-boost="false"`. There is no HTMX

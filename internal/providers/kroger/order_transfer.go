@@ -32,15 +32,12 @@ func transferKey(userID, id string) string {
 }
 
 func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	request := transfer.Request
 	id := transfer.IdempotencyKey
 	key := transferKey(transfer.UserID, id)
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
-		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Location.Chain != request.Location.Chain || previous.Request.ReturnURL != request.ReturnURL {
-			writeTransferError(w, http.StatusConflict, "This list already has a different cart transfer.")
-			return
-		}
+		// The finalized shopping-list key identifies the items and location.
+		// Reuse its saved request and result rather than compare a repeated payload.
 		// Preparation or account connection failed before a cart mutation.
 		// Updates can overwrite concurrent attempts until IfMatch is supported.
 		if retryableTransfer(previous.Result.Code) {

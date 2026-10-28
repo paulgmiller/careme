@@ -2,8 +2,6 @@ package kroger
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,15 +63,6 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 		return err
 	}
 	return a.cache.Put(ctx, key, string(body), options)
-}
-
-func orderFingerprint(request ordertypes.TransferRequest) string {
-	body, _ := json.Marshal(struct {
-		StoreID string
-		Items   []ai.ShoppingItem
-	}{request.Location.ID, request.Items})
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:])
 }
 
 func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAuthorization bool) ordertypes.Transfer {
