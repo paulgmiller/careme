@@ -57,9 +57,9 @@ func orderMux(a *OrderHandler) *http.ServeMux {
 
 func savedResult(t *testing.T, a *OrderHandler, key string) ordertypes.Transfer {
 	t.Helper()
-	var transfer cartTransfer
+	var transfer ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key), &transfer))
-	return transfer.Result
+	return transfer
 }
 
 func transferResponse(t *testing.T, a *OrderHandler, response *httptest.ResponseRecorder) ordertypes.Transfer {
@@ -136,13 +136,13 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
 	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, postOrder(mux, form)).Status)
-	var original cartTransfer
+	var original ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &original))
 	setOrderField(t, form, "items", json.RawMessage(`[{"id":"new","name":"New product"}]`))
 	setOrderField(t, form, "location", map[string]string{"id": "01400943", "chain": "FREDMEYER"})
 	setOrderField(t, form, "return_url", "/recipes?h=different")
 	assert.Equal(t, query, transferResponse(t, a, postOrder(mux, form)))
-	var repeated cartTransfer
+	var repeated ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &repeated))
 	assert.Equal(t, original, repeated, "reposting a key keeps the original request and result")
 	assert.Equal(t, 1, calls)
@@ -264,11 +264,11 @@ type orderFailCache struct {
 
 func (c orderFailCache) Put(ctx context.Context, key, value string, options cache.PutOptions) error {
 	if strings.HasPrefix(key, c.prefix) {
-		var transfer cartTransfer
+		var transfer ordertypes.Transfer
 		_ = json.Unmarshal([]byte(value), &transfer)
 		fail := !c.confirmation && !c.reservation
-		fail = fail || (c.confirmation && options.Condition == cache.PutUnconditional && transfer.Result.Status != "pending")
-		fail = fail || (c.reservation && options.Condition == cache.PutUnconditional && transfer.Result.Status == "pending")
+		fail = fail || (c.confirmation && options.Condition == cache.PutUnconditional && transfer.Status != "pending")
+		fail = fail || (c.reservation && options.Condition == cache.PutUnconditional && transfer.Status == "pending")
 		if fail {
 			return errors.New("cache unavailable")
 		}

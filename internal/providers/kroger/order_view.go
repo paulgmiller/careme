@@ -24,15 +24,15 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 		return nil, fmt.Errorf("read Kroger transfer: %w", err)
 	}
 	defer func() { _ = reader.Close() }()
-	var transfer cartTransfer
+	var transfer ordertypes.Transfer
 	if err := json.NewDecoder(reader).Decode(&transfer); err != nil {
 		return nil, fmt.Errorf("decode Kroger transfer: %w", err)
 	}
-	switch transfer.Result.Status {
+	switch transfer.Status {
 	case ordertypes.TransferFailed:
 		return &ordertypes.OrderView{TransferFailed: true}, nil
 	case ordertypes.TransferApplied, ordertypes.TransferPending:
-		return &ordertypes.OrderView{ReviewCartURL: transfer.Result.CartURL}, nil
+		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
 	}
 
 	return OrderView(input)

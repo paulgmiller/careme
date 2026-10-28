@@ -73,7 +73,7 @@ func TestKrogerOrderViewRejectsInvalidLocation(t *testing.T) {
 
 func TestKrogerTransferUsesChainCart(t *testing.T) {
 	for banner, domain := range chainDomains {
-		response := (cartTransfer{IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{Chain: banner}}}).result("applied", 0, 0)
+		response := ordertypes.Transfer{TransferID: "list", Status: ordertypes.TransferApplied, CartURL: cartURL(banner)}
 		assert.Equal(t, "https://www."+domain+"/cart", response.CartURL)
 		assert.Equal(t, ordertypes.TransferApplied, response.Status)
 	}
@@ -119,12 +119,11 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
-			transfer := cartTransfer{UserID: "viewer", IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}}
-			transfer.Result = transfer.result(ordertypes.TransferStatus(tc.code), 1, 0)
+			transfer := ordertypes.Transfer{TransferID: "list", Status: ordertypes.TransferStatus(tc.code), CartURL: "https://www.qfc.com/cart", Added: 1}
 			if tc.code != "" {
 				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list"), transfer, cache.Unconditional()))
 			}
-			input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: transfer.Request.Location}
+			input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}
 			view, err := OrderViewForUser(t.Context(), a.cache, input)
 			require.NoError(t, err)
 			assert.Equal(t, tc.review, view.ReviewCartURL != "")

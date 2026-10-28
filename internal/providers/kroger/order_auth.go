@@ -144,17 +144,17 @@ func (a *OrderHandler) shopperToken(ctx context.Context, userID string) (CartTok
 	return token, nil
 }
 
-func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	banner := authorizationBanner(transfer.Request.Location.Chain)
+func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request, userID, idempotencyKey string, input ordertypes.TransferRequest) {
+	banner := authorizationBanner(input.Location.Chain)
 	nonce := make([]byte, 32)
 	if _, err := rand.Read(nonce); err != nil {
 		http.Error(w, "Unable to connect to Kroger", http.StatusInternalServerError)
 		return
 	}
 	state := base64.RawURLEncoding.EncodeToString(nonce)
-	continuation := oauthContinuation{UserID: transfer.UserID, IdempotencyKey: transfer.IdempotencyKey, Request: transfer.Request, IssuedAt: time.Now()}
-	if err := a.saveJSON(r.Context(), oauthContinuationKey(transfer.UserID, state), continuation, cache.IfNoneMatch()); err != nil {
-		writeTransferError(w, http.StatusInternalServerError, "Unable to start Kroger connection.")
+	continuation := oauthContinuation{UserID: userID, IdempotencyKey: idempotencyKey, Request: input, IssuedAt: time.Now()}
+	if err := a.saveJSON(r.Context(), oauthContinuationKey(userID, state), continuation, cache.IfNoneMatch()); err != nil {
+		http.Error(w, "Unable to start Kroger connection.", http.StatusInternalServerError)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Value: state, Path: "/kroger/callback", MaxAge: 600, HttpOnly: true, Secure: strings.HasPrefix(a.origin, "https://"), SameSite: http.SameSiteLaxMode})
@@ -181,42 +181,42 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Path: "/kroger/callback", MaxAge: -1, HttpOnly: true})
 	state := cookie.Value
 	if len(state) != 43 || strings.ContainsAny(state, "/\\") || subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
-		writeTransferError(w, http.StatusBadRequest, "Invalid Kroger connection.")
+		http.Error(w, "Invalid Kroger connection.", http.StatusBadRequest)
 		return
 	}
 	var continuation oauthContinuation
 	if err := a.loadJSON(r.Context(), oauthContinuationKey(userID, state), &continuation); err != nil || continuation.UserID != userID || continuation.IssuedAt.IsZero() || time.Since(continuation.IssuedAt) > 10*time.Minute || time.Until(continuation.IssuedAt) > time.Minute {
-		writeTransferError(w, http.StatusBadRequest, "Kroger connection expired or unavailable.")
+		http.Error(w, "Kroger connection expired or unavailable.", http.StatusBadRequest)
 		return
 	}
-	var existing cartTransfer
+	var existing ordertypes.Transfer
 	if err := a.loadJSON(r.Context(), transferKey(userID, continuation.IdempotencyKey), &existing); err == nil {
-		a.finishTransfer(w, r, existing)
+		http.Redirect(w, r, continuation.Request.ReturnURL, http.StatusSeeOther)
 		return
 	} else if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		writeTransferError(w, http.StatusInternalServerError, "Unable to read cart transfer.")
+		http.Error(w, "Unable to read cart transfer.", http.StatusInternalServerError)
 		return
 	}
 	if r.URL.Query().Get("error") != "" {
-		writeTransferError(w, http.StatusBadRequest, "Kroger connection was not approved.")
+		http.Error(w, "Kroger connection was not approved.", http.StatusBadRequest)
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		writeTransferError(w, http.StatusBadRequest, "Kroger did not finish connecting your account.")
+		http.Error(w, "Kroger did not finish connecting your account.", http.StatusBadRequest)
 		return
 	}
 	token, err := a.client.Exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
-		writeTransferError(w, http.StatusInternalServerError, "Unable to connect to Kroger.")
+		http.Error(w, "Unable to connect to Kroger.", http.StatusInternalServerError)
 		return
 	}
 	if err := a.saveToken(r.Context(), userID, token); err != nil {
-		writeTransferError(w, http.StatusInternalServerError, "Unable to save Kroger connection.")
+		http.Error(w, "Unable to save Kroger connection.", http.StatusInternalServerError)
 		return
 	}
-	a.createTransfer(w, r, cartTransfer{UserID: userID, IdempotencyKey: continuation.IdempotencyKey, Request: continuation.Request})
+	a.createTransfer(w, r, userID, continuation.IdempotencyKey, continuation.Request)
 }
 
 // get user or redirect/error if we can't

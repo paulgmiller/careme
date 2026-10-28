@@ -3,12 +3,12 @@ package kroger
 import (
 	"encoding/base64"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 
 	"careme/internal/auth"
+	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,12 +33,11 @@ func TestCartTransferBrowserReturnsToShoppingList(t *testing.T) {
 				t.Fatal("redirecting must not write cart")
 				return nil, nil
 			})
-			transfer := cartTransfer{IdempotencyKey: "list", Request: mustOrderRequest(t)}
-			transfer.Result = transfer.result(status, 0, 1)
-			response := httptest.NewRecorder()
-			a.finishTransfer(response, httptest.NewRequest(http.MethodPost, "/kroger/order-transfers", nil), transfer)
+			transfer := ordertypes.Transfer{TransferID: "list-hash", Status: status, CartURL: "https://www.qfc.com/cart", Unmatched: 1}
+			require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), transfer, cache.Unconditional()))
+			response := postOrder(orderMux(a), orderForm())
 			assert.Equal(t, http.StatusSeeOther, response.Code)
-			assert.Equal(t, transfer.Request.ReturnURL, response.Header().Get("Location"))
+			assert.Equal(t, mustOrderRequest(t).ReturnURL, response.Header().Get("Location"))
 		})
 	}
 }

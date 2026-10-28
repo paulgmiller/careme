@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCartTransferFormPersistsRequestAndRedirectsToCart(t *testing.T) {
+func TestCartTransferFormPersistsResultAndRedirectsToList(t *testing.T) {
 	calls := 0
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
 		calls++
@@ -39,12 +39,9 @@ func TestCartTransferFormPersistsRequestAndRedirectsToCart(t *testing.T) {
 	transfer := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
 	assert.Equal(t, 1, transfer.Added)
-	var saved cartTransfer
+	var saved ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), &saved))
-	assert.Equal(t, input, saved.Request, "the full shared request survives the transfer handoff")
-	assert.Equal(t, transfer, saved.Result, "the record retains the cart result")
-	assert.Equal(t, "mock-clerk-user-id", saved.UserID)
-	assert.Equal(t, "list-hash", saved.IdempotencyKey)
+	assert.Equal(t, transfer, saved, "the record stores the shared result directly")
 	for range 3 {
 		assert.Equal(t, transfer, transferResponse(t, a, postOrder(mux, form)))
 	}

@@ -18,24 +18,24 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
-		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
 		return
 	}
 	var input ordertypes.TransferRequest
 	if err := json.Unmarshal([]byte(r.PostForm.Get("transfer_request")), &input); err != nil {
-		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
 		return
 	}
 	idempotencyKey := r.PostForm.Get("idempotency_key")
 	if !localReturnURL(input.ReturnURL) || !validIdempotencyKey(idempotencyKey) || !NewIdentityProvider().IsID(input.Location.ID) || len(input.Items) == 0 {
-		writeTransferError(w, http.StatusBadRequest, "Invalid cart transfer.")
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
 		return
 	}
 	userID, ok := a.cartUser(w, r, input.ReturnURL)
 	if !ok {
 		return
 	}
-	a.createTransfer(w, r, cartTransfer{UserID: userID, IdempotencyKey: idempotencyKey, Request: input})
+	a.createTransfer(w, r, userID, idempotencyKey, input)
 }
 
 func validIdempotencyKey(key string) bool {
@@ -64,21 +64,26 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, token CartToken) (ordertypes.Transfer, error) {
-	items, gaps, err := a.resolveItems(ctx, transfer.Request)
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
+	items, gaps, err := a.resolveItems(ctx, input)
 	if err != nil {
-		return transfer.result(ordertypes.TransferFailed, 0, 0), err
+		return transfer, err
 	}
+	transfer.Unmatched = len(gaps)
 	if len(items) == 0 {
-		result := transfer.result(ordertypes.TransferFailed, 0, len(gaps))
-		return result, nil
+		return transfer, nil
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
-		return transfer.result(ordertypes.TransferFailed, 0, len(gaps)), fmt.Errorf("add Kroger cart products: %w", err)
+		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
-	return transfer.result(ordertypes.TransferApplied, len(items), len(gaps)), nil
+	transfer.Status = ordertypes.TransferApplied
+	transfer.Added = len(items)
+	return transfer, nil
 }
 
+// resolveItms goes back and gets ups for each product id. Could be avoided if we saved in inputingredient
+// if not that should be parallelized
 func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {
 	var items []CartItem
 	var gaps []ai.ShoppingItem
