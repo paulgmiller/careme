@@ -7,10 +7,11 @@ import (
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
-	UserID    string
-	Location  locationtypes.Location
-	Items     []ai.ShoppingItem
-	ListKey   string
+	ListKey  string // shoppinglist hash
+	UserID   string // combines with above to look up
+	Location locationtypes.Location
+	Items    []ai.ShoppingItem
+
 	ReturnURL string
 }
 
@@ -21,7 +22,7 @@ type OrderView struct {
 	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
 	TransferURL         string
-	ActionLabel         string
+	TransferLabel       string
 	TransferRequestJSON string
 	Description         string
 }

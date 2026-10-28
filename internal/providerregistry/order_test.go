@@ -108,7 +108,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 			if scenario.want {
 				require.NotNil(t, view)
 				assert.Equal(t, "/kroger/order-transfers", view.TransferURL)
-				assert.Equal(t, "Add to QFC cart", view.ActionLabel)
+				assert.Equal(t, "Add to QFC cart", view.TransferLabel)
 			} else {
 				assert.Nil(t, view)
 			}
@@ -118,7 +118,7 @@ func TestOrderViewMatchesConfiguredLocation(t *testing.T) {
 
 func TestOrderViewBuilderUsesOrderingCache(t *testing.T) {
 	c := cache.NewInMemoryCache()
-	require.NoError(t, c.Put(t.Context(), "kroger_order_transfers/viewer/list/submission", `{"code":"complete","cart_url":"https://www.qfc.com/cart"}`, cache.Unconditional()))
+	require.NoError(t, c.Put(t.Context(), "kroger_order_transfers/viewer/list", `{"result":{"code":"complete","cart_url":"https://www.qfc.com/cart"}}`, cache.Unconditional()))
 	builder := NewFactory(&config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}}).NewOrderViewBuilder(c)
 	input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: locationtypes.Location{ID: "70500874"}}
 	view, err := builder.OrderView(t.Context(), input)

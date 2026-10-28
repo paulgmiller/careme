@@ -28,12 +28,12 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
 		assert.Equal(t, []ai.ShoppingItem{{Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
-		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", ActionLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`, Description: "Destination instructions"}, nil
+		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", TransferLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`, Description: "Destination instructions"}, nil
 	})
 	if view.User == nil {
 		view.User = &utypes.User{ID: "viewer"}
 	}
-	require.NoError(t, s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes?destination_status=ready", nil)))
+	require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?destination_status=ready", nil).Context(), &view))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
@@ -50,7 +50,7 @@ func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 		s.orderView = orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, failure })
 		view := shoppingListPageView{}
 		view.User = &utypes.User{ID: "viewer"}
-		err := s.populateOrderView(&view, httptest.NewRequest("GET", "/recipes", nil))
+		err := s.populateOrderView(httptest.NewRequest("GET", "/recipes", nil).Context(), &view)
 		if failure != nil {
 			require.ErrorIs(t, err, failure)
 		} else {
@@ -72,7 +72,7 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 		t.Run(scenario.name, func(t *testing.T) {
 			view := shoppingListPageView{Hash: "list", HasSavedRecipes: true, Finalized: scenario.finalized}
 			if scenario.ordering {
-				view.Order = &ordertypes.OrderView{TransferURL: "/destination/order", ActionLabel: "Add to cart", Description: "Review amounts before checkout."}
+				view.Order = &ordertypes.OrderView{TransferURL: "/destination/order", TransferLabel: "Add to cart", Description: "Review amounts before checkout."}
 			}
 			var controls bytes.Buffer
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls", view))

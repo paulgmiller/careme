@@ -67,11 +67,15 @@ the server does not automatically replay an addition. Invalid forms and cache
 failures return HTTP errors on the provider route, without putting error state
 into the shopping-list page or its URL.
 
-Before any cart write, Kroger conditionally creates a `/submission` subrecord
-under the authenticated user's transfer key. Its saved result is authoritative
-if the lifecycle save fails or an OAuth callback arrives late. Uncertain and
-completed submissions prevent another write. Failed product lookup can be
-retried because it occurs before this reservation and before any cart change.
+Kroger stores the request, OAuth state, and result in one transfer record.
+Before a cart write it saves `pending`, then overwrites that record with the
+outcome. Sequential reposts and callbacks consult the saved result. Pending is
+internal state and does not enable browser polling.
+
+TODO: use cache ETags and `IfMatch` for transitions. Updates are unconditional
+for now: concurrent attempts can overwrite results and can duplicate additions.
+A failed final save leaves the record pending. This is not a guarantee of
+at-most-once cart writes across concurrent requests.
 
 The shared `TransferRequest` and `Transfer` types describe the saved request and
 result inside the handler; they are not a browser JSON API. Transfer IDs use the
@@ -95,8 +99,7 @@ partner API, not a production recipe ordering destination.
 ## Saved cart link on the shopping list
 
 The server asks the configured provider for this signed-in viewer's saved
-transfer using the finalized list key. Kroger reads the durable submission first,
-then lifecycle state when no submission exists. Confirmed or possibly applied
+transfer using the finalized list key. Kroger reads one saved transfer record. Completed, pending, or possibly applied
 writes replace the form with “Review cart (opens a new tab)”; no counts or status
 text are shown. Missing transfers and known pre-write failures keep Add to cart.
 Read or decoding errors fail the page request. There is no browser status fetch.

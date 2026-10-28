@@ -77,13 +77,6 @@ func orderFingerprint(request ordertypes.TransferRequest) string {
 }
 
 func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAuthorization bool) ordertypes.Transfer {
-	key := submissionKey(transfer)
-	var previous ordertypes.Transfer
-	if err := a.loadJSON(ctx, key, &previous); err == nil {
-		return previous
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		return transfer.result("start_failed", 0, 0)
-	}
 	token, err := a.loadToken(ctx, transfer.UserID)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return transfer.result("connect_failed", 0, 0)
@@ -107,15 +100,14 @@ func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAu
 	if err != nil {
 		return transfer.result("lookup_failed", 0, 0)
 	}
-	result := transfer.result("uncertain", 0, len(gaps))
+	result := transfer.result("pending", 0, len(gaps))
 	if len(items) == 0 {
 		return transfer.result("no_matches", 0, len(gaps))
 	}
-	if err := a.saveJSON(ctx, key, result, cache.IfNoneMatch()); err != nil {
-		if errors.Is(err, cache.ErrAlreadyExists) {
-			// Re-enter the read path; the winner owns the only cart write.
-			return a.order(ctx, transfer, false)
-		}
+	transfer.Result = result
+	// TODO: Claim this transition with IfMatch once cache ETag updates are supported.
+	// Until then, competing attempts may overwrite this record and both submit.
+	if err := a.saveJSON(ctx, transferKey(transfer.UserID, transfer.IdempotencyKey), transfer, cache.Unconditional()); err != nil {
 		return transfer.result("start_failed", 0, len(gaps))
 	}
 	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
@@ -123,9 +115,7 @@ func (a *OrderHandler) order(ctx context.Context, transfer cartTransfer, allowAu
 	} else {
 		result = transfer.result("complete", len(items), len(gaps))
 	}
-	if err := a.saveJSON(ctx, key, result, cache.Unconditional()); err != nil {
-		return transfer.result("confirmation_failed", result.Added, result.Unmatched)
-	}
+
 	return result
 }
 

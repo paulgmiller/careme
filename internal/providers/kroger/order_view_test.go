@@ -55,7 +55,7 @@ func TestKrogerOrderViewForm(t *testing.T) {
 		if brand == "" {
 			brand = "Kroger"
 		}
-		assert.Equal(t, "Add to "+brand+" cart", view.ActionLabel)
+		assert.Equal(t, "Add to "+brand+" cart", view.TransferLabel)
 		var request ordertypes.TransferRequest
 		require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &request))
 		assert.Equal(t, "70500874", request.Location.ID)
@@ -112,32 +112,17 @@ func TestKrogerOrderTemplateRendersIdempotencyField(t *testing.T) {
 
 func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 	for _, tc := range []struct {
-		code, suffix string
-		review       bool
+		code   string
+		review bool
 	}{
-		{"", "", false},
-		{"complete", "/submission", true},
-		{"uncertain", "/submission", true},
-		{"confirmation_failed", "/state", true},
-		{"uncertain", "/state", true},
-		{"lookup_failed", "/state", false},
-		{"start_failed", "/state", false},
-		{"no_matches", "/state", false},
-		{"pending_login", "/state", false},
+		{"", false}, {"complete", true}, {"pending", true}, {"uncertain", true}, {"confirmation_failed", true}, {"lookup_failed", false}, {"start_failed", false}, {"no_matches", false}, {"pending_login", false},
 	} {
-		t.Run(tc.code+tc.suffix, func(t *testing.T) {
+		t.Run(tc.code, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
 			transfer := cartTransfer{UserID: "viewer", IdempotencyKey: "list", Request: ordertypes.TransferRequest{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}}}
 			transfer.Result = transfer.result(tc.code, 1, 0)
-			if tc.suffix != "" {
-				var value any = transfer
-				if tc.suffix == "/submission" {
-					value = transfer.Result
-				}
-				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list")+tc.suffix, value, cache.Unconditional()))
-			}
-			if tc.suffix == "/submission" {
-				require.NoError(t, a.cache.Put(t.Context(), transferKey("viewer", "list")+"/state", "broken", cache.Unconditional()))
+			if tc.code != "" {
+				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list"), transfer, cache.Unconditional()))
 			}
 			input := ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list", Location: transfer.Request.Location}
 			view, err := OrderViewForUser(t.Context(), a.cache, input)
@@ -164,9 +149,9 @@ func (c failingTransferRead) Get(context.Context, string) (io.ReadCloser, error)
 }
 
 func TestOrderViewForUserReadErrors(t *testing.T) {
-	for _, suffix := range []string{"/submission", "/state"} {
+	{
 		c := cache.NewInMemoryCache()
-		require.NoError(t, c.Put(t.Context(), transferKey("viewer", "list")+suffix, "broken", cache.Unconditional()))
+		require.NoError(t, c.Put(t.Context(), transferKey("viewer", "list"), "broken", cache.Unconditional()))
 		_, err := OrderViewForUser(t.Context(), c, ordertypes.OrderViewInput{UserID: "viewer", ListKey: "list"})
 		require.ErrorContains(t, err, "decode Kroger transfer")
 	}

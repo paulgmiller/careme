@@ -13,8 +13,7 @@ import (
 	"careme/internal/templates"
 )
 
-// The lifecycle record owns the request, OAuth state, and preparation result.
-// Its submission subrecord reserves and records the only cart write.
+// A single record owns the request, OAuth state, and cart-write result.
 type cartTransfer struct {
 	UserID         string                     `json:"user_id"`
 	IdempotencyKey string                     `json:"idempotency_key"`
@@ -28,10 +27,6 @@ type transferAuthorization struct {
 	IssuedAt time.Time `json:"issued_at"`
 }
 
-func submissionKey(transfer cartTransfer) string {
-	return transferKey(transfer.UserID, transfer.IdempotencyKey) + "/submission"
-}
-
 func transferKey(userID, id string) string {
 	return "kroger_order_transfers/" + userID + "/" + id
 }
@@ -39,7 +34,7 @@ func transferKey(userID, id string) string {
 func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
 	request := transfer.Request
 	id := transfer.IdempotencyKey
-	key := transferKey(transfer.UserID, id) + "/state"
+	key := transferKey(transfer.UserID, id)
 	var previous cartTransfer
 	if err := a.loadJSON(r.Context(), key, &previous); err == nil {
 		if orderFingerprint(previous.Request) != orderFingerprint(request) || previous.Request.Location.Chain != request.Location.Chain || previous.Request.ReturnURL != request.ReturnURL {
@@ -47,7 +42,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 			return
 		}
 		// Preparation or account connection failed before a cart mutation.
-		// Retrying still conditionally reserves the only cart write.
+		// Updates can overwrite concurrent attempts until IfMatch is supported.
 		if retryableTransfer(previous.Result.Code) {
 			previous.Result = a.order(r.Context(), previous, true)
 			if !a.saveTransfer(w, r, previous) {
@@ -60,7 +55,7 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 		writeTransferError(w, http.StatusInternalServerError, "Unable to read cart transfer.")
 		return
 	}
-	transfer.Result = transfer.result("uncertain", 0, 0)
+	transfer.Result = transfer.result("pending", 0, 0)
 	if err := a.saveJSON(r.Context(), key, transfer, cache.IfNoneMatch()); err != nil {
 		if errors.Is(err, cache.ErrAlreadyExists) {
 			a.createTransfer(w, r, transfer)
@@ -77,23 +72,16 @@ func (a *OrderHandler) createTransfer(w http.ResponseWriter, r *http.Request, tr
 }
 
 func (a *OrderHandler) saveTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) bool {
-	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, transfer.IdempotencyKey)+"/state", transfer, cache.Unconditional()); err != nil {
+	if err := a.saveJSON(r.Context(), transferKey(transfer.UserID, transfer.IdempotencyKey), transfer, cache.Unconditional()); err != nil {
 		writeTransferError(w, http.StatusInternalServerError, "Unable to save your cart result. Review your cart before trying again.")
 		return false
 	}
 	return true
 }
 
-// Browser navigation stays on the provider route until it can open the cart.
-// The durable submission wins over a failed state save or a late OAuth callback.
+// TODO: Use ETags/IfMatch for state transitions. Updates currently overwrite on
+// races; concurrent retries or OAuth callbacks can duplicate cart writes or lose results.
 func (a *OrderHandler) finishTransfer(w http.ResponseWriter, r *http.Request, transfer cartTransfer) {
-	var result ordertypes.Transfer
-	if err := a.loadJSON(r.Context(), submissionKey(transfer), &result); err == nil {
-		transfer.Result = result
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		writeTransferError(w, http.StatusInternalServerError, "Unable to read cart result.")
-		return
-	}
 	switch transfer.Result.Code {
 	case "pending_login":
 		a.startAuthorization(w, r, transfer)
@@ -132,7 +120,7 @@ func (a *OrderHandler) writeTransferFailure(w http.ResponseWriter, r *http.Reque
 			writeTransferError(w, http.StatusInternalServerError, "Unable to render cart transfer.")
 			return
 		}
-		retry.ActionLabel = "Try again, chef"
+		retry.TransferLabel = "Try again, chef"
 		view.Retry = retry
 	}
 	var body bytes.Buffer
@@ -142,7 +130,7 @@ func (a *OrderHandler) writeTransferFailure(w http.ResponseWriter, r *http.Reque
 	}
 	status := http.StatusBadGateway
 	switch transfer.Result.Code {
-	case "uncertain", "start_failed", "confirmation_failed":
+	case "pending", "uncertain", "start_failed", "confirmation_failed":
 		status = http.StatusConflict
 	case "denied", "missing_code":
 		status = http.StatusBadRequest
@@ -164,6 +152,8 @@ func (t cartTransfer) result(code string, added, unmatched int) ordertypes.Trans
 		Code: code, Message: krogerOrderNotice(code),
 	}
 	switch code {
+	case "pending":
+		result.Status = "pending"
 	case "complete", "no_matches":
 		result.Status = "applied"
 	case "uncertain", "confirmation_failed", "start_failed":

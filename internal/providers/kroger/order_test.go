@@ -57,15 +57,9 @@ func orderMux(a *OrderHandler) *http.ServeMux {
 
 func savedResult(t *testing.T, a *OrderHandler, key string) ordertypes.Transfer {
 	t.Helper()
-	var result ordertypes.Transfer
-	err := a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key)+"/submission", &result)
-	if errors.Is(err, cache.ErrNotFound) {
-		var transfer cartTransfer
-		require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key)+"/state", &transfer))
-		return transfer.Result
-	}
-	require.NoError(t, err)
-	return result
+	var transfer cartTransfer
+	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", key), &transfer))
+	return transfer.Result
 }
 
 func transferResponse(t *testing.T, a *OrderHandler, response *httptest.ResponseRecorder) ordertypes.Transfer {
@@ -216,7 +210,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 			cookie := start.Result().Cookies()[0]
 			state := cookie.Value
 			var continuation cartTransfer
-			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash")+"/state", &continuation))
+			require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &continuation))
 			switch scenario {
 			case "wrong state":
 				state = "wrong"
@@ -236,7 +230,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 				a.cache = cache.NewInMemoryCache()
 			}
 			if scenario != "missing request" {
-				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash")+"/state", continuation, cache.Unconditional()))
+				require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), continuation, cache.Unconditional()))
 			}
 			if scenario == "exchange failure" {
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
@@ -273,11 +267,19 @@ type orderFailCache struct {
 	cache.Cache
 	prefix       string
 	confirmation bool
+	reservation  bool
 }
 
 func (c orderFailCache) Put(ctx context.Context, key, value string, options cache.PutOptions) error {
-	if strings.HasPrefix(key, c.prefix) && (!c.confirmation || options.Condition == cache.PutUnconditional) {
-		return errors.New("cache unavailable")
+	if strings.HasPrefix(key, c.prefix) {
+		var transfer cartTransfer
+		_ = json.Unmarshal([]byte(value), &transfer)
+		fail := !c.confirmation && !c.reservation
+		fail = fail || (c.confirmation && options.Condition == cache.PutUnconditional && transfer.Result.Code != "pending")
+		fail = fail || (c.reservation && options.Condition == cache.PutUnconditional && transfer.Result.Code == "pending")
+		if fail {
+			return errors.New("cache unavailable")
+		}
 	}
 	return c.Cache.Put(ctx, key, value, options)
 }
@@ -293,14 +295,19 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			saveShopper(t, a, time.Now().Add(time.Hour))
 			expected := "uncertain"
 			if scenario == "confirmation failed" {
-				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/submission", confirmation: true}
-				expected = "uncertain"
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash"), confirmation: true}
+				expected = "pending"
 			}
 			mux := orderMux(a)
-			assert.Equal(t, expected, transferResponse(t, a, postOrder(mux, orderForm())).Code)
+			first := postOrder(mux, orderForm())
+			if scenario == "confirmation failed" {
+				assert.Equal(t, http.StatusInternalServerError, first.Code)
+			} else {
+				assert.Equal(t, expected, transferResponse(t, a, first).Code)
+			}
 			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Code
 			if scenario == "confirmation failed" {
-				assert.Equal(t, "uncertain", repeat)
+				assert.Equal(t, "pending", repeat)
 			} else {
 				assert.Equal(t, expected, repeat)
 			}
@@ -325,7 +332,7 @@ func TestKrogerOrderConcurrentSubmission(t *testing.T) {
 	<-entered
 	second := postOrder(mux, orderForm())
 	close(release)
-	assert.Equal(t, "uncertain", transferResponse(t, a, second).Code)
+	assert.Equal(t, "pending", transferResponse(t, a, second).Code)
 	assert.Equal(t, "complete", transferResponse(t, a, <-completed).Code)
 	assert.Equal(t, int32(1), calls.Load())
 }
@@ -395,7 +402,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				expected = "connect_failed"
 			case "reservation failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash") + "/submission"}
+				a.cache = orderFailCache{Cache: a.cache, prefix: transferKey("mock-clerk-user-id", "list-hash"), reservation: true}
 				expected = "start_failed"
 			}
 			response := postOrder(orderMux(a), form)

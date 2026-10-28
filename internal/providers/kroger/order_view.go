@@ -16,33 +16,23 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 	if input.UserID == "" {
 		return nil, fmt.Errorf("order view requires an authenticated Kroger user ID")
 	}
-	root := transferKey(input.UserID, input.ListKey)
-	for _, suffix := range []string{"/submission", "/state"} {
-		reader, err := c.Get(ctx, root+suffix)
-		if errors.Is(err, cache.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read Kroger transfer%s: %w", suffix, err)
-		}
-		var result ordertypes.Transfer
-		if suffix == "/submission" {
-			err = json.NewDecoder(reader).Decode(&result)
-		} else {
-			var transfer cartTransfer
-			err = json.NewDecoder(reader).Decode(&transfer)
-			result = transfer.Result
-		}
-		_ = reader.Close()
-		if err != nil {
-			return nil, fmt.Errorf("decode Kroger transfer%s: %w", suffix, err)
-		}
-		switch result.Code {
-		case "complete", "uncertain", "confirmation_failed":
-			return &ordertypes.OrderView{ReviewCartURL: result.CartURL}, nil
-		}
-		break
+	reader, err := c.Get(ctx, transferKey(input.UserID, input.ListKey))
+	if errors.Is(err, cache.ErrNotFound) {
+		return OrderView(input)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("read Kroger transfer: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+	var transfer cartTransfer
+	if err := json.NewDecoder(reader).Decode(&transfer); err != nil {
+		return nil, fmt.Errorf("decode Kroger transfer: %w", err)
+	}
+	switch transfer.Result.Code {
+	case "complete", "pending", "uncertain", "confirmation_failed":
+		return &ordertypes.OrderView{ReviewCartURL: transfer.Result.CartURL}, nil
+	}
+
 	return OrderView(input)
 }
 
@@ -59,7 +49,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	order := &ordertypes.OrderView{
 		IdempotencyKey:      input.ListKey,
 		TransferURL:         "/kroger/order-transfers",
-		ActionLabel:         "Add to " + brand + " cart",
+		TransferLabel:       "Add to " + brand + " cart",
 		Description:         "Adds one package of each matched product. Review amounts, store, and checkout in your cart.",
 		TransferRequestJSON: string(body),
 	}
@@ -69,6 +59,7 @@ func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 
 func krogerOrderNotice(code string) string {
 	return map[string]string{
+		"pending":             "Your transfer is still running or could not be confirmed. Review your cart before trying again.",
 		"complete":            "Your products were sent to your cart. Review amounts before checkout.",
 		"no_matches":          "No products could be matched. Nothing was sent to Kroger.",
 		"uncertain":           "Careme could not confirm what Kroger added. Review your cart before adding missing items.",

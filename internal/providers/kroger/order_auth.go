@@ -150,13 +150,18 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var transfer cartTransfer
-	if err := a.loadJSON(r.Context(), transferKey(userID, string(key))+"/state", &transfer); err != nil || transfer.UserID != userID || transfer.Authorization == nil {
+	if err := a.loadJSON(r.Context(), transferKey(userID, string(key)), &transfer); err != nil || transfer.UserID != userID || transfer.Authorization == nil {
 		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
 		return
 	}
 	authorization := transfer.Authorization
 	if subtle.ConstantTimeCompare([]byte(authorization.State), []byte(state)) != 1 || authorization.IssuedAt.IsZero() || time.Since(authorization.IssuedAt) > 10*time.Minute || time.Until(authorization.IssuedAt) > time.Minute {
 		http.Error(w, "Kroger connection expired or unavailable", http.StatusBadRequest)
+		return
+	}
+	switch transfer.Result.Code {
+	case "complete", "pending", "uncertain", "confirmation_failed":
+		a.finishTransfer(w, r, transfer)
 		return
 	}
 	if r.URL.Query().Get("error") != "" {
