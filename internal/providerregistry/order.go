@@ -13,6 +13,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/httpretry"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
 	"careme/internal/routing"
 
@@ -37,6 +38,13 @@ func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) 
 			return err
 		}
 		handler.Register(routes)
+	}
+	if f.config.MNFoodClub.OrderAPIURL != "" || f.config.MNFoodClub.OrderAccessToken != "" {
+		client, err := mnfoodclub.NewOrderClient(f.config.MNFoodClub, http.DefaultClient)
+		if err != nil {
+			return err
+		}
+		mnfoodclub.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
 	}
 	return nil
 }
@@ -89,6 +97,13 @@ func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 	}
 	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
 		return kroger.OrderViewForUser(ctx, b.cache, input)
+	}
+	if mnfoodclub.NewIdentityProvider().IsID(input.Location.ID) && (b.factory.config.MNFoodClub.OrderAPIURL != "" || b.factory.config.MNFoodClub.OrderAccessToken != "") {
+		client, err := mnfoodclub.NewOrderClient(b.factory.config.MNFoodClub, http.DefaultClient)
+		if err != nil {
+			return nil, err
+		}
+		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
 	return nil, nil
 }

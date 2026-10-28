@@ -54,8 +54,9 @@ func compareShoppingAisles(a, b string) int {
 
 type shoppingPurchaseItem struct {
 	ai.ShoppingItem
-	Size  string
-	Aisle string
+	VariantID string `json:"variant_id,omitempty"`
+	Size      string
+	Aisle     string
 }
 
 type shoppingPurchaseGroup struct {
@@ -73,6 +74,7 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 	for _, item := range items {
 		row := shoppingPurchaseItem{ShoppingItem: item}
 		if product, ok := products[item.ProductID]; ok {
+			row.VariantID = product.VariantID
 			row.Name = product.Description
 			row.Size = product.Size
 			row.Aisle = strings.TrimSpace(product.AisleNumber)

@@ -77,8 +77,10 @@ type KrogerConfig struct {
 
 // MNFoodClubConfig supplies the store-level credentials used for MNFoodClub.
 type MNFoodClubConfig struct {
-	APIPath     string `json:"api_path"`
-	AccessToken string `json:"-"`
+	APIPath          string `json:"api_path"`
+	AccessToken      string `json:"-"`
+	OrderAPIURL      string `json:"order_api_url"`
+	OrderAccessToken string `json:"-"`
 }
 
 type MockConfig struct {
@@ -228,8 +230,10 @@ func LoadOnlyProviders() (*Config, error) {
 			CartTokenKey: os.Getenv("KROGER_CART_TOKEN_KEY"),
 		},
 		MNFoodClub: MNFoodClubConfig{
-			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
-			AccessToken: os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
+			APIPath:          os.Getenv("MNFOODCLUB_API_PATH"),
+			AccessToken:      os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
+			OrderAPIURL:      os.Getenv("MNFOODCLUB_ORDER_API_URL"),
+			OrderAccessToken: os.Getenv("MNFOODCLUB_ORDER_ACCESS_TOKEN"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv

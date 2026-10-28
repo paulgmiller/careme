@@ -7,10 +7,11 @@ import (
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
-	ListKey  string // shoppinglist hash
-	UserID   string // combines with above to look up
-	Location locationtypes.Location
-	Items    []ai.ShoppingItem
+	ListKey    string // shoppinglist hash
+	UserID     string // combines with above to look up
+	Location   locationtypes.Location
+	Items      []ai.ShoppingItem
+	VariantIDs map[string]string // Selected catalog variants, keyed by product ID.
 
 	ReturnURL string
 }
@@ -30,16 +31,17 @@ type OrderView struct {
 // TransferRequest sends the displayed shopping list to a destination.
 // The browser submits the idempotency key separately in the idempotency_key form field.
 type TransferRequest struct {
-	Items     []ai.ShoppingItem      `json:"items"`
-	Location  locationtypes.Location `json:"location"`
-	ReturnURL string                 `json:"return_url"`
+	Items      []ai.ShoppingItem      `json:"items"`
+	Location   locationtypes.Location `json:"location"`
+	ReturnURL  string                 `json:"return_url"`
+	VariantIDs map[string]string      `json:"variant_ids,omitempty"`
 }
 
 // Transfer describes a cart handoff, never checkout or a placed order.
 // CartURL opens the destination cart; the provider handler owns login redirects.
 // Added counts packages sent; Unmatched counts shopping items not sent.
 type Transfer struct {
-	// TransferID is the original idempotency key, scoped to the authenticated user and destination.
+	// TransferID identifies the destination's transfer. Kroger uses the idempotency key directly.
 	TransferID string         `json:"transfer_id"`
 	Status     TransferStatus `json:"status"`
 	CartURL    string         `json:"cart_url"`

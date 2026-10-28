@@ -34,6 +34,7 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
@@ -107,8 +108,8 @@ The shopping-list UI
 asks the provider for the current viewer's saved handoff during server rendering.
 Confirmed or possibly applied writes show a cart link instead of the form;
 transfer-read failures fail the page. There is no browser status fetch.
-Kroger is currently the only destination; future integrations can adapt their
-upstream APIs behind the same browser handoff. Users review amounts and complete
+Kroger and the opt-in MN Food Club adapter use this browser handoff. Food Club’s
+partner API remains a proposal; configure it only against an agreed endpoint. Users review amounts and complete
 checkout with the provider. See [Cart transfers](docs/ordering.md) for browser
 navigation and OAuth details.
 
@@ -248,7 +249,7 @@ level for each product. Ties keep the first eligible variant in catalog order.
 Zero stock excludes items only when inventory tracking is enabled. The selected
 variant's prices and `variant_id` are saved alongside the parent product `id` in
 cached ingredient data; the TSV includes only the parent product ID. Older
-cached catalogs need refreshing to populate `variant_id`. The saved IDs support
+cached catalogs need refreshing to populate `variant_id`. The saved IDs are carried through finalized shopping lists to
 the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 
 For a test-site cart handoff walkthrough and standalone mock API, see

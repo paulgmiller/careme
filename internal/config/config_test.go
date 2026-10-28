@@ -230,6 +230,8 @@ func resetStoreEnvs(t *testing.T) {
 		"PUBLIC_ORIGIN",
 		"MNFOODCLUB_API_PATH",
 		"MNFOODCLUB_ACCESS_TOKEN",
+		"MNFOODCLUB_ORDER_API_URL",
+		"MNFOODCLUB_ORDER_ACCESS_TOKEN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
@@ -262,10 +264,14 @@ func TestLoadMNFoodClubCredentials(t *testing.T) {
 	t.Setenv("ENABLE_MOCKS", "1")
 	t.Setenv("MNFOODCLUB_API_PATH", "https://api.bigcommerce.com/stores/test/v3/")
 	t.Setenv("MNFOODCLUB_ACCESS_TOKEN", "test-token")
+	t.Setenv("MNFOODCLUB_ORDER_API_URL", "https://orders.foodclub.test")
+	t.Setenv("MNFOODCLUB_ORDER_ACCESS_TOKEN", "partner-token")
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/", cfg.MNFoodClub.APIPath)
 	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
+	assert.Equal(t, "https://orders.foodclub.test", cfg.MNFoodClub.OrderAPIURL)
+	assert.Equal(t, "partner-token", cfg.MNFoodClub.OrderAccessToken)
 }
 
 func TestLoadOnlyProvidersIgnoresAppConfiguration(t *testing.T) {
