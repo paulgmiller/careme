@@ -72,10 +72,10 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token cartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
 	// Kroger adds the requested whole-package quantity for each product.
-	var items []CartItem
+	var items []cartItem
 	var accepted []ordertypes.TransferItem
 	resolved, err := a.resolveUPCs(ctx, input)
 	if err != nil {
@@ -91,14 +91,14 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 			transfer.Items = append(transfer.Items, result)
 			continue
 		}
-		items = append(items, CartItem{UPC: lookup.upc, Quantity: quantity})
+		items = append(items, cartItem{UPC: lookup.upc, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
 	if len(items) == 0 {
 		return transfer, nil
 	}
-	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
+	if err := a.client.add(ctx, token.AccessToken, items); err != nil {
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied
@@ -127,8 +127,8 @@ func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.Trans
 		productIDs = append(productIDs, item.ProductID)
 	}
 	resolved, err := parallelism.MapWithErrors(productIDs, func(productID string) (*upcResult, error) {
-		upc, err := a.client.ProductUPC(ctx, productID, request.Location.ID)
-		if errors.Is(err, ErrProductUnavailable) {
+		upc, err := a.client.productUPC(ctx, productID, request.Location.ID)
+		if errors.Is(err, errProductUnavailable) {
 			return &upcResult{unavailable: true}, nil
 		}
 		if err != nil {

@@ -24,7 +24,7 @@ func TestSafewayProductUnmarshal(t *testing.T) {
 		"Availability": true
 	}`)
 
-	var got SafewayProduct
+	var got safewayProduct
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("json.Unmarshal(): %v", err)
 	}
@@ -51,7 +51,7 @@ func TestSafewayProductsJSONUnmarshal(t *testing.T) {
 		t.Fatalf("ReadFile returned error: %v", err)
 	}
 
-	var got []SafewayProduct
+	var got []safewayProduct
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("json.Unmarshal(): %v", err)
 	}

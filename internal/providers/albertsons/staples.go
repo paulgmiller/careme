@@ -41,7 +41,7 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 	return cachekey.NewHash(locationID, date, string(defaultStaplesSignature))
 }
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	newClient searchClientFactory
 }
@@ -50,10 +50,10 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (StaplesProvider, error) {
+func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (staplesProvider, error) {
 	c, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
+		return staplesProvider{}, fmt.Errorf("create albertsons cache: %w", err)
 	}
 
 	return newStaplesProviderWithFactory(func(baseURL string) (searchClient, error) {
@@ -72,14 +72,14 @@ func NewStaplesProvider(cfg config.AlbertsonsConfig, httpClient *http.Client) (S
 }
 
 // only used for testing
-func newStaplesProviderWithFactory(factory searchClientFactory) StaplesProvider {
-	return StaplesProvider{
+func newStaplesProviderWithFactory(factory searchClientFactory) staplesProvider {
+	return staplesProvider{
 		newClient: factory,
 	}
 }
 
 func (p identityProvider) IsID(locationID string) bool {
-	return IsID(locationID)
+	return isID(locationID)
 }
 
 var stapleRows = map[string]uint{
@@ -90,7 +90,7 @@ var stapleRows = map[string]uint{
 	query.Category_Pasta_Grains: 160,
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styl
 }
 
 // clientForLocation takes a prefixed store id and looks up chaing base url and returnes unprefixed id.
-func (p StaplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
+func (p staplesProvider) clientForLocation(locationID string) (searchClient, string, error) {
 	baseURL, storeID, ok := searchBaseURLAndStoreID(locationID)
 	if !ok {
 		return nil, "", fmt.Errorf("invalid albertsons location id %q", locationID)

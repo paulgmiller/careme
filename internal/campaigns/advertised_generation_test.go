@@ -73,10 +73,10 @@ func (g *campaignImageStub) GenerateStepImage(context.Context, ai.Recipe, int) (
 	panic("unexpected step image request")
 }
 
-func testService() (*Service, *campaignGeneratorStub, *campaignImageStub) {
+func testService() (*service, *campaignGeneratorStub, *campaignImageStub) {
 	c := cache.NewInMemoryCache()
 	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
-	return &Service{
+	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
 		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
 	}, g, images

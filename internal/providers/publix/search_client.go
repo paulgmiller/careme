@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const DefaultSearchBaseURL = "https://services.publix.com"
+const defaultSearchBaseURL = "https://services.publix.com"
 
 const (
 	storeProductsSavingsSource = "WEB_SEARCH"
@@ -23,12 +23,12 @@ const (
 	storeProductsSavingsUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 )
 
-type SearchClient struct {
+type searchClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-type StoreProductsSavingsOptions struct {
+type storeProductsSavingsOptions struct {
 	StoreNumber string
 	CategoryID  string
 	Abck        string
@@ -36,12 +36,12 @@ type StoreProductsSavingsOptions struct {
 	Skip        int
 }
 
-type StoreProductsSavingsResult struct {
-	StoreProducts []StoreProduct `json:"storeProducts"`
+type storeProductsSavingsResult struct {
+	StoreProducts []storeProduct `json:"storeProducts"`
 	TotalCount    int            `json:"totalCount"`
 }
 
-type StoreProduct struct {
+type storeProduct struct {
 	ItemCode int    `json:"itemCode"`
 	Title    string `json:"title"`
 	// shortDescription?
@@ -51,26 +51,26 @@ type StoreProduct struct {
 	SizeDescription   *string `json:"sizeDescription"`
 }
 
-func NewSearchClient(httpClient *http.Client) *SearchClient {
-	return NewSearchClientWithBaseURL(DefaultSearchBaseURL, httpClient)
+func newSearchClient(httpClient *http.Client) *searchClient {
+	return newSearchClientWithBaseURL(defaultSearchBaseURL, httpClient)
 }
 
-func NewSearchClientWithBaseURL(baseURL string, httpClient *http.Client) *SearchClient {
+func newSearchClientWithBaseURL(baseURL string, httpClient *http.Client) *searchClient {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
-		baseURL = DefaultSearchBaseURL
+		baseURL = defaultSearchBaseURL
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	return &SearchClient{
+	return &searchClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 	}
 }
 
-func (c *SearchClient) StoreProductsSavings(ctx context.Context, opts StoreProductsSavingsOptions) (*StoreProductsSavingsResult, error) {
+func (c *searchClient) StoreProductsSavings(ctx context.Context, opts storeProductsSavingsOptions) (*storeProductsSavingsResult, error) {
 	opts.StoreNumber = strings.TrimSpace(opts.StoreNumber)
 	opts.CategoryID = strings.TrimSpace(opts.CategoryID)
 	opts.Abck = strings.TrimSpace(opts.Abck)
@@ -175,7 +175,7 @@ type storeProductsSavingsVariables struct {
 
 type storeProductsSavingsGraphQLResponse struct {
 	Data struct {
-		StoreProductsSavingsSearchResult StoreProductsSavingsResult `json:"storeProductsSavingsSearchResult"`
+		StoreProductsSavingsSearchResult storeProductsSavingsResult `json:"storeProductsSavingsSearchResult"`
 	} `json:"data"`
 	Errors []graphQLError `json:"errors,omitempty"`
 }

@@ -40,7 +40,7 @@ func TestNewLocationBackendBuildsIndexAndLookup(t *testing.T) {
 	if loc.Name != "Whole Foods Westlake" || loc.ZipCode != "98121" || loc.Chain != "wholefoods" {
 		t.Fatalf("unexpected location: %+v", loc)
 	}
-	reader, err := cacheStore.Get(context.Background(), LocationIndexCacheKey)
+	reader, err := cacheStore.Get(context.Background(), locationIndexCacheKey)
 	if err != nil {
 		t.Fatalf("expected compact location index to be cached: %v", err)
 	}

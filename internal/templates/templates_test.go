@@ -78,7 +78,7 @@ func TestGoogleTagNoScriptIncludesContainerID(t *testing.T) {
 	})
 	GoogleTagManagerID = "GTM-KP55TPW6"
 
-	script := string(GoogleTagNoScript())
+	script := string(googleTagNoScript())
 	if !strings.Contains(script, `www.googletagmanager.com/ns.html?id=GTM-KP55TPW6`) {
 		t.Fatalf("expected GTM noscript iframe URL, got %q", script)
 	}

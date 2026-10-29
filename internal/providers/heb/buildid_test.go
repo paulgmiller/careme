@@ -38,7 +38,7 @@ func TestFetchBuildIDFromHomePage(t *testing.T) {
 	if got != "fresh-build" {
 		t.Fatalf("unexpected build id: got %q want %q", got, "fresh-build")
 	}
-	if browser.targetURL != DefaultBaseURL+"/" {
+	if browser.targetURL != defaultBaseURL+"/" {
 		t.Fatalf("unexpected target URL: %q", browser.targetURL)
 	}
 	if browser.opts.WaitAfterNavigation != 250*time.Millisecond {

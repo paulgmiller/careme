@@ -22,10 +22,10 @@ type expectation struct {
 
 type promptfooContext struct {
 	Vars struct {
-		Cases []EvalCase `json:"cases"`
+		Cases []evalCase `json:"cases"`
 	} `json:"vars"`
 }
-type EvalCase struct {
+type evalCase struct {
 	// only expecting Brand, Descirption and maybe size from hard coded entries.
 	Ingredient ai.InputIngredient `json:"ingredient"`
 	Expect     expectation        `json:"expect"`
@@ -35,6 +35,7 @@ type ingredientGrader interface {
 	GradeIngredients(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	return callAPI(ctx)
 }
