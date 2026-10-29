@@ -79,9 +79,10 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
 	for _, item := range input.Items {
 		quantity := item.PackageQuantity()
-		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: quantity}
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
 		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
 		if errors.Is(err, ErrProductUnavailable) {
+			result.RejectedQuantity = quantity
 			result.RejectionReason = "product_unavailable"
 			transfer.Items = append(transfer.Items, result)
 			continue
@@ -90,7 +91,7 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
 		}
 		items = append(items, CartItem{UPC: upc, Quantity: quantity})
-		result.AcceptedQuantity, result.RejectedQuantity = quantity, 0
+		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
 	if len(items) == 0 {
