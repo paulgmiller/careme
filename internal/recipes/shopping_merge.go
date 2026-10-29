@@ -28,6 +28,7 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 }
 
 func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
+	// TODO: Recheck product availability when merging the shopping list; cart transfer only resolves UPCs.
 	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash

@@ -2,12 +2,14 @@ package kroger
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -82,9 +84,59 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	return transfer, nil
 }
 
-// resolveItms goes back and gets ups for each product id. Could be avoided if we saved in inputingredient
-// if not that should be parallelized
+// productUPC caches the store-specific product mapping independently of inventory.
+func (a *OrderHandler) productUPC(ctx context.Context, productID, locationID string) (string, error) {
+	key := fmt.Sprintf("kroger_product_upcs/v1/%x", sha256.Sum256([]byte(locationID+"\x00"+productID)))
+	var upc string
+	if err := a.loadJSON(ctx, key, &upc); err == nil {
+		return upc, nil
+	} else if !errors.Is(err, cache.ErrNotFound) {
+		return "", fmt.Errorf("read Kroger UPC cache: %w", err)
+	}
+	upc, err := a.client.ProductUPC(ctx, productID, locationID)
+	if err != nil {
+		return "", err
+	}
+	if err := a.saveJSON(ctx, key, upc, cache.Unconditional()); err != nil {
+		return "", fmt.Errorf("save Kroger UPC cache: %w", err)
+	}
+	return upc, nil
+}
+
 func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		upc string
+		err error
+	}
+	results := make(map[string]*result)
+	var wg sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
+	for _, item := range request.Items {
+		if item.ProductID == "" {
+			continue
+		}
+		if _, exists := results[item.ProductID]; exists {
+			continue
+		}
+		resolved := &result{}
+		results[item.ProductID] = resolved
+		wg.Add(1)
+		go func(productID string) {
+			defer wg.Done()
+			resolved.upc, resolved.err = a.productUPC(ctx, productID, request.Location.ID)
+			if resolved.err != nil && !errors.Is(resolved.err, ErrProductUnavailable) {
+				errOnce.Do(func() { firstErr = resolved.err; cancel() })
+			}
+		}(item.ProductID)
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, nil, fmt.Errorf("resolve Kroger order product: %w", firstErr)
+	}
+
 	var items []CartItem
 	var gaps []ai.ShoppingItem
 	seen := make(map[string]bool)
@@ -93,7 +145,7 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.Tran
 			gaps = append(gaps, item)
 			continue
 		}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, request.Location.ID)
+		upc, err := results[item.ProductID].upc, results[item.ProductID].err
 		if errors.Is(err, ErrProductUnavailable) {
 			gaps = append(gaps, item)
 			continue

@@ -28,6 +28,9 @@ var userClerkBillingJS []byte
 //go:embed share.js
 var shareJS []byte
 
+//go:embed order.js
+var orderJS []byte
+
 //go:embed recipe.js
 var recipeJS []byte
 
@@ -66,7 +69,7 @@ var AssetPath = calculateAssetPath()
 func calculateAssetPath() string {
 	hasher := fnv.New64()
 
-	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS} {
+	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, orderJS, recipeJS, farmersMarketJS} {
 		_, _ = hasher.Write(asset)
 	}
 	return fmt.Sprintf("/static/%x/", hasher.Sum(nil))
@@ -101,6 +104,7 @@ func Register(mux routing.Registrar) {
 	// w.Header().Set("Cache-Control", "public, max-age=3600")
 
 	mux.HandleFunc(AssetPath+"share.js", static(jsContentType, shareJS))
+	mux.HandleFunc(AssetPath+"order.js", static(jsContentType, orderJS))
 	mux.HandleFunc(AssetPath+"recipe.js", static(jsContentType, recipeJS))
 
 	mux.HandleFunc(AssetPath+"farmersmarket.js", static(jsContentType, farmersMarketJS))

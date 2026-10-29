@@ -78,7 +78,7 @@ func (c *CartClient) Refresh(ctx context.Context, refreshToken string) (CartToke
 	return result, nil
 }
 
-// ProductUPC resolves a catalog product at the intended store to one sellable UPC.
+// ProductUPC resolves a catalog product at the intended store to one UPC, independently of inventory.
 func (c *CartClient) ProductUPC(ctx context.Context, productID, locationID string) (string, error) {
 	if c.CatalogToken == nil {
 		return "", fmt.Errorf("kroger product token unavailable")
@@ -109,15 +109,12 @@ func (c *CartClient) ProductUPC(ctx context.Context, productID, locationID strin
 	}
 	if resp.JSON200.Data.Items != nil {
 		for _, item := range *resp.JSON200.Data.Items {
-			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
-				continue
-			}
 			if upc := strings.TrimSpace(stringValue(item.ItemId)); upc != "" {
 				return upc, nil
 			}
 		}
 	}
-	return "", fmt.Errorf("%w: %q has no available UPC", ErrProductUnavailable, productID)
+	return "", fmt.Errorf("%w: %q has no UPC", ErrProductUnavailable, productID)
 }
 
 func (c *CartClient) Add(ctx context.Context, token string, items []CartItem) error {
