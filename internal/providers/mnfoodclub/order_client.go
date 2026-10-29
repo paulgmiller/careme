@@ -9,14 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"careme/internal/config"
-	"careme/internal/httpretry"
 	ordertypes "careme/internal/orders/types"
-
-	"github.com/hashicorp/go-retryablehttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type requestedItem struct {
@@ -46,7 +41,7 @@ type OrderClient struct {
 	httpClient *http.Client
 }
 
-func NewOrderClient(cfg config.MNFoodClubConfig, baseClient *http.Client) (*OrderClient, error) {
+func NewOrderClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*OrderClient, error) {
 	base, err := url.Parse(cfg.OrderAPIURL)
 	if err != nil || !validOrderURL(base) || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return nil, fmt.Errorf("MNFOODCLUB_ORDER_API_URL must be an absolute HTTPS URL (HTTP localhost is allowed for testing)")
@@ -54,17 +49,7 @@ func NewOrderClient(cfg config.MNFoodClubConfig, baseClient *http.Client) (*Orde
 	if strings.TrimSpace(cfg.OrderAccessToken) == "" {
 		return nil, fmt.Errorf("MN Food Club ordering requires MNFOODCLUB_ORDER_ACCESS_TOKEN")
 	}
-	instrumented := *baseClient
-	instrumented.Timeout = 15 * time.Second
-	instrumented.Transport = otelhttp.NewTransport(baseClient.Transport)
-	instrumented.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	retry := retryablehttp.NewClient()
-	retry.HTTPClient = &instrumented
-	// Transfers are never automatically resubmitted, including after ambiguous failures.
-	retry.RetryMax = 0
-	retry.Logger = nil
-	retry.RequestLogHook = httpretry.LogRetry("mnfoodclub-order")
-	return &OrderClient{endpoint: strings.TrimRight(base.String(), "/") + "/v1/cart-transfers", token: cfg.OrderAccessToken, httpClient: retry.StandardClient()}, nil
+	return &OrderClient{endpoint: strings.TrimRight(base.String(), "/") + "/v1/cart-transfers", token: cfg.OrderAccessToken, httpClient: httpClient}, nil
 }
 
 func validOrderURL(u *url.URL) bool {
@@ -83,22 +68,7 @@ func (c *OrderClient) create(ctx context.Context, key string, input handoffReque
 	if err != nil {
 		return handoffResponse{}, err
 	}
-	if result.Status == ordertypes.TransferApplied {
-		quantities := make(map[string]int, len(input.Items))
-		for _, item := range input.Items {
-			quantities[item.ProductID] = item.Quantity
-		}
-		for _, item := range result.Items {
-			if quantity, ok := quantities[item.ProductID]; !ok || item.AcceptedQuantity+item.RejectedQuantity != quantity {
-				return handoffResponse{}, fmt.Errorf("MN Food Club returned inconsistent quantities for product %q", item.ProductID)
-			}
-			delete(quantities, item.ProductID)
-		}
-		if len(quantities) != 0 {
-			return handoffResponse{}, fmt.Errorf("MN Food Club omitted product results")
-		}
-	}
-	return result, nil
+	return result, result.validate(input.Items)
 }
 
 func (c *OrderClient) status(ctx context.Context, id string) (handoffResponse, error) {
@@ -106,10 +76,13 @@ func (c *OrderClient) status(ctx context.Context, id string) (handoffResponse, e
 		return handoffResponse{}, fmt.Errorf("MN Food Club transfer has no partner ID yet")
 	}
 	result, err := c.request(ctx, http.MethodGet, c.endpoint+"/"+url.PathEscape(id), "", nil)
-	if err == nil && result.TransferID != id {
+	if err != nil {
+		return handoffResponse{}, err
+	}
+	if result.TransferID != id {
 		return handoffResponse{}, fmt.Errorf("MN Food Club returned a different transfer ID")
 	}
-	return result, err
+	return result, result.validate(nil)
 }
 
 func (c *OrderClient) request(ctx context.Context, method, endpoint, key string, body []byte) (handoffResponse, error) {
@@ -139,13 +112,11 @@ func (c *OrderClient) request(ctx context.Context, method, endpoint, key string,
 	if result.Status == "pending_login" {
 		result.Status = ordertypes.TransferPending
 	}
-	if err := result.validate(); err != nil {
-		return handoffResponse{}, err
-	}
 	return result, nil
 }
 
-func (r handoffResponse) validate() error {
+// requested is nil when a status lookup has no original request to compare against.
+func (r handoffResponse) validate(requested []requestedItem) error {
 	u, err := url.Parse(r.CartURL)
 	if err != nil || !validOrderURL(u) || strings.TrimSpace(r.TransferID) == "" {
 		return fmt.Errorf("MN Food Club returned an invalid transfer ID or cart URL")
@@ -157,12 +128,25 @@ func (r handoffResponse) validate() error {
 		if r.UserID == "" || len(r.Items) == 0 {
 			return fmt.Errorf("MN Food Club returned incomplete applied results")
 		}
+		quantities := make(map[string]int, len(requested))
+		for _, item := range requested {
+			quantities[item.ProductID] = item.Quantity
+		}
 		seen := make(map[string]bool, len(r.Items))
 		for _, item := range r.Items {
 			if item.ProductID == "" || seen[item.ProductID] || item.AcceptedQuantity < 0 || item.RejectedQuantity < 0 || item.AcceptedQuantity+item.RejectedQuantity <= 0 || (item.RejectedQuantity > 0 && item.RejectionReason == "") {
 				return fmt.Errorf("MN Food Club returned invalid product results")
 			}
 			seen[item.ProductID] = true
+			if len(requested) != 0 {
+				if quantity, ok := quantities[item.ProductID]; !ok || item.AcceptedQuantity+item.RejectedQuantity != quantity {
+					return fmt.Errorf("MN Food Club returned inconsistent quantities for product %q", item.ProductID)
+				}
+				delete(quantities, item.ProductID)
+			}
+		}
+		if len(quantities) != 0 {
+			return fmt.Errorf("MN Food Club omitted product results")
 		}
 		return nil
 	default:
