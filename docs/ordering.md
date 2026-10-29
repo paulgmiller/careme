@@ -117,8 +117,9 @@ Careme IDs are never passed as Food Club customer IDs. Customer-ID, ZIP, and
 storefront-brand hints are currently omitted.
 
 Each product is sent once. Package counts come from `buy`, rounded up to whole
-packages; a missing count defaults to one. Duplicate product quantities are
-combined. Recipe measurements such as “2 cups” are never converted to package
+packages; a missing count defaults to one. The shopping list already combines
+product IDs and quantities, so the adapter forwards them directly. Recipe
+measurements such as “2 cups” are never converted to package
 counts. Every item must have a nonempty product ID. A request containing an
 empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
 contacting the partner. No items are silently omitted.

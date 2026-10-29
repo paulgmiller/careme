@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -130,11 +129,7 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to read MN Food Club transfer.", http.StatusInternalServerError)
 		return
 	}
-	request, err := orderItems(input)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	request := orderItems(input)
 	email, err := h.auth.GetUserEmail(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "Unable to load your email for MN Food Club.", http.StatusInternalServerError)
@@ -177,25 +172,12 @@ func validOrderForm(key string, input ordertypes.TransferRequest) bool {
 		strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".." && len(input.Items) > 0 && NewIdentityProvider().IsID(input.Location.ID)
 }
 
-func orderItems(input ordertypes.TransferRequest) (handoffRequest, error) {
-	request := handoffRequest{Items: []requestedItem{}}
-	indices := make(map[string]int)
-	for _, item := range input.Items {
-		quantity := item.PackageQuantity()
-		if index, exists := indices[item.ProductID]; exists {
-			if request.Items[index].VariantID != item.VariantID {
-				return handoffRequest{}, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
-			}
-			if request.Items[index].Quantity > math.MaxInt32-quantity {
-				return handoffRequest{}, fmt.Errorf("MN Food Club package quantity is too large")
-			}
-			request.Items[index].Quantity += quantity
-			continue
-		}
-		indices[item.ProductID] = len(request.Items)
-		request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})
+func orderItems(input ordertypes.TransferRequest) handoffRequest {
+	request := handoffRequest{Items: make([]requestedItem, len(input.Items))}
+	for i, item := range input.Items {
+		request.Items[i] = requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: item.PackageQuantity()}
 	}
-	return request, nil
+	return request
 }
 
 func redirectOrder(w http.ResponseWriter, r *http.Request, transfer ordertypes.Transfer, returnURL string) {

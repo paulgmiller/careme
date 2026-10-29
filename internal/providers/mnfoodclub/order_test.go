@@ -191,22 +191,6 @@ func TestOrderRejectsInvalidPartnerResponses(t *testing.T) {
 	}
 }
 
-func TestOrderItemsUsePackagesAndUniqueProducts(t *testing.T) {
-	input := orderInput()
-	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "101", VariantID: "1005", Name: "More chicken", Buy: new(float64(0.5))})
-	request, err := orderItems(input)
-	require.NoError(t, err)
-	assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 4}, {ProductID: "202", Quantity: 1}}, request.Items)
-	input.Items[len(input.Items)-1].VariantID = "different-variant"
-	_, err = orderItems(input)
-	require.ErrorContains(t, err, "conflicting")
-	input = orderInput()
-	input.Items[0].Buy = new(float64(-1))
-	request, err = orderItems(input)
-	require.NoError(t, err)
-	assert.Equal(t, 1, request.Items[0].Quantity)
-}
-
 func TestOrderMissingProductIDRejectsWholeTransfer(t *testing.T) {
 	for _, id := range []string{"", "  "} {
 		h, _, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) { t.Error("invalid transfer must not contact the partner") })
