@@ -102,7 +102,11 @@ func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := readTransfer(r.Context(), h.cache, userID, id); errors.Is(err, cache.ErrNotFound) {
 		// The mock accepts every shopping item without external product matching.
-		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id), Added: len(input.Items)}
+		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id)}
+		for _, item := range input.Items {
+			quantity := item.PackageQuantity()
+			transfer.Items = append(transfer.Items, ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, AcceptedQuantity: quantity})
+		}
 		body, err := json.Marshal(transfer)
 		if err != nil {
 			http.Error(w, "Unable to encode mock transfer", http.StatusInternalServerError)

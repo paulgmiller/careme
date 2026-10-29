@@ -30,7 +30,7 @@ func TestRegisterOrdersDisabled(t *testing.T) {
 	routes := http.NewServeMux()
 	err := NewFactory(&config.Config{}).RegisterOrders(routes, orderingTestOptions())
 	require.NoError(t, err)
-	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback", "/mock/order-transfers/list"} {
+	for _, path := range []string{"/kroger/order-transfers", "/kroger/callback", "/mock/order-transfers/list", "/mnfoodclub/order-transfers"} {
 		response := httptest.NewRecorder()
 		routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		assert.Equal(t, http.StatusNotFound, response.Code)

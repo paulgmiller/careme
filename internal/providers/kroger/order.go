@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
 )
@@ -32,6 +32,13 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	if !localReturnURL(input.ReturnURL) || !validIdempotencyKey(idempotencyKey) || !NewIdentityProvider().IsID(input.Location.ID) || len(input.Items) == 0 {
 		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
 		return
+	}
+	for _, item := range input.Items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			slog.ErrorContext(r.Context(), "Kroger shopping item has no product ID", "item_name", item.Name, "transfer_id", idempotencyKey)
+			http.Error(w, "Cart transfer contains an item without a product ID.", http.StatusBadRequest)
+			return
+		}
 	}
 	userID, ok := a.cartUser(w, r, input.ReturnURL)
 	if !ok {
@@ -68,11 +75,30 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 
 func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
-	items, gaps, err := a.resolveItems(ctx, input)
+	// Kroger adds the requested whole-package quantity for each product.
+	var items []CartItem
+	var accepted []ordertypes.TransferItem
+	resolved, err := a.resolveUPCs(ctx, input)
 	if err != nil {
 		return transfer, err
 	}
-	transfer.Unmatched = len(gaps)
+	for _, item := range input.Items {
+		quantity := item.PackageQuantity()
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
+		upc, err := resolved[item.ProductID].upc, resolved[item.ProductID].err
+		if errors.Is(err, ErrProductUnavailable) {
+			result.RejectedQuantity = quantity
+			result.RejectionReason = "product_unavailable"
+			transfer.Items = append(transfer.Items, result)
+			continue
+		}
+		if err != nil {
+			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
+		}
+		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		result.AcceptedQuantity = quantity
+		accepted = append(accepted, result)
+	}
 	if len(items) == 0 {
 		return transfer, nil
 	}
@@ -80,7 +106,7 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied
-	transfer.Added = len(items)
+	transfer.Items = append(accepted, transfer.Items...)
 	return transfer, nil
 }
 
@@ -103,14 +129,15 @@ func (a *OrderHandler) productUPC(ctx context.Context, productID, locationID str
 	return upc, nil
 }
 
-func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {
+type upcResult struct {
+	upc string
+	err error
+}
+
+func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.TransferRequest) (map[string]*upcResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	type result struct {
-		upc string
-		err error
-	}
-	results := make(map[string]*result)
+	results := make(map[string]*upcResult)
 	var wg sync.WaitGroup
 	var firstErr error
 	var errOnce sync.Once
@@ -121,7 +148,7 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.Tran
 		if _, exists := results[item.ProductID]; exists {
 			continue
 		}
-		resolved := &result{}
+		resolved := &upcResult{}
 		results[item.ProductID] = resolved
 		wg.Add(1)
 		go func(productID string) {
@@ -134,29 +161,7 @@ func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.Tran
 	}
 	wg.Wait()
 	if firstErr != nil {
-		return nil, nil, fmt.Errorf("resolve Kroger order product: %w", firstErr)
+		return nil, fmt.Errorf("resolve Kroger order product: %w", firstErr)
 	}
-
-	var items []CartItem
-	var gaps []ai.ShoppingItem
-	seen := make(map[string]bool)
-	for _, item := range request.Items {
-		if item.ProductID == "" {
-			gaps = append(gaps, item)
-			continue
-		}
-		upc, err := results[item.ProductID].upc, results[item.ProductID].err
-		if errors.Is(err, ErrProductUnavailable) {
-			gaps = append(gaps, item)
-			continue
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve Kroger order product: %w", err)
-		}
-		if !seen[upc] {
-			items = append(items, CartItem{UPC: upc, Quantity: 1})
-			seen[upc] = true
-		}
-	}
-	return items, gaps, nil
+	return results, nil
 }

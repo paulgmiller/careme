@@ -25,7 +25,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	mux := http.NewServeMux()
 	NewHandler(c, auth.DefaultMock()).Register(mux)
-	input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: "list", Location: locationtypes.Location{ID: "any-provider"}, Items: []ai.ShoppingItem{{Name: "Milk"}, {Name: "Bread"}}, ReturnURL: "/recipes?h=list"}
+	input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: "list", Location: locationtypes.Location{ID: "any-provider"}, Items: []ai.ShoppingItem{{Name: "Milk", Buy: new(float64(2.2))}, {Name: "Bread"}, {Name: "Eggs", Buy: new(float64(-1))}}, ReturnURL: "/recipes?h=list"}
 	view, err := OrderView(t.Context(), c, input)
 	require.NoError(t, err)
 	form := url.Values{"idempotency_key": {view.IdempotencyKey}, "transfer_request": {view.TransferRequestJSON}}
@@ -43,7 +43,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 	transfer, err := readTransfer(t.Context(), c, input.UserID, input.ListKey)
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Equal(t, 2, transfer.Added)
+	assert.Equal(t, []ordertypes.TransferItem{{Name: "Milk", AcceptedQuantity: 3}, {Name: "Bread", AcceptedQuantity: 1}, {Name: "Eggs", AcceptedQuantity: 1}}, transfer.Items)
 	view, err = OrderView(t.Context(), c, input)
 	require.NoError(t, err)
 	assert.Equal(t, transfer.CartURL, view.ReviewCartURL)

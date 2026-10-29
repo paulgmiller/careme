@@ -41,14 +41,13 @@ func TestUPCResolutionConcurrentCachedAndOrdered(t *testing.T) {
 	request := mustOrderRequest(t)
 	request.Items = []ai.ShoppingItem{{ProductID: "first"}, {ProductID: "second"}, {ProductID: "first"}, {}}
 	type outcome struct {
-		items []CartItem
-		gaps  []ai.ShoppingItem
+		items map[string]*upcResult
 		err   error
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		items, gaps, err := a.resolveItems(context.Background(), request)
-		done <- outcome{items, gaps, err}
+		items, err := a.resolveUPCs(context.Background(), request)
+		done <- outcome{items, err}
 	}()
 	// Both requests must start before either is allowed to complete.
 	for range 2 {
@@ -62,14 +61,15 @@ func TestUPCResolutionConcurrentCachedAndOrdered(t *testing.T) {
 	close(release)
 	first := <-done
 	require.NoError(t, first.err)
-	assert.Equal(t, []CartItem{{UPC: "first", Quantity: 1}, {UPC: "second", Quantity: 1}}, first.items)
-	assert.Len(t, first.gaps, 1)
-	items, _, err := a.resolveItems(t.Context(), request)
+	assert.Equal(t, "first", first.items["first"].upc)
+	assert.Equal(t, "second", first.items["second"].upc)
+	assert.Len(t, first.items, 2)
+	items, err := a.resolveUPCs(t.Context(), request)
 	require.NoError(t, err)
 	assert.Equal(t, first.items, items)
 	assert.Empty(t, started, "cached mappings must not contact Kroger")
 	request.Location.ID = "other-store"
-	_, _, err = a.resolveItems(t.Context(), request)
+	_, err = a.resolveUPCs(t.Context(), request)
 	require.NoError(t, err)
 	assert.Len(t, started, 2, "stores have separate mappings")
 	mu.Lock()

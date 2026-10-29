@@ -92,6 +92,24 @@ func TestCartAddReportsRejectionWithoutRetry(t *testing.T) {
 	assert.Equal(t, 1, calls)
 }
 
+func TestCartProductLookupDoesNotRetry(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			calls := 0
+			client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+				calls++
+				return cartResponse(status, `{}`), nil
+			})}
+			manager := NewKrogerTokenManager("id", "secret", client)
+			manager.token, manager.expiresAt = "catalog", time.Now().Add(time.Hour)
+			cart := CartClient{HTTPClient: client, CatalogToken: manager}
+			_, err := cart.ProductUPC(t.Context(), "food", "store")
+			require.Error(t, err)
+			assert.Equal(t, 1, calls)
+		})
+	}
+}
+
 func TestCartAddResponses(t *testing.T) {
 	for _, status := range []int{http.StatusOK, http.StatusNoContent, http.StatusBadRequest, http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable} {
 		t.Run(http.StatusText(status), func(t *testing.T) {

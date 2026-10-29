@@ -87,7 +87,7 @@ func (c *CartClient) ProductUPC(ctx context.Context, productID, locationID strin
 	if err != nil {
 		return "", fmt.Errorf("authorize Kroger product lookup: %w", err)
 	}
-	client, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(withRetries(c.HTTPClient)))
+	client, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(c.HTTPClient))
 	if err != nil {
 		return "", fmt.Errorf("create Kroger products client: %w", err)
 	}
@@ -121,7 +121,7 @@ func (c *CartClient) Add(ctx context.Context, token string, items []CartItem) er
 	if len(items) == 0 {
 		return fmt.Errorf("cart has no items")
 	}
-	client, err := cart.NewClientWithResponses(krogerAPIOrigin, cart.WithHTTPClient(singleAttemptClient(c.HTTPClient)))
+	client, err := cart.NewClientWithResponses(krogerAPIOrigin, cart.WithHTTPClient(c.HTTPClient))
 	if err != nil {
 		return fmt.Errorf("create Kroger cart client: %w", err)
 	}
