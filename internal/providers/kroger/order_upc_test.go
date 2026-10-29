@@ -21,7 +21,7 @@ func TestUPCResolutionConcurrentCachedAndOrdered(t *testing.T) {
 		t.Error("unexpected cart write")
 		return cartResponse(500, ""), nil
 	})
-	a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(r *http.Request) (*http.Response, error) {
+	testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(r *http.Request) (*http.Response, error) {
 		key := r.URL.Query().Get("filter.locationId") + r.URL.Path
 		mu.Lock()
 		calls[key]++
@@ -85,13 +85,28 @@ func TestUPCCacheDoesNotStoreMissingProducts(t *testing.T) {
 		return cartResponse(500, ""), nil
 	})
 	calls := 0
-	a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+	testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 		calls++
 		return cartResponse(404, `{}`), nil
 	})}
 	for range 2 {
-		_, err := a.productUPC(t.Context(), "missing", "store")
+		_, err := a.client.ProductUPC(t.Context(), "missing", "store")
 		require.ErrorIs(t, err, ErrProductUnavailable)
 	}
 	assert.Equal(t, 2, calls)
+}
+
+func TestUPCResolutionMarksUnavailableProduct(t *testing.T) {
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		t.Error("unexpected cart write")
+		return cartResponse(500, ""), nil
+	})
+	request := mustOrderRequest(t)
+	request.Items = []ai.ShoppingItem{{ProductID: "missing"}, {ProductID: "food"}}
+	results, err := a.resolveUPCs(t.Context(), request)
+	require.NoError(t, err)
+	assert.True(t, results["missing"].unavailable)
+	assert.Empty(t, results["missing"].upc)
+	assert.False(t, results["food"].unavailable)
+	assert.Equal(t, "food-upc", results["food"].upc)
 }

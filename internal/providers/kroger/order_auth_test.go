@@ -18,7 +18,8 @@ import (
 func newTestOrderHandler(t *testing.T, client *CartClient) *OrderHandler {
 	t.Helper()
 	require.NoError(t, templates.Init(&config.Config{}))
-	adapter, err := NewOrderHandler(OrderOptions{Cache: cache.NewInMemoryCache(), Client: client, TokenKey: []byte(strings.Repeat("k", 32)), Origin: "https://careme.test", Auth: auth.DefaultMock()})
+	store := cache.NewInMemoryCache()
+	adapter, err := NewOrderHandler(OrderOptions{Cache: store, Client: NewCachedOrderClient(client, store), TokenKey: []byte(strings.Repeat("k", 32)), Origin: "https://careme.test", Auth: auth.DefaultMock()})
 	require.NoError(t, err)
 	return adapter
 }
@@ -40,4 +41,8 @@ func TestOrderingTokenEncryptionAndUserBinding(t *testing.T) {
 	require.NoError(t, adapter.cache.Put(t.Context(), "kroger_cart_tokens/user-two", string(body), cache.Unconditional()))
 	_, err = adapter.loadToken(t.Context(), "user-two")
 	require.Error(t, err)
+}
+
+func testCartClient(a *OrderHandler) *CartClient {
+	return a.client.(*CachedOrderClient).orderClient.(*CartClient)
 }

@@ -2,7 +2,6 @@ package kroger
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,10 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
+	"careme/internal/parallelism"
 )
 
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
@@ -85,17 +84,14 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	for _, item := range input.Items {
 		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
-		upc, err := resolved[item.ProductID].upc, resolved[item.ProductID].err
-		if errors.Is(err, ErrProductUnavailable) {
+		lookup := resolved[item.ProductID]
+		if lookup.unavailable {
 			result.RejectedQuantity = quantity
 			result.RejectionReason = "product_unavailable"
 			transfer.Items = append(transfer.Items, result)
 			continue
 		}
-		if err != nil {
-			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
-		}
-		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		items = append(items, CartItem{UPC: lookup.upc, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
@@ -110,37 +106,16 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	return transfer, nil
 }
 
-// productUPC caches the store-specific product mapping independently of inventory.
-func (a *OrderHandler) productUPC(ctx context.Context, productID, locationID string) (string, error) {
-	key := fmt.Sprintf("kroger_product_upcs/v1/%x", sha256.Sum256([]byte(locationID+"\x00"+productID)))
-	var upc string
-	if err := a.loadJSON(ctx, key, &upc); err == nil {
-		return upc, nil
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		return "", fmt.Errorf("read Kroger UPC cache: %w", err)
-	}
-	upc, err := a.client.ProductUPC(ctx, productID, locationID)
-	if err != nil {
-		return "", err
-	}
-	if err := a.saveJSON(ctx, key, upc, cache.Unconditional()); err != nil {
-		return "", fmt.Errorf("save Kroger UPC cache: %w", err)
-	}
-	return upc, nil
-}
-
 type upcResult struct {
-	upc string
-	err error
+	upc         string
+	unavailable bool
 }
 
 func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.TransferRequest) (map[string]*upcResult, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	results := make(map[string]*upcResult)
-	var wg sync.WaitGroup
-	var firstErr error
-	var errOnce sync.Once
+	var productIDs []string
 	for _, item := range request.Items {
 		if item.ProductID == "" {
 			continue
@@ -148,20 +123,25 @@ func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.Trans
 		if _, exists := results[item.ProductID]; exists {
 			continue
 		}
-		resolved := &upcResult{}
-		results[item.ProductID] = resolved
-		wg.Add(1)
-		go func(productID string) {
-			defer wg.Done()
-			resolved.upc, resolved.err = a.productUPC(ctx, productID, request.Location.ID)
-			if resolved.err != nil && !errors.Is(resolved.err, ErrProductUnavailable) {
-				errOnce.Do(func() { firstErr = resolved.err; cancel() })
-			}
-		}(item.ProductID)
+		results[item.ProductID] = nil
+		productIDs = append(productIDs, item.ProductID)
 	}
-	wg.Wait()
-	if firstErr != nil {
-		return nil, fmt.Errorf("resolve Kroger order product: %w", firstErr)
+	resolved, err := parallelism.MapWithErrors(productIDs, func(productID string) (*upcResult, error) {
+		upc, err := a.client.ProductUPC(ctx, productID, request.Location.ID)
+		if errors.Is(err, ErrProductUnavailable) {
+			return &upcResult{unavailable: true}, nil
+		}
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("resolve Kroger order product %q: %w", productID, err)
+		}
+		return &upcResult{upc: upc}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, productID := range productIDs {
+		results[productID] = resolved[i]
 	}
 	return results, nil
 }

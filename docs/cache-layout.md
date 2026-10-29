@@ -62,7 +62,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `kroger_product_upcs/v1/` | Successful UPC strings keyed by SHA-256 of store ID, NUL, and product ID; no expiry or availability data | Kroger cart preparation | Kroger cart preparation |
+| `kroger_product_upcs/v1/` | Successful UPC strings keyed by SHA-256 of store ID, NUL, and product ID; no expiry or availability data | Kroger cached order client | Kroger cached order client |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `mnfoodclub_order_transfers/` | Shared transfer results keyed by Careme user and form idempotency key; transfer_id is the partner ID | MN Food Club order POST and server-side status refresh | Provider form route and order view builder |
