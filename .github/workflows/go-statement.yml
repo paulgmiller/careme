@@ -2,6 +2,8 @@ name: Go statement diff
 
 on:
   pull_request:
+  push:
+    branches: [master]
 
 permissions:
   contents: read
@@ -13,7 +15,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-go@v6
         with:
@@ -23,7 +25,7 @@ jobs:
 
       - name: Report statement diff
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           go-statement diff "$BASE_SHA...HEAD" > statement-diff.txt
           cat statement-diff.txt
