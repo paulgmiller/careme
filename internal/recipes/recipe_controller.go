@@ -190,12 +190,6 @@ func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !exists {
-		until, err := strconv.ParseInt(r.URL.Query().Get("until"), 10, 64)
-		if err != nil || time.Now().Unix() >= until {
-			// HTMX stops polling on 286 and removes the empty placeholder.
-			w.WriteHeader(286)
-			return
-		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}

@@ -180,8 +180,7 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 			return fmt.Errorf("render recipe save action: %w", err)
 		}
 		if saved {
-			// A page may have stopped waiting before the user saves the recipe.
-			// Restart its image placeholder with the new background generation.
+			// Refresh the image panel after saving starts background generation.
 			image := recipeImageView{Hash: recipeHash, HasImage: s.recipeImageExistsForCard(ctx, recipeHash), Poll: true}
 			if err := templates.Recipe.ExecuteTemplate(&response, "recipe_image_response", image); err != nil {
 				return fmt.Errorf("render saved recipe image: %w", err)

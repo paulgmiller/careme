@@ -700,7 +700,7 @@ func TestShoppingImagesPollIndependently(t *testing.T) {
 						assert.NotContains(t, body, `hx-trigger=`)
 					} else if saved {
 						assert.Contains(t, body, `hx-trigger="every 5s"`)
-						assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping&amp;until=`)
+						assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
 						assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
 					} else {
 						assert.NotContains(t, body, `/image-panel`)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"slices"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/locations"
@@ -20,12 +19,6 @@ type recipeImageView struct {
 	HasImage  bool
 	Thumbnail bool
 	Poll      bool
-}
-
-// PollUntil bounds waiting for optional background image generation, including
-// failed generations and older recipes whose images were never generated.
-func (v recipeImageView) PollUntil() int64 {
-	return time.Now().Add(4 * time.Minute).Unix()
 }
 
 type recipePageView struct {
