@@ -229,7 +229,7 @@ func TestKrogerOrderOAuthRejectsInvalidContinuation(t *testing.T) {
 				require.NoError(t, a.saveJSON(t.Context(), oauthContinuationKey("mock-clerk-user-id", cookie.Value), continuation, cache.Unconditional()))
 			}
 			if scenario == "exchange failure" {
-				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+				testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 					return cartResponse(http.StatusServiceUnavailable, ""), nil
 				})}
 			}
@@ -395,7 +395,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				expected = "failed"
 			case "lookup failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+				testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 					return cartResponse(http.StatusServiceUnavailable, ""), nil
 				})}
 				expected = "failed"
@@ -469,8 +469,8 @@ func TestKrogerShopperTokenIsReusedAcrossTransfers(t *testing.T) {
 		adds++
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
-	transport := a.client.HTTPClient.Transport
-	a.client.HTTPClient.Transport = cartRoundTrip(func(r *http.Request) (*http.Response, error) {
+	transport := testCartClient(a).HTTPClient.Transport
+	testCartClient(a).HTTPClient.Transport = cartRoundTrip(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path == "/v1/connect/oauth2/token" {
 			exchanges++
 		}
