@@ -2,12 +2,9 @@ package campaigns
 
 import (
 	"fmt"
-	"time"
 
 	"careme/internal/locations"
 	"careme/internal/providers/mnfoodclub"
-
-	"github.com/samber/lo"
 )
 
 // Campaign is a promoted store plus campaign-specific page context.
@@ -15,9 +12,6 @@ type campaign struct {
 	Location    locations.Location
 	HelpMessage string
 	Generate    bool
-	// GenerateWeekday limits generation to this weekday in the store's timezone.
-	// A nil value allows generation every day.
-	GenerateWeekday *time.Weekday
 }
 
 func genericLocationHelp(location string) string {
@@ -49,19 +43,16 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			Generate: false,
 		},
 		"mnfoodclub": {
-			Location:        locations.Location{ID: mnfoodclub.MNFoodClubLocationID},
-			Generate:        true,
-			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
+			Location: locations.Location{ID: mnfoodclub.MNFoodClubLocationID},
+			Generate: true,
 		},
 		"tcfarm": {
-			Location:        locations.Location{ID: mnfoodclub.TCFarmLocationID},
-			Generate:        true,
-			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
+			Location: locations.Location{ID: mnfoodclub.TCFarmLocationID},
+			Generate: true,
 		},
 		"nelsongrassfarm": {
-			Location:        locations.Location{ID: mnfoodclub.NelsonGrassFarmLocationID},
-			Generate:        true,
-			GenerateWeekday: lo.ToPtr(mnfoodclub.WeekStartDay),
+			Location: locations.Location{ID: mnfoodclub.NelsonGrassFarmLocationID},
+			Generate: true,
 		},
 		/* Too close to fred meyers
 		bellevue_wf": {

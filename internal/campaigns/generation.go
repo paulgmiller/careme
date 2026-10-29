@@ -121,10 +121,6 @@ func (s *Service) generateLocation(ctx context.Context, c campaign, now time.Tim
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
 	}
-	localNow := now.In(date.Location())
-	if c.GenerateWeekday != nil && localNow.Weekday() != *c.GenerateWeekday {
-		return nil
-	}
 	if err := s.generate(ctx, recipes.DefaultParams(loc, date)); err != nil {
 		return fmt.Errorf("generate campaign for %s: %w", locationID, err)
 	}
