@@ -142,10 +142,11 @@ Its README documents dynamic entry point exceptions and build configuration
 limits. The tool is maintained and tested in its own repository.
 
 `./task.sh statement-diff` reports Go statement debt changes from `origin/master`
-to the working tree. CI reports `$BASE_SHA...HEAD` for pull requests and pushes
-to `master`, using the PR base SHA or the previous master HEAD respectively.
-The Go statement diff job summary uses `paulgmiller/go-statement@latest`.
-This report is informational; no debt threshold is configured.
+to the working tree. The `statement-diff` job in Build and Publish reports
+`$BASE_SHA...HEAD`, using the PR base SHA, the previous branch HEAD for pushes,
+or `HEAD^` for manual runs. It uses `paulgmiller/go-statement@latest` and writes
+the report to the job summary. Publishing depends on this job. No debt threshold
+is configured yet; add `--max-debt <limit>` to its diff command to enforce one.
 
 ## Mail placement tests
 

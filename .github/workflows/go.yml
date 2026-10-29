@@ -87,6 +87,36 @@ jobs:
       - name: Run Go lint and unnecessary-export check
         run: ./task.sh lint
 
+  statements:
+    name: statement-diff
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: go install github.com/paulgmiller/go-statement@latest
+
+      - name: Report statement diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          go-statement diff "$BASE_SHA...HEAD" > statement-diff.txt
+          cat statement-diff.txt
+          {
+            echo '### Go statement diff'
+            echo '```text'
+            cat statement-diff.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   crap:
     name: crap
     runs-on: ubuntu-latest
@@ -153,7 +183,7 @@ jobs:
 
   publish:
     name: publish (${{ matrix.name }})
-    needs: [verify, vet, format, lint, crap, js-lint, k8s-lint]
+    needs: [verify, vet, format, lint, statements, crap, js-lint, k8s-lint]
     runs-on: ubuntu-latest
     permissions:
       contents: read
