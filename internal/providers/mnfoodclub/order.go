@@ -82,12 +82,6 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 		if err != nil {
 			return nil, err
 		}
-		// Preserve items that were rejected locally before contacting Food Club.
-		for _, item := range transfer.Items {
-			if item.ProductID == "" {
-				result.Items = append(result.Items, item)
-			}
-		}
 		transfer = result.Transfer
 		// TODO: Save result.UserID as the Food Club customer mapping for this Careme user.
 		// TODO: Use ETags/IfMatch; concurrent status reads currently overwrite on a race.
@@ -136,7 +130,7 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to read MN Food Club transfer.", http.StatusInternalServerError)
 		return
 	}
-	request, rejected, err := orderItems(input)
+	request, err := orderItems(input)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -149,64 +143,58 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	if email != "" {
 		request.IdentityHints.Emails = []string{email}
 	}
-	transfer := ordertypes.Transfer{Status: ordertypes.TransferPending, Items: rejected}
-	if len(request.Items) == 0 {
-		transfer.Status = ordertypes.TransferFailed
-	}
+	transfer := ordertypes.Transfer{Status: ordertypes.TransferPending}
 	if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.IfNoneMatch()); err != nil {
 		http.Error(w, "Unable to start MN Food Club transfer.", http.StatusInternalServerError)
 		return
 	}
-	if len(request.Items) != 0 {
-		// The partner scopes keys to the integration, so scope ours to the Careme user too.
-		partnerKey := fmt.Sprintf("%x", sha256.Sum256([]byte(userID+"\x00"+key)))
-		result, err := h.client.create(r.Context(), partnerKey, request)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "MN Food Club transfer failed", "error", err)
-			transfer.Status = ordertypes.TransferFailed
-		} else {
-			transfer = result.Transfer
-			transfer.Items = append(transfer.Items, rejected...)
-			// TODO: Save result.UserID as the Food Club customer mapping for this Careme user.
-		}
-		// TODO: Use ETags/IfMatch; result writes currently overwrite on a race.
-		if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.Unconditional()); err != nil {
-			http.Error(w, "Unable to save MN Food Club transfer.", http.StatusInternalServerError)
-			return
-		}
+	// The partner scopes keys to the integration, so scope ours to the Careme user too.
+	partnerKey := fmt.Sprintf("%x", sha256.Sum256([]byte(userID+"\x00"+key)))
+	result, err := h.client.create(r.Context(), partnerKey, request)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "MN Food Club transfer failed", "error", err)
+		transfer.Status = ordertypes.TransferFailed
+	} else {
+		transfer = result.Transfer
+		// TODO: Save result.UserID as the Food Club customer mapping for this Careme user.
+	}
+	// TODO: Use ETags/IfMatch; result writes currently overwrite on a race.
+	if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.Unconditional()); err != nil {
+		http.Error(w, "Unable to save MN Food Club transfer.", http.StatusInternalServerError)
+		return
 	}
 	redirectOrder(w, r, transfer, input.ReturnURL)
 }
 
 func validOrderForm(key string, input ordertypes.TransferRequest) bool {
+	for _, item := range input.Items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			return false
+		}
+	}
 	u, err := url.Parse(input.ReturnURL)
 	return err == nil && !u.IsAbs() && u.Host == "" && strings.HasPrefix(input.ReturnURL, "/") && !strings.HasPrefix(u.Path, "//") && !strings.ContainsAny(u.Path, "\\\r\n") &&
 		strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".." && len(input.Items) > 0 && NewIdentityProvider().IsID(input.Location.ID)
 }
 
-func orderItems(input ordertypes.TransferRequest) (handoffRequest, []ordertypes.TransferItem, error) {
+func orderItems(input ordertypes.TransferRequest) (handoffRequest, error) {
 	request := handoffRequest{Items: []requestedItem{}}
 	indices := make(map[string]int)
-	var rejected []ordertypes.TransferItem
 	for _, item := range input.Items {
-		if strings.TrimSpace(item.ProductID) == "" {
-			rejected = append(rejected, ordertypes.TransferItem{Name: item.Name, RejectedQuantity: 1, RejectionReason: "missing_product_id"})
-			continue
-		}
 		quantity := 1
 		if item.Buy != nil {
 			// The API accepts whole packages; never send recipe measurements or fractions.
 			if math.IsNaN(*item.Buy) || *item.Buy <= 0 || *item.Buy > math.MaxInt32 {
-				return handoffRequest{}, nil, fmt.Errorf("invalid MN Food Club package quantity for %q", item.Name)
+				return handoffRequest{}, fmt.Errorf("invalid MN Food Club package quantity for %q", item.Name)
 			}
 			quantity = int(math.Ceil(*item.Buy))
 		}
 		if index, exists := indices[item.ProductID]; exists {
 			if request.Items[index].VariantID != item.VariantID {
-				return handoffRequest{}, nil, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
+				return handoffRequest{}, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
 			}
 			if request.Items[index].Quantity > math.MaxInt32-quantity {
-				return handoffRequest{}, nil, fmt.Errorf("MN Food Club package quantity is too large")
+				return handoffRequest{}, fmt.Errorf("MN Food Club package quantity is too large")
 			}
 			request.Items[index].Quantity += quantity
 			continue
@@ -214,7 +202,7 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, []ordertypes.
 		indices[item.ProductID] = len(request.Items)
 		request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})
 	}
-	return request, rejected, nil
+	return request, nil
 }
 
 func redirectOrder(w http.ResponseWriter, r *http.Request, transfer ordertypes.Transfer, returnURL string) {

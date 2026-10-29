@@ -33,7 +33,7 @@ func TestCartTransferBrowserReturnsToShoppingList(t *testing.T) {
 				t.Fatal("redirecting must not write cart")
 				return nil, nil
 			})
-			transfer := ordertypes.Transfer{TransferID: "list-hash", Status: status, CartURL: "https://www.qfc.com/cart", Items: []ordertypes.TransferItem{{RejectedQuantity: 1, RejectionReason: "missing_product_id"}}}
+			transfer := ordertypes.Transfer{TransferID: "list-hash", Status: status, CartURL: "https://www.qfc.com/cart", Items: []ordertypes.TransferItem{{RejectedQuantity: 1, ProductID: "missing", RejectionReason: "product_unavailable"}}}
 			require.NoError(t, a.saveJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), transfer, cache.Unconditional()))
 			response := postOrder(orderMux(a), orderForm())
 			assert.Equal(t, http.StatusSeeOther, response.Code)

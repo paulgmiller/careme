@@ -102,15 +102,34 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("no matching products"); return nil, nil })
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	form := orderForm()
-	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
+	setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
 	assert.Equal(t, ordertypes.TransferFailed, result.Status)
 	assert.Equal(t, []ordertypes.TransferItem{
-		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
 		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
 	}, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
+}
+
+func TestCartTransferMissingProductIDRejectsWholeTransfer(t *testing.T) {
+	for _, id := range []string{"", "  "} {
+		a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+			t.Fatal("invalid transfer must not write the cart")
+			return nil, nil
+		})
+		saveShopper(t, a, time.Now().Add(time.Hour))
+		a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+			t.Fatal("invalid transfer must not contact Kroger")
+			return nil, nil
+		})}
+		form := orderForm()
+		setOrderField(t, form, "items", []ai.ShoppingItem{{ProductID: "food", Name: "Milk"}, {ProductID: id, Name: "Invalid item"}})
+		response := postOrder(orderMux(a), form)
+		assert.Equal(t, http.StatusBadRequest, response.Code)
+		var transfer ordertypes.Transfer
+		assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &transfer), cache.ErrNotFound)
+	}
 }
 
 func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {

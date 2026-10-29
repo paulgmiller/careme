@@ -46,7 +46,7 @@ type Transfer struct {
 }
 
 // TransferItem records package quantities accepted or rejected by a cart handoff.
-// Name identifies local rejections that have no provider product ID.
+// Name is optional display copy supplied by the provider.
 type TransferItem struct {
 	ProductID        string `json:"product_id"`
 	Name             string `json:"name,omitempty"`

@@ -32,6 +32,13 @@ func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
 		return
 	}
+	for _, item := range input.Items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			slog.ErrorContext(r.Context(), "Kroger shopping item has no product ID", "item_name", item.Name, "transfer_id", idempotencyKey)
+			http.Error(w, "Cart transfer contains an item without a product ID.", http.StatusBadRequest)
+			return
+		}
+	}
 	userID, ok := a.cartUser(w, r, input.ReturnURL)
 	if !ok {
 		return
@@ -80,12 +87,6 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 			quantity = int(math.Ceil(*item.Buy))
 		}
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: quantity}
-		if item.ProductID == "" {
-			slog.ErrorContext(ctx, "Kroger shopping item has no product ID", "item_name", item.Name, "transfer_id", idempotencyKey)
-			result.RejectionReason = "missing_product_id"
-			transfer.Items = append(transfer.Items, result)
-			continue
-		}
 		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
 		if errors.Is(err, ErrProductUnavailable) {
 			result.RejectionReason = "product_unavailable"

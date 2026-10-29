@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"missing","name":"Eggs"}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {
@@ -135,7 +135,6 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 		{ProductID: "food", Name: "Milk", AcceptedQuantity: 2},
 		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
 		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
-		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
 	}, query.Items)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
@@ -392,7 +391,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				saveShopper(t, a, time.Now().Add(-time.Minute))
 			case "no matches":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
+				setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 				expected = "failed"
 			case "lookup failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))

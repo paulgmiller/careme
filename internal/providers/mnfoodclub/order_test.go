@@ -35,7 +35,7 @@ func newOrderTest(t *testing.T, api http.HandlerFunc) (*OrderHandler, *OrderClie
 func orderInput() ordertypes.TransferRequest {
 	return ordertypes.TransferRequest{
 		Location: locationtypes.Location{ID: TCFarmLocationID, Chain: "TC Farm"}, ReturnURL: "/recipes?h=list",
-		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}, {Name: "Salt", Needed: "1 tsp"}},
+		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}},
 	}
 }
 
@@ -80,7 +80,7 @@ func TestOrderAppliedRelaysFormAndReusesResult(t *testing.T) {
 	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
-	assert.Equal(t, ordertypes.Transfer{TransferID: "partner-1", Status: ordertypes.TransferApplied, CartURL: "https://shop.foodclub.test/cart", Items: []ordertypes.TransferItem{{ProductID: "101", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"}, {ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"}, {Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}}, transfer)
+	assert.Equal(t, ordertypes.Transfer{TransferID: "partner-1", Status: ordertypes.TransferApplied, CartURL: "https://shop.foodclub.test/cart", Items: []ordertypes.TransferItem{{ProductID: "101", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"}, {ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"}}}, transfer)
 	input := orderInput()
 	input.Items = []ai.ShoppingItem{{ProductID: "different"}}
 	input.ReturnURL = "/recipes?h=other"
@@ -134,7 +134,6 @@ func TestOrderPendingRedirectsToLoginAndRefreshesOnServer(t *testing.T) {
 	assert.Equal(t, []ordertypes.TransferItem{
 		{ProductID: "101", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"},
 		{ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"},
-		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
 	}, transfer.Items)
 	_, err = OrderViewForUser(t.Context(), c, client, input)
 	require.NoError(t, err)
@@ -159,7 +158,7 @@ func TestOrderOperationalFailuresAreSavedWithoutRetries(t *testing.T) {
 			}
 			saved, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 			require.NoError(t, err)
-			assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, saved.Items, "API failures preserve only confirmed local rejections")
+			assert.Empty(t, saved.Items, "API failures must not invent product outcomes")
 			view, err := OrderViewForUser(t.Context(), c, client, ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: "list"})
 			require.NoError(t, err)
 			assert.True(t, view.TransferFailed)
@@ -195,27 +194,26 @@ func TestOrderRejectsInvalidPartnerResponses(t *testing.T) {
 func TestOrderItemsUsePackagesAndUniqueProducts(t *testing.T) {
 	input := orderInput()
 	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "101", VariantID: "1005", Name: "More chicken", Buy: new(float64(0.5))})
-	request, rejected, err := orderItems(input)
+	request, err := orderItems(input)
 	require.NoError(t, err)
 	assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 4}, {ProductID: "202", Quantity: 1}}, request.Items)
-	assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, rejected)
 	input.Items[len(input.Items)-1].VariantID = "different-variant"
-	_, _, err = orderItems(input)
+	_, err = orderItems(input)
 	require.ErrorContains(t, err, "conflicting")
 	input.Items[0].Buy = new(float64(-1))
-	_, _, err = orderItems(input)
+	_, err = orderItems(input)
 	require.Error(t, err)
 }
 
-func TestOrderNoProductIDsFailsWithoutPartnerRequest(t *testing.T) {
-	h, _, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) { t.Error("must not call partner without product IDs") })
-	input := orderInput()
-	input.Items = []ai.ShoppingItem{{Name: "Salt"}}
-	assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, input).Code)
-	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
-	require.NoError(t, err)
-	assert.Equal(t, ordertypes.TransferFailed, transfer.Status)
-	assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, transfer.Items)
+func TestOrderMissingProductIDRejectsWholeTransfer(t *testing.T) {
+	for _, id := range []string{"", "  "} {
+		h, _, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) { t.Error("invalid transfer must not contact the partner") })
+		input := orderInput()
+		input.Items = append(input.Items, ai.ShoppingItem{ProductID: id, Name: "Invalid item"})
+		assert.Equal(t, http.StatusBadRequest, postTransfer(t, h, input).Code)
+		_, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
+		assert.ErrorIs(t, err, cache.ErrNotFound)
+	}
 }
 
 func TestOrderPendingStatusFailureIsHardError(t *testing.T) {
@@ -269,7 +267,6 @@ func TestOrderAllRejectedIsApplied(t *testing.T) {
 	assert.Equal(t, []ordertypes.TransferItem{
 		{ProductID: "101", RejectedQuantity: 3, RejectionReason: "insufficient_stock"},
 		{ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"},
-		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
 	}, transfer.Items)
 }
 
