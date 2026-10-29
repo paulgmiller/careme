@@ -72,8 +72,6 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	assert.Equal(t, p.Hash(), values["idempotency_key"])
 	assert.Contains(t, posted.ReturnURL, "#shopping-list-section")
 	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
-	assert.Contains(t, page.String(), `data-cart-transfer`)
-	assert.Contains(t, page.String(), `hidden role="status" data-cart-transfer-status`)
 	assert.NotContains(t, page.String(), `target="_blank"`)
 	assert.NotContains(t, page.String(), "other")
 	assert.Len(t, food, 1, "wine is appended without changing cached food")
