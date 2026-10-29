@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -283,8 +282,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to create templates %v", err)
 	}
 
-	cacheDir := filepath.Join(t.TempDir(), "cache")
-	cacheStore := cache.NewFileCache(cacheDir)
+	// Location lookups write their cache asynchronously, beyond HTTP response completion.
+	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
