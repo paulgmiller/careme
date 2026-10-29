@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,13 +66,20 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 
 func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
-	// Kroger adds one package per unique UPC.
+	// Kroger adds whole packages for each unique UPC.
 	var items []CartItem
 	var accepted []ordertypes.TransferItem
 	seen := make(map[string]bool)
 	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
 	for _, item := range input.Items {
-		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: 1}
+		quantity := 1
+		if item.Buy != nil {
+			if math.IsNaN(*item.Buy) || *item.Buy <= 0 || *item.Buy > math.MaxInt32 {
+				return transfer, fmt.Errorf("invalid Kroger package quantity for %q", item.Name)
+			}
+			quantity = int(math.Ceil(*item.Buy))
+		}
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: quantity}
 		if item.ProductID == "" {
 			result.RejectionReason = "missing_product_id"
 			transfer.Items = append(transfer.Items, result)
@@ -92,8 +100,8 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 			continue
 		}
 		seen[upc] = true
-		items = append(items, CartItem{UPC: upc, Quantity: 1})
-		result.AcceptedQuantity, result.RejectedQuantity = 1, 0
+		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		result.AcceptedQuantity, result.RejectedQuantity = quantity, 0
 		accepted = append(accepted, result)
 	}
 	if len(items) == 0 {

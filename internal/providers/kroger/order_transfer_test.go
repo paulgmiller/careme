@@ -209,7 +209,7 @@ func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
 	mux.ServeHTTP(response, callback)
 	result := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, result.Status)
-	assert.Equal(t, ordertypes.TransferItem{ProductID: "food", Name: "Milk", AcceptedQuantity: 1}, result.Items[0])
+	assert.Equal(t, ordertypes.TransferItem{ProductID: "food", Name: "Milk", AcceptedQuantity: 2}, result.Items[0])
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }

@@ -96,7 +96,7 @@ func TestOrderAppliedRelaysFormAndReusesResult(t *testing.T) {
 	assert.Empty(t, view.ReviewCartURL)
 }
 
-func TestOrderPendingLoginRedirectsAndRefreshesOnServer(t *testing.T) {
+func TestOrderPendingRedirectsToLoginAndRefreshesOnServer(t *testing.T) {
 	var posts, gets atomic.Int32
 	var loggedIn atomic.Bool
 	h, client, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +233,7 @@ func TestOrderPendingStatusFailureIsHardError(t *testing.T) {
 	assert.Nil(t, view)
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
-	assert.Equal(t, ordertypes.TransferPendingLogin, transfer.Status)
+	assert.Equal(t, ordertypes.TransferPending, transfer.Status)
 }
 
 type orderUser struct {

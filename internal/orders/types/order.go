@@ -59,8 +59,7 @@ type TransferItem struct {
 type TransferStatus string
 
 const (
-	TransferPending      TransferStatus = "pending"
-	TransferPendingLogin TransferStatus = "pending_login"
-	TransferFailed       TransferStatus = "failed"
-	TransferApplied      TransferStatus = "applied"
+	TransferPending TransferStatus = "pending"
+	TransferFailed  TransferStatus = "failed"
+	TransferApplied TransferStatus = "applied"
 )

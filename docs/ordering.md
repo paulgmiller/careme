@@ -55,7 +55,8 @@ or separate connection GET routes. Reloading the shopping list reads the saved
 handoff to choose the form, cart link, or failure label. Reposting consults the
 saved transfer without resubmitting products.
 
-Kroger sends one package per unique matched UPC. Successful writes record
+Kroger sends the requested `buy` quantity for each unique matched UPC, rounding
+up to whole packages and defaulting to one when `buy` is absent. Successful writes record
 accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
@@ -86,8 +87,8 @@ for now: concurrent attempts can overwrite results and can duplicate additions.
 A failed final save leaves the record pending. This is not a guarantee of
 at-most-once cart writes across concurrent requests.
 
-The typed `TransferStatus` values are `pending`, `pending_login`, `failed`, and
-`applied`. `pending` reserves an attempt; `pending_login` is a saved partner handoff.
+The typed `TransferStatus` values are `pending`, `failed`, and `applied`.
+Pending covers an in-flight attempt or a saved partner handoff awaiting login.
 There is no separate provider code or custom JSON decoding.
 
 The shared `TransferRequest` and `Transfer` types describe the submitted request
@@ -128,9 +129,10 @@ Partial and all-rejected responses remain applied and retain the supplied cart
 link. The partner’s product IDs, totals, statuses, and cart URLs must be valid;
 incomplete results fail the transfer instead of silently omitting products.
 
-A `pending_login` response is stored with the same shared status and immediately
-redirects the browser to the partner’s opaque handoff URL. Loading the shopping
-list later performs one server-side GET for the saved partner transfer ID.
+The partner’s `pending_login` response is converted to the shared `pending`
+status inside the Food Club adapter and immediately redirects the browser to
+the partner’s opaque handoff URL. Loading the shopping list later performs one
+server-side GET for the saved partner transfer ID.
 Once applied, the result and cart URL are updated and no further GET is needed.
 While login remains pending, Review cart opens the saved partner handoff URL.
 Lookup errors, including HTTP 404, fail the page; they never create a new transfer.

@@ -9,7 +9,7 @@ import (
 )
 
 func TestTransferStatusRoundTrip(t *testing.T) {
-	for _, status := range []TransferStatus{TransferPending, TransferPendingLogin, TransferFailed, TransferApplied} {
+	for _, status := range []TransferStatus{TransferPending, TransferFailed, TransferApplied} {
 		t.Run(string(status), func(t *testing.T) {
 			original := Transfer{TransferID: "list", Status: status, CartURL: "https://www.qfc.com/cart", Items: []TransferItem{{ProductID: "food", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"}}}
 			body, err := json.Marshal(original)

@@ -120,7 +120,7 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 			Items []CartItem `json:"items"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
+		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
@@ -132,7 +132,7 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	query := transferResponse(t, a, result)
 	assert.Equal(t, ordertypes.TransferApplied, query.Status)
 	assert.Equal(t, []ordertypes.TransferItem{
-		{ProductID: "food", Name: "Milk", AcceptedQuantity: 1},
+		{ProductID: "food", Name: "Milk", AcceptedQuantity: 2},
 		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
 		{ProductID: "duplicate", Name: "More milk", RejectedQuantity: 1, RejectionReason: "duplicate_upc"},
 		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
@@ -197,7 +197,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			query := transferResponse(t, a, result)
 			assert.Equal(t, ordertypes.TransferApplied, query.Status)
 			assert.Equal(t, scenario.cart, query.CartURL)
-			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
+			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
 			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
 		})
 	}

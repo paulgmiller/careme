@@ -77,7 +77,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	if err != nil {
 		return nil, fmt.Errorf("read MN Food Club transfer: %w", err)
 	}
-	if transfer.Status == ordertypes.TransferPendingLogin {
+	if transfer.Status == ordertypes.TransferPending {
 		result, err := client.status(ctx, transfer.TransferID)
 		if err != nil {
 			return nil, err
@@ -98,7 +98,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	switch transfer.Status {
 	case ordertypes.TransferFailed:
 		return &ordertypes.OrderView{TransferFailed: true}, nil
-	case ordertypes.TransferApplied, ordertypes.TransferPendingLogin:
+	case ordertypes.TransferApplied, ordertypes.TransferPending:
 		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
 	default:
 		return nil, fmt.Errorf("unknown MN Food Club saved transfer status %q", transfer.Status)
@@ -219,10 +219,6 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, []ordertypes.
 
 func redirectOrder(w http.ResponseWriter, r *http.Request, transfer ordertypes.Transfer, returnURL string) {
 	if transfer.Status == ordertypes.TransferPending {
-		http.Error(w, "MN Food Club transfer has no saved handoff yet.", http.StatusInternalServerError)
-		return
-	}
-	if transfer.Status == ordertypes.TransferPendingLogin {
 		if transfer.CartURL == "" {
 			http.Error(w, "MN Food Club transfer has no saved handoff yet.", http.StatusInternalServerError)
 			return

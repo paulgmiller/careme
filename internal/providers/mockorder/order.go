@@ -59,7 +59,7 @@ func OrderView(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInp
 	transfer, err := readTransfer(ctx, c, input.UserID, input.ListKey)
 	if err == nil {
 		switch transfer.Status {
-		case ordertypes.TransferApplied, ordertypes.TransferPending, ordertypes.TransferPendingLogin:
+		case ordertypes.TransferApplied, ordertypes.TransferPending:
 			return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
 		case ordertypes.TransferFailed:
 			return &ordertypes.OrderView{TransferFailed: true}, nil

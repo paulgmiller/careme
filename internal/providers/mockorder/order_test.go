@@ -68,7 +68,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 }
 
 func TestSavedTransferStatuses(t *testing.T) {
-	for _, status := range []ordertypes.TransferStatus{ordertypes.TransferFailed, ordertypes.TransferApplied, ordertypes.TransferPending, ordertypes.TransferPendingLogin, "unknown", ""} {
+	for _, status := range []ordertypes.TransferStatus{ordertypes.TransferFailed, ordertypes.TransferApplied, ordertypes.TransferPending, "unknown", ""} {
 		t.Run(string(status), func(t *testing.T) {
 			c := cache.NewInMemoryCache()
 			body, err := json.Marshal(ordertypes.Transfer{Status: status, CartURL: "/mock/cart"})

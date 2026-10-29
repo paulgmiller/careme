@@ -135,6 +135,10 @@ func (c *OrderClient) request(ctx context.Context, method, endpoint, key string,
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
 		return handoffResponse{}, fmt.Errorf("decode MN Food Club transfer: %w", err)
 	}
+	// Keep the partner's login state at the API boundary; shared transfers use pending.
+	if result.Status == "pending_login" {
+		result.Status = ordertypes.TransferPending
+	}
 	if err := result.validate(); err != nil {
 		return handoffResponse{}, err
 	}
@@ -147,7 +151,7 @@ func (r handoffResponse) validate() error {
 		return fmt.Errorf("MN Food Club returned an invalid transfer ID or cart URL")
 	}
 	switch r.Status {
-	case ordertypes.TransferPendingLogin:
+	case ordertypes.TransferPending:
 		return nil
 	case ordertypes.TransferApplied:
 		if r.UserID == "" || len(r.Items) == 0 {
