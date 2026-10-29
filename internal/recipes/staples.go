@@ -234,7 +234,7 @@ func wineIngredientsCacheKey(style, location string, date time.Time) string {
 	lo.Must(io.WriteString(fnv, location))
 	lo.Must(io.WriteString(fnv, date.Format("2006-01-02")))
 	lo.Must(io.WriteString(fnv, normalizedStyle))
-	return "wines/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
+	return "wines/v2/" + base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
 func wineStylesCacheKey(styles []string, location string, date time.Time) string {

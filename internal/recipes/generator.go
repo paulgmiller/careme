@@ -116,7 +116,11 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if err != nil {
 		return nil, err
 	}
-	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
+	byID := inputIngredientMap(wines)
+	enrichIngredientsMetadata(selection.Wines, byID)
+	for i := range selection.Wines {
+		selection.Wines[i].VariantID = byID[selection.Wines[i].ProductID].VariantID
+	}
 	return selection, nil
 }
 

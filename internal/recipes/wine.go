@@ -9,7 +9,7 @@ import (
 	"careme/internal/cache"
 )
 
-const wineRecommendationsCachePrefix = "wine_recommendations/"
+const wineRecommendationsCachePrefix = "wine_recommendations/v2/"
 
 func recipeWineCacheKey(hash string) string {
 	return wineRecommendationsCachePrefix + hash

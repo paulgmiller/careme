@@ -41,46 +41,28 @@ shopping list after a transfer.
 
 ## Kroger navigation
 
-### Product and item identity: current behavior and proposed follow-up
+### Product and item identity
 
-Kroger's product schema has a product ID, a product-level UPC, and an `items`
-array. Each item has its own `itemId` (documented as the item's UPC), size,
-price, and inventory. The schema permits multiple items but does not explain
-their relationship well enough to assume their UPCs are interchangeable.
+Kroger catalog search retains each priced, in-stock item's `itemId` as
+`InputIngredient.VariantID`, together with that item's size and price.
+`ProductID` remains the recipe reference. Shared catalog deduplication keeps the
+first row per product ID; independently selecting multiple variants would require
+broader changes to recipe identity and merging.
 
-Currently, `searchIngredients` emits one ingredient per priced, in-stock item,
-using `product.productId` for identity and the item's size and price. It drops
-`item.itemId`. The shared catalog deduplicates by product ID and keeps the first
-row. Recipe ingredients and shopping merging also identify products by product
-ID. Cart preparation subsequently looks up the product again and chooses the
-first nonempty item UPC; that need not identify the item whose size was used
-to calculate purchase quantities.
+Food shopping snapshots persist the catalog VariantID. Wine selections are
+likewise enriched from the selected catalog row before saving, and wine shopping
+rows copy that identifier. Cart transfer submits these saved identifiers as UPCs
+with the calculated whole-package quantities. It performs no product-detail
+request or availability recheck, and the product-to-UPC lookup/cache is removed.
+Store filtering still applies when fetching catalog prices and availability.
+Availability checking during shopping-list merge remains a separate TODO.
 
-The proposed follow-up is to retain the selected item's UPC in `VariantID`:
-
-- `ProductID` remains Kroger's `product.productId`, used for recipe references.
-- `VariantID` holds that row's `item.itemId`, used as the cart UPC. Preserve it
-  with the same item's size and price. This matches the field's existing role
-  as the selected provider variant for ordering; it is not an AI-generated value.
-- Keep the existing single selected row per product ID. Supporting multiple
-  independently selectable items under one product ID would require changes to
-  recipe identity, deduplication, and shopping merging, beyond copying a field.
-- The shopping display already attaches `VariantID` from the selected catalog
-  row to the persisted shopping item, and transfer requests preserve it. Kroger
-  ordering should consume it directly rather than resolve the product again.
-- Wine needs equivalent propagation: wine recipe ingredients currently lack
-  `VariantID`, and the shopping wine rows only copy their product ID. Updating
-  staples alone will not eliminate wine lookups.
-- Older catalog snapshots and finalized lists lack this identifier. Define their
-  refresh or migration behavior before requiring it. A product-only lookup
-  cannot reconstruct a previously selected item's identity unambiguously when
-  multiple distinct item UPCs exist; do not silently choose a replacement.
-
-This is a documented follow-up, not implemented behavior. Product-level `upc`
-is not a justified substitute for preserving the selected item's identity.
-Location filtering belongs in catalog selection for store prices and availability;
-it is not needed to submit an already selected UPC to the cart. Availability
-rechecking during shopping-list merging remains a separate TODO.
+Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
+pantry snapshots. Wine candidates and recommendations use version 2 cache keys.
+Existing finalized food snapshots remain immutable. Transfers containing any item
+without a selected UPC fail before writing the cart; recreate those lists from a
+refreshed catalog. There is no migration from product ID or product-level `upc`:
+multiple item UPCs make the original choice impossible to reconstruct safely.
 
 See the checked-in `products.productModel` and `products.productItemModel` schemas
 in `internal/providers/kroger/products/openapi.json` and
@@ -107,7 +89,7 @@ saving a transfer or contacting Kroger.
 
 Kroger sends the requested `buy` quantity for each product, rounding
 up to whole packages and defaulting to one when `buy` is absent. Successful writes record
-accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
+accepted package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
@@ -115,8 +97,8 @@ A cart transfer never checks out or places an order.
 OAuth denial, a missing code, or token exchange/storage errors return ordinary
 HTTP errors on the provider route. They do not create an order transfer.
 
-After authentication succeeds, the handler creates a pending transfer. Product
-lookup errors, no matched products, and cart write errors are saved as failed.
+After authentication succeeds, the handler creates a pending transfer. Missing
+selected item UPCs and cart write errors are saved as failed.
 Both successful and failed transfers redirect to the request’s shopping-list URL.
 The shopping list replaces the form with “Add to cart failed.” for a failed
 transfer. There is no retry control, and repeated posts or OAuth callbacks reuse

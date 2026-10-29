@@ -22,7 +22,7 @@ func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
 	const locationID = "70500874"
 	signature := mustJSONSignature(defaultStaples())
-	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	want := cachekey.NewHash(locationID, date, "item-upc-v1/"+signature).Sum(nil)
 	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
@@ -186,6 +186,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	categories := []string{"Produce", "Fresh Fruit"}
 	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
 		ProductId:    new(" apple-1 "),
+		ItemId:       new(" apple-upc "),
 		AisleNumber:  new(" 12 "),
 		Brand:        new(" Orchard Co "),
 		Description:  new(" Honeycrisp Apple "),
@@ -196,6 +197,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	}, 0)
 
 	assert.Equal(t, "apple-1", ingredient.ProductID)
+	assert.Equal(t, "apple-upc", ingredient.VariantID)
 	assert.Equal(t, "12", ingredient.AisleNumber)
 	assert.Equal(t, "Orchard Co", ingredient.Brand)
 	assert.Equal(t, "Honeycrisp Apple", ingredient.Description)

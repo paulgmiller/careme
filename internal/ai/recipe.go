@@ -26,6 +26,7 @@ const (
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
+	VariantID   string `json:"variant_id,omitempty" jsonschema:"-"`
 	ProductID   string `json:"id"`
 	AisleNumber string `json:"aisle_number,omitempty" jsonschema:"-"`
 	Name        string `json:"name"`

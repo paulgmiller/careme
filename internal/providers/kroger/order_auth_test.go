@@ -19,7 +19,7 @@ func newTestOrderHandler(t *testing.T, client *CartClient) *OrderHandler {
 	t.Helper()
 	require.NoError(t, templates.Init(&config.Config{}))
 	store := cache.NewInMemoryCache()
-	adapter, err := NewOrderHandler(OrderOptions{Cache: store, Client: NewCachedOrderClient(client, store), TokenKey: []byte(strings.Repeat("k", 32)), Origin: "https://careme.test", Auth: auth.DefaultMock()})
+	adapter, err := NewOrderHandler(OrderOptions{Cache: store, Client: client, TokenKey: []byte(strings.Repeat("k", 32)), Origin: "https://careme.test", Auth: auth.DefaultMock()})
 	require.NoError(t, err)
 	return adapter
 }
@@ -44,5 +44,5 @@ func TestOrderingTokenEncryptionAndUserBinding(t *testing.T) {
 }
 
 func testCartClient(a *OrderHandler) *CartClient {
-	return a.client.(*CachedOrderClient).orderClient.(*CartClient)
+	return a.client.(*CartClient)
 }

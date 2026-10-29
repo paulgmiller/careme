@@ -105,7 +105,7 @@ func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.R
 		}
 		wine := selection.Wines[0] // Use the same first pick as the recipe card.
 		group.Items = append(group.Items, shoppingPurchaseItem{
-			ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity,
+			ProductID: wine.ProductID, VariantID: wine.VariantID, Name: wine.Name, Needed: wine.Quantity,
 		})
 	}
 	if len(group.Items) == 0 {

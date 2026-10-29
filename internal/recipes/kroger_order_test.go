@@ -25,8 +25,8 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "70500874", Chain: "QFC", Name: "QFC", Address: "123 Store Street", ZipCode: "98004"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Chicken", Quantity: "2 lbs"}}}
 	p.Saved = []ai.Recipe{recipe}
-	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ProductID: "food", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: new(float64(2)), Size: "1 lb"}}}}
-	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
+	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ProductID: "food", VariantID: "food-upc", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: new(float64(2)), Size: "1 lb"}}}}
+	wine := ai.Ingredient{ProductID: "wine", VariantID: "wine-upc", Name: "Red wine", Quantity: "1 bottle"}
 	view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
 		params: p, list: ai.ShoppingList{Recipes: p.Saved}, purchases: food, hash: p.Hash(),
 		currentUser:         &utypes.User{ID: "user", Email: []string{"chef@example.test"}},
@@ -61,7 +61,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(values["transfer_request"]), &posted))
 	require.Len(t, posted.Items, 2)
 	assert.Equal(t, food[0].Items[0].ShoppingItem, posted.Items[0])
-	assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, posted.Items[1])
+	assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, VariantID: wine.VariantID, Name: wine.Name, Needed: wine.Quantity}, posted.Items[1])
 	assert.Equal(t, *p.Location, posted.Location)
 	assert.NotContains(t, values, "items")
 	assert.NotContains(t, values, "location")

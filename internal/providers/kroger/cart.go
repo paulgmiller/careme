@@ -2,20 +2,15 @@ package kroger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"careme/internal/providers/kroger/cart"
 	"careme/internal/providers/kroger/oauth"
-	"careme/internal/providers/kroger/products"
 )
 
 const krogerAPIOrigin = "https://api.kroger.com"
-
-var ErrProductUnavailable = errors.New("kroger product unavailable")
 
 type CartToken struct {
 	AccessToken  string    `json:"access_token"`
@@ -31,7 +26,6 @@ type CartItem struct {
 type CartClient struct {
 	ClientID, ClientSecret, RedirectURI string
 	HTTPClient                          *http.Client
-	CatalogToken                        *KrogerTokenManager
 }
 
 func (c *CartClient) AuthorizationURL(state, banner string) (string, error) {
@@ -76,45 +70,6 @@ func (c *CartClient) Refresh(ctx context.Context, refreshToken string) (CartToke
 		result.RefreshToken = refreshToken
 	}
 	return result, nil
-}
-
-// ProductUPC resolves a catalog product at the intended store to one UPC, independently of inventory.
-func (c *CartClient) ProductUPC(ctx context.Context, productID, locationID string) (string, error) {
-	if c.CatalogToken == nil {
-		return "", fmt.Errorf("kroger product token unavailable")
-	}
-	token, err := c.CatalogToken.GetToken(ctx)
-	if err != nil {
-		return "", fmt.Errorf("authorize Kroger product lookup: %w", err)
-	}
-	client, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(c.HTTPClient))
-	if err != nil {
-		return "", fmt.Errorf("create Kroger products client: %w", err)
-	}
-	resp, err := client.ProductGetIDWithResponse(ctx, productID, &products.ProductGetIDParams{FilterLocationId: &locationID}, func(_ context.Context, req *http.Request) error {
-		req.Header.Set("Authorization", "Bearer "+token)
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("look up Kroger product %q: %w", productID, err)
-	}
-	if resp.StatusCode() == http.StatusNotFound {
-		return "", fmt.Errorf("%w: %q", ErrProductUnavailable, productID)
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return "", fmt.Errorf("kroger product %q lookup returned %d", productID, resp.StatusCode())
-	}
-	if resp.JSON200 == nil || resp.JSON200.Data == nil {
-		return "", fmt.Errorf("decode Kroger product %q: missing product data", productID)
-	}
-	if resp.JSON200.Data.Items != nil {
-		for _, item := range *resp.JSON200.Data.Items {
-			if upc := strings.TrimSpace(stringValue(item.ItemId)); upc != "" {
-				return upc, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("%w: %q has no UPC", ErrProductUnavailable, productID)
 }
 
 func (c *CartClient) Add(ctx context.Context, token string, items []CartItem) error {

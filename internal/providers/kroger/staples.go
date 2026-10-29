@@ -32,7 +32,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, defaultStaplesSignature)
+	return cachekey.NewHash(locationID, date, "item-upc-v1/"+defaultStaplesSignature)
 }
 
 func NewIdentityProvider() identityProvider {
@@ -159,6 +159,7 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 
 			ingredients = append(ingredients, Ingredient{
 				ProductId:    product.ProductId,
+				ItemId:       item.ItemId,
 				Brand:        product.Brand,
 				Description:  product.Description,
 				Size:         item.Size,
@@ -197,6 +198,7 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
+		VariantID:    strings.TrimSpace(toStr(ingredient.ItemId)),
 		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
 		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
 		Description:  strings.TrimSpace(toStr(ingredient.Description)),

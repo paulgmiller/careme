@@ -511,7 +511,7 @@ func (s *captureRecipeSaver) titles() []string {
 func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 	t.Parallel()
 	got := wineIngredientsCacheKey(" Pinot Noir ", "70500874", time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC))
-	want := "wines/0XY3COdxwHk"
+	want := "wines/v2/0XY3COdxwHk"
 	if got != want {
 		t.Fatalf("unexpected cache key: got %q want %q", got, want)
 	}
@@ -531,6 +531,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	cached := []ai.InputIngredient{
 		{
 			ProductID:   "cached-pinot-noir",
+			VariantID:   "wine-upc",
 			Description: "Cached Pinot Noir",
 			Size:        "750mL",
 			AisleNumber: "wine",
@@ -569,6 +570,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	assert.Equal(t, "$18.99", got.Wines[0].Price)
+	assert.Equal(t, "wine-upc", got.Wines[0].VariantID)
 	if aiStub.recipe.Title != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipe.Title)
 	}

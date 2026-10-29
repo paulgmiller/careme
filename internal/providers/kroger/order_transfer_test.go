@@ -29,7 +29,7 @@ func TestCartTransferFormPersistsResultAndRedirectsToList(t *testing.T) {
 	input := ordertypes.TransferRequest{
 		ReturnURL: "/recipes?h=list-hash#shopping-list-section",
 		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC", Name: "My QFC", Address: "123 Store Street"},
-		Items:     []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Needed: "2 cups"}},
+		Items:     []ai.ShoppingItem{{ProductID: "food", VariantID: "food-upc", Name: "Milk", Needed: "2 cups"}},
 	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
@@ -98,17 +98,18 @@ func TestCartTransferRejectsJSONBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 }
 
-func TestCartTransferNoMatchesIsSaved(t *testing.T) {
-	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("no matching products"); return nil, nil })
+func TestCartTransferMissingUPCFailureIsSaved(t *testing.T) {
+	a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("missing UPC must prevent cart writes")
+		return nil, nil
+	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	form := orderForm()
 	setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
 	assert.Equal(t, ordertypes.TransferFailed, result.Status)
-	assert.Equal(t, []ordertypes.TransferItem{
-		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
-	}, result.Items)
+	assert.Empty(t, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
 }
 
