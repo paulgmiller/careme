@@ -77,12 +77,19 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	if err != nil {
 		return nil, fmt.Errorf("read MN Food Club transfer: %w", err)
 	}
-	if transfer.Status == ordertypes.TransferPending {
+	if transfer.Status == ordertypes.TransferPendingLogin {
 		result, err := client.status(ctx, transfer.TransferID)
 		if err != nil {
 			return nil, err
 		}
-		transfer = result.transfer(transfer.Unmatched)
+		// Preserve items that were rejected locally before contacting Food Club.
+		for _, item := range transfer.Items {
+			if item.ProductID == "" {
+				result.Items = append(result.Items, item)
+			}
+		}
+		transfer = result.Transfer
+		// TODO: Save result.UserID as the Food Club customer mapping for this Careme user.
 		// TODO: Use ETags/IfMatch; concurrent status reads currently overwrite on a race.
 		if err := saveOrderTransfer(ctx, c, input.UserID, input.ListKey, transfer, cache.Unconditional()); err != nil {
 			return nil, err
@@ -91,7 +98,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	switch transfer.Status {
 	case ordertypes.TransferFailed:
 		return &ordertypes.OrderView{TransferFailed: true}, nil
-	case ordertypes.TransferApplied, ordertypes.TransferPending:
+	case ordertypes.TransferApplied, ordertypes.TransferPendingLogin:
 		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
 	default:
 		return nil, fmt.Errorf("unknown MN Food Club saved transfer status %q", transfer.Status)
@@ -129,7 +136,7 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to read MN Food Club transfer.", http.StatusInternalServerError)
 		return
 	}
-	request, unmatched, err := orderItems(input)
+	request, rejected, err := orderItems(input)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -142,7 +149,7 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	if email != "" {
 		request.IdentityHints.Emails = []string{email}
 	}
-	transfer := ordertypes.Transfer{Status: ordertypes.TransferPending, Unmatched: unmatched}
+	transfer := ordertypes.Transfer{Status: ordertypes.TransferPending, Items: rejected}
 	if len(request.Items) == 0 {
 		transfer.Status = ordertypes.TransferFailed
 	}
@@ -158,7 +165,9 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(r.Context(), "MN Food Club transfer failed", "error", err)
 			transfer.Status = ordertypes.TransferFailed
 		} else {
-			transfer = result.transfer(unmatched)
+			transfer = result.Transfer
+			transfer.Items = append(transfer.Items, rejected...)
+			// TODO: Save result.UserID as the Food Club customer mapping for this Careme user.
 		}
 		// TODO: Use ETags/IfMatch; result writes currently overwrite on a race.
 		if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.Unconditional()); err != nil {
@@ -175,29 +184,29 @@ func validOrderForm(key string, input ordertypes.TransferRequest) bool {
 		strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".." && len(input.Items) > 0 && NewIdentityProvider().IsID(input.Location.ID)
 }
 
-func orderItems(input ordertypes.TransferRequest) (handoffRequest, int, error) {
+func orderItems(input ordertypes.TransferRequest) (handoffRequest, []ordertypes.TransferItem, error) {
 	request := handoffRequest{Items: []requestedItem{}}
 	indices := make(map[string]int)
-	unmatched := 0
+	var rejected []ordertypes.TransferItem
 	for _, item := range input.Items {
 		if strings.TrimSpace(item.ProductID) == "" {
-			unmatched++
+			rejected = append(rejected, ordertypes.TransferItem{Name: item.Name, RejectedQuantity: 1, RejectionReason: "missing_product_id"})
 			continue
 		}
 		quantity := 1
 		if item.Buy != nil {
 			// The API accepts whole packages; never send recipe measurements or fractions.
 			if math.IsNaN(*item.Buy) || *item.Buy <= 0 || *item.Buy > math.MaxInt32 {
-				return handoffRequest{}, 0, fmt.Errorf("invalid MN Food Club package quantity for %q", item.Name)
+				return handoffRequest{}, nil, fmt.Errorf("invalid MN Food Club package quantity for %q", item.Name)
 			}
 			quantity = int(math.Ceil(*item.Buy))
 		}
 		if index, exists := indices[item.ProductID]; exists {
 			if request.Items[index].VariantID != item.VariantID {
-				return handoffRequest{}, 0, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
+				return handoffRequest{}, nil, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)
 			}
 			if request.Items[index].Quantity > math.MaxInt32-quantity {
-				return handoffRequest{}, 0, fmt.Errorf("MN Food Club package quantity is too large")
+				return handoffRequest{}, nil, fmt.Errorf("MN Food Club package quantity is too large")
 			}
 			request.Items[index].Quantity += quantity
 			continue
@@ -205,25 +214,15 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, int, error) {
 		indices[item.ProductID] = len(request.Items)
 		request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})
 	}
-	return request, unmatched, nil
-}
-
-func (r handoffResponse) transfer(unmatched int) ordertypes.Transfer {
-	transfer := ordertypes.Transfer{TransferID: r.TransferID, CartURL: r.CartURL, Unmatched: unmatched, Status: ordertypes.TransferPending}
-	if r.Status == "applied" {
-		transfer.Status = ordertypes.TransferApplied
-		for _, item := range r.Items {
-			transfer.Added += item.Accepted
-			if item.Rejected > 0 {
-				transfer.Unmatched++
-			}
-		}
-	}
-	return transfer
+	return request, rejected, nil
 }
 
 func redirectOrder(w http.ResponseWriter, r *http.Request, transfer ordertypes.Transfer, returnURL string) {
 	if transfer.Status == ordertypes.TransferPending {
+		http.Error(w, "MN Food Club transfer has no saved handoff yet.", http.StatusInternalServerError)
+		return
+	}
+	if transfer.Status == ordertypes.TransferPendingLogin {
 		if transfer.CartURL == "" {
 			http.Error(w, "MN Food Club transfer has no saved handoff yet.", http.StatusInternalServerError)
 			return

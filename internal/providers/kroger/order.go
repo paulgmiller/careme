@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
 )
@@ -66,11 +65,37 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 
 func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
-	items, gaps, err := a.resolveItems(ctx, input)
-	if err != nil {
-		return transfer, err
+	// Kroger adds one package per unique UPC.
+	var items []CartItem
+	var accepted []ordertypes.TransferItem
+	seen := make(map[string]bool)
+	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
+	for _, item := range input.Items {
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: 1}
+		if item.ProductID == "" {
+			result.RejectionReason = "missing_product_id"
+			transfer.Items = append(transfer.Items, result)
+			continue
+		}
+		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
+		if errors.Is(err, ErrProductUnavailable) {
+			result.RejectionReason = "product_unavailable"
+			transfer.Items = append(transfer.Items, result)
+			continue
+		}
+		if err != nil {
+			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
+		}
+		if seen[upc] {
+			result.RejectionReason = "duplicate_upc"
+			transfer.Items = append(transfer.Items, result)
+			continue
+		}
+		seen[upc] = true
+		items = append(items, CartItem{UPC: upc, Quantity: 1})
+		result.AcceptedQuantity, result.RejectedQuantity = 1, 0
+		accepted = append(accepted, result)
 	}
-	transfer.Unmatched = len(gaps)
 	if len(items) == 0 {
 		return transfer, nil
 	}
@@ -78,33 +103,6 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied
-	transfer.Added = len(items)
+	transfer.Items = append(accepted, transfer.Items...)
 	return transfer, nil
-}
-
-// resolveItms goes back and gets ups for each product id. Could be avoided if we saved in inputingredient
-// if not that should be parallelized
-func (a *OrderHandler) resolveItems(ctx context.Context, request ordertypes.TransferRequest) ([]CartItem, []ai.ShoppingItem, error) {
-	var items []CartItem
-	var gaps []ai.ShoppingItem
-	seen := make(map[string]bool)
-	for _, item := range request.Items {
-		if item.ProductID == "" {
-			gaps = append(gaps, item)
-			continue
-		}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, request.Location.ID)
-		if errors.Is(err, ErrProductUnavailable) {
-			gaps = append(gaps, item)
-			continue
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve Kroger order product: %w", err)
-		}
-		if !seen[upc] {
-			items = append(items, CartItem{UPC: upc, Quantity: 1})
-			seen[upc] = true
-		}
-	}
-	return items, gaps, nil
 }

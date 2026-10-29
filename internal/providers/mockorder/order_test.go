@@ -43,7 +43,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 	transfer, err := readTransfer(t.Context(), c, input.UserID, input.ListKey)
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Equal(t, 2, transfer.Added)
+	assert.Equal(t, []ordertypes.TransferItem{{Name: "Milk", AcceptedQuantity: 1}, {Name: "Bread", AcceptedQuantity: 1}}, transfer.Items)
 	view, err = OrderView(t.Context(), c, input)
 	require.NoError(t, err)
 	assert.Equal(t, transfer.CartURL, view.ReviewCartURL)
@@ -68,7 +68,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 }
 
 func TestSavedTransferStatuses(t *testing.T) {
-	for _, status := range []ordertypes.TransferStatus{ordertypes.TransferFailed, ordertypes.TransferApplied, ordertypes.TransferPending, "unknown", ""} {
+	for _, status := range []ordertypes.TransferStatus{ordertypes.TransferFailed, ordertypes.TransferApplied, ordertypes.TransferPending, ordertypes.TransferPendingLogin, "unknown", ""} {
 		t.Run(string(status), func(t *testing.T) {
 			c := cache.NewInMemoryCache()
 			body, err := json.Marshal(ordertypes.Transfer{Status: status, CartURL: "/mock/cart"})

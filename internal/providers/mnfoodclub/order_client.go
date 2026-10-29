@@ -13,6 +13,7 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/httpretry"
+	ordertypes "careme/internal/orders/types"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -33,19 +34,9 @@ type handoffRequest struct {
 	IdentityHints identityHints   `json:"identity_hints"`
 }
 
-type itemResult struct {
-	ProductID string `json:"product_id"`
-	Accepted  int    `json:"accepted_quantity"`
-	Rejected  int    `json:"rejected_quantity"`
-	Reason    string `json:"rejection_reason,omitempty"`
-}
-
 type handoffResponse struct {
-	TransferID string       `json:"transfer_id"`
-	Status     string       `json:"status"`
-	CartURL    string       `json:"cart_url"`
-	UserID     string       `json:"user_id,omitempty"`
-	Items      []itemResult `json:"items,omitempty"`
+	ordertypes.Transfer
+	UserID string `json:"user_id,omitempty"`
 }
 
 // OrderClient calls the proposed partner API with credentials separate from BigCommerce.
@@ -92,13 +83,13 @@ func (c *OrderClient) create(ctx context.Context, key string, input handoffReque
 	if err != nil {
 		return handoffResponse{}, err
 	}
-	if result.Status == "applied" {
+	if result.Status == ordertypes.TransferApplied {
 		quantities := make(map[string]int, len(input.Items))
 		for _, item := range input.Items {
 			quantities[item.ProductID] = item.Quantity
 		}
 		for _, item := range result.Items {
-			if quantity, ok := quantities[item.ProductID]; !ok || item.Accepted+item.Rejected != quantity {
+			if quantity, ok := quantities[item.ProductID]; !ok || item.AcceptedQuantity+item.RejectedQuantity != quantity {
 				return handoffResponse{}, fmt.Errorf("MN Food Club returned inconsistent quantities for product %q", item.ProductID)
 			}
 			delete(quantities, item.ProductID)
@@ -156,15 +147,15 @@ func (r handoffResponse) validate() error {
 		return fmt.Errorf("MN Food Club returned an invalid transfer ID or cart URL")
 	}
 	switch r.Status {
-	case "pending_login":
+	case ordertypes.TransferPendingLogin:
 		return nil
-	case "applied":
+	case ordertypes.TransferApplied:
 		if r.UserID == "" || len(r.Items) == 0 {
 			return fmt.Errorf("MN Food Club returned incomplete applied results")
 		}
 		seen := make(map[string]bool, len(r.Items))
 		for _, item := range r.Items {
-			if item.ProductID == "" || seen[item.ProductID] || item.Accepted < 0 || item.Rejected < 0 || item.Accepted+item.Rejected <= 0 || (item.Rejected > 0 && item.Reason == "") {
+			if item.ProductID == "" || seen[item.ProductID] || item.AcceptedQuantity < 0 || item.RejectedQuantity < 0 || item.AcceptedQuantity+item.RejectedQuantity <= 0 || (item.RejectedQuantity > 0 && item.RejectionReason == "") {
 				return fmt.Errorf("MN Food Club returned invalid product results")
 			}
 			seen[item.ProductID] = true

@@ -131,8 +131,13 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	result := postOrder(mux, form)
 	query := transferResponse(t, a, result)
 	assert.Equal(t, ordertypes.TransferApplied, query.Status)
-	assert.Equal(t, 2, query.Added)
-	assert.Equal(t, 2, query.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{ProductID: "food", Name: "Milk", AcceptedQuantity: 1},
+		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
+		{ProductID: "duplicate", Name: "More milk", RejectedQuantity: 1, RejectionReason: "duplicate_upc"},
+		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
+		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
+	}, query.Items)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
 	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, postOrder(mux, form)).Status)
@@ -300,7 +305,11 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			} else {
 				assert.Equal(t, ordertypes.TransferStatus(expected), transferResponse(t, a, first).Status)
 			}
-			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Status
+			repeated := transferResponse(t, a, postOrder(mux, orderForm()))
+			for _, item := range repeated.Items {
+				assert.Zero(t, item.AcceptedQuantity, "failed writes must not report confirmed acceptance")
+			}
+			repeat := repeated.Status
 			if scenario == "confirmation failed" {
 				assert.Equal(t, ordertypes.TransferPending, repeat)
 			} else {

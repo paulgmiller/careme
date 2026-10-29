@@ -55,8 +55,8 @@ or separate connection GET routes. Reloading the shopping list reads the saved
 handoff to choose the form, cart link, or failure label. Reposting consults the
 saved transfer without resubmitting products.
 
-Kroger sends one package per unique matched UPC. Unmatched items are counted in
-the saved result; the shopper reviews amounts and checkout in Kroger's cart.
+Kroger sends one package per unique matched UPC. Successful writes record
+accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
@@ -86,7 +86,8 @@ for now: concurrent attempts can overwrite results and can duplicate additions.
 A failed final save leaves the record pending. This is not a guarantee of
 at-most-once cart writes across concurrent requests.
 
-The typed `TransferStatus` values are `pending`, `failed`, and `applied`.
+The typed `TransferStatus` values are `pending`, `pending_login`, `failed`, and
+`applied`. `pending` reserves an attempt; `pending_login` is a saved partner handoff.
 There is no separate provider code or custom JSON decoding.
 
 The shared `TransferRequest` and `Transfer` types describe the submitted request
@@ -114,20 +115,20 @@ storefront-brand hints are currently omitted.
 Each product is sent once. Package counts come from `buy`, rounded up to whole
 packages; a missing count defaults to one. Duplicate product quantities are
 combined. Recipe measurements such as “2 cups” are never converted to package
-counts. Items without a product ID are counted as unmatched and not sent. If no
+counts. Items without a product ID are recorded as local rejections and not sent. If no
 products can be sent, save a failed transfer without calling the partner.
 The selected catalog variant is included when available in the finalized
 shopping snapshot. Older snapshots and items without a selected variant omit it,
 using the partner’s documented default variant selection.
 
 An `applied` response saves the shared transfer result and returns the browser
-to the shopping list. Added counts accepted packages; unmatched includes local
-items without product IDs and partner products with any rejected quantity.
+to the shopping list. The shared result contains each product’s accepted and
+rejected package quantities and rejection reason, with local rejections appended.
 Partial and all-rejected responses remain applied and retain the supplied cart
 link. The partner’s product IDs, totals, statuses, and cart URLs must be valid;
 incomplete results fail the transfer instead of silently omitting products.
 
-A `pending_login` response is stored internally as pending and immediately
+A `pending_login` response is stored with the same shared status and immediately
 redirects the browser to the partner’s opaque handoff URL. Loading the shopping
 list later performs one server-side GET for the saved partner transfer ID.
 Once applied, the result and cart URL are updated and no further GET is needed.
@@ -137,9 +138,12 @@ There is no browser polling or callback route.
 
 Transfers are reserved before the POST and never automatically retried.
 Operational errors or invalid responses are saved as failed, and the browser
-returns to the shopping list’s failure label. A failed save returns HTTP 500.
+returns to the shopping list’s failure label. Item results record only confirmed
+acceptance or rejection; an API failure does not invent product rejections. A failed save returns HTTP 500.
 Repeated native posts reuse the saved outcome; pending transfers redirect to
-the handoff again. No request wrapper or customer-ID mapping is persisted.
+the handoff again. No request wrapper or customer-ID mapping is persisted. The partner response
+embeds the shared `Transfer` plus `user_id`; TODO: save that customer-ID mapping
+for future identity hints.
 
 ## Local development and E2E tests
 

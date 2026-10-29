@@ -38,7 +38,7 @@ func TestCartTransferFormPersistsResultAndRedirectsToList(t *testing.T) {
 	response := postOrder(mux, form)
 	transfer := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Equal(t, 1, transfer.Added)
+	assert.Equal(t, []ordertypes.TransferItem{{ProductID: "food", Name: "Milk", AcceptedQuantity: 1}}, transfer.Items)
 	var saved ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), &saved))
 	assert.Equal(t, transfer, saved, "the record stores the shared result directly")
@@ -83,7 +83,7 @@ func TestCartTransferSaveFailureLeavesPending(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
 	result := savedResult(t, a, "list-hash")
 	assert.Equal(t, ordertypes.TransferPending, result.Status)
-	assert.Zero(t, result.Added)
+	assert.Empty(t, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }
@@ -106,8 +106,10 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
 	assert.Equal(t, ordertypes.TransferFailed, result.Status)
-	assert.Zero(t, result.Added)
-	assert.Equal(t, 2, result.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
+		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
+	}, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
 }
 
@@ -207,7 +209,7 @@ func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
 	mux.ServeHTTP(response, callback)
 	result := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, result.Status)
-	assert.Equal(t, 2, result.Added)
+	assert.Equal(t, ordertypes.TransferItem{ProductID: "food", Name: "Milk", AcceptedQuantity: 1}, result.Items[0])
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }

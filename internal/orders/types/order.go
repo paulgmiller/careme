@@ -37,21 +37,30 @@ type TransferRequest struct {
 
 // Transfer describes a cart handoff, never checkout or a placed order.
 // CartURL opens the destination cart; the provider handler owns login redirects.
-// Added counts packages sent; Unmatched counts shopping items not sent.
 type Transfer struct {
 	// TransferID identifies the destination's transfer. Kroger uses the idempotency key directly.
 	TransferID string         `json:"transfer_id"`
 	Status     TransferStatus `json:"status"`
 	CartURL    string         `json:"cart_url"`
-	Added      int            `json:"added"`
-	Unmatched  int            `json:"unmatched"`
+	Items      []TransferItem `json:"items,omitempty"`
+}
+
+// TransferItem records package quantities accepted or rejected by a cart handoff.
+// Name identifies local rejections that have no provider product ID.
+type TransferItem struct {
+	ProductID        string `json:"product_id"`
+	Name             string `json:"name,omitempty"`
+	AcceptedQuantity int    `json:"accepted_quantity"`
+	RejectedQuantity int    `json:"rejected_quantity"`
+	RejectionReason  string `json:"rejection_reason,omitempty"`
 }
 
 // TransferStatus is the persisted outcome of a cart handoff.
 type TransferStatus string
 
 const (
-	TransferPending TransferStatus = "pending"
-	TransferFailed  TransferStatus = "failed"
-	TransferApplied TransferStatus = "applied"
+	TransferPending      TransferStatus = "pending"
+	TransferPendingLogin TransferStatus = "pending_login"
+	TransferFailed       TransferStatus = "failed"
+	TransferApplied      TransferStatus = "applied"
 )

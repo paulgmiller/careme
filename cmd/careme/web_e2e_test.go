@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -130,13 +131,18 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		return result
 	}
 	transfer := readMockCart()
-	if transfer.Status != ordertypes.TransferApplied || transfer.Added != len(input.Items) {
+	if transfer.Status != ordertypes.TransferApplied || len(transfer.Items) != len(input.Items) {
 		t.Fatalf("unexpected mock cart: %+v", transfer)
+	}
+	for i, item := range transfer.Items {
+		if item.ProductID != input.Items[i].ProductID || item.AcceptedQuantity != 1 || item.RejectedQuantity != 0 {
+			t.Fatalf("unexpected mock item result: %+v", item)
+		}
 	}
 	// Reposting the native form reuses its result.
 	_ = mustPostFormBody(t, client, srv.URL+"/mock/order-transfers", form)
 	repeated := readMockCart()
-	if transfer != repeated {
+	if !reflect.DeepEqual(transfer, repeated) {
 		t.Fatalf("duplicate submission changed mock cart: %+v", repeated)
 	}
 

@@ -59,7 +59,7 @@ func OrderView(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInp
 	transfer, err := readTransfer(ctx, c, input.UserID, input.ListKey)
 	if err == nil {
 		switch transfer.Status {
-		case ordertypes.TransferApplied, ordertypes.TransferPending:
+		case ordertypes.TransferApplied, ordertypes.TransferPending, ordertypes.TransferPendingLogin:
 			return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
 		case ordertypes.TransferFailed:
 			return &ordertypes.OrderView{TransferFailed: true}, nil
@@ -102,7 +102,10 @@ func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := readTransfer(r.Context(), h.cache, userID, id); errors.Is(err, cache.ErrNotFound) {
 		// The mock accepts every shopping item without external product matching.
-		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id), Added: len(input.Items)}
+		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id)}
+		for _, item := range input.Items {
+			transfer.Items = append(transfer.Items, ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, AcceptedQuantity: 1})
+		}
 		body, err := json.Marshal(transfer)
 		if err != nil {
 			http.Error(w, "Unable to encode mock transfer", http.StatusInternalServerError)

@@ -80,7 +80,7 @@ func TestOrderAppliedRelaysFormAndReusesResult(t *testing.T) {
 	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
-	assert.Equal(t, ordertypes.Transfer{TransferID: "partner-1", Status: ordertypes.TransferApplied, CartURL: "https://shop.foodclub.test/cart", Added: 2, Unmatched: 3}, transfer)
+	assert.Equal(t, ordertypes.Transfer{TransferID: "partner-1", Status: ordertypes.TransferApplied, CartURL: "https://shop.foodclub.test/cart", Items: []ordertypes.TransferItem{{ProductID: "101", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"}, {ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"}, {Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}}, transfer)
 	input := orderInput()
 	input.Items = []ai.ShoppingItem{{ProductID: "different"}}
 	input.ReturnURL = "/recipes?h=other"
@@ -131,8 +131,11 @@ func TestOrderPendingLoginRedirectsAndRefreshesOnServer(t *testing.T) {
 	assert.Equal(t, "https://shop.foodclub.test/cart", view.ReviewCartURL)
 	transfer, err := loadOrderTransfer(t.Context(), c, input.UserID, input.ListKey)
 	require.NoError(t, err)
-	assert.Equal(t, 2, transfer.Added)
-	assert.Equal(t, 3, transfer.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{ProductID: "101", AcceptedQuantity: 2, RejectedQuantity: 1, RejectionReason: "insufficient_stock"},
+		{ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"},
+		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
+	}, transfer.Items)
 	_, err = OrderViewForUser(t.Context(), c, client, input)
 	require.NoError(t, err)
 	assert.Equal(t, "/recipes?h=list", postTransfer(t, h, orderInput()).Header().Get("Location"))
@@ -154,6 +157,9 @@ func TestOrderOperationalFailuresAreSavedWithoutRetries(t *testing.T) {
 				assert.Equal(t, http.StatusSeeOther, response.Code)
 				assert.Equal(t, "/recipes?h=list", response.Header().Get("Location"))
 			}
+			saved, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
+			require.NoError(t, err)
+			assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, saved.Items, "API failures preserve only confirmed local rejections")
 			view, err := OrderViewForUser(t.Context(), c, client, ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: "list"})
 			require.NoError(t, err)
 			assert.True(t, view.TransferFailed)
@@ -189,10 +195,10 @@ func TestOrderRejectsInvalidPartnerResponses(t *testing.T) {
 func TestOrderItemsUsePackagesAndUniqueProducts(t *testing.T) {
 	input := orderInput()
 	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "101", VariantID: "1005", Name: "More chicken", Buy: new(float64(0.5))})
-	request, unmatched, err := orderItems(input)
+	request, rejected, err := orderItems(input)
 	require.NoError(t, err)
 	assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 4}, {ProductID: "202", Quantity: 1}}, request.Items)
-	assert.Equal(t, 1, unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, rejected)
 	input.Items[len(input.Items)-1].VariantID = "different-variant"
 	_, _, err = orderItems(input)
 	require.ErrorContains(t, err, "conflicting")
@@ -209,7 +215,7 @@ func TestOrderNoProductIDsFailsWithoutPartnerRequest(t *testing.T) {
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferFailed, transfer.Status)
-	assert.Equal(t, 1, transfer.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"}}, transfer.Items)
 }
 
 func TestOrderPendingStatusFailureIsHardError(t *testing.T) {
@@ -227,7 +233,7 @@ func TestOrderPendingStatusFailureIsHardError(t *testing.T) {
 	assert.Nil(t, view)
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
-	assert.Equal(t, ordertypes.TransferPending, transfer.Status)
+	assert.Equal(t, ordertypes.TransferPendingLogin, transfer.Status)
 }
 
 type orderUser struct {
@@ -260,8 +266,11 @@ func TestOrderAllRejectedIsApplied(t *testing.T) {
 	transfer, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Zero(t, transfer.Added)
-	assert.Equal(t, 3, transfer.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{ProductID: "101", RejectedQuantity: 3, RejectionReason: "insufficient_stock"},
+		{ProductID: "202", RejectedQuantity: 1, RejectionReason: "new-partner-reason"},
+		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
+	}, transfer.Items)
 }
 
 type orderWriteFailure struct {
