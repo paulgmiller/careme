@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {
@@ -134,7 +134,6 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	assert.Equal(t, []ordertypes.TransferItem{
 		{ProductID: "food", Name: "Milk", AcceptedQuantity: 2},
 		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
-		{ProductID: "duplicate", Name: "More milk", RejectedQuantity: 1, RejectionReason: "duplicate_upc"},
 		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
 		{Name: "Salt", RejectedQuantity: 1, RejectionReason: "missing_product_id"},
 	}, query.Items)

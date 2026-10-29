@@ -55,7 +55,7 @@ or separate connection GET routes. Reloading the shopping list reads the saved
 handoff to choose the form, cart link, or failure label. Reposting consults the
 saved transfer without resubmitting products.
 
-Kroger sends the requested `buy` quantity for each unique matched UPC, rounding
+Kroger sends the requested `buy` quantity for each product, rounding
 up to whole packages and defaulting to one when `buy` is absent. Successful writes record
 accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
