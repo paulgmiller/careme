@@ -142,8 +142,8 @@ Its README documents dynamic entry point exceptions and build configuration
 limits. The tool is maintained and tested in its own repository.
 
 `./task.sh statement-diff` reports Go statement debt changes from `origin/master`
-to the working tree. PR CI reports `origin/master...HEAD` in the Go statement diff
-job summary using a pinned version of `paulgmiller/go-statement`. This report is
+to the working tree. PR CI reports `$BASE_SHA...HEAD` in the Go statement diff
+job summary using `paulgmiller/go-statement@latest`. This report is
 informational; no debt threshold is configured.
 
 ## Mail placement tests
