@@ -55,17 +55,21 @@ func TestInstacartOrderRegistration(t *testing.T) {
 	}
 }
 
-func TestInstacartOrderViewUsesNativeProviderPrecedence(t *testing.T) {
+func TestInstacartOrderViewOnlyMatchesWholeFoods(t *testing.T) {
 	for _, tt := range []struct {
 		name, location, want string
 		cfg                  config.Config
 	}{
-		{name: "disabled", location: "any-store"},
-		{name: "any store", location: "unknown-store", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
-		{name: "Kroger unconfigured", location: "70500874", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "Whole Foods disabled", location: "wholefoods_10399"},
+		{name: "Whole Foods enabled", location: "wholefoods_10399", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "another Whole Foods", location: "wholefoods_10240", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "unknown store", location: "unknown-store", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
+		{name: "Walmart", location: "walmart_123", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
+		{name: "MNFoodClub unconfigured", location: "mnfoodclub_delivery", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
+		{name: "Kroger unconfigured", location: "70500874", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
 		{name: "Kroger preferred", location: "70500874", cfg: config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/kroger/order-transfers"},
 		{name: "MNFoodClub preferred", location: "mnfoodclub_delivery", cfg: config.Config{MNFoodClub: config.MNFoodClubConfig{OrderAPIURL: "https://foodclub.test", OrderAccessToken: "key"}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/mnfoodclub/order-transfers"},
-		{name: "mock preferred", location: "any-store", cfg: config.Config{Mocks: config.MockConfig{Enable: true}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/mock/order-transfers"},
+		{name: "mock preferred", location: "wholefoods_10399", cfg: config.Config{Mocks: config.MockConfig{Enable: true}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/mock/order-transfers"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			options := orderingTestOptions()

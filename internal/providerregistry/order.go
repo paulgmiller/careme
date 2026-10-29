@@ -15,6 +15,7 @@ import (
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
+	"careme/internal/providers/wholefoods"
 	"careme/internal/routing"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -114,7 +115,7 @@ func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	if b.factory.config.Instacart.APIKey != "" {
+	if wholefoods.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
 		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil

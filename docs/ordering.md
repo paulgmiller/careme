@@ -154,8 +154,8 @@ for future identity hints.
 
 ## Instacart shopping lists
 
-Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers` for source
-stores without a configured Kroger or MN Food Club ordering destination. Mock
+Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers`. The provider
+registry currently offers Instacart only for Whole Foods (`wholefoods_*`) IDs. Mock
 mode still uses only the mock provider. `INSTACART_BASE_URL` defaults to
 `https://connect.instacart.com`; development keys use `https://connect.dev.instacart.tools`.
 
