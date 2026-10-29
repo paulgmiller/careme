@@ -21,7 +21,7 @@ const (
 	Category_Meat         = "GR-MeatF-fffc8662"   // https://www.safeway.com/aisle-vs/meat-seafood/meat-favorites.html
 	Category_Wine         = "GR-S-Searc-db592d50"
 	Category_Pasta_Grains = "GR-C-Categ-77b9d5dd" // https://www.safeway.com/aisle-vs/grains-pasta-sides/best-sellers.html
-	Category_Dairy        = "GR-C-Categ-f210e5cd" // new and trending seems dubious https://www.safeway.com/aisle-vs/dairy-eggs-cheese/new-trending.html
+	category_Dairy        = "GR-C-Categ-f210e5cd" // new and trending seems dubious https://www.safeway.com/aisle-vs/dairy-eggs-cheese/new-trending.html
 )
 
 func StapleCategories() []string {
@@ -43,7 +43,7 @@ const (
 	defaultSearchUser    = "G"
 )
 
-type SearchClient struct {
+type searchClient struct {
 	baseURL         string
 	subscriptionKey string
 	reese84Provider func(context.Context) (string, error) // interface?
@@ -64,7 +64,7 @@ type SearchOptions struct {
 	Sort  string
 }
 
-func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
+func NewSearchClient(cfg SearchClientConfig) (*searchClient, error) {
 	subscriptionKey := strings.TrimSpace(cfg.SubscriptionKey)
 	if subscriptionKey == "" {
 		return nil, errors.New("subscription key is required")
@@ -81,7 +81,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 		httpClient = http.DefaultClient
 	}
 
-	return &SearchClient{
+	return &searchClient{
 		baseURL:         baseURL,
 		subscriptionKey: subscriptionKey,
 		reese84Provider: cfg.Reese84Provider,
@@ -89,7 +89,7 @@ func NewSearchClient(cfg SearchClientConfig) (*SearchClient, error) {
 	}, nil
 }
 
-func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) ([]PathwaySearchProduct, error) {
+func (c *searchClient) SearchAll(ctx context.Context, storeID, category string, opts SearchOptions) ([]PathwaySearchProduct, error) {
 	if opts.Rows == 0 {
 		opts.Rows = defaultSearchRows
 	}
@@ -121,7 +121,7 @@ func (c *SearchClient) SearchAll(ctx context.Context, storeID, category string, 
 	return products, nil
 }
 
-func (c *SearchClient) search(ctx context.Context, storeID, category string, opts SearchOptions) (*PathwaySearchPayload, error) {
+func (c *searchClient) search(ctx context.Context, storeID, category string, opts SearchOptions) (*pathwaySearchPayload, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
@@ -177,7 +177,7 @@ func (c *SearchClient) search(ctx context.Context, storeID, category string, opt
 		return nil, fmt.Errorf("search request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(errbody)))
 	}
 
-	var payload PathwaySearchPayload
+	var payload pathwaySearchPayload
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode json response: %w", err)
 	}

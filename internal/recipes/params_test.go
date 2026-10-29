@@ -76,7 +76,7 @@ func TestParseGenerationFormMNFoodClubWeekStartsMonday9AM(t *testing.T) {
 		now, err := time.Parse(time.RFC3339, tt.now)
 		require.NoError(t, err)
 		nowFn = func() time.Time { return now }
-		p, err := ParseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+location.ID, nil), staticLocationLookup{location: location})
+		p, err := parseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+location.ID, nil), staticLocationLookup{location: location})
 		require.NoError(t, err)
 		assert.True(t, now.Equal(p.Date))
 		monday, err := time.Parse(time.DateOnly, tt.monday)
@@ -118,7 +118,7 @@ func TestParseGenerationForm_DefaultDateUsesStoreCoordinates(t *testing.T) {
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=farmersmarket_1", nil)
-	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
+	p, err := parseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T)
 	}
 
 	req := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian&help=Save%20two%20meals", nil)
-	p, err := ParseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
+	p, err := parseGenerationForm(context.Background(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm returned error: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestParseGenerationForm_CampaignInstructionsOnlyAffectsParams(t *testing.T)
 	}
 
 	reqWithoutHelp := httptest.NewRequest("GET", "/recipes?location=loc-123&instructions=make%20it%20vegetarian", nil)
-	pWithoutHelp, err := ParseGenerationForm(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
+	pWithoutHelp, err := parseGenerationForm(context.Background(), reqWithoutHelp, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("ParseGenerationForm without help returned error: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestParseGenerationFormExplicitDateUsesSelectedShoppingDay(t *testing.T) {
 	for _, id := range []string{"70500874", "mnfoodclub_delivery"} {
 		location := &locations.Location{ID: id, Lat: &lat, Lon: &lon}
 		for _, date := range []string{"2026-10-21", "2026-03-08", "2026-11-01"} {
-			p, err := ParseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+id+"&date="+date, nil), staticLocationLookup{location: location})
+			p, err := parseGenerationForm(t.Context(), httptest.NewRequest("GET", "/recipes?location="+id+"&date="+date, nil), staticLocationLookup{location: location})
 			require.NoError(t, err)
 			assert.Equal(t, date, p.Date.Format(time.DateOnly))
 			assert.Equal(t, 0, p.Date.Hour())

@@ -3,14 +3,8 @@ package locations
 import (
 	"context"
 	"fmt"
-	"html/template"
-	"net/http"
 
-	"careme/internal/auth"
 	"careme/internal/locations/geo"
-	"careme/internal/routing"
-	"careme/internal/seasons"
-	"careme/internal/templates"
 
 	"github.com/samber/lo"
 )
@@ -73,29 +67,4 @@ func (mock) RequestStore(ctx context.Context, locationID string) error {
 
 func (mock) RequestedStoreIDs(ctx context.Context) ([]string, error) {
 	return nil, nil
-}
-
-func (m mock) Register(mux routing.Registrar, _ auth.AuthClient) {
-	mux.HandleFunc("/locations", func(w http.ResponseWriter, r *http.Request) {
-		data := struct {
-			Locations       []Location
-			Zip             string
-			FavoriteStore   string
-			ClarityScript   template.HTML
-			GoogleTagScript template.HTML
-			Style           seasons.Style
-			ServerSignedIn  bool
-		}{
-			Locations:       lo.Values(fakes),
-			Zip:             r.URL.Query().Get("zip"),
-			FavoriteStore:   "",
-			ClarityScript:   templates.ClarityScript(r.Context()),
-			GoogleTagScript: templates.GoogleTagScript(),
-			Style:           seasons.GetCurrentStyle(),
-			ServerSignedIn:  false,
-		}
-		if err := templates.Location.Execute(w, data); err != nil {
-			http.Error(w, "template error", http.StatusInternalServerError)
-		}
-	})
 }

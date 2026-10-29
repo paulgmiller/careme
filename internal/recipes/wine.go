@@ -15,7 +15,7 @@ func recipeWineCacheKey(hash string) string {
 	return wineRecommendationsCachePrefix + hash
 }
 
-func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSelection, error) {
+func (rio recipeio) wineFromCache(ctx context.Context, hash string) (*ai.WineSelection, error) {
 	wineReader, err := rio.Cache.Get(ctx, recipeWineCacheKey(hash))
 	if err != nil {
 		return nil, err
@@ -28,11 +28,11 @@ func (rio recipeio) WineFromCache(ctx context.Context, hash string) (*ai.WineSel
 	return &selection, err
 }
 
-func (rio recipeio) WineExists(ctx context.Context, hash string) (bool, error) {
+func (rio recipeio) wineExists(ctx context.Context, hash string) (bool, error) {
 	return rio.Cache.Exists(ctx, recipeWineCacheKey(hash))
 }
 
-func (rio recipeio) SaveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
+func (rio recipeio) saveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
 	if selection == nil {
 		return fmt.Errorf("wine selection is required")
 	}

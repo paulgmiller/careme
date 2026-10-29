@@ -71,17 +71,17 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token cartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
 	// Kroger adds the requested whole-package quantity for each product.
-	var items []CartItem
+	var items []cartItem
 	var accepted []ordertypes.TransferItem
 	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
 	for _, item := range input.Items {
 		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
-		if errors.Is(err, ErrProductUnavailable) {
+		upc, err := a.client.productUPC(ctx, item.ProductID, input.Location.ID)
+		if errors.Is(err, errProductUnavailable) {
 			result.RejectedQuantity = quantity
 			result.RejectionReason = "product_unavailable"
 			transfer.Items = append(transfer.Items, result)
@@ -90,14 +90,14 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 		if err != nil {
 			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
 		}
-		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		items = append(items, cartItem{UPC: upc, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
 	if len(items) == 0 {
 		return transfer, nil
 	}
-	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
+	if err := a.client.add(ctx, token.AccessToken, items); err != nil {
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied

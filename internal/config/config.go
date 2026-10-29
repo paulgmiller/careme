@@ -29,7 +29,7 @@ const (
 
 type Config struct {
 	AI                AIConfig                `json:"ai"`
-	OpenRouter        OpenRouterConfig        `json:"openrouter"`
+	OpenRouter        openRouterConfig        `json:"openrouter"`
 	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
 	Kroger            KrogerConfig            `json:"kroger"`
 	MNFoodClub        MNFoodClubConfig        `json:"mnfoodclub"`
@@ -39,7 +39,7 @@ type Config struct {
 	Albertsons        AlbertsonsConfig        `json:"albertsons"`
 	Publix            PublixConfig            `json:"publix"`
 	HEB               HEBConfig               `json:"heb"`
-	Wegmans           WegmansConfig           `json:"wegmans"`
+	Wegmans           wegmansConfig           `json:"wegmans"`
 	BrightDataProxy   brightdata.ProxyConfig  `json:"brightdata_proxy"`
 	Mocks             MockConfig              `json:"mocks"`
 	Clerk             ClerkConfig             `json:"clerk"`
@@ -60,12 +60,12 @@ type IngredientGradingConfig struct {
 	Model  string `json:"model"`
 }
 
-type OpenRouterConfig struct {
+type openRouterConfig struct {
 	APIKey        string `json:"api_key"`
 	CritiqueModel string `json:"critique_model"`
 }
 
-func (c *OpenRouterConfig) IsEnabled() bool {
+func (c *openRouterConfig) IsEnabled() bool {
 	return strings.TrimSpace(c.APIKey) != ""
 }
 
@@ -94,7 +94,7 @@ type ClerkConfig struct {
 	Domain         string
 }
 
-func (c *ClerkConfig) IsEnabled() bool {
+func (c *ClerkConfig) isEnabled() bool {
 	return c.SecretKey != "" && c.Domain != "" && c.PublishableKey != ""
 }
 
@@ -129,11 +129,6 @@ func (c *AlbertsonsConfig) IsEnabled() bool {
 	return c.Enable
 }
 
-// can we dynamically disable if our key  expires
-func (c *AlbertsonsConfig) HasInventory() bool {
-	return c.SearchSubscriptionKey != ""
-}
-
 type PublixConfig struct {
 	Enable bool `json:"enable"`
 	// Abck   string `json:"abck"`
@@ -151,11 +146,11 @@ func (c *HEBConfig) IsEnabled() bool {
 	return c.Enable
 }
 
-type WegmansConfig struct {
+type wegmansConfig struct {
 	Enable bool `json:"enable"`
 }
 
-func (c *WegmansConfig) IsEnabled() bool {
+func (c *wegmansConfig) IsEnabled() bool {
 	return c.Enable
 }
 
@@ -201,7 +196,7 @@ func Load() (*Config, error) {
 		Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
 		Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
 	}
-	cfg.OpenRouter = OpenRouterConfig{
+	cfg.OpenRouter = openRouterConfig{
 		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
 		CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
 	}
@@ -257,7 +252,7 @@ func LoadOnlyProviders() (*Config, error) {
 		HEB: HEBConfig{
 			Enable: envEnabled("HEB_ENABLE"),
 		},
-		Wegmans: WegmansConfig{
+		Wegmans: wegmansConfig{
 			Enable: envEnabled("WEGMANS_ENABLE"),
 		},
 		BrightDataProxy: brightdata.LoadConfig(),
@@ -290,7 +285,7 @@ func validate(cfg *Config) error {
 		return err
 	}
 
-	if cfg.Clerk.IsEnabled() {
+	if cfg.Clerk.isEnabled() {
 		if err := validateAbsoluteURL("clerk sign-in URL", cfg.Clerk.Signin()); err != nil {
 			return err
 		}
@@ -306,7 +301,7 @@ func validate(cfg *Config) error {
 	if cfg.Mocks.Enable {
 		return nil
 	}
-	if !cfg.Clerk.IsEnabled() {
+	if !cfg.Clerk.isEnabled() {
 		return fmt.Errorf("clerk configuration must be set")
 	}
 

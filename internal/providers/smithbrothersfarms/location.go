@@ -15,23 +15,23 @@ var deliveryBoxes = []struct{ south, north, west, east float64 }{
 	{45.30, 45.80, -122.95, -122.35}, // Greater Portland
 }
 
-const theLocationID = LocationIDPrefix + "delivery"
+const theLocationID = locationIDPrefix + "delivery"
 
-// LocationBackend exposes Smith Brothers Farms home delivery within the approximate area.
-type LocationBackend struct{ identityProvider }
+// locationBackend exposes Smith Brothers Farms home delivery within the approximate area.
+type locationBackend struct{ identityProvider }
 
-func NewLocationBackend() LocationBackend { return LocationBackend{} }
+func NewLocationBackend() locationBackend { return locationBackend{} }
 
 // CachePolicy disables location caching because search coordinates represent
 // the current delivery point rather than a fixed store.
-func (LocationBackend) CachePolicy() (version string, cacheable bool) { return "", false }
+func (locationBackend) CachePolicy() (version string, cacheable bool) { return "", false }
 
-func (b LocationBackend) HasInventory(locationID string) bool {
+func (b locationBackend) HasInventory(locationID string) bool {
 	_, err := b.GetLocationByID(context.Background(), locationID)
 	return err == nil
 }
 
-func (b LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+func (b locationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (b LocationBackend) GetLocationByID(ctx context.Context, locationID string)
 	return deliveryLocation(locationID, coordinates), nil
 }
 
-func (LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+func (locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

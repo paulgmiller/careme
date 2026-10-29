@@ -122,7 +122,7 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	provider := StaplesProvider{client: client}
+	provider := staplesProvider{client: client}
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
@@ -143,7 +143,7 @@ func TestStaplesProvider_FetchPantry_UsesPantrySearchTerms(t *testing.T) {
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
 	require.NoError(t, err)
 
-	got, err := (StaplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
+	got, err := (staplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	for i, term := range PantryCategories() {
@@ -184,7 +184,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	regular := float32(4.99)
 	sale := float32(3.49)
 	categories := []string{"Produce", "Fresh Fruit"}
-	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
+	ingredient := inputIngredientFromKrogerIngredient(ingredient{
 		ProductId:    new(" apple-1 "),
 		AisleNumber:  new(" 12 "),
 		Brand:        new(" Orchard Co "),

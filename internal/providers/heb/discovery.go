@@ -17,7 +17,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-type StorePage struct {
+type storePage struct {
 	URL        string
 	Country    string
 	State      string
@@ -80,19 +80,19 @@ var (
 	addressLineRe     = regexp.MustCompile(`(?i)(\d[0-9a-z .#-]+?)\s+([a-z][a-z .'-]+),\s*([a-z]{2})\s+(\d{5}(?:-\d{4})?)`)
 )
 
-func IsID(locationID string) bool {
+func isID(locationID string) bool {
 	locationID = strings.TrimSpace(locationID)
-	if !strings.HasPrefix(locationID, LocationIDPrefix) {
+	if !strings.HasPrefix(locationID, locationIDPrefix) {
 		return false
 	}
-	return isDigits(strings.TrimPrefix(locationID, LocationIDPrefix))
+	return isDigits(strings.TrimPrefix(locationID, locationIDPrefix))
 }
 
-func FilterStorePages(urls []string) []StorePage {
-	pages := make([]StorePage, 0, len(urls))
+func FilterStorePages(urls []string) []storePage {
+	pages := make([]storePage, 0, len(urls))
 	seen := make(map[string]struct{}, len(urls))
 	for _, rawURL := range urls {
-		page, ok := ParseStorePageURL(rawURL)
+		page, ok := parseStorePageURL(rawURL)
 		if !ok {
 			continue
 		}
@@ -105,7 +105,7 @@ func FilterStorePages(urls []string) []StorePage {
 	return pages
 }
 
-// ParseStorePageURL accepts only HEB store landing pages.
+// parseStorePageURL accepts only HEB store landing pages.
 // Expected path shape is:
 //
 //	/heb-store/US/<state>/<city>/<store-slug>-<store-number>
@@ -116,39 +116,39 @@ func FilterStorePages(urls []string) []StorePage {
 //
 // City pages, category pages, and store paths without the trailing numeric
 // store identifier are rejected.
-func ParseStorePageURL(rawURL string) (StorePage, bool) {
+func parseStorePageURL(rawURL string) (storePage, bool) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	host := strings.TrimSpace(u.Host)
 	if host == "" {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(segments) != 5 {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 	if !strings.EqualFold(segments[0], "heb-store") {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	slug := strings.TrimSpace(segments[4])
 	matches := storePathIDRe.FindStringSubmatch(slug)
 	if len(matches) != 2 {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	country := strings.ToUpper(strings.TrimSpace(segments[1]))
 	state := strings.ToUpper(strings.TrimSpace(segments[2]))
 	city := strings.TrimSpace(segments[3])
 	if country == "" || state == "" || city == "" {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
-	return StorePage{
+	return storePage{
 		URL:        rawURL,
 		Country:    country,
 		State:      state,
@@ -182,11 +182,11 @@ func FetchStoreSummary(ctx context.Context, client *http.Client, pageURL string)
 		return nil, fmt.Errorf("read store page: %w", err)
 	}
 
-	return ExtractStoreSummary(pageURL, body)
+	return extractStoreSummary(pageURL, body)
 }
 
-func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
-	page, ok := ParseStorePageURL(pageURL)
+func extractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
+	page, ok := parseStorePageURL(pageURL)
 	if !ok {
 		return nil, fmt.Errorf("store page URL %q is invalid", pageURL)
 	}
@@ -254,7 +254,7 @@ func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
 	}
 
 	return &StoreSummary{
-		ID:      LocationIDPrefix + fields.StoreID,
+		ID:      locationIDPrefix + fields.StoreID,
 		StoreID: fields.StoreID,
 		Name:    fields.Name,
 		Address: fields.Address,

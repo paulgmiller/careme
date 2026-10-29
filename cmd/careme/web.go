@@ -194,7 +194,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 	campaigns.Register(appRoutes, userStorage, authClient)
-	home{userStorage, locationStorage, authClient}.Register(appRoutes)
+	home{userStorage, locationStorage, authClient}.register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})

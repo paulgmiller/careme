@@ -39,7 +39,7 @@ func TestResolveModel(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("RECIPE_EVAL_MODEL", tc.environment)
-			var settings Settings
+			var settings settings
 			settings.Config.Model = tc.configured
 			assert.Equal(t, tc.want, resolveModel(settings, "production-model"))
 		})

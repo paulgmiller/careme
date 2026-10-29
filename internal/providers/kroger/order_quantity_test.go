@@ -31,10 +31,10 @@ func TestKrogerOrderPackageQuantities(t *testing.T) {
 			a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
 				calls++
 				var payload struct {
-					Items []CartItem `json:"items"`
+					Items []cartItem `json:"items"`
 				}
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-				assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: tc.quantity}}, payload.Items)
+				assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: tc.quantity}}, payload.Items)
 				return cartResponse(http.StatusNoContent, ""), nil
 			})
 			saveShopper(t, a, time.Now().Add(time.Hour))
@@ -62,15 +62,15 @@ func TestKrogerInvalidPackageQuantityDefaultsToOne(t *testing.T) {
 		a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
 			calls++
 			var payload struct {
-				Items []CartItem `json:"items"`
+				Items []cartItem `json:"items"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}}, payload.Items)
+			assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: 1}}, payload.Items)
 			return cartResponse(http.StatusNoContent, ""), nil
 		})
 		input := mustOrderRequest(t)
 		input.Items = []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Buy: &buy}}
-		result, err := a.order(t.Context(), "list", input, CartToken{AccessToken: "shopper"})
+		result, err := a.order(t.Context(), "list", input, cartToken{AccessToken: "shopper"})
 		require.NoError(t, err)
 		assert.Equal(t, 1, calls)
 		assert.Equal(t, ordertypes.TransferApplied, result.Status)

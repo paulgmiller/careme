@@ -17,17 +17,17 @@ import (
 	"careme/internal/parallelism"
 )
 
-type Embedder interface {
+type embedder interface {
 	EmbedIngredients(context.Context, []string) ([]ai.IngredientEmbedding, error)
 	CacheVersion() string
 }
 
 type Service struct {
 	cache    cache.Cache
-	embedder Embedder
+	embedder embedder
 }
 
-func New(c cache.Cache, embedder Embedder) *Service {
+func New(c cache.Cache, embedder embedder) *Service {
 	return &Service{cache: c, embedder: embedder}
 }
 

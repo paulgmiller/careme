@@ -21,7 +21,7 @@ import (
 const (
 	brightDataBrowserWSEnv     = "BRIGHTDATA_BROWSER_WS_ENDPOINT"
 	defaultBuildIDDiscoverWait = 5 * time.Second
-	BuildIDLatestCacheKey      = "heb/build_id/latest.json"
+	buildIDLatestCacheKey      = "heb/build_id/latest.json"
 )
 
 type browserHTMLClient interface {
@@ -31,7 +31,7 @@ type browserHTMLClient interface {
 // interface?
 type loadBuildID func(ctx context.Context, oldbuildId string) (string, error)
 
-type BuildIDRecord struct {
+type buildIDRecord struct {
 	BuildID   string    `json:"build_id"`
 	FetchedAt time.Time `json:"fetched_at"`
 }
@@ -73,7 +73,7 @@ func newBrightDataBuildIDLoaderFromEnv() (loadBuildID, error) {
 }
 
 func fetchBuildIDFromHomePage(ctx context.Context, browser browserHTMLClient, wait time.Duration) (string, error) {
-	body, err := browser.HTML(ctx, DefaultBaseURL+"/", brightdata.BrowserOptions{
+	body, err := browser.HTML(ctx, defaultBaseURL+"/", brightdata.BrowserOptions{
 		WaitAfterNavigation: wait,
 	})
 	if err != nil {
@@ -96,7 +96,7 @@ func saveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error
 		return errors.New("build id is required")
 	}
 
-	record := BuildIDRecord{
+	record := buildIDRecord{
 		BuildID:   buildID,
 		FetchedAt: time.Now().UTC(),
 	}
@@ -104,7 +104,7 @@ func saveLatestBuildID(ctx context.Context, c cache.Cache, buildID string) error
 	if err != nil {
 		return fmt.Errorf("marshal heb build id record: %w", err)
 	}
-	if err := c.Put(ctx, BuildIDLatestCacheKey, string(body), cache.Unconditional()); err != nil {
+	if err := c.Put(ctx, buildIDLatestCacheKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write heb build id cache: %w", err)
 	}
 	return nil
@@ -115,7 +115,7 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 		return "", errors.New("cache is required")
 	}
 
-	reader, err := c.Get(ctx, BuildIDLatestCacheKey)
+	reader, err := c.Get(ctx, buildIDLatestCacheKey)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
 			return "", nil
@@ -126,7 +126,7 @@ func loadLatestBuildID(ctx context.Context, c cache.Cache) (string, error) {
 		_ = reader.Close()
 	}()
 
-	var record BuildIDRecord
+	var record buildIDRecord
 	if err := json.NewDecoder(reader).Decode(&record); err != nil {
 		return "", fmt.Errorf("decode heb build id record: %w", err)
 	}

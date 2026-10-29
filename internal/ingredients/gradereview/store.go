@@ -21,24 +21,24 @@ const reviewCachePrefix = "ingredient_grade_reviews/"
 // the grading manager or its model-specific cache version.
 const catalogReviewVersion = "catalog-v1"
 
-type Verdict string
+type verdict string
 
 const (
-	VerdictTooHigh Verdict = "too_high"
-	VerdictCorrect Verdict = "correct"
-	VerdictTooLow  Verdict = "too_low"
+	verdictTooHigh verdict = "too_high"
+	verdictCorrect verdict = "correct"
+	verdictTooLow  verdict = "too_low"
 )
 
-var ErrInvalidVerdict = errors.New("invalid ingredient grade verdict")
+var errInvalidVerdict = errors.New("invalid ingredient grade verdict")
 
-type Review struct {
+type reviewRecord struct {
 	GradeKey   string             `json:"grade_key"`
 	Ingredient ai.InputIngredient `json:"ingredient"`
-	Verdict    Verdict            `json:"verdict"`
+	Verdict    verdict            `json:"verdict"`
 	ReviewedAt time.Time          `json:"reviewed_at"`
 }
 
-type Candidate struct {
+type CatalogCandidate struct {
 	GradeKey   string
 	Ingredient ai.InputIngredient
 }
@@ -65,7 +65,7 @@ func (e *catalogEntry) remove(i int) {
 	}
 }
 
-type Store struct {
+type store struct {
 	mu          sync.Mutex
 	cache       cache.Cache
 	entries     map[string]*catalogEntry
@@ -74,14 +74,14 @@ type Store struct {
 	now         func() time.Time
 }
 
-func NewStore(c cache.Cache, locations locationLookup, ingredients ingredientCache) *Store {
+func NewStore(c cache.Cache, locations locationLookup, ingredients ingredientCache) *store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
-	return &Store{cache: c, locations: locations, ingredients: ingredients, now: time.Now, entries: make(map[string]*catalogEntry)}
+	return &store{cache: c, locations: locations, ingredients: ingredients, now: time.Now, entries: make(map[string]*catalogEntry)}
 }
 
-func (s *Store) saveReview(ctx context.Context, review Review) error {
+func (s *store) saveReview(ctx context.Context, review reviewRecord) error {
 	body, err := json.Marshal(review)
 	if err != nil {
 		return fmt.Errorf("encode ingredient grade review: %w", err)
@@ -92,9 +92,9 @@ func (s *Store) saveReview(ctx context.Context, review Review) error {
 	return nil
 }
 
-func (v Verdict) Valid() bool {
+func (v verdict) valid() bool {
 	switch v {
-	case VerdictTooHigh, VerdictCorrect, VerdictTooLow:
+	case verdictTooHigh, verdictCorrect, verdictTooLow:
 		return true
 	default:
 		return false
@@ -103,7 +103,7 @@ func (v Verdict) Valid() bool {
 
 // Next removes previously reviewed ingredients from the chosen store and selects
 // its next unreviewed ingredient.
-func (s *Store) Next(ctx context.Context, locationID string) (*locations.Location, *Candidate, error) {
+func (s *store) Next(ctx context.Context, locationID string) (*locations.Location, *CatalogCandidate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, err := s.loadCatalog(ctx, locationID)
@@ -122,17 +122,17 @@ func (s *Store) Next(ctx context.Context, locationID string) (*locations.Locatio
 			return nil, nil, fmt.Errorf("check ingredient grade review %q: %w", key, err)
 		}
 		if !reviewed {
-			return entry.location, &Candidate{GradeKey: key, Ingredient: ingredient}, nil
+			return entry.location, &CatalogCandidate{GradeKey: key, Ingredient: ingredient}, nil
 		}
 		entry.remove(0)
 	}
-	return entry.location, &Candidate{}, nil
+	return entry.location, &CatalogCandidate{}, nil
 }
 
-// Save validates membership and persists the server-side snapshot.
-func (s *Store) Save(ctx context.Context, locationID, gradeKey string, verdict Verdict, reviewedAt time.Time) error {
-	if !verdict.Valid() {
-		return ErrInvalidVerdict
+// save validates membership and persists the server-side snapshot.
+func (s *store) save(ctx context.Context, locationID, gradeKey string, verdict verdict, reviewedAt time.Time) error {
+	if !verdict.valid() {
+		return errInvalidVerdict
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -145,7 +145,7 @@ func (s *Store) Save(ctx context.Context, locationID, gradeKey string, verdict V
 			continue
 		}
 		ingredient.Embedding = nil
-		err := s.saveReview(ctx, Review{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC()})
+		err := s.saveReview(ctx, reviewRecord{GradeKey: gradeKey, Ingredient: ingredient, Verdict: verdict, ReviewedAt: reviewedAt.UTC()})
 		if err == nil || errors.Is(err, cache.ErrAlreadyExists) {
 			entry.remove(i)
 		}
@@ -159,7 +159,7 @@ func catalogGradeKey(ingredient ai.InputIngredient) string {
 }
 
 // loadCatalog is called with mu held. Catalogs expire 30 minutes after loading.
-func (s *Store) loadCatalog(ctx context.Context, id string) (*catalogEntry, error) {
+func (s *store) loadCatalog(ctx context.Context, id string) (*catalogEntry, error) {
 	if entry := s.entries[id]; entry != nil {
 		return entry, nil
 	}
