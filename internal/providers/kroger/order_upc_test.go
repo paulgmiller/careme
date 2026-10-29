@@ -39,7 +39,7 @@ func TestUPCResolutionConcurrentCachedAndOrdered(t *testing.T) {
 		return cartResponse(200, `{"data":{"items":[{"itemId":"`+upc+`","inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}}]}}`), nil
 	})}
 	request := mustOrderRequest(t)
-	request.Items = []ai.ShoppingItem{{ProductID: "first"}, {ProductID: "second"}, {ProductID: "first"}, {}}
+	request.Items = []ai.ShoppingItem{{ProductID: "first"}, {ProductID: "second"}, {ProductID: "first"}}
 	type outcome struct {
 		items map[string]*upcResult
 		err   error
@@ -109,4 +109,25 @@ func TestUPCResolutionMarksUnavailableProduct(t *testing.T) {
 	assert.Empty(t, results["missing"].upc)
 	assert.False(t, results["food"].unavailable)
 	assert.Equal(t, "food-upc", results["food"].upc)
+}
+
+func TestUPCResolutionRejectsMissingProductIDBeforeLookups(t *testing.T) {
+	for _, id := range []string{"", "   "} {
+		t.Run("id="+id, func(t *testing.T) {
+			a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+				t.Error("unexpected cart write")
+				return cartResponse(500, ""), nil
+			})
+			testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+				t.Error("invalid input must not perform lookups")
+				return cartResponse(500, ""), nil
+			})}
+			request := mustOrderRequest(t)
+			request.Items = []ai.ShoppingItem{{ProductID: "food"}, {ProductID: id, Name: "Milk"}}
+			results, err := a.resolveUPCs(t.Context(), request)
+			require.ErrorContains(t, err, "missing product ID")
+			assert.ErrorContains(t, err, "Milk")
+			assert.Nil(t, results)
+		})
+	}
 }

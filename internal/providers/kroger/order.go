@@ -117,8 +117,8 @@ func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.Trans
 	results := make(map[string]*upcResult)
 	var productIDs []string
 	for _, item := range request.Items {
-		if item.ProductID == "" {
-			continue
+		if strings.TrimSpace(item.ProductID) == "" {
+			return nil, fmt.Errorf("resolve Kroger order product %q: missing product ID", item.Name)
 		}
 		if _, exists := results[item.ProductID]; exists {
 			continue
