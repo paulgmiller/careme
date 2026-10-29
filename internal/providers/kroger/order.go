@@ -12,6 +12,7 @@ import (
 
 	"careme/internal/cache"
 	ordertypes "careme/internal/orders/types"
+	"careme/internal/parallelism"
 )
 
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
@@ -76,21 +77,21 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	// Kroger adds the requested whole-package quantity for each product.
 	var items []CartItem
 	var accepted []ordertypes.TransferItem
-	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
+	resolved, err := a.resolveUPCs(ctx, input)
+	if err != nil {
+		return transfer, err
+	}
 	for _, item := range input.Items {
 		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
-		if errors.Is(err, ErrProductUnavailable) {
+		lookup := resolved[item.ProductID]
+		if lookup.unavailable {
 			result.RejectedQuantity = quantity
 			result.RejectionReason = "product_unavailable"
 			transfer.Items = append(transfer.Items, result)
 			continue
 		}
-		if err != nil {
-			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
-		}
-		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		items = append(items, CartItem{UPC: lookup.upc, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
@@ -103,4 +104,44 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	transfer.Status = ordertypes.TransferApplied
 	transfer.Items = append(accepted, transfer.Items...)
 	return transfer, nil
+}
+
+type upcResult struct {
+	upc         string
+	unavailable bool
+}
+
+func (a *OrderHandler) resolveUPCs(ctx context.Context, request ordertypes.TransferRequest) (map[string]*upcResult, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(map[string]*upcResult)
+	var productIDs []string
+	for _, item := range request.Items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			return nil, fmt.Errorf("resolve Kroger order product %q: missing product ID", item.Name)
+		}
+		if _, exists := results[item.ProductID]; exists {
+			continue
+		}
+		results[item.ProductID] = nil
+		productIDs = append(productIDs, item.ProductID)
+	}
+	resolved, err := parallelism.MapWithErrors(productIDs, func(productID string) (*upcResult, error) {
+		upc, err := a.client.ProductUPC(ctx, productID, request.Location.ID)
+		if errors.Is(err, ErrProductUnavailable) {
+			return &upcResult{unavailable: true}, nil
+		}
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("resolve Kroger order product %q: %w", productID, err)
+		}
+		return &upcResult{upc: upc}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, productID := range productIDs {
+		results[productID] = resolved[i]
+	}
+	return results, nil
 }

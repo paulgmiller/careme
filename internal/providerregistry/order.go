@@ -64,7 +64,7 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 		CatalogToken: kroger.NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient),
 	}
 	handler, err := kroger.NewOrderHandler(kroger.OrderOptions{
-		Cache: options.Cache, Client: client, TokenKey: key,
+		Cache: options.Cache, Client: kroger.NewCachedOrderClient(client, options.Cache), TokenKey: key,
 		Origin: cfg.ResolvedPublicOrigin(), Auth: options.Auth,
 	})
 	if err != nil {

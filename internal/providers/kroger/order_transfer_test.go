@@ -119,7 +119,7 @@ func TestCartTransferMissingProductIDRejectsWholeTransfer(t *testing.T) {
 			return nil, nil
 		})
 		saveShopper(t, a, time.Now().Add(time.Hour))
-		a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+		testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 			t.Fatal("invalid transfer must not contact Kroger")
 			return nil, nil
 		})}
@@ -148,15 +148,15 @@ func TestCartTransferFailedLookupIsNotRetried(t *testing.T) {
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
-	client := a.client.HTTPClient
-	a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+	client := testCartClient(a).HTTPClient
+	testCartClient(a).HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 		return cartResponse(http.StatusServiceUnavailable, ""), nil
 	})}
 	mux := orderMux(a)
 	failure := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, ordertypes.TransferFailed, failure.Status)
 	assert.Zero(t, calls)
-	a.client.HTTPClient = client
+	testCartClient(a).HTTPClient = client
 	completed := transferResponse(t, a, postOrder(mux, orderForm()))
 	assert.Equal(t, failure.TransferID, completed.TransferID)
 	assert.Equal(t, failure, completed)

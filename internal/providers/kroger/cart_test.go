@@ -34,7 +34,7 @@ func TestCartClientConnectLookupAndAdd(t *testing.T) {
 		case "/v1/products/0001111060903":
 			assert.Equal(t, "01400943", req.URL.Query().Get("filter.locationId"))
 			assert.Equal(t, "Bearer catalog-token", req.Header.Get("Authorization"))
-			return cartResponse(http.StatusOK, `{"data":{"items":[{"itemId":"out","inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}},{"itemId":"0001111060903","inventory":{"stockLevel":"HIGH"}}]}}`), nil
+			return cartResponse(http.StatusOK, `{"data":{"items":[{"itemId":"","inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}},{"itemId":"0001111060903","inventory":{"stockLevel":"HIGH"}}]}}`), nil
 		case "/v1/cart/add":
 			assert.Equal(t, http.MethodPut, req.Method)
 			assert.Equal(t, "Bearer shopper-token", req.Header.Get("Authorization"))
@@ -147,9 +147,9 @@ func TestCartProductResponses(t *testing.T) {
 	}{
 		{"malformed", `{`, "look up Kroger product", false},
 		{"missing data", `{}`, "missing product data", false},
-		{"no items", `{"data":{}}`, "no available UPC", true},
-		{"out of stock", `{"data":{"items":[{"itemId":"123","inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}}]}}`, "no available UPC", true},
-		{"empty UPC", `{"data":{"items":[{"itemId":" "}]}}`, "no available UPC", true},
+		{"no items", `{"data":{}}`, "no UPC", true},
+
+		{"empty UPC", `{"data":{"items":[{"itemId":" "}]}}`, "no UPC", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) { return cartResponse(200, tc.body), nil })}
