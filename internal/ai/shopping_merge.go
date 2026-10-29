@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/responses"
@@ -19,6 +20,18 @@ type ShoppingItem struct {
 	Name      string   `json:"name"`
 	Needed    string   `json:"needed"`
 	Buy       *float64 `json:"buy" jsonschema:"anyof_type=number;null"`
+}
+
+// PackageQuantity rounds Buy up to whole packages and uses one for absent or invalid values.
+func (s ShoppingItem) PackageQuantity() int {
+	if s.Buy == nil {
+		return 1
+	}
+	if math.IsNaN(*s.Buy) || *s.Buy <= 0 || *s.Buy > math.MaxInt32 {
+		slog.Error("invalid shopping item package quantity; using one", "product_id", s.ProductID, "item_name", s.Name, "buy", fmt.Sprint(*s.Buy))
+		return 1
+	}
+	return int(math.Ceil(*s.Buy))
 }
 
 type shoppingIngredientsResponse struct {

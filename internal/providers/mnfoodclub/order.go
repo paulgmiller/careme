@@ -181,14 +181,7 @@ func orderItems(input ordertypes.TransferRequest) (handoffRequest, error) {
 	request := handoffRequest{Items: []requestedItem{}}
 	indices := make(map[string]int)
 	for _, item := range input.Items {
-		quantity := 1
-		if item.Buy != nil {
-			// The API accepts whole packages; never send recipe measurements or fractions.
-			if math.IsNaN(*item.Buy) || *item.Buy <= 0 || *item.Buy > math.MaxInt32 {
-				return handoffRequest{}, fmt.Errorf("invalid MN Food Club package quantity for %q", item.Name)
-			}
-			quantity = int(math.Ceil(*item.Buy))
-		}
+		quantity := item.PackageQuantity()
 		if index, exists := indices[item.ProductID]; exists {
 			if request.Items[index].VariantID != item.VariantID {
 				return handoffRequest{}, fmt.Errorf("conflicting MN Food Club variants for product %q", item.ProductID)

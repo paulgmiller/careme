@@ -200,9 +200,11 @@ func TestOrderItemsUsePackagesAndUniqueProducts(t *testing.T) {
 	input.Items[len(input.Items)-1].VariantID = "different-variant"
 	_, err = orderItems(input)
 	require.ErrorContains(t, err, "conflicting")
+	input = orderInput()
 	input.Items[0].Buy = new(float64(-1))
-	_, err = orderItems(input)
-	require.Error(t, err)
+	request, err = orderItems(input)
+	require.NoError(t, err)
+	assert.Equal(t, 1, request.Items[0].Quantity)
 }
 
 func TestOrderMissingProductIDRejectsWholeTransfer(t *testing.T) {

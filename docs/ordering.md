@@ -156,8 +156,10 @@ for future identity hints.
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
 of registering real ordering providers. No Kroger credentials, cart-token key,
 or OAuth callback registration are needed. Generate and finalize a shopping
-list, then submit “Add to mock cart”. The provider accepts all displayed items,
-saves a shared `Transfer`, and redirects back to the shopping list. “Review cart”
+list, then submit “Add to mock cart”. The provider accepts all displayed items
+using `buy` rounded up to whole packages, defaulting to one when absent. Invalid
+quantities are logged and use one package in every order provider. It saves a shared
+`Transfer` and redirects back to the shopping list. “Review cart”
 opens the local `/mock/order-transfers/<id>` endpoint, which displays the saved
 result as JSON. Repeated submissions reuse the result without adding again.
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,6 +14,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestShoppingItemPackageQuantity(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		buy  *float64
+		want int
+	}{
+		{name: "default", want: 1},
+		{name: "whole packages", buy: new(float64(3)), want: 3},
+		{name: "fraction of a package", buy: new(float64(0.5)), want: 1},
+		{name: "round up", buy: new(float64(2.2)), want: 3},
+		{name: "maximum", buy: new(float64(math.MaxInt32)), want: math.MaxInt32},
+		{name: "round up to maximum", buy: new(float64(math.MaxInt32) - 0.5), want: math.MaxInt32},
+		{name: "zero", buy: new(float64(0)), want: 1},
+		{name: "negative", buy: new(float64(-1)), want: 1},
+		{name: "not a number", buy: new(math.NaN()), want: 1},
+		{name: "positive infinity", buy: new(math.Inf(1)), want: 1},
+		{name: "negative infinity", buy: new(math.Inf(-1)), want: 1},
+		{name: "too large", buy: new(float64(math.MaxInt32) + 0.5), want: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			quantity := (ShoppingItem{Name: "Milk", Buy: tc.buy}).PackageQuantity()
+			assert.Equal(t, tc.want, quantity)
+		})
+	}
+}
 
 func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 	ingredients := []Ingredient{{ProductID: "pork", Name: "Ground pork", Quantity: "8 oz"}, {ProductID: "pork", Name: "Ground pork", Quantity: "16 oz"}, {ProductID: "garlic", Name: "Garlic", Quantity: "3 cloves"}}

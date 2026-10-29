@@ -56,16 +56,24 @@ func TestKrogerOrderPackageQuantities(t *testing.T) {
 	}
 }
 
-func TestKrogerInvalidPackageQuantityDoesNotWriteCart(t *testing.T) {
+func TestKrogerInvalidPackageQuantityDefaultsToOne(t *testing.T) {
 	for _, buy := range []float64{0, -1, math.NaN(), math.Inf(1), float64(math.MaxInt32) + 1} {
-		a := orderFixture(t, func(*http.Request) (*http.Response, error) {
-			t.Fatal("invalid quantity must not write the cart")
-			return nil, nil
+		calls := 0
+		a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
+			calls++
+			var payload struct {
+				Items []CartItem `json:"items"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}}, payload.Items)
+			return cartResponse(http.StatusNoContent, ""), nil
 		})
 		input := mustOrderRequest(t)
 		input.Items = []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Buy: &buy}}
 		result, err := a.order(t.Context(), "list", input, CartToken{AccessToken: "shopper"})
-		require.ErrorContains(t, err, "invalid Kroger package quantity")
-		assert.Equal(t, ordertypes.TransferFailed, result.Status)
+		require.NoError(t, err)
+		assert.Equal(t, 1, calls)
+		assert.Equal(t, ordertypes.TransferApplied, result.Status)
+		assert.Equal(t, []ordertypes.TransferItem{{ProductID: "food", Name: "Milk", AcceptedQuantity: 1}}, result.Items)
 	}
 }

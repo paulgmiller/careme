@@ -104,7 +104,8 @@ func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 		// The mock accepts every shopping item without external product matching.
 		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id)}
 		for _, item := range input.Items {
-			transfer.Items = append(transfer.Items, ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, AcceptedQuantity: 1})
+			quantity := item.PackageQuantity()
+			transfer.Items = append(transfer.Items, ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, AcceptedQuantity: quantity})
 		}
 		body, err := json.Marshal(transfer)
 		if err != nil {

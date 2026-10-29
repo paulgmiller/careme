@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -79,13 +78,7 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	var accepted []ordertypes.TransferItem
 	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
 	for _, item := range input.Items {
-		quantity := 1
-		if item.Buy != nil {
-			if math.IsNaN(*item.Buy) || *item.Buy <= 0 || *item.Buy > math.MaxInt32 {
-				return transfer, fmt.Errorf("invalid Kroger package quantity for %q", item.Name)
-			}
-			quantity = int(math.Ceil(*item.Buy))
-		}
+		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, RejectedQuantity: quantity}
 		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
 		if errors.Is(err, ErrProductUnavailable) {
