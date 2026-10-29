@@ -55,6 +55,9 @@ or separate connection GET routes. Reloading the shopping list reads the saved
 handoff to choose the form, cart link, or failure label. Reposting consults the
 saved transfer without resubmitting products.
 
+Kroger rejects the entire form with HTTP 400 if any product ID is empty, before
+saving a transfer or contacting Kroger.
+
 Kroger sends the requested `buy` quantity for each product, rounding
 up to whole packages and defaulting to one when `buy` is absent. Successful writes record
 accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
@@ -116,15 +119,16 @@ storefront-brand hints are currently omitted.
 Each product is sent once. Package counts come from `buy`, rounded up to whole
 packages; a missing count defaults to one. Duplicate product quantities are
 combined. Recipe measurements such as “2 cups” are never converted to package
-counts. Items without a product ID are recorded as local rejections and not sent. If no
-products can be sent, save a failed transfer without calling the partner.
+counts. Every item must have a nonempty product ID. A request containing an
+empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
+contacting the partner. No items are silently omitted.
 The selected catalog variant is included when available in the finalized
 shopping snapshot. Older snapshots and items without a selected variant omit it,
 using the partner’s documented default variant selection.
 
 An `applied` response saves the shared transfer result and returns the browser
 to the shopping list. The shared result contains each product’s accepted and
-rejected package quantities and rejection reason, with local rejections appended.
+rejected package quantities and rejection reason directly from the partner.
 Partial and all-rejected responses remain applied and retain the supplied cart
 link. The partner’s product IDs, totals, statuses, and cart URLs must be valid;
 incomplete results fail the transfer instead of silently omitting products.
