@@ -7,9 +7,10 @@ a saved cart link, or a failure label,
 using a provider lookup during server rendering. It never polls from the browser.
 
 This browser contract differs from the [MN Food Club proposal](mnfoodclub-ordering.openapi.yaml),
-which describes a server-to-server JSON API. A future Food Club provider would
-receive Careme's form, call that upstream API, and redirect the browser to its
-returned cart or account-connection URL. Upstream states stay inside the adapter.
+which describes a server-to-server JSON API. The Food Club adapter receives
+Careme’s form and calls that upstream API. Applied transfers return to the
+shopping list; unresolved customers navigate to the returned login handoff.
+Upstream states stay inside the adapter.
 
 ## Browser form
 
@@ -17,6 +18,8 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
 
 - `transfer_request`: the complete JSON-serialized `orders/types.TransferRequest`,
   containing the displayed `items`, source `location`, and local `return_url`.
+  Each shopping item includes its optional `variant_id` from the saved catalog
+  snapshot.
 - `idempotency_key`: identifies one intended addition for this shopper and
   destination, normally the finalized shopping-list hash.
   The finalized key identifies the items and location; repeated posts reuse the
@@ -26,8 +29,9 @@ returned cart or account-connection URL. Upstream states stay inside the adapter
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
 copy. The template uses a native form with `hx-boost="false"`. There is no HTMX
 transfer request, status URL, polling, JSON response, or connect-account control.
-A native form cannot set a custom header; an adapter calling Food Club would
-forward the form's key in the upstream `Idempotency-Key` header.
+A native form cannot set a custom header. The Food Club adapter derives its
+upstream `Idempotency-Key` from the authenticated Careme user and form key, since
+Food Club scopes keys across the whole integration rather than by shopper.
 
 The authenticated shopper comes from the verified Careme session, never from
 submitted JSON. A shopper whose session has expired is redirected to sign in,
@@ -51,8 +55,12 @@ or separate connection GET routes. Reloading the shopping list reads the saved
 handoff to choose the form, cart link, or failure label. Reposting consults the
 saved transfer without resubmitting products.
 
-Kroger sends one package per unique matched UPC. Unmatched items are counted in
-the saved result; the shopper reviews amounts and checkout in Kroger's cart.
+Kroger rejects the entire form with HTTP 400 if any product ID is empty, before
+saving a transfer or contacting Kroger.
+
+Kroger sends the requested `buy` quantity for each product, rounding
+up to whole packages and defaulting to one when `buy` is absent. Successful writes record
+accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
@@ -83,21 +91,76 @@ A failed final save leaves the record pending. This is not a guarantee of
 at-most-once cart writes across concurrent requests.
 
 The typed `TransferStatus` values are `pending`, `failed`, and `applied`.
+Pending covers an in-flight attempt or a saved partner handoff awaiting login.
 There is no separate provider code or custom JSON decoding.
 
 The shared `TransferRequest` and `Transfer` types describe the submitted request
-and stored result inside the handler; they are not a browser JSON API. Transfer IDs use the
-idempotency key directly, scoped to the authenticated user and destination.
+and stored result inside the handler; they are not a browser JSON API. Kroger
+and mock transfer IDs use the idempotency key directly; Food Club retains its
+partner-issued transfer ID. Local cache keys are scoped to the Careme user and
+form idempotency key.
 Records have no automatic expiry; OAuth state expires logically after ten minutes.
 See [cache layout](cache-layout.md) for storage details.
+
+## MN Food Club partner API
+
+Set both `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` to enable
+`POST /mnfoodclub/order-transfers` for MN Food Club, TC Farm, and Nelson Grass
+Farm delivery locations. They are separate from BigCommerce catalog credentials.
+The API remains a proposal; no production host or token is assumed. HTTPS is
+required except for HTTP localhost endpoints used in tests.
+
+The adapter sends JSON to `/v1/cart-transfers` with the partner bearer token and
+an integration-wide idempotency key derived from the Careme user ID and list key.
+Only the authenticated shopper’s account email is sent as an identity hint.
+Careme IDs are never passed as Food Club customer IDs. Customer-ID, ZIP, and
+storefront-brand hints are currently omitted.
+
+Each product is sent once. Package counts come from `buy`, rounded up to whole
+packages; a missing count defaults to one. The shopping list already combines
+product IDs and quantities, so the adapter forwards them directly. Recipe
+measurements such as “2 cups” are never converted to package
+counts. Every item must have a nonempty product ID. A request containing an
+empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
+contacting the partner. No items are silently omitted.
+The selected catalog variant is included when available in the finalized
+shopping snapshot. Older snapshots and items without a selected variant omit it,
+using the partner’s documented default variant selection.
+
+An `applied` response saves the shared transfer result and returns the browser
+to the shopping list. The shared result contains each product’s accepted and
+rejected package quantities and rejection reason directly from the partner.
+Partial and all-rejected responses remain applied and retain the supplied cart
+link. The partner’s product IDs, totals, statuses, and cart URLs must be valid;
+incomplete results fail the transfer instead of silently omitting products.
+
+The partner’s `pending_login` response is converted to the shared `pending`
+status inside the Food Club adapter and immediately redirects the browser to
+the partner’s opaque handoff URL. Loading the shopping list later performs one
+server-side GET for the saved partner transfer ID.
+Once applied, the result and cart URL are updated and no further GET is needed.
+While login remains pending, Review cart opens the saved partner handoff URL.
+Lookup errors, including HTTP 404, fail the page; they never create a new transfer.
+There is no browser polling or callback route.
+
+Transfers are reserved before the POST and never automatically retried.
+Operational errors or invalid responses are saved as failed, and the browser
+returns to the shopping list’s failure label. Item results record only confirmed
+acceptance or rejection; an API failure does not invent product rejections. A failed save returns HTTP 500.
+Repeated native posts reuse the saved outcome; pending transfers redirect to
+the handoff again. No request wrapper or customer-ID mapping is persisted. The partner response
+embeds the shared `Transfer` plus `user_id`; TODO: save that customer-ID mapping
+for future identity hints.
 
 ## Local development and E2E tests
 
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
 of registering real ordering providers. No Kroger credentials, cart-token key,
 or OAuth callback registration are needed. Generate and finalize a shopping
-list, then submit “Add to mock cart”. The provider accepts all displayed items,
-saves a shared `Transfer`, and redirects back to the shopping list. “Review cart”
+list, then submit “Add to mock cart”. The provider accepts all displayed items
+using `buy` rounded up to whole packages, defaulting to one when absent. Invalid
+quantities are logged and use one package in every order provider. It saves a shared
+`Transfer` and redirects back to the shopping list. “Review cart”
 opens the local `/mock/order-transfers/<id>` endpoint, which displays the saved
 result as JSON. Repeated submissions reuse the result without adding again.
 

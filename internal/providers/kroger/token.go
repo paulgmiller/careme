@@ -7,21 +7,10 @@ import (
 	"net/http"
 
 	"careme/internal/providers/kroger/oauth"
-
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
-// singleAttemptClient keeps one-time grants and cart additions from being replayed.
-func singleAttemptClient(base *http.Client) *http.Client {
-	client := withRetries(base)
-	retry := client.Transport.(*retryablehttp.RoundTripper).Client
-	retry.RetryMax = 0
-	retry.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	return client
-}
-
 func requestToken(ctx context.Context, httpClient *http.Client, clientID, clientSecret string, body oauth.AccessTokenFormdataRequestBody) (*oauth.AuthorizationCodeResponse, error) {
-	client, err := oauth.NewClientWithResponses(krogerAPIOrigin, oauth.WithHTTPClient(singleAttemptClient(httpClient)))
+	client, err := oauth.NewClientWithResponses(krogerAPIOrigin, oauth.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("create Kroger OAuth client: %w", err)
 	}

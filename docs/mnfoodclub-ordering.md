@@ -2,9 +2,10 @@
 
 This is a proposed contract for partner review, not a deployed partner endpoint. The
 [OpenAPI document](mnfoodclub-ordering.openapi.yaml) is the machine-readable
-handoff for MN Food Club and the basis for a later Careme client. A separate
+handoff for MN Food Club and the contract used by the opt-in Careme adapter. A separate
 [mock API and test-site walkthrough](mnfoodclub-mock.md) demonstrates the flow
-with fictional data; production Careme ordering is not enabled.
+with fictional data. The adapter is disabled until its dedicated partner endpoint
+and token are configured; this does not imply that the partner API is deployed.
 
 ## Request and customer matching
 
@@ -45,9 +46,9 @@ with the duplicate-product rule.
 Careme selects the purchasable catalog variant with the highest inventory level,
 keeping the first eligible variant in catalog order on ties. Its ID is saved as
 `variant_id` on the cached input ingredient, alongside the parent product `id`
-and the selected variant's prices. A later cart-transfer client can look up the
-shopping item's product ID in that saved catalog and send both `product_id` and
-`variant_id`. Older cached catalogs lack `variant_id` until refreshed.
+and the selected variant's prices. Careme preserves the variant in the finalized
+shopping snapshot and sends it as `variant_id` with `product_id`. Older catalog
+and shopping snapshots omit `variant_id` until refreshed or rebuilt.
 
 All identity hints are optional. Emails can identify a customer without a prior
 connection. MN Food Club owns matching, including conflicts between a saved ID

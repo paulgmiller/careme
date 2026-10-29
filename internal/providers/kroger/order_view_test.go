@@ -119,7 +119,7 @@ func TestOrderViewForUserReadsSavedTransfer(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			a := newTestOrderHandler(t, &CartClient{})
-			transfer := ordertypes.Transfer{TransferID: "list", Status: ordertypes.TransferStatus(tc.code), CartURL: "https://www.qfc.com/cart", Added: 1}
+			transfer := ordertypes.Transfer{TransferID: "list", Status: ordertypes.TransferStatus(tc.code), CartURL: "https://www.qfc.com/cart", Items: []ordertypes.TransferItem{{AcceptedQuantity: 1}}}
 			if tc.code != "" {
 				require.NoError(t, a.saveJSON(t.Context(), transferKey("viewer", "list"), transfer, cache.Unconditional()))
 			}

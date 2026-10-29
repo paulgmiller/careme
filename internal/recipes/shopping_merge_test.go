@@ -30,9 +30,12 @@ func TestMergedShoppingListCachedByFinalHash(t *testing.T) {
 	merger := &countingShoppingMerger{}
 	s.shoppingMerger = merger
 	ingredients := []ai.Ingredient{{ProductID: "garlic-id", Name: "Garlic", Quantity: "1 cloves"}, {ProductID: "garlic-id", Name: "Garlic", Quantity: "2 cloves"}}
-	err := s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
+	err := s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{{ProductID: "garlic-id", Description: "Garlic", VariantID: "variant-42"}})
 	require.NoError(t, err)
 	first := cachedShoppingItems(t, s, "final-hash")
+	purchases, err := s.cachedShoppingPurchases(t.Context(), "final-hash")
+	require.NoError(t, err)
+	assert.Equal(t, "variant-42", purchases[0].Items[0].VariantID)
 	err = s.mergeAndCacheShoppingList(t.Context(), "final-hash", ingredients, []ai.InputIngredient{})
 	require.NoError(t, err)
 	second := cachedShoppingItems(t, s, "final-hash")

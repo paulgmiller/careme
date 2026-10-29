@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"duplicate","name":"More milk"},{"id":"missing","name":"Eggs"},{"name":"Salt","needed":"1 tsp"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"missing","name":"Eggs"}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {
@@ -120,7 +120,7 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 			Items []CartItem `json:"items"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
+		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
@@ -131,8 +131,11 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	result := postOrder(mux, form)
 	query := transferResponse(t, a, result)
 	assert.Equal(t, ordertypes.TransferApplied, query.Status)
-	assert.Equal(t, 2, query.Added)
-	assert.Equal(t, 2, query.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{ProductID: "food", Name: "Milk", AcceptedQuantity: 2},
+		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
+		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
+	}, query.Items)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
 	assert.Equal(t, ordertypes.TransferApplied, transferResponse(t, a, postOrder(mux, form)).Status)
@@ -192,7 +195,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			query := transferResponse(t, a, result)
 			assert.Equal(t, ordertypes.TransferApplied, query.Status)
 			assert.Equal(t, scenario.cart, query.CartURL)
-			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 1}, {UPC: "wine-upc", Quantity: 1}}, added)
+			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
 			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
 		})
 	}
@@ -300,7 +303,11 @@ func TestKrogerOrderWriteOutcomesBlockRetries(t *testing.T) {
 			} else {
 				assert.Equal(t, ordertypes.TransferStatus(expected), transferResponse(t, a, first).Status)
 			}
-			repeat := transferResponse(t, a, postOrder(mux, orderForm())).Status
+			repeated := transferResponse(t, a, postOrder(mux, orderForm()))
+			for _, item := range repeated.Items {
+				assert.Zero(t, item.AcceptedQuantity, "failed writes must not report confirmed acceptance")
+			}
+			repeat := repeated.Status
 			if scenario == "confirmation failed" {
 				assert.Equal(t, ordertypes.TransferPending, repeat)
 			} else {
@@ -384,7 +391,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				saveShopper(t, a, time.Now().Add(-time.Minute))
 			case "no matches":
 				saveShopper(t, a, time.Now().Add(time.Hour))
-				setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
+				setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 				expected = "failed"
 			case "lookup failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))

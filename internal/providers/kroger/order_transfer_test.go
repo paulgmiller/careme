@@ -38,7 +38,7 @@ func TestCartTransferFormPersistsResultAndRedirectsToList(t *testing.T) {
 	response := postOrder(mux, form)
 	transfer := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Equal(t, 1, transfer.Added)
+	assert.Equal(t, []ordertypes.TransferItem{{ProductID: "food", Name: "Milk", AcceptedQuantity: 1}}, transfer.Items)
 	var saved ordertypes.Transfer
 	require.NoError(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", transfer.TransferID), &saved))
 	assert.Equal(t, transfer, saved, "the record stores the shared result directly")
@@ -83,7 +83,7 @@ func TestCartTransferSaveFailureLeavesPending(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, postOrder(mux, orderForm()).Code)
 	result := savedResult(t, a, "list-hash")
 	assert.Equal(t, ordertypes.TransferPending, result.Status)
-	assert.Zero(t, result.Added)
+	assert.Empty(t, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }
@@ -102,13 +102,34 @@ func TestCartTransferNoMatchesIsSaved(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("no matching products"); return nil, nil })
 	saveShopper(t, a, time.Now().Add(time.Hour))
 	form := orderForm()
-	setOrderField(t, form, "items", json.RawMessage(`[{"name":"Salt"},{"id":"missing","name":"Eggs"}]`))
+	setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 	mux := orderMux(a)
 	result := transferResponse(t, a, postOrder(mux, form))
 	assert.Equal(t, ordertypes.TransferFailed, result.Status)
-	assert.Zero(t, result.Added)
-	assert.Equal(t, 2, result.Unmatched)
+	assert.Equal(t, []ordertypes.TransferItem{
+		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
+	}, result.Items)
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, form)))
+}
+
+func TestCartTransferMissingProductIDRejectsWholeTransfer(t *testing.T) {
+	for _, id := range []string{"", "  "} {
+		a := orderFixture(t, func(*http.Request) (*http.Response, error) {
+			t.Fatal("invalid transfer must not write the cart")
+			return nil, nil
+		})
+		saveShopper(t, a, time.Now().Add(time.Hour))
+		a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
+			t.Fatal("invalid transfer must not contact Kroger")
+			return nil, nil
+		})}
+		form := orderForm()
+		setOrderField(t, form, "items", []ai.ShoppingItem{{ProductID: "food", Name: "Milk"}, {ProductID: id, Name: "Invalid item"}})
+		response := postOrder(orderMux(a), form)
+		assert.Equal(t, http.StatusBadRequest, response.Code)
+		var transfer ordertypes.Transfer
+		assert.ErrorIs(t, a.loadJSON(t.Context(), transferKey("mock-clerk-user-id", "list-hash"), &transfer), cache.ErrNotFound)
+	}
 }
 
 func TestCartTransferReservationFailureDoesNotWrite(t *testing.T) {
@@ -207,7 +228,7 @@ func TestCartTransferFileCacheOAuthAndDuplicateProtection(t *testing.T) {
 	mux.ServeHTTP(response, callback)
 	result := transferResponse(t, a, response)
 	assert.Equal(t, ordertypes.TransferApplied, result.Status)
-	assert.Equal(t, 2, result.Added)
+	assert.Equal(t, ordertypes.TransferItem{ProductID: "food", Name: "Milk", AcceptedQuantity: 2}, result.Items[0])
 	assert.Equal(t, result, transferResponse(t, a, postOrder(mux, orderForm())))
 	assert.Equal(t, 1, calls)
 }
