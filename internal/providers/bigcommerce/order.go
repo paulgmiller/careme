@@ -295,7 +295,15 @@ func OrderView(input ordertypes.OrderViewInput, storeName string) (*ordertypes.O
 		added, addedErr := strconv.Atoi(input.Query.Get("bigcommerce_added"))
 		unmatched, unmatchedErr := strconv.Atoi(input.Query.Get("bigcommerce_unmatched"))
 		if addedErr == nil && unmatchedErr == nil && added >= 0 && unmatched >= 0 {
-			view.Notice = fmt.Sprintf("Sent %d matched products to a cart. %d items were not sent. Review products and amounts before checkout.", added, unmatched)
+			products := "products"
+			if added == 1 {
+				products = "product"
+			}
+			notSent := "items were"
+			if unmatched == 1 {
+				notSent = "item was"
+			}
+			view.Notice = fmt.Sprintf("Sent %d matched %s to a cart. %d %s not sent. Review products and amounts before checkout.", added, products, unmatched, notSent)
 		}
 	}
 	id := input.Query.Get("bigcommerce_transfer")

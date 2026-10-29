@@ -337,6 +337,9 @@ func TestOrderViewAndTemplate(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "/bigcommerce/order", view.ActionURL)
 			assert.Equal(t, "Add to MNFoodClub cart", view.ActionLabel)
+			if tt.code == "complete" {
+				assert.Contains(t, view.Notice, "1 item was not sent")
+			}
 			if tt.want != "" {
 				assert.Contains(t, view.Notice, tt.want)
 			} else {
