@@ -4,12 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
-const LocationIDPrefix = "mnfoodclub_"
+// WeekStartDay anchors weekly cache keys and campaign generation.
+const WeekStartDay = time.Monday
 
 const catalogVersion = "mnfoodclub-bigcommerce-v1"
 
@@ -18,18 +22,25 @@ const wineCategoryID = 178
 
 type identityProvider struct{}
 
-func NewIdentityProvider() identityProvider { return identityProvider{} }
-
-func (identityProvider) IsID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix)
-}
-
-func (identityProvider) Signature() string {
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	date = date.AddDate(0, 0, -int((date.Weekday()-WeekStartDay+7)%7))
 	signatureParts := []string{catalogVersion}
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(signatureParts, "\n"))))
+	// We could generate recipes once and copy them to all three storefront hashes,
+	// but each hash needs its own params object to preserve the store name and ID.
+	return cachekey.NewHash(locationID, date, signature)
+}
+
+func NewIdentityProvider() identityProvider { return identityProvider{} }
+
+func (identityProvider) IsID(locationID string) bool {
+	return locationID == MNFoodClubLocationID ||
+		locationID == TCFarmLocationID ||
+		locationID == NelsonGrassFarmLocationID
 }
 
 type ingredientClient interface {
@@ -37,7 +48,7 @@ type ingredientClient interface {
 }
 
 // StaplesProvider serves the API catalog and static produce shares for every
-// location ID beginning with mnfoodclub_.
+// MN Food Club, TC Farm, and Nelson Grass Farm delivery location.
 type StaplesProvider struct {
 	identityProvider
 	client ingredientClient

@@ -19,7 +19,7 @@ func TestCachedProduceScorerUsesTodayCacheBeforeYesterday(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	c := &testIngredientCache{ingredients: map[string][]ai.InputIngredient{}}
 	loc := testProduceScoreLocation()
-	today := time.Date(2026, time.January, 15, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
+	today := time.Date(2026, time.January, 15, 9, 0, 0, 0, time.FixedZone("test", -5*60*60))
 	yesterday := today.AddDate(0, 0, -1)
 	seedProduceScoreIngredients(t, c, loc, yesterday, repeatGradedIngredients(10, 10))
 	todayIngredients := append(repeatGradedIngredients(10, 11),
@@ -39,7 +39,7 @@ func TestCachedProduceScorerFallsBackToYesterday(t *testing.T) {
 	// Keep sequential: this test changes process-wide state.
 	c := &testIngredientCache{ingredients: map[string][]ai.InputIngredient{}}
 	loc := testProduceScoreLocation()
-	yesterday := time.Date(2026, time.January, 14, 0, 0, 0, 0, time.FixedZone("test", -5*60*60))
+	yesterday := time.Date(2026, time.January, 14, 9, 0, 0, 0, time.FixedZone("test", -5*60*60))
 	yesterdayIngredients := append(repeatGradedIngredients(9, 12), gradedIngredient(5))
 	seedProduceScoreIngredients(t, c, loc, yesterday, yesterdayIngredients)
 	withNow(t, time.Date(2026, time.January, 15, 15, 0, 0, 0, time.UTC))
@@ -123,7 +123,7 @@ func repeatGradedIngredients(score, count int) []ai.InputIngredient {
 
 func seedProduceScoreIngredients(t *testing.T, c *testIngredientCache, loc *locations.Location, date time.Time, ingredients []ai.InputIngredient) {
 	t.Helper()
-	c.ingredients[cachekey.ForStore(loc.ID, date, cachekey.StaplesSignature(loc.ID))] = ingredients
+	c.ingredients[cachekey.ForStore(loc.ID, date)] = ingredients
 }
 
 func withNow(t *testing.T, now time.Time) {

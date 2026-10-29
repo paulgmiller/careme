@@ -17,7 +17,7 @@
               </h1>
               <p class="mt-2 text-ink-600">
                 Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-                <span class="text-sm text-ink-500">({{.Location.Address}})</span>
+                <span class="text-sm text-ink-500">{{template "location_details" .Location}}</span>
               </p>
             </div>
             {{template "account_widget" .}}
@@ -43,7 +43,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
-  {{range .Orders}}
+  {{with .Order}}
   {{template "shopping_order_form" .}}
   {{else}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
@@ -72,9 +72,6 @@
   {{end}}
   {{end}}
   {{template "shopping_list_share_button" .}}
-  {{range .Orders}}
-  {{if .Description}}<p class="basis-full text-xs text-ink-600">{{.Description}}</p>{{end}}
-  {{end}}
   {{if not .HasSavedRecipes}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
@@ -362,10 +359,6 @@
 {{define "shopping_purchase_section"}}
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-  {{range .Orders}}
-  {{if .Notice}}<p role="status" class="mt-4 text-sm text-ink-700">{{.Notice}}</p>{{end}}
-  {{if .ReviewURL}}<a href="{{.ReviewURL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{.ReviewLabel}}</a>{{end}}
-  {{end}}
   <div class="mt-4 space-y-5 text-ink-700">
     {{range .Purchases}}
     <section>
@@ -391,11 +384,15 @@
 {{end}}
 
 {{define "shopping_order_form"}}
-  <form method="POST" action="{{.ActionURL}}">
-    <input type="hidden" name="items" value="{{.Fields.Items}}">
-    <input type="hidden" name="location" value="{{.Fields.Location}}">
-    <input type="hidden" name="list_key" value="{{.Fields.ListKey}}">
-    <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">
-    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
-  </form>
+{{if .TransferFailed}}
+<p role="alert" class="text-sm text-action-red-700">Add to cart failed.</p>
+{{else if .ReviewCartURL}}
+<a href="{{.ReviewCartURL}}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">Review cart (opens a new tab)</a>
+{{else if .TransferURL}}
+<form method="POST" action="{{.TransferURL}}" hx-boost="false">
+  <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+  <input type="hidden" name="transfer_request" value="{{.TransferRequestJSON}}">
+  <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.TransferLabel}}</button>
+</form>
+{{end}}
 {{end}}

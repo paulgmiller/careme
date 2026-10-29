@@ -73,6 +73,7 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 	for _, item := range items {
 		row := shoppingPurchaseItem{ShoppingItem: item}
 		if product, ok := products[item.ProductID]; ok {
+			row.VariantID = product.VariantID
 			row.Name = product.Description
 			row.Size = product.Size
 			row.Aisle = strings.TrimSpace(product.AisleNumber)
@@ -103,9 +104,9 @@ func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.R
 			continue
 		}
 		wine := selection.Wines[0] // Use the same first pick as the recipe card.
-		group.Items = append(group.Items, shoppingPurchaseItem{ShoppingItem: ai.ShoppingItem{
+		group.Items = append(group.Items, shoppingPurchaseItem{
 			ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity,
-		}})
+		})
 	}
 	if len(group.Items) == 0 {
 		return purchases

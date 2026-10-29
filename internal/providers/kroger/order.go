@@ -2,67 +2,51 @@ package kroger
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
-	"time"
 
-	"careme/internal/ai"
 	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
+	ordertypes "careme/internal/orders/types"
 )
-
-// orderRequest is the posted shopping list retained while connecting Kroger.
-// UserID comes exclusively from authentication, never from the submitted form.
-type orderRequest struct {
-	UserID    string
-	ListKey   string
-	StoreID   string
-	Chain     string
-	ReturnURL string
-	Items     []ai.ShoppingItem
-}
-
-// Keep the original transfer record fields readable across the HTTP handoff change.
-type orderResult struct {
-	Status      string            `json:"status"`
-	Added       int               `json:"added"`
-	Gaps        []ai.ShoppingItem `json:"gaps,omitempty"`
-	Fingerprint string            `json:"fingerprint,omitempty"`
-}
 
 func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	userID, ok := a.cartUser(w, r)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
+		return
+	}
+	var input ordertypes.TransferRequest
+	if err := json.Unmarshal([]byte(r.PostForm.Get("transfer_request")), &input); err != nil {
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
+		return
+	}
+	idempotencyKey := r.PostForm.Get("idempotency_key")
+	if !localReturnURL(input.ReturnURL) || !validIdempotencyKey(idempotencyKey) || !NewIdentityProvider().IsID(input.Location.ID) || len(input.Items) == 0 {
+		http.Error(w, "Invalid cart transfer.", http.StatusBadRequest)
+		return
+	}
+	for _, item := range input.Items {
+		if strings.TrimSpace(item.ProductID) == "" {
+			slog.ErrorContext(r.Context(), "Kroger shopping item has no product ID", "item_name", item.Name, "transfer_id", idempotencyKey)
+			http.Error(w, "Cart transfer contains an item without a product ID.", http.StatusBadRequest)
+			return
+		}
+	}
+	userID, ok := a.cartUser(w, r, input.ReturnURL)
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
-		return
-	}
-	var location locationtypes.Location
-	if err := json.Unmarshal([]byte(r.PostForm.Get("location")), &location); err != nil {
-		http.Error(w, "Invalid ordering location", http.StatusBadRequest)
-		return
-	}
-	request := orderRequest{UserID: userID, ListKey: r.PostForm.Get("list_key"), StoreID: location.ID, Chain: location.Chain, ReturnURL: r.PostForm.Get("return_url")}
-	if !localReturnURL(request.ReturnURL) || !validListKey(request.ListKey) || !NewIdentityProvider().IsID(request.StoreID) || json.Unmarshal([]byte(r.PostForm.Get("items")), &request.Items) != nil || len(request.Items) == 0 {
-		http.Error(w, "Invalid Kroger order", http.StatusBadRequest)
-		return
-	}
-	a.order(w, r, request, true)
+	a.createTransfer(w, r, userID, idempotencyKey, input)
 }
 
-func validListKey(key string) bool {
-	return strings.TrimSpace(key) != "" && len(key) <= 256 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".."
+func validIdempotencyKey(key string) bool {
+	return strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".."
 }
 
 func localReturnURL(raw string) bool {
@@ -87,126 +71,36 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func orderFingerprint(request orderRequest) string {
-	body, _ := json.Marshal(struct {
-		StoreID string
-		Items   []ai.ShoppingItem
-	}{request.StoreID, request.Items})
-	sum := sha256.Sum256(body)
-	return hex.EncodeToString(sum[:])
-}
-
-func cartURL(chain string) string {
-	if strings.EqualFold(chain, "qfc") {
-		return "https://www.qfc.com/cart"
-	}
-	return "https://www.kroger.com/cart"
-}
-
-func (a *OrderHandler) returnToList(w http.ResponseWriter, r *http.Request, request orderRequest, result orderResult, code string) {
-	destination, _ := url.Parse(request.ReturnURL)
-	query := destination.Query()
-	if code == "" {
-		code = result.Status
-	}
-	query.Set("kroger_status", code)
-	query.Set("kroger_added", strconv.Itoa(result.Added))
-	query.Set("kroger_unmatched", strconv.Itoa(len(result.Gaps)))
-	query.Set("kroger_cart", cartURL(request.Chain))
-	destination.RawQuery = query.Encode()
-	http.Redirect(w, r, destination.String(), http.StatusSeeOther)
-}
-
-func (a *OrderHandler) order(w http.ResponseWriter, r *http.Request, request orderRequest, allowAuthorization bool) {
-	ctx := r.Context()
-	key := "kroger_cart_transfers/" + request.UserID + "/" + request.ListKey
-	fingerprint := orderFingerprint(request)
-	var previous orderResult
-	if err := a.loadJSON(ctx, key, &previous); err == nil {
-		if previous.Status == "complete" && previous.Fingerprint != fingerprint {
-			previous.Status = "changed"
-		}
-		a.returnToList(w, r, request, previous, "")
-		return
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		a.returnToList(w, r, request, orderResult{}, "start_failed")
-		return
-	}
-	token, err := a.loadToken(ctx, request.UserID)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		a.returnToList(w, r, request, orderResult{}, "connect_failed")
-		return
-	}
-	if err == nil && time.Now().After(token.ExpiresAt.Add(-time.Minute)) {
-		token, err = a.client.Refresh(ctx, token.RefreshToken)
-		if err == nil {
-			if err = a.saveToken(ctx, request.UserID, token); err != nil {
-				a.returnToList(w, r, request, orderResult{}, "save_failed")
-				return
-			}
-		}
-	}
-	if err != nil || token.AccessToken == "" {
-		if allowAuthorization {
-			a.startAuthorization(w, r, request)
-		} else {
-			a.returnToList(w, r, request, orderResult{}, "connect_failed")
-		}
-		return
-	}
-	items, gaps, err := a.resolveItems(ctx, request)
-	if err != nil {
-		a.returnToList(w, r, request, orderResult{}, "lookup_failed")
-		return
-	}
-	result := orderResult{Status: "pending", Gaps: gaps, Fingerprint: fingerprint}
-	if len(items) == 0 {
-		a.returnToList(w, r, request, result, "no_matches")
-		return
-	}
-	if err := a.saveJSON(ctx, key, result, cache.IfNoneMatch()); err != nil {
-		if errors.Is(err, cache.ErrAlreadyExists) {
-			// Re-enter the read path; the winner owns the only cart write.
-			a.order(w, r, request, false)
-			return
-		}
-		a.returnToList(w, r, request, result, "start_failed")
-		return
-	}
-	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
-		result.Status = "uncertain"
-	} else {
-		result.Status = "complete"
-		result.Added = len(items)
-	}
-	if err := a.saveJSON(ctx, key, result, cache.Unconditional()); err != nil {
-		a.returnToList(w, r, request, result, "confirmation_failed")
-		return
-	}
-	a.returnToList(w, r, request, result, "")
-}
-
-func (a *OrderHandler) resolveItems(ctx context.Context, request orderRequest) ([]CartItem, []ai.ShoppingItem, error) {
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
+	// Kroger adds the requested whole-package quantity for each product.
 	var items []CartItem
-	var gaps []ai.ShoppingItem
-	seen := make(map[string]bool)
-	for _, item := range request.Items {
-		if item.ProductID == "" {
-			gaps = append(gaps, item)
-			continue
-		}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, request.StoreID)
+	var accepted []ordertypes.TransferItem
+	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
+	for _, item := range input.Items {
+		quantity := item.PackageQuantity()
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
+		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
 		if errors.Is(err, ErrProductUnavailable) {
-			gaps = append(gaps, item)
+			result.RejectedQuantity = quantity
+			result.RejectionReason = "product_unavailable"
+			transfer.Items = append(transfer.Items, result)
 			continue
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("resolve Kroger order product: %w", err)
+			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
 		}
-		if !seen[upc] {
-			items = append(items, CartItem{UPC: upc, Quantity: 1})
-			seen[upc] = true
-		}
+		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		result.AcceptedQuantity = quantity
+		accepted = append(accepted, result)
 	}
-	return items, gaps, nil
+	if len(items) == 0 {
+		return transfer, nil
+	}
+	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
+		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
+	}
+	transfer.Status = ordertypes.TransferApplied
+	transfer.Items = append(accepted, transfer.Items...)
+	return transfer, nil
 }

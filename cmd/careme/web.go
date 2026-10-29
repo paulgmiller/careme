@@ -146,7 +146,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

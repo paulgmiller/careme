@@ -20,13 +20,9 @@ const (
 
 type grader interface {
 	GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error)
-	CacheVersion() string
 }
 
 type rubberstamp struct{}
-
-// Disabled grading does not write cached grades.
-func (r rubberstamp) CacheVersion() string { return "" }
 
 func (r rubberstamp) GradeIngredients(_ context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	results := make([]ai.InputIngredient, 0, len(ingredients))
@@ -48,7 +44,7 @@ func (m *multiGrader) CacheVersion() string {
 	return m.grader.CacheVersion()
 }
 
-func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
+func NewManager(cfg *config.Config, c cache.Cache, httpClient *http.Client) grader {
 	if cfg == nil || !cfg.IngredientGrading.Enable {
 		return rubberstamp{}
 	}
@@ -64,7 +60,7 @@ func NewManager(cfg *config.Config, c cache.ListCache, httpClient *http.Client) 
 // NewEnrichingGrader returns the grade manager with independent embedding
 // resolution enabled. This is kept separate from NewManager until embeddings
 // are ready to participate in production recipe generation.
-func NewEnrichingGrader(cfg *config.Config, c cache.ListCache, httpClient *http.Client) grader {
+func NewEnrichingGrader(cfg *config.Config, c cache.Cache, httpClient *http.Client) grader {
 	grader := NewManager(cfg, c, httpClient)
 	if cfg == nil || !cfg.IngredientGrading.Enable || strings.TrimSpace(cfg.AI.APIKey) == "" {
 		return grader
@@ -106,8 +102,6 @@ type enrichingGrader struct {
 	grader     grader
 	embeddings *embeddings.Service
 }
-
-func (g *enrichingGrader) CacheVersion() string { return g.grader.CacheVersion() }
 
 func (g *enrichingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	graded, err := g.grader.GradeIngredients(ctx, ingredients)

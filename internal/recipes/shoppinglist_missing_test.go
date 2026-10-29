@@ -38,7 +38,7 @@ func TestMissingCampaignShoppingListOffersGeneration(t *testing.T) {
 			assert.Contains(t, rr.Body.String(), "Want to generate one?")
 			assert.Contains(t, rr.Body.String(), "Generate my shopping list")
 			assert.Empty(t, rr.Result().Cookies(), "viewing the prompt must not initialize the guest allowance")
-			p := DefaultParams(&location, time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC))
+			p := DefaultParams(&location, time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC))
 			p.Instructions = query.Get("instructions")
 			_, err := s.ParamsFromCache(t.Context(), p.Hash())
 			require.ErrorIs(t, err, cache.ErrNotFound)

@@ -83,8 +83,10 @@ type KrogerConfig struct {
 
 // MNFoodClubConfig supplies the store-level credentials used for MNFoodClub.
 type MNFoodClubConfig struct {
-	APIPath     string `json:"api_path"`
-	AccessToken string `json:"-"`
+	APIPath          string `json:"api_path"`
+	AccessToken      string `json:"-"`
+	OrderAPIURL      string `json:"order_api_url"`
+	OrderAccessToken string `json:"-"`
 }
 
 type MockConfig struct {
@@ -192,47 +194,58 @@ func (c *Config) ResolvedPublicOrigin() string {
 }
 
 func Load() (*Config, error) {
+	cfg, err := LoadOnlyProviders()
+	if err != nil {
+		return nil, err
+	}
+	cfg.AI = AIConfig{
+		APIKey:      os.Getenv("AI_API_KEY"),
+		RecipeModel: DefaultRecipeModel,
+		ImageModel:  DefaultImageModel,
+	}
+	cfg.IngredientGrading = IngredientGradingConfig{
+		Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
+		Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
+	}
+	cfg.OpenRouter = OpenRouterConfig{
+		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
+		CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
+	}
+	cfg.Clerk = ClerkConfig{
+		SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
+		PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		Domain:         os.Getenv("CLERK_DOMAIN"),
+	}
+	cfg.Admin = AdminConfig{
+		Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+	}
+	cfg.PublicOrigin = os.Getenv("PUBLIC_ORIGIN")
+	return cfg, validate(cfg)
+}
+
+// LoadOnlyProviders loads provider credentials and flags without app, AI, or
+// authentication settings. Provider clients validate their remaining credentials.
+func LoadOnlyProviders() (*Config, error) {
 	if err := kage.Load(); err != nil {
 		return nil, err
 	}
-
-	config := &Config{
+	cfg := &Config{
 		Instacart: InstacartConfig{APIKey: os.Getenv("INSTACART_API_KEY"), BaseURL: os.Getenv("INSTACART_BASE_URL")},
-		AI: AIConfig{
-			APIKey:      os.Getenv("AI_API_KEY"),
-			RecipeModel: DefaultRecipeModel,
-			ImageModel:  DefaultImageModel,
-		},
-		IngredientGrading: IngredientGradingConfig{
-			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
-			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
-		},
-		OpenRouter: OpenRouterConfig{
-			APIKey:        os.Getenv("OPENROUTER_API_KEY"),
-			CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
-		},
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
 			CartTokenKey: os.Getenv("KROGER_CART_TOKEN_KEY"),
 		},
 		MNFoodClub: MNFoodClubConfig{
-			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
-			AccessToken: os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
+			APIPath:          os.Getenv("MNFOODCLUB_API_PATH"),
+			AccessToken:      os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
+			OrderAPIURL:      os.Getenv("MNFOODCLUB_ORDER_API_URL"),
+			OrderAccessToken: os.Getenv("MNFOODCLUB_ORDER_ACCESS_TOKEN"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
 			Email:  os.Getenv("MOCK_USER_EMAIL"),
 		},
-		Clerk: ClerkConfig{
-			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
-			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
-			Domain:         os.Getenv("CLERK_DOMAIN"),
-		},
-		Admin: AdminConfig{
-			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
-		},
-		PublicOrigin: os.Getenv("PUBLIC_ORIGIN"),
 		Aldi: AldiConfig{
 			Enable: envEnabled("ALDI_ENABLE"),
 		},
@@ -262,8 +275,10 @@ func Load() (*Config, error) {
 			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
-
-	return config, validate(config)
+	if !cfg.Mocks.Enable && (cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "") {
+		return nil, fmt.Errorf("kroger client ID and secret must be set")
+	}
+	return cfg, nil
 }
 
 func envEnabled(name string) bool {
@@ -302,9 +317,6 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("clerk configuration must be set")
 	}
 
-	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-		return fmt.Errorf("kroger client ID and secret must be set")
-	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
 	}

@@ -7,7 +7,8 @@ import (
 )
 
 // produceShareIngredients is the static inventory transcribed from the supplied
-// October 12–17 share list. Share membership is part of each description and product ID.
+// October 19–24 share list (page 1 of the weekly feature PDF; later pages include
+// older weeks). Share membership is part of each description and product ID.
 func produceShareIngredients() []ai.InputIngredient {
 	shares := []struct {
 		name          string
@@ -17,40 +18,39 @@ func produceShareIngredients() []ai.InputIngredient {
 		{
 			name: "Seasonal",
 			items: []string{
-				"Rutabaga", "Leeks", "Flat Leaf Parsley", "Watermelon Radish",
-				"Parsnips", "Pie Apples (2nds)",
+				"Koginut Squash", "Broccolini", "Carrots", "Daikon Radish",
+				"Kennebec Potatoes", "Red Keeper Onions", "Poblano Peppers",
 			},
 		},
 		{
 			name: "Small Seasonal",
 			items: []string{
-				"Butternut Squash", "Yellow Onions", "Flat Leaf Parsley", "Garlic Chives",
-				"Parsnips", "Table Apples (1sts)",
+				"Stripetti or Spaghetti Squash", "Poblano Peppers", "Carrots", "Cilantro",
+				"Red Keeper Onions", "Pie Apples (2nds)",
 			},
 		},
 		{
 			name: "Low Carb",
 			items: []string{
-				"Kohlrabi", "Asparagus", "Yellow Candy Onions", "Avocado", "Carmen Peppers",
+				"Mini Peppers", "Broccolini", "Zucchini", "Kale", "Red Cabbage",
 			},
-			substitutions: []string{"Cauliflower"},
 		},
 		{
 			name: "Staple",
 			items: []string{
-				"Broccoli", "Russet Potatoes", "Red Beets", "Red Onions", "Koginut Squash",
+				"Jalapeño Peppers", "Red Potatoes", "Kohlrabi", "Green Cabbage", "Yellow Onions", "Cucumbers",
 			},
 		},
 		{
 			name: "Fruit",
 			items: []string{
-				"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Pineapple", "Red Grapes",
+				"Mandarins", "Asian Pear", "Mango", "Cranberries", "Cantaloupe",
 			},
 		},
 		{
 			name: "Small Fruit",
 			items: []string{
-				"Table Apples (1sts)", "Kiwi", "Bosc Pears", "Red Grapes",
+				"Mandarins", "Asian Pear", "Mango", "Cantaloupe",
 			},
 		},
 	}
@@ -59,7 +59,7 @@ func produceShareIngredients() []ai.InputIngredient {
 		for _, name := range append(share.items, share.substitutions...) {
 			description := "Produce share " + strings.ToLower(share.name) + " " + name
 			ingredient := ai.InputIngredient{
-				ProductID:   LocationIDPrefix + strings.ToLower(strings.ReplaceAll(description, " ", "-")),
+				ProductID:   "mnfoodclub" + strings.ToLower(strings.ReplaceAll(description, " ", "-")),
 				Description: description,
 				Brand:       "mnfood.club",
 				Categories:  []string{"Produce", share.name},

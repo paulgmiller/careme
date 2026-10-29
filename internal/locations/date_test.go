@@ -7,23 +7,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDefaultRecipeDate_Uses9AMStoreBoundary(t *testing.T) {
-	storeLoc, err := time.LoadLocation("America/New_York")
-	if err != nil {
-		t.Fatalf("failed to load timezone: %v", err)
+func TestStoreTimePreservesInstant(t *testing.T) {
+	t.Parallel()
+	lat, lon := 40.7128, -74.006
+	location := &Location{ID: "store-1", Lat: &lat, Lon: &lon}
+	for _, input := range []string{"2026-01-15T13:59:00Z", "2026-01-15T14:00:00Z", "2026-03-08T07:30:00Z", "2026-11-01T06:30:00Z"} {
+		now, err := time.Parse(time.RFC3339, input)
+		require.NoError(t, err)
+		now = now.Add(123 * time.Nanosecond)
+		local, err := StoreTime(t.Context(), now, location)
+		require.NoError(t, err)
+		require.True(t, now.Equal(local))
+		require.Equal(t, "America/New_York", local.Location().String())
 	}
+}
 
-	beforeBoundary := time.Date(2026, 1, 15, 13, 59, 0, 0, time.UTC) // 08:59 in New York
-	before := defaultRecipeDate(beforeBoundary, storeLoc)
-	if got, want := before.Format("2006-01-02"), "2026-01-14"; got != want {
-		t.Fatalf("expected previous day before 9AM boundary, got %s", got)
-	}
-
-	atBoundary := time.Date(2026, 1, 15, 14, 0, 0, 0, time.UTC) // 09:00 in New York
-	after := defaultRecipeDate(atBoundary, storeLoc)
-	if got, want := after.Format("2006-01-02"), "2026-01-15"; got != want {
-		t.Fatalf("expected same day at 9AM boundary, got %s", got)
-	}
+func TestStoreTimeRejectsMissingLocation(t *testing.T) {
+	_, err := StoreTime(t.Context(), time.Now(), nil)
+	require.ErrorContains(t, err, "nil location")
 }
 
 func TestResolveStoreTimeLocation_RejectsLocationWithoutCoordinates(t *testing.T) {

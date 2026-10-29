@@ -1,39 +1,65 @@
 package types
 
 import (
-	"net/url"
-
 	"careme/internal/ai"
 	locationtypes "careme/internal/locations/types"
 )
 
 // OrderViewInput carries the displayed shopping list to its destination's form builder.
 type OrderViewInput struct {
-	Location  locationtypes.Location
-	Items     []ai.ShoppingItem
-	ListKey   string
+	ListKey  string // shoppinglist hash
+	UserID   string // combines with above to look up
+	Location locationtypes.Location
+	Items    []ai.ShoppingItem
+
 	ReturnURL string
-	Query     url.Values
 }
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	ActionURL   string
-	ActionLabel string
-	Fields      OrderFields
-	Description string
-	Notice      string
-	ReviewURL   string
-	ReviewLabel string
+	TransferFailed bool
+	ReviewCartURL  string
+	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
+	IdempotencyKey string
+	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
+	TransferURL         string
+	TransferLabel       string
+	TransferRequestJSON string
 }
 
-// OrderFields is the shared form contract for ordering destinations.
-// Items and Location are JSON encoded for hidden form inputs. Location is a source
-// store hint; each destination decides how to select its destination store.
-// Extend this struct when an integration needs more shopping-list information.
-type OrderFields struct {
-	Items     string
-	Location  string
-	ListKey   string
-	ReturnURL string
+// TransferRequest sends the displayed shopping list to a destination.
+// The browser submits the idempotency key separately in the idempotency_key form field.
+type TransferRequest struct {
+	Items     []ai.ShoppingItem      `json:"items"`
+	Location  locationtypes.Location `json:"location"`
+	ReturnURL string                 `json:"return_url"`
 }
+
+// Transfer describes a cart handoff, never checkout or a placed order.
+// CartURL opens the destination cart; the provider handler owns login redirects.
+type Transfer struct {
+	// TransferID identifies the destination's transfer. Kroger uses the idempotency key directly.
+	TransferID string         `json:"transfer_id"`
+	Status     TransferStatus `json:"status"`
+	CartURL    string         `json:"cart_url"`
+	Items      []TransferItem `json:"items,omitempty"`
+}
+
+// TransferItem records package quantities accepted or rejected by a cart handoff.
+// Name is optional display copy supplied by the provider.
+type TransferItem struct {
+	ProductID        string `json:"product_id"`
+	Name             string `json:"name,omitempty"`
+	AcceptedQuantity int    `json:"accepted_quantity"`
+	RejectedQuantity int    `json:"rejected_quantity"`
+	RejectionReason  string `json:"rejection_reason,omitempty"`
+}
+
+// TransferStatus is the persisted outcome of a cart handoff.
+type TransferStatus string
+
+const (
+	TransferPending TransferStatus = "pending"
+	TransferFailed  TransferStatus = "failed"
+	TransferApplied TransferStatus = "applied"
+)

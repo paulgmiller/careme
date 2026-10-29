@@ -15,3 +15,9 @@ actions:
   - target: $.components.schemas["products.productItemPriceModel"].properties.effectiveDate
     description: Drop field because Kroger returns date-time strings while the spec declares date-only values and staples does not use it.
     remove: true
+  - target: $.paths["/v1/products/{id}"].get.parameters[?(@.name == "id")].schema.oneOf
+    description: Both product IDs and UPCs are strings; avoid generating an unusable anonymous union for the path parameter.
+    remove: true
+  - target: $.paths["/v1/products/{id}"].get.parameters[?(@.name == "id")].schema
+    update:
+      type: string

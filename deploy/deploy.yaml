@@ -144,17 +144,31 @@ spec:
               name: http
           envFrom:
             - secretRef:
-                name: ai
+                name: albertsons
+            - secretRef:
+                name: brightdata-proxy
+            - secretRef:
+                name: kroger
+            - secretRef:
+                name: mnfoodclub
             - secretRef:
                 name: storage
+            - secretRef:
+                name: walmart
           readinessProbe:
             httpGet:
-              path: /grader
+              path: /healthz
               port: http
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
-              path: /grader
+              path: /healthz
               port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
           resources:
             requests:
               cpu: 10m

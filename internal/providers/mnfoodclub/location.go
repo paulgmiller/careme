@@ -8,6 +8,13 @@ import (
 	locationtypes "careme/internal/locations/types"
 )
 
+// Delivery location IDs are shared by provider routing and campaigns.
+const (
+	MNFoodClubLocationID      = "mnfoodclub_delivery"
+	TCFarmLocationID          = "tcfarm_delivery"
+	NelsonGrassFarmLocationID = "nelsongrassfarm_delivery"
+)
+
 // Rough rectangle around the supplied delivery map, not its exact service polygon.
 // It includes St. Cloud, the Twin Cities, Hudson, and Rochester.
 // https://mnfood.club/About/ see Delivery Deails.
@@ -18,7 +25,17 @@ const (
 	deliveryEast  = -92.35
 )
 
-const theLocationID = LocationIDPrefix + "delivery"
+type storefront struct {
+	id   string
+	name string
+	url  string
+}
+
+var storefronts = [...]storefront{
+	{id: MNFoodClubLocationID, name: "MN Food Club", url: "https://mnfood.club/"},
+	{id: TCFarmLocationID, name: "TC Farm", url: "https://tc.farm/"},
+	{id: NelsonGrassFarmLocationID, name: "Nelson Grass Farm", url: "https://nelsongrassfarm.com/"},
+}
 
 // LocationBackend exposes MNFoodClub home delivery within the approximate area.
 type LocationBackend struct{ identityProvider }
@@ -38,13 +55,15 @@ func (b LocationBackend) GetLocationByID(ctx context.Context, locationID string)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if locationID != theLocationID {
-		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
-	}
 	// 10035 Flanders Court NE
 	// Blaine, MN 55449
 	coordinates := geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}
-	return deliveryLocation(locationID, coordinates), nil
+	for _, store := range storefronts {
+		if locationID == store.id {
+			return store.deliveryLocation(coordinates), nil
+		}
+	}
+	return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 }
 
 func (LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
@@ -59,7 +78,11 @@ func (LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinate
 	}
 	// Home delivery is located at the search point so the shared nearby-store
 	// distance filter works across the whole area. These locations are not cached.
-	return []locationtypes.Location{*deliveryLocation(theLocationID, coordinates)}, nil
+	locations := make([]locationtypes.Location, 0, len(storefronts))
+	for _, store := range storefronts {
+		locations = append(locations, *store.deliveryLocation(coordinates))
+	}
+	return locations, nil
 }
 
 func inDeliveryArea(coordinates geo.Coordinate) bool {
@@ -67,9 +90,9 @@ func inDeliveryArea(coordinates geo.Coordinate) bool {
 		coordinates.Lon >= deliveryWest && coordinates.Lon <= deliveryEast
 }
 
-func deliveryLocation(id string, coordinates geo.Coordinate) *locationtypes.Location {
+func (s storefront) deliveryLocation(coordinates geo.Coordinate) *locationtypes.Location {
 	return &locationtypes.Location{
-		ID: id, Name: "MNFoodClub delivery", Chain: "MNFoodClub", Address: "Home delivery",
+		ID: s.id, Name: s.name + " delivery", Chain: s.name, Address: "Home delivery", URL: s.url,
 		Lat: &coordinates.Lat, Lon: &coordinates.Lon,
 	}
 }

@@ -40,8 +40,6 @@ func newCachingGrader(grader baseGrader, store store) *cachingGrader {
 	}
 }
 
-func (c *cachingGrader) CacheVersion() string { return c.cacheVersion }
-
 func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	type lookupResult struct {
 		cached  *ai.InputIngredient

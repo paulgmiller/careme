@@ -9,36 +9,38 @@ import (
 	"testing"
 	"time"
 
-	ordertypes "careme/internal/orders/types"
-
 	"careme/internal/ai"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestKrogerNoticeSurvivesShoppingListReload(t *testing.T) {
-	_ = newTestServer(t)
+func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
+	s := newTestServer(t)
+	s.orderView = orderViewBuilderFunc(kroger.OrderView)
 	p := DefaultParams(&locations.Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
 		t.Run(code, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
-			order, err := kroger.OrderView(ordertypes.OrderViewInput{Query: httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).URL.Query()})
-			require.NoError(t, err)
-			view.Orders = []*ordertypes.OrderView{order}
+			if view.User == nil {
+				view.User = &utypes.User{ID: "viewer"}
+			}
+			require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).Context(), &view))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
-			if code == "denied" {
-				assert.Contains(t, page.String(), "Kroger connection was not approved")
-			} else {
-				assert.NotContains(t, page.String(), "alert(1)")
-			}
+			assert.NotContains(t, page.String(), `hx-get="/kroger/order-transfers/`)
+			assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
+			assert.NotContains(t, page.String(), "cart-transfer.js")
+			assert.NotContains(t, page.String(), `id="shopping-cart-transfer"`)
+			assert.NotContains(t, page.String(), "Kroger connection was not approved")
+			assert.NotContains(t, page.String(), "alert(1)")
 		})
 	}
 }
@@ -167,6 +169,41 @@ func TestFormatShoppingListHTML_UsesTodaysIngredientsForOldList(t *testing.T) {
 	assert.NotContains(t, html, "Try again, chef")
 	assert.NotContains(t, html, `Older list`)
 	assert.NotContains(t, html, `/regenerate"`)
+}
+
+func TestFormatShoppingListHTML_WeeklyIngredientsStayFreshUntilNextWeek(t *testing.T) {
+	// Keep sequential: this test changes process-wide state.
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	monday := time.Date(2026, time.October, 19, 9, 0, 0, 0, zone)
+	backend := mnfoodclub.NewLocationBackend()
+	for _, id := range []string{mnfoodclub.MNFoodClubLocationID, mnfoodclub.TCFarmLocationID, mnfoodclub.NelsonGrassFarmLocationID} {
+		t.Run(id, func(t *testing.T) {
+			location, err := backend.GetLocationByID(t.Context(), id)
+			require.NoError(t, err)
+			p := DefaultParams(location, monday)
+			for _, tt := range []struct {
+				name string
+				now  time.Time
+				old  bool
+			}{
+				{"Friday", monday.AddDate(0, 0, 4), false},
+				{"before next Monday cutoff", monday.AddDate(0, 0, 7).Add(-time.Minute), false},
+				{"next Monday cutoff", monday.AddDate(0, 0, 7), true},
+				{"future plan", monday.AddDate(0, 0, -7), true},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					withNow(t, tt.now)
+					w := httptest.NewRecorder()
+					formatShoppingListHTMLForTest(t.Context(), p, list, true, recipeSelection{}, w)
+					html := assertHTTPSuccess(t, w)
+					assert.Equal(t, tt.old, strings.Contains(html, "Using ingredients from"))
+					assert.Equal(t, tt.old, strings.Contains(html, "Use today's ingredients"))
+					assert.Equal(t, !tt.old, strings.Contains(html, "Try again, chef"))
+				})
+			}
+		})
+	}
 }
 
 func TestFormatShoppingListHTML_UsesRegenerateForRecentList(t *testing.T) {
@@ -641,23 +678,35 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 func TestShoppingImagesPollIndependently(t *testing.T) {
 	for _, ready := range []bool{false, true} {
 		t.Run(strconv.FormatBool(ready), func(t *testing.T) {
-			recipe := list.Recipes[0]
-			hash := recipe.ComputeHash()
-			w := httptest.NewRecorder()
-			writeShoppingListPage(t.Context(), w, shoppingListViewInput{
-				params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
-				list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
-				hash:         "list-hash",
-				recipeImages: map[string]bool{hash: ready},
-			})
-			body := assertHTTPSuccess(t, w)
-			if ready {
-				assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
-				assert.NotContains(t, body, `hx-trigger=`)
-			} else {
-				assert.Contains(t, body, `hx-trigger="every 5s"`)
-				assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
-				assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
+			for _, saved := range []bool{false, true} {
+				t.Run("saved="+strconv.FormatBool(saved), func(t *testing.T) {
+					recipe := list.Recipes[0]
+					hash := recipe.ComputeHash()
+					selection := recipeSelection{}
+					if saved {
+						selection.markSaved(hash)
+					}
+					w := httptest.NewRecorder()
+					writeShoppingListPage(t.Context(), w, shoppingListViewInput{
+						params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
+						list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
+						hash:         "list-hash",
+						recipeImages: map[string]bool{hash: ready},
+						selection:    selection,
+					})
+					body := assertHTTPSuccess(t, w)
+					if ready {
+						assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
+						assert.NotContains(t, body, `hx-trigger=`)
+					} else if saved {
+						assert.Contains(t, body, `hx-trigger="every 5s"`)
+						assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
+						assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
+					} else {
+						assert.NotContains(t, body, `/image-panel`)
+						assert.NotContains(t, body, `hx-trigger=`)
+					}
+				})
 			}
 		})
 	}
@@ -700,7 +749,7 @@ func TestFinalizedShoppingListRendersMergedQuantities(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: id}, time.Now())
 			p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "1 clove"}}}}
-			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Garlic", Needed: "1 clove"}}}}}})
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, list: ai.ShoppingList{Recipes: p.Saved}, hash: p.Hash(), purchases: []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Garlic", Needed: "1 clove"}}}}})
 			if !assert.NoError(t, err) {
 				return
 			}
@@ -718,7 +767,7 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 	recipe := ai.Recipe{Title: "Dinner"}
 	otherRecipe := ai.Recipe{Title: "Unsaved dinner"}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{ShoppingItem: ai.ShoppingItem{Name: "Pork", Needed: "24 oz"}}}}}
+	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Pork", Needed: "24 oz"}}}}
 	for _, tc := range []struct {
 		name            string
 		purchases       []shoppingPurchaseGroup
@@ -743,6 +792,29 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 			require.Len(t, got[1].Items, 1)
 			assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, got[1].Items[0].ShoppingItem)
 			assert.Equal(t, food, tc.purchases, "rendering must preserve the cached food groups")
+		})
+	}
+}
+
+func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
+	zone, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+	lat, lon := 47.61, -122.33
+	location := &locations.Location{ID: "70000001", Lat: &lat, Lon: &lon}
+	for _, tt := range []struct {
+		name      string
+		now, date time.Time
+		old       bool
+	}{
+		{"timestamp before boundary", time.Date(2026, 1, 15, 8, 59, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), false},
+		{"timestamp at boundary", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 9, 0, 0, 0, zone), true},
+		{"legacy midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 0, zone), true},
+		{"just after midnight", time.Date(2026, 1, 15, 9, 0, 0, 0, zone), time.Date(2026, 1, 14, 0, 0, 0, 1, zone), true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			withNow(t, tt.now)
+			p := &generatorParams{Location: location, Date: tt.date}
+			assert.Equal(t, tt.old, shoppingListIsOlderThanFreshIngredientsWindow(t.Context(), p))
 		})
 	}
 }

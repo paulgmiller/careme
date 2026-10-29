@@ -17,6 +17,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/guest"
 	"careme/internal/httpx"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/feedback"
@@ -361,7 +362,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
-				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp))
+				renderMissingShoppingList(ctx, w, p, r.URL.Query().Get(QueryArgHelp), currentUser != nil)
 				return
 			}
 			slog.ErrorContext(ctx, "failed to check recipe parameters", "error", err)
@@ -476,7 +477,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
 	if err == nil && view.Finalized && view.ServerSignedIn {
-		err = s.populateOrderView(&view, r)
+		err = s.populateOrderView(ctx, &view)
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
@@ -704,11 +705,11 @@ func (s *server) recordShoppingListForUser(userID, hash string, location *locati
 }
 
 func shoppingListIsOlderThanFreshIngredientsWindow(ctx context.Context, p *generatorParams) bool {
-	today, err := locations.StoreToDate(ctx, nowFn(), p.Location)
+	today, err := locations.StoreTime(ctx, nowFn(), p.Location)
 	if err != nil {
 		return false
 	}
-	return today.Sub(p.Date) > 24*time.Hour
+	return cachekey.ForStore(p.Location.ID, today) != p.LocationHash()
 }
 
 func writeShoppingListPage(ctx context.Context, w http.ResponseWriter, input shoppingListViewInput) {

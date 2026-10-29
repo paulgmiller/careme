@@ -20,6 +20,7 @@ import (
 	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/config"
 	"careme/internal/guest"
 	"careme/internal/locations"
 	"careme/internal/recipes/feedback"
@@ -204,7 +205,7 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 		withTestGenerator(generator),
 		withTestLocationServer(staticLocationLookup{location: location}),
 	)
-	p := DefaultParams(location, time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(location, time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC))
 	require.NoError(t, s.SaveParams(t.Context(), p))
 
 	req := httptest.NewRequest(http.MethodGet, "/recipes?location=70100023&date=2026-07-29&help=Save+two+dinners", nil)
@@ -228,6 +229,46 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	case <-generator.called:
 		t.Fatal("GET location redirect should not start generation")
 	default:
+	}
+}
+
+func TestHandleRecipesMNFoodClubReusesMondayListAllWeek(t *testing.T) {
+	t.Parallel()
+	zone, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
+	monday := time.Date(2026, 10, 19, 9, 0, 0, 0, zone)
+	for _, id := range []string{"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery"} {
+		t.Run(id, func(t *testing.T) {
+			lat, lon := 45.152, -93.194
+			location := &locations.Location{ID: id, Name: id + " storefront", Lat: &lat, Lon: &lon}
+			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+			s := newTestServer(t, withTestGenerator(generator), withTestLocationServer(staticLocationLookup{location: location}))
+			p := DefaultParams(location, monday)
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
+				Recipes: []ai.Recipe{{Title: "Monday supper"}},
+			}, p.Hash()))
+			for day := range 7 {
+				target := "/recipes?location=" + id + "&date=" + monday.AddDate(0, 0, day).Format(time.DateOnly)
+				rr := httptest.NewRecorder()
+				s.handleRecipes(rr, httptest.NewRequest(http.MethodGet, target, nil))
+				require.Equal(t, http.StatusSeeOther, rr.Code)
+				canonical, err := url.Parse(rr.Header().Get("Location"))
+				require.NoError(t, err)
+				assert.Equal(t, p.Hash(), canonical.Query().Get(queryArgHash))
+				page := httptest.NewRecorder()
+				s.handleRecipes(page, httptest.NewRequest(http.MethodGet, canonical.String(), nil))
+				require.Equal(t, http.StatusOK, page.Code)
+				assert.Contains(t, page.Body.String(), "Monday supper")
+				assert.Contains(t, page.Body.String(), "Recipes for "+location.Name)
+				assert.NotContains(t, page.Body.String(), "Generate my shopping list")
+			}
+			select {
+			case <-generator.called:
+				t.Fatal("weekly lookups should reuse the cached Monday list")
+			default:
+			}
+		})
 	}
 }
 
@@ -328,6 +369,54 @@ func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
 	}
 	if got := u.Query().Get("h"); got != hash {
 		t.Fatalf("expected redirect hash %q, got %q", hash, got)
+	}
+}
+
+func TestHandleRecipes_MissingShoppingListRefreshesClerkSession(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Clerk.PublishableKey = "pk_test_123"
+	require.NoError(t, templates.Init(cfg))
+	t.Cleanup(func() { require.NoError(t, templates.Init(&config.Config{})) })
+
+	for _, tt := range []struct {
+		name     string
+		clerk    auth.AuthClient
+		signedIn bool
+	}{
+		{name: "expired server session after Clerk redirect", clerk: noSessionAuth{}},
+		{name: "valid server session", clerk: auth.DefaultMock(), signedIn: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			generator := &captureKickgenerationGenerator{called: make(chan struct{}, 1)}
+			s := newTestServer(t,
+				withTestClerk(tt.clerk),
+				withTestGenerator(generator),
+				withTestLocationServer(staticLocationLookup{location: &locations.Location{
+					ID: "70001001", Name: "Test Store", ZipCode: "94105",
+				}}),
+			)
+			req := httptest.NewRequest(http.MethodGet, "/recipes?location=70001001&date=2026-10-22&instructions=make+it+vegetarian", nil)
+			req.AddCookie(&http.Cookie{Name: guest.ShoppingListCookieName, Value: "2"})
+			rr := httptest.NewRecorder()
+
+			s.handleRecipes(rr, req)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+			body := rr.Body.String()
+			assert.Contains(t, body, "Let&#39;s get cooking")
+			assert.Contains(t, body, `data-clerk-publishable-key="pk_test_123"`)
+			assert.Regexp(t, fmt.Sprintf(`const serverSignedIn =\s*%t\s*;`, tt.signedIn), body)
+			assert.Contains(t, body, `await Clerk.load()`)
+			assert.Contains(t, body, `!serverSignedIn && clerkSignedIn && !sessionStorage.getItem(key)`)
+			assert.Contains(t, body, `location.reload()`)
+			assert.Contains(t, body, `name="instructions" value="make it vegetarian"`)
+			assert.Contains(t, rr.Header().Get("Cache-Control"), "no-store")
+			select {
+			case <-generator.called:
+				t.Fatal("restoring a session must not start generation on GET")
+			default:
+			}
+		})
 	}
 }
 
@@ -723,7 +812,7 @@ func TestHandleGenerate_GuestRedirectsToCachedHashWhenCacheHits(t *testing.T) {
 		}}),
 	)
 
-	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 0, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
+	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store", ZipCode: "94105"}, time.Date(2026, 3, 6, 9, 0, 0, 0, time.FixedZone("PST", -8*60*60)))
 	p.Instructions = "make it vegetarian"
 	hash := p.Hash()
 	if err := s.SaveShoppingList(t.Context(), &ai.ShoppingList{
@@ -2038,7 +2127,8 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
 	require.Contains(t, rr.Body.String(), `Dismiss`)
 	require.NotContains(t, rr.Body.String(), `id="recipe-image-panel"`)
-	require.NotContains(t, rr.Body.String(), `hx-swap-oob=`)
+	require.Contains(t, rr.Body.String(), `hx-swap-oob="innerHTML:#recipe-image-panel"`)
+	require.Contains(t, rr.Body.String(), `/recipe/`+recipeHash+`/image`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
@@ -3093,10 +3183,11 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 			if state == "error" {
 				s.images = failingImageExistsStore{ImageStore: s.images}
 			}
-			req := httptest.NewRequest(http.MethodGet, "/recipe/recipe-hash/image-panel", nil)
+			req := httptest.NewRequest(http.MethodGet, "/recipe/recipe-hash/image-panel?view=shopping", nil)
 			req.SetPathValue("hash", "recipe-hash")
 			rr := httptest.NewRecorder()
 			s.handleRecipeImagePanel(rr, req)
+			require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 			if state == "error" {
 				require.Equal(t, http.StatusInternalServerError, rr.Code)
 				require.NotContains(t, rr.Body.String(), "recipe-image-panel")
@@ -3115,4 +3206,26 @@ func TestHandleRecipeImagePanel(t *testing.T) {
 			require.NotContains(t, body, "<details")
 		})
 	}
+}
+
+func TestHandleRecipeImagePanelStopsPollingWhenImageArrives(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t, withTestCache(cache.NewFileCache(t.TempDir())))
+	path := "/recipe/recipe-hash/image-panel?view=shopping"
+	poll := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.SetPathValue("hash", "recipe-hash")
+		rr := httptest.NewRecorder()
+		s.handleRecipeImagePanel(rr, req)
+		return rr
+	}
+	pending := poll()
+	require.Equal(t, http.StatusNoContent, pending.Code)
+	require.Empty(t, pending.Body.String())
+	require.NoError(t, s.images.Save(t.Context(), "recipe-hash", &ai.GeneratedImage{Body: bytes.NewReader(mockRecipeImage)}))
+	ready := poll()
+	require.Equal(t, http.StatusOK, ready.Code)
+	require.Contains(t, ready.Body.String(), `src="/recipe/recipe-hash/image"`)
+	require.NotContains(t, ready.Body.String(), "hx-trigger")
+	require.NotContains(t, ready.Body.String(), "hx-get")
 }

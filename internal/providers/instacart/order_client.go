@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
+	"careme/internal/config"
 	"careme/internal/httpretry"
+	ordertypes "careme/internal/orders/types"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -23,42 +23,56 @@ const (
 	DevelopmentURL = "https://connect.dev.instacart.tools"
 )
 
-type Client struct {
+// OrderClient creates shoppable lists using the server-side Instacart API key.
+type OrderClient struct {
 	apiKey     string
 	baseURL    string
+	origin     string
 	httpClient *http.Client
 }
 
-type ClientOptions struct {
-	APIKey  string
-	BaseURL string
-	// Transport is instrumented without replacing the caller's transport.
-	Transport http.RoundTripper
-}
-
-func NewClient(options ClientOptions) (*Client, error) {
-	baseURL := strings.TrimRight(options.BaseURL, "/")
+func NewOrderClient(cfg config.InstacartConfig, origin string, httpClient *http.Client) (*OrderClient, error) {
+	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = ProductionURL
 	}
 	if baseURL != ProductionURL && baseURL != DevelopmentURL {
 		return nil, fmt.Errorf("instacart base URL must be the production or development endpoint")
 	}
-	if strings.TrimSpace(options.APIKey) == "" {
+	if strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, fmt.Errorf("instacart requires an API key")
 	}
-	transport := options.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return nil, fmt.Errorf("instacart requires a valid public origin")
 	}
 	retry := retryablehttp.NewClient()
-	retry.HTTPClient = &http.Client{Timeout: 15 * time.Second, Transport: otelhttp.NewTransport(transport), CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
-	// Link creation has no documented idempotency key. Do not replay POSTs.
+	retry.HTTPClient = httpClient
+	// Link creation has no documented idempotency key. Never replay POSTs.
 	retry.RetryMax = 0
 	retry.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	retry.Logger = nil
 	retry.RequestLogHook = httpretry.LogRetry("instacart")
-	return &Client{apiKey: options.APIKey, baseURL: baseURL, httpClient: retry.StandardClient()}, nil
+	client := retry.StandardClient()
+	client.Timeout = httpClient.Timeout
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &OrderClient{apiKey: cfg.APIKey, baseURL: baseURL, origin: strings.TrimRight(origin, "/"), httpClient: client}, nil
+}
+
+func (c *OrderClient) create(ctx context.Context, input ordertypes.TransferRequest) (string, error) {
+	payload := shoppingList{Title: "Careme shopping list", LinkType: "shopping_list", ExpiresIn: 30, LandingPage: landingPage{LinkbackURL: c.origin + input.ReturnURL}}
+	for _, item := range input.Items {
+		display := item.Name
+		if item.Needed != "" {
+			display += " — " + item.Needed
+		}
+		payload.Items = append(payload.Items, lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)})
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode Instacart list: %w", err)
+	}
+	return c.createLink(ctx, body)
 }
 
 type measurement struct {
@@ -84,7 +98,7 @@ type landingPage struct {
 	LinkbackURL string `json:"partner_linkback_url"`
 }
 
-func (c *Client) createLink(ctx context.Context, body []byte) (string, error) {
+func (c *OrderClient) createLink(ctx context.Context, body []byte) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/idp/v1/products/products_link", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create Instacart request: %w", err)

@@ -10,7 +10,7 @@ import (
 func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	t.Parallel()
 	loc := &locations.Location{ID: "loc-123", Name: "Test Loc", Address: "1 Test St", State: "TS"}
-	d1 := time.Date(2025, 9, 17, 1, 2, 3, 0, time.UTC)
+	d1 := time.Date(2025, 9, 17, 9, 2, 3, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 23, 59, 59, 0, time.UTC)
 
 	p1 := DefaultParams(loc, d1)
@@ -51,7 +51,7 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 	t.Parallel()
 	loc := &locations.Location{ID: "23456789", Name: "Another", Address: "2 Test Ave", State: "TS"}
-	d1 := time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)
+	d1 := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
 	d2 := time.Date(2025, 9, 17, 12, 0, 0, 0, time.UTC)
 
 	p1 := DefaultParams(loc, d1)
@@ -72,8 +72,8 @@ func TestGeneratorParamsLocationHashStableForDifferentHours(t *testing.T) {
 
 func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 	t.Parallel()
-	krogerParams := DefaultParams(&locations.Location{ID: "10216", Name: "Kroger 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
-	wholeFoodsParams := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Whole Foods 10216"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	krogerParams := DefaultParams(&locations.Location{ID: "10216", Name: "Kroger 10216"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
+	wholeFoodsParams := DefaultParams(&locations.Location{ID: "wholefoods_10216", Name: "Whole Foods 10216"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
 
 	if got, want := krogerParams.LocationHash() != wholeFoodsParams.LocationHash(), true; got != want {
 		t.Fatalf("expected location hashes to differ across store backends: kroger=%s wholefoods=%s", krogerParams.LocationHash(), wholeFoodsParams.LocationHash())
@@ -82,7 +82,7 @@ func TestGeneratorParamsLocationHash_DiffersAcrossStoreBackends(t *testing.T) {
 
 func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
 
 	before := p.Hash()
 	p.PriorSavedHashes = []string{"saved-1", "saved-2"}
@@ -95,7 +95,7 @@ func TestGeneratorParamsHash_IgnoresPriorSavedHashes(t *testing.T) {
 
 func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Hash Store"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
 
 	before := p.Hash()
 	p.PreviousMenuPlanResponseID = "resp-menu-123"
@@ -109,7 +109,7 @@ func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 
 func TestNormalizeLegacyRecipeHash(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC))
+	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
 	hash := p.Hash()
 	legacyHash, ok := legacyRecipeHash(hash)
 	if !ok {

@@ -1,8 +1,8 @@
 package instacart
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,165 +10,144 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
-	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/routing"
 )
 
-const (
-	linkLifetime  = 30 * 24 * time.Hour
-	failureNotice = "Could not prepare your Instacart list. Try again, chef."
-)
-
-type OrderOptions struct {
-	Cache  cache.Cache
-	Client *Client
-	Origin string
-	Auth   auth.AuthClient
-}
+const orderTransferURL = "/instacart/order-transfers"
 
 type OrderHandler struct {
 	cache  cache.Cache
-	client *Client
-	origin string
 	auth   auth.AuthClient
+	client *OrderClient
 }
 
-func NewOrderHandler(options OrderOptions) (*OrderHandler, error) {
-	if options.Cache == nil || options.Client == nil || options.Auth == nil {
-		return nil, fmt.Errorf("instacart ordering requires cache, client, and authentication")
-	}
-	origin, err := url.Parse(options.Origin)
-	if err != nil || (origin.Scheme != "https" && origin.Scheme != "http") || origin.Host == "" || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || (origin.Path != "" && origin.Path != "/") {
-		return nil, fmt.Errorf("instacart ordering requires a valid public origin")
-	}
-	return &OrderHandler{cache: options.Cache, client: options.Client, origin: strings.TrimRight(options.Origin, "/"), auth: options.Auth}, nil
+func NewOrderHandler(c cache.Cache, authClient auth.AuthClient, client *OrderClient) *OrderHandler {
+	return &OrderHandler{cache: c, auth: authClient, client: client}
 }
 
-func (a *OrderHandler) Register(routes routing.Registrar) {
-	routes.Handle("POST /instacart/order", http.NewCrossOriginProtection().Handler(http.HandlerFunc(a.handleOrder)))
+func (h *OrderHandler) Register(routes routing.Registrar) {
+	routes.Handle("POST "+orderTransferURL, http.NewCrossOriginProtection().Handler(http.HandlerFunc(h.handleOrder)))
 }
 
-func (a *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	userID, err := a.auth.GetUserIDFromRequest(r)
+func orderTransferKey(userID, key string) string {
+	return "instacart_order_transfers/" + userID + "/" + key
+}
+
+func loadOrderTransfer(ctx context.Context, c cache.Cache, userID, key string) (ordertypes.Transfer, error) {
+	reader, err := c.Get(ctx, orderTransferKey(userID, key))
 	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			http.Error(w, "must be logged in", http.StatusUnauthorized)
-		} else {
-			http.Error(w, "Unable to load account", http.StatusInternalServerError)
-		}
-		return
+		return ordertypes.Transfer{}, err
 	}
+	defer func() { _ = reader.Close() }()
+	var transfer ordertypes.Transfer
+	err = json.NewDecoder(reader).Decode(&transfer)
+	return transfer, err
+}
+
+func saveOrderTransfer(ctx context.Context, c cache.Cache, userID, key string, transfer ordertypes.Transfer, options cache.PutOptions) error {
+	body, err := json.Marshal(transfer)
+	if err != nil {
+		return fmt.Errorf("encode Instacart transfer: %w", err)
+	}
+	if err := c.Put(ctx, orderTransferKey(userID, key), string(body), options); err != nil {
+		return fmt.Errorf("save Instacart transfer: %w", err)
+	}
+	return nil
+}
+
+// OrderViewForUser reads saved handoffs without contacting Instacart or creating a list.
+func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if input.UserID == "" {
+		return nil, fmt.Errorf("instacart order view requires an authenticated user ID")
+	}
+	transfer, err := loadOrderTransfer(ctx, c, input.UserID, input.ListKey)
+	if errors.Is(err, cache.ErrNotFound) {
+		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+		if err != nil {
+			return nil, fmt.Errorf("encode Instacart transfer request: %w", err)
+		}
+		return &ordertypes.OrderView{TransferURL: orderTransferURL, TransferLabel: "Shop with Instacart", IdempotencyKey: input.ListKey, TransferRequestJSON: string(body)}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Instacart transfer: %w", err)
+	}
+	switch transfer.Status {
+	case ordertypes.TransferFailed:
+		return &ordertypes.OrderView{TransferFailed: true}, nil
+	case ordertypes.TransferApplied, ordertypes.TransferPending:
+		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
+	default:
+		return nil, fmt.Errorf("unknown Instacart saved transfer status %q", transfer.Status)
+	}
+}
+
+func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid Instacart order", http.StatusBadRequest)
+		http.Error(w, "Invalid Instacart transfer.", http.StatusBadRequest)
 		return
 	}
-	returnURL := r.PostForm.Get("return_url")
-	listKey := r.PostForm.Get("list_key")
-	var items []ai.ShoppingItem
-	var location locationtypes.Location
-	if !localReturnURL(returnURL) || strings.TrimSpace(listKey) == "" || len(listKey) > 256 || json.Unmarshal([]byte(r.PostForm.Get("location")), &location) != nil || location.ID == "" || json.Unmarshal([]byte(r.PostForm.Get("items")), &items) != nil || len(items) == 0 {
-		http.Error(w, "Invalid Instacart order", http.StatusBadRequest)
+	var input ordertypes.TransferRequest
+	if err := json.Unmarshal([]byte(r.PostForm.Get("transfer_request")), &input); err != nil {
+		http.Error(w, "Invalid Instacart transfer.", http.StatusBadRequest)
 		return
 	}
-	payload := shoppingList{Title: "Careme shopping list", LinkType: "shopping_list", ExpiresIn: 30, LandingPage: landingPage{LinkbackURL: a.origin + returnURL}}
-	for _, item := range items {
-		if strings.TrimSpace(item.Name) == "" {
-			http.Error(w, "Invalid Instacart item", http.StatusBadRequest)
-			return
-		}
-		display := item.Name
-		if item.Needed != "" {
-			display += " — " + item.Needed
-		}
-		payload.Items = append(payload.Items, lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)})
+	key := r.PostForm.Get("idempotency_key")
+	if !validOrderForm(key, input) {
+		http.Error(w, "Invalid Instacart transfer.", http.StatusBadRequest)
+		return
 	}
-	destination, err := a.shoppingLink(r, userID, payload)
+	userID, err := h.auth.GetUserIDFromRequest(r)
+	if errors.Is(err, auth.ErrNoSession) {
+		http.Redirect(w, r, "/sign-in?return_to_b64="+base64.RawURLEncoding.EncodeToString([]byte(input.ReturnURL)), http.StatusSeeOther)
+		return
+	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), "Prepare Instacart shopping list", "error", err)
-		back, _ := url.Parse(returnURL)
-		query := back.Query()
-		query.Set("instacart_status", "failed")
-		back.RawQuery = query.Encode()
-		http.Redirect(w, r, back.String(), http.StatusSeeOther)
+		http.Error(w, "Unable to load account.", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, destination, http.StatusSeeOther)
-}
-
-type linkRecord struct {
-	URL       string    `json:"url"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-func (a *OrderHandler) shoppingLink(r *http.Request, userID string, payload shoppingList) (string, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode Instacart list: %w", err)
-	}
-	// Include the environment so development links never leak into production.
-	sum := sha256.Sum256(append([]byte(a.client.baseURL+"\n"), body...))
-	key := "instacart_shopping_links/" + userID + "/" + hex.EncodeToString(sum[:])
-	reader, err := a.cache.Get(r.Context(), key)
+	_, err = loadOrderTransfer(r.Context(), h.cache, userID, key)
 	if err == nil {
-		var record linkRecord
-		decodeErr := json.NewDecoder(reader).Decode(&record)
-		_ = reader.Close()
-		if decodeErr != nil {
-			return "", fmt.Errorf("decode cached Instacart link: %w", decodeErr)
-		}
-		if !validLink(record.URL) {
-			return "", fmt.Errorf("invalid cached Instacart link")
-		}
-		if time.Now().Before(record.ExpiresAt) {
-			return record.URL, nil
-		}
-	} else if !errors.Is(err, cache.ErrNotFound) {
-		return "", fmt.Errorf("load Instacart link: %w", err)
+		http.Redirect(w, r, input.ReturnURL, http.StatusSeeOther)
+		return
 	}
-	started := time.Now()
-	destination, err := a.client.createLink(r.Context(), body)
+	if !errors.Is(err, cache.ErrNotFound) {
+		http.Error(w, "Unable to read Instacart transfer.", http.StatusInternalServerError)
+		return
+	}
+	transfer := ordertypes.Transfer{TransferID: key, Status: ordertypes.TransferPending}
+	if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.IfNoneMatch()); err != nil {
+		http.Error(w, "Unable to start Instacart transfer.", http.StatusConflict)
+		return
+	}
+	destination, err := h.client.create(r.Context(), input)
 	if err != nil {
-		return "", err
+		slog.ErrorContext(r.Context(), "Instacart transfer failed", "error", err)
+		transfer.Status = ordertypes.TransferFailed
+	} else {
+		transfer.Status = ordertypes.TransferApplied
+		transfer.CartURL = destination
 	}
-	record, err := json.Marshal(linkRecord{URL: destination, ExpiresAt: started.Add(linkLifetime)})
-	if err != nil {
-		return "", fmt.Errorf("encode Instacart link record: %w", err)
+	if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.Unconditional()); err != nil {
+		http.Error(w, "Unable to save Instacart transfer.", http.StatusInternalServerError)
+		return
 	}
-	if err := a.cache.Put(r.Context(), key, string(record), cache.Unconditional()); err != nil {
-		return "", fmt.Errorf("save Instacart link: %w", err)
-	}
-	return destination, nil
+	http.Redirect(w, r, input.ReturnURL, http.StatusSeeOther)
 }
 
-func localReturnURL(raw string) bool {
-	u, err := url.Parse(raw)
-	return err == nil && !u.IsAbs() && u.Host == "" && strings.HasPrefix(raw, "/") && !strings.HasPrefix(u.Path, "//") && !strings.ContainsAny(u.Path, "\\\r\n")
-}
-
-func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	items, err := json.Marshal(input.Items)
-	if err != nil {
-		return nil, fmt.Errorf("encode shopping items for Instacart: %w", err)
+func validOrderForm(key string, input ordertypes.TransferRequest) bool {
+	for _, item := range input.Items {
+		// Instacart matches names, so pantry items and other stores' IDs are supported.
+		if strings.TrimSpace(item.Name) == "" {
+			return false
+		}
 	}
-	location, err := json.Marshal(input.Location)
-	if err != nil {
-		return nil, fmt.Errorf("encode Instacart source location: %w", err)
-	}
-	view := &ordertypes.OrderView{
-		ActionURL: "/instacart/order", ActionLabel: "Shop with Instacart",
-		Description: "Choose a store on Instacart, then review products and quantities before checkout.",
-		Fields:      ordertypes.OrderFields{Items: string(items), Location: string(location), ListKey: input.ListKey, ReturnURL: input.ReturnURL},
-	}
-	if input.Query.Get("instacart_status") == "failed" {
-		view.Notice = failureNotice
-	}
-	return view, nil
+	u, err := url.Parse(input.ReturnURL)
+	return err == nil && !u.IsAbs() && u.Host == "" && strings.HasPrefix(input.ReturnURL, "/") && !strings.HasPrefix(u.Path, "//") && !strings.ContainsAny(u.Path, "\\\r\n") &&
+		strings.TrimSpace(key) != "" && len(key) <= 255 && !strings.ContainsAny(key, "/\\") && key != "." && key != ".." && len(input.Items) > 0 && strings.TrimSpace(input.Location.ID) != ""
 }

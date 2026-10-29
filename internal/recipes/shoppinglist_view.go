@@ -47,7 +47,8 @@ func (v shoppingRecipeView) DOMID() string {
 }
 
 func (v shoppingRecipeView) Image() recipeImageView {
-	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true}
+	// Unsaved suggestions do not start image generation.
+	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true, Poll: v.Saved}
 }
 
 type shoppingProgress struct {
@@ -83,7 +84,7 @@ type shoppingListPageView struct {
 	AuthReturnTo         string
 	UseTodaysIngredients bool
 	AdminURL             string
-	Orders               []*ordertypes.OrderView
+	Order                *ordertypes.OrderView
 }
 
 type shoppingListViewInput struct {
@@ -218,7 +219,7 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 
 type shoppingFinalizeView struct {
 	// Selection changes require rebuilding before another order can be submitted.
-	Orders          []*ordertypes.OrderView
+	Order           *ordertypes.OrderView
 	Hash            string
 	HasSavedRecipes bool
 }

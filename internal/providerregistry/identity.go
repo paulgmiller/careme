@@ -1,13 +1,15 @@
 package providerregistry
 
 import (
+	"hash"
 	"testing"
+	"time"
 
 	"careme/internal/farmersmarket"
-	"careme/internal/heb"
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"
@@ -16,33 +18,26 @@ import (
 	"careme/internal/providers/wholefoods"
 )
 
-// this is pretty hacky but if we don't do this we have to pass something to every recipes.IO
-// so it can hash params correctly. Open to better methods.
+// Register cache identities without coupling cache consumers to provider construction.
 func init() {
-	cachekey.RegisterStaplesSignature(StaplesSignature)
-}
-
-type staplesIdentity interface {
-	IsID(string) bool
-	Signature() string
-}
-
-// StaplesSignature returns the provider version used for a store's recipe and
-// ingredient cache keys.
-func StaplesSignature(locationID string) string {
 	for _, provider := range staplesIdentities() {
-		if provider.IsID(locationID) {
-			return provider.Signature()
-		}
+		cachekey.RegisterProvider(provider)
 	}
-	if testing.Testing() && locationID == "loc-123" {
-		return kroger.NewIdentityProvider().Signature()
+	if testing.Testing() {
+		cachekey.RegisterProvider(testKrogerIdentity{})
 	}
-	panic("unknown staples provider for location " + locationID)
 }
 
-func staplesIdentities() []staplesIdentity {
-	return []staplesIdentity{
+// Preserve the established synthetic Kroger ID used by integration fixtures.
+type testKrogerIdentity struct{}
+
+func (testKrogerIdentity) IsID(id string) bool { return id == "loc-123" }
+func (testKrogerIdentity) HashForStore(id string, date time.Time) hash.Hash {
+	return kroger.NewIdentityProvider().HashForStore(id, date)
+}
+
+func staplesIdentities() []cachekey.StoreHasher {
+	return []cachekey.StoreHasher{
 		kroger.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
 		heb.NewIdentityProvider(),

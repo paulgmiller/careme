@@ -78,7 +78,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 					} else {
 						assert.Equal(t, "178", req.URL.Query().Get("categories:in"))
 					}
-					resp = jsonPage(t, []catalogProduct{{ID: page, Name: " Organic Beef - avg 1lb ", BrandID: 2, Categories: []int{1, 2}, Price: 10, IsVisible: true, Availability: "available", Variants: []catalogVariant{{CalculatedPrice: 8}}}}, page, 2)
+					resp = jsonPage(t, []catalogProduct{{ID: page, Name: " Organic Beef - avg 1lb ", BrandID: 2, Categories: []int{1, 2}, Price: 10, IsVisible: true, Availability: "available", Variants: []catalogVariant{{ID: page + 100, CalculatedPrice: 8}}}}, page, 2)
 				case "/stores/test/v3/catalog/categories":
 					resp = jsonPage(t, []catalogCategory{{ID: page, Name: []string{"Shop All", "Meat"}[page-1]}}, page, 2)
 				case "/stores/test/v3/catalog/brands":
@@ -95,6 +95,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, got, 2)
 			assert.Equal(t, "2", got[1].ProductID)
+			assert.Equal(t, "102", got[1].VariantID)
 			assert.Equal(t, "Organic Beef - avg 1lb", got[0].Description)
 			assert.Equal(t, "avg 1lb", got[0].Size)
 			assert.Equal(t, "Local Farm", got[0].Brand)

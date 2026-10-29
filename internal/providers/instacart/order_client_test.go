@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +42,7 @@ func TestCreateLink(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			client, err := NewClient(ClientOptions{APIKey: "test-key", Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 				calls++
 				assert.Equal(t, "POST", r.Method)
 				assert.Equal(t, ProductionURL+"/idp/v1/products/products_link", r.URL.String())
@@ -69,7 +71,7 @@ func TestCreateLink(t *testing.T) {
 	}
 }
 
-func TestNewClientConfiguration(t *testing.T) {
+func TestNewOrderClientConfiguration(t *testing.T) {
 	for _, tt := range []struct {
 		key, base string
 		valid     bool
@@ -81,7 +83,7 @@ func TestNewClientConfiguration(t *testing.T) {
 		{"  ", ProductionURL, false},
 		{"key", "https://evil.test", false},
 	} {
-		_, err := NewClient(ClientOptions{APIKey: tt.key, BaseURL: tt.base})
+		_, err := NewOrderClient(config.InstacartConfig{APIKey: tt.key, BaseURL: tt.base}, "https://careme.test", http.DefaultClient)
 		if tt.valid {
 			require.NoError(t, err)
 		} else {
@@ -95,4 +97,29 @@ func TestValidLink(t *testing.T) {
 		assert.False(t, validLink(raw), raw)
 	}
 	assert.True(t, validLink("https://www.instacart.com/store/shopping_lists/1"))
+}
+
+func TestOrderClientDoesNotFollowRedirects(t *testing.T) {
+	calls := 0
+	client, err := NewOrderClient(config.InstacartConfig{APIKey: "key"}, "https://careme.test", &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+			calls++
+			assert.Equal(t, "connect.instacart.com", r.URL.Host)
+			resp := response(302, "")
+			resp.Header.Set("Location", "https://evil.test/capture")
+			return resp, nil
+		}),
+	})
+	require.NoError(t, err)
+	_, err = client.createLink(t.Context(), []byte(`{}`))
+	require.ErrorContains(t, err, "returned 302")
+	assert.Equal(t, 1, calls)
+}
+
+func TestOrderClientRequiresPublicOrigin(t *testing.T) {
+	for _, origin := range []string{"", "https://careme.test/path", "//careme.test", "https://user:pass@careme.test", "https://careme.test?query=bad"} {
+		_, err := NewOrderClient(config.InstacartConfig{APIKey: "key"}, origin, http.DefaultClient)
+		require.ErrorContains(t, err, "public origin")
+	}
 }

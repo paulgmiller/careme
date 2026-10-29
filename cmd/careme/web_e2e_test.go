@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"hash/fnv"
+	stdhtml "html"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
+	ordertypes "careme/internal/orders/types"
 	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
@@ -98,6 +101,48 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		if recipeHashes[0] == dismissed {
 			t.Fatalf("finalized recipe %s was in dismissed list", dismissed)
 		}
+	}
+
+	// Submit the actual native form and follow its redirect back to the shopping list.
+	form := url.Values{
+		"idempotency_key":  {stdhtml.UnescapeString(extractHiddenValue(t, finalizedBody, "idempotency_key"))},
+		"transfer_request": {stdhtml.UnescapeString(extractHiddenValue(t, finalizedBody, "transfer_request"))},
+	}
+	transferredBody := mustPostFormBody(t, client, srv.URL+"/mock/order-transfers", form)
+	if !strings.Contains(transferredBody, "Review cart (opens a new tab)") || strings.Contains(transferredBody, `name="transfer_request"`) {
+		t.Fatalf("expected saved cart link to replace transfer form: %s", transferredBody)
+	}
+	var input ordertypes.TransferRequest
+	if err := json.Unmarshal([]byte(form.Get("transfer_request")), &input); err != nil {
+		t.Fatal(err)
+	}
+	cartURL := srv.URL + "/mock/order-transfers/" + url.PathEscape(form.Get("idempotency_key"))
+	readMockCart := func() ordertypes.Transfer {
+		response := mustGet(t, client, cartURL)
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("mock cart returned %d", response.StatusCode)
+		}
+		var result ordertypes.Transfer
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	transfer := readMockCart()
+	if transfer.Status != ordertypes.TransferApplied || len(transfer.Items) != len(input.Items) {
+		t.Fatalf("unexpected mock cart: %+v", transfer)
+	}
+	for i, item := range transfer.Items {
+		if item.ProductID != input.Items[i].ProductID || item.AcceptedQuantity != 1 || item.RejectedQuantity != 0 {
+			t.Fatalf("unexpected mock item result: %+v", item)
+		}
+	}
+	// Reposting the native form reuses its result.
+	_ = mustPostFormBody(t, client, srv.URL+"/mock/order-transfers", form)
+	repeated := readMockCart()
+	if !reflect.DeepEqual(transfer, repeated) {
+		t.Fatalf("duplicate submission changed mock cart: %+v", repeated)
 	}
 
 	// Step 6: ask a question on the finalized single recipe page.
@@ -237,8 +282,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("failed to create templates %v", err)
 	}
 
-	cacheDir := filepath.Join(t.TempDir(), "cache")
-	cacheStore := cache.NewFileCache(cacheDir)
+	// Location lookups write their cache asynchronously, beyond HTTP response completion.
+	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
@@ -262,11 +307,14 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}
 	recipeHandler.Register(appRoutes)
+	if err := providerregistry.NewFactory(cfg).RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cacheStore, Auth: mockAuth}); err != nil {
+		t.Fatal(err)
+	}
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)

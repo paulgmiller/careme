@@ -2,32 +2,21 @@ package kroger
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"strings"
 	"sync"
 	"time"
 
 	"careme/internal/config"
 	"careme/internal/httpretry"
+	"careme/internal/providers/kroger/oauth"
 	"careme/internal/providers/kroger/products"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
-//go:generate go generate ./products ./locations
-
-// this wasn't in the swagger? try the jsons added next
-// oAuth2TokenResponse represents the response from Kroger OAuth2 token endpoint
-type oAuth2TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-	Scope       string `json:"scope"`
-}
+//go:generate go generate ./products ./locations ./oauth ./cart
 
 // KrogerTokenManager manages the bearer token and refreshes it if needed
 type KrogerTokenManager struct {
@@ -57,51 +46,27 @@ func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
 	now := time.Now()
 	// Refresh if less than 1 minute left or not set
 	if m.token == "" || now.After(m.expiresAt.Add(-1*time.Minute)) {
-		endpoint := "https://api.kroger.com/v1/connect/oauth2/token"
-		data := url.Values{}
-		data.Set("grant_type", "client_credentials")
-		data.Set("scope", "product.compact") // wierd for location?
-
-		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(data.Encode()))
+		body, err := requestToken(ctx, m.httpClient, m.clientID, m.clientSecret, oauth.AccessTokenFormdataRequestBody{
+			GrantType: "client_credentials", Scope: new("product.compact"),
+		})
 		if err != nil {
 			return "", err
 		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.SetBasicAuth(m.clientID, m.clientSecret)
-
-		resp, err := m.httpClient.Do(req)
-		if err != nil {
-			return "", err
-		}
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				fmt.Printf("Kroger Response Close Error: %v\n", err)
-			}
-		}()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("failed to get token: %s", string(body))
-		}
-
-		var tokenResp oAuth2TokenResponse
-		if err := json.Unmarshal(body, &tokenResp); err != nil {
-			return "", err
-		}
-		m.token = tokenResp.AccessToken
-		m.expiresAt = now.Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		m.token = *body.AccessToken
+		m.expiresAt = now.Add(time.Duration(*body.ExpiresIn) * time.Second)
 	}
 	return m.token, nil
 }
 
-// similiar but less customiszed that bright data.
+// withRetries applies the catalog retry policy while preserving the injected client.
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient = baseClient
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+	instrumented := *baseClient
+	instrumented.Transport = otelhttp.NewTransport(baseClient.Transport)
+	retryClient.HTTPClient = &instrumented
 	retryClient.RequestLogHook = httpretry.LogRetry("kroger")
 	return retryClient.StandardClient()
 }
@@ -123,8 +88,8 @@ func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	httpClient = withRetries(httpClient)
 	requestEditor := newBearerTokenRequestEditor(cfg, httpClient)
+	httpClient = withRetries(httpClient)
 	productsClient, err := products.NewClientWithResponses("https://api.kroger.com",
 		products.WithHTTPClient(httpClient),
 		products.WithRequestEditorFn(products.RequestEditorFn(requestEditor)),

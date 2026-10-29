@@ -18,7 +18,6 @@ import (
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 
-	"github.com/samber/lo"
 	lop "github.com/samber/lo/parallel"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -96,27 +95,29 @@ func NewService(cfg *config.Config, providers providerFactory) (*Service, error)
 }
 
 // RunOnce waits for required recipes and images, returning failures to the cronjob.
-func (s *Service) RunOnce(ctx context.Context) error {
+func (s *Service) RunOnce(ctx context.Context, now time.Time) error {
 	defer s.wait()
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
-	errs := lop.Map(lo.Values(AdvertisedRecipeLocations()), func(c campaign, _ int) error {
+	var errs []error
+	for _, c := range AdvertisedRecipeLocations() {
 		if !c.Generate {
-			return nil
+			continue
 		}
-		return s.generateLocation(ctx, c.Location.ID)
-	})
+		errs = append(errs, s.generateLocation(ctx, c, now))
+	}
 	return errors.Join(errs...)
 }
 
-func (s *Service) generateLocation(ctx context.Context, locationID string) error {
+func (s *Service) generateLocation(ctx context.Context, c campaign, now time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
+	locationID := c.Location.ID
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
 	if err != nil {
 		return fmt.Errorf("hydrate location %s: %w", locationID, err)
 	}
-	date, err := locations.StoreToDate(ctx, time.Now(), loc)
+	date, err := locations.StoreTime(ctx, now, loc)
 	if err != nil {
 		return fmt.Errorf("resolve store date for %s: %w", locationID, err)
 	}

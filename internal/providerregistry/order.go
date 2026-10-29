@@ -1,6 +1,7 @@
 package providerregistry
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -10,12 +11,12 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
-	"careme/internal/httpretry"
 	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/mnfoodclub"
+	"careme/internal/providers/mockorder"
 	"careme/internal/routing"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -26,6 +27,10 @@ type OrderOptions struct {
 
 // RegisterOrders installs routes for every configured ordering destination.
 func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) error {
+	if f.config.Mocks.Enable {
+		mockorder.NewHandler(options.Cache, options.Auth).Register(routes)
+		return nil
+	}
 	if f.config.Kroger.CartTokenKey != "" {
 		handler, err := f.newKrogerOrder(options)
 		if err != nil {
@@ -33,16 +38,19 @@ func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) 
 		}
 		handler.Register(routes)
 	}
+	if f.config.MNFoodClub.OrderAPIURL != "" || f.config.MNFoodClub.OrderAccessToken != "" {
+		client, err := mnfoodclub.NewOrderClient(f.config.MNFoodClub, newOrderHTTPClient())
+		if err != nil {
+			return err
+		}
+		mnfoodclub.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
+	}
 	if f.config.Instacart.APIKey != "" {
-		client, err := instacart.NewClient(instacart.ClientOptions{APIKey: f.config.Instacart.APIKey, BaseURL: f.config.Instacart.BaseURL})
+		client, err := instacart.NewOrderClient(f.config.Instacart, f.config.ResolvedPublicOrigin(), newOrderHTTPClient())
 		if err != nil {
 			return err
 		}
-		handler, err := instacart.NewOrderHandler(instacart.OrderOptions{Cache: options.Cache, Client: client, Origin: f.config.ResolvedPublicOrigin(), Auth: options.Auth})
-		if err != nil {
-			return err
-		}
-		handler.Register(routes)
+		instacart.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
 	}
 	return nil
 }
@@ -56,13 +64,7 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	if err != nil || len(key) != 32 {
 		return nil, fmt.Errorf("KROGER_CART_TOKEN_KEY must be a base64-encoded 32-byte key")
 	}
-	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient = &http.Client{Timeout: 15 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	// Cart writes and authorization codes cannot safely be replayed.
-	retryClient.RetryMax = 0
-	retryClient.Logger = nil
-	retryClient.RequestLogHook = httpretry.LogRetry("kroger")
-	httpClient := retryClient.StandardClient()
+	httpClient := newOrderHTTPClient()
 	client := &kroger.CartClient{
 		ClientID: cfg.Kroger.ClientID, ClientSecret: cfg.Kroger.ClientSecret,
 		RedirectURI:  cfg.ResolvedPublicOrigin() + "/kroger/callback",
@@ -79,22 +81,41 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	return handler, nil
 }
 
-// OrderViews builds each configured destination's form and return presentation.
-func (f Factory) OrderViews(input ordertypes.OrderViewInput) ([]*ordertypes.OrderView, error) {
-	var views []*ordertypes.OrderView
-	if kroger.NewIdentityProvider().IsID(input.Location.ID) && f.config.Kroger.CartTokenKey != "" {
-		view, err := kroger.OrderView(input)
+// Ordering clients are instrumented once and do not automatically retry or follow API redirects.
+func newOrderHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout:       15 * time.Second,
+		Transport:     otelhttp.NewTransport(http.DefaultTransport),
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+// OrderViewBuilder binds provider-owned transfer reads to the application's cache.
+type OrderViewBuilder struct {
+	factory Factory
+	cache   cache.Cache
+}
+
+func (f Factory) NewOrderViewBuilder(c cache.Cache) *OrderViewBuilder {
+	return &OrderViewBuilder{factory: f, cache: c}
+}
+
+func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	if b.factory.config.Mocks.Enable {
+		return mockorder.OrderView(ctx, b.cache, input)
+	}
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
+		return kroger.OrderViewForUser(ctx, b.cache, input)
+	}
+	if mnfoodclub.NewIdentityProvider().IsID(input.Location.ID) && (b.factory.config.MNFoodClub.OrderAPIURL != "" || b.factory.config.MNFoodClub.OrderAccessToken != "") {
+		client, err := mnfoodclub.NewOrderClient(b.factory.config.MNFoodClub, newOrderHTTPClient())
 		if err != nil {
 			return nil, err
 		}
-		views = append(views, view)
+		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	if f.config.Instacart.APIKey != "" {
-		view, err := instacart.OrderView(input)
-		if err != nil {
-			return nil, err
-		}
-		views = append(views, view)
+	if b.factory.config.Instacart.APIKey != "" {
+		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
-	return views, nil
+	return nil, nil
 }

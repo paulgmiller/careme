@@ -2,11 +2,16 @@ package smithbrothersfarms
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"careme/internal/ingredients/cachekey"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +32,8 @@ func fixtureClient(t *testing.T, failURL string, status int, failure error) (*Cl
 	t.Helper()
 	pages := map[string]string{
 		stapleURLs[0]: fixture(t, "produce"), stapleURLs[1]: fixture(t, "meat"),
+		baseURL + "/dairy-eggs":              fixture(t, "dairy-eggs"),
+		baseURL + "/yogurt":                  fixture(t, "yogurt"),
 		baseURL + "/" + harvestBoxes[0].slug: fixture(t, "organic-box"),
 		baseURL + "/" + harvestBoxes[1].slug: fixture(t, "standard-box"),
 	}
@@ -57,10 +64,12 @@ func TestFetchStaples(t *testing.T) {
 	client, calls, bodies := fixtureClient(t, "", 0, nil)
 	got, err := NewStaplesProvider(client).FetchStaples(t.Context(), "smithbrothersfarms_delivery")
 	require.NoError(t, err)
-	require.Len(t, got, 25)
-	assert.Equal(t, []string{stapleURLs[0], stapleURLs[1], baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}, *calls)
-	assert.Equal(t, "Organic Produce Box — Local Organic Sugar Bee Apples", got[6].Description)
-	assert.Equal(t, "Produce Box — Avocados", got[18].Description)
+	require.Len(t, got, 28)
+	assert.Equal(t, []string{stapleURLs[0], stapleURLs[1], baseURL + "/dairy-eggs", baseURL + "/yogurt", baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}, *calls)
+	assert.Equal(t, "Organic Produce Box — Local Organic Sugar Bee Apples", got[9].Description)
+	assert.Equal(t, "Produce Box — Avocados", got[21].Description)
+	assert.Equal(t, "Smith Brothers Whole Milk - half gallon", got[7].Description)
+	assert.Equal(t, "Chobani 20g Protein Plain Greek Yogurt - 32 oz", got[8].Description)
 	for _, body := range *bodies {
 		assert.True(t, body.closed)
 	}
@@ -72,7 +81,7 @@ func TestFetchStaples(t *testing.T) {
 }
 
 func TestFetchStaplesFailures(t *testing.T) {
-	urls := []string{stapleURLs[0], stapleURLs[1], baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}
+	urls := []string{stapleURLs[0], stapleURLs[1], baseURL + "/dairy-eggs", baseURL + "/yogurt", baseURL + "/" + harvestBoxes[0].slug, baseURL + "/" + harvestBoxes[1].slug}
 	wantErr := errors.New("network failed")
 	for i, url := range urls {
 		for _, failure := range []struct {
@@ -130,18 +139,26 @@ func TestIdentityAndWineLookup(t *testing.T) {
 	for _, id := range []string{"", "smithbrothersfarms", "other_smithbrothersfarms_delivery"} {
 		assert.False(t, identity.IsID(id))
 	}
-	original := identity.Signature()
-	assert.Len(t, original, 64)
-	assert.Equal(t, original, identity.Signature())
+	date := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
+	original := identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil)
+	parts := append([]string{}, stapleURLs...)
+	for _, box := range harvestBoxes {
+		parts = append(parts, baseURL+"/"+box.slug)
+	}
+	parts = append(parts, parserVersion)
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	monday := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, cachekey.NewHash("smithbrothersfarms_delivery", monday, signature).Sum(nil), original)
+	assert.Equal(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	saved := stapleURLs[0]
 	t.Cleanup(func() { stapleURLs[0] = saved })
 	stapleURLs[0] += "?changed=1"
-	assert.NotEqual(t, original, identity.Signature())
+	assert.NotEqual(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	stapleURLs[0] = saved
 	box := harvestBoxes[0].slug
 	t.Cleanup(func() { harvestBoxes[0].slug = box })
 	harvestBoxes[0].slug += "-changed"
-	assert.NotEqual(t, original, identity.Signature())
+	assert.NotEqual(t, original, identity.HashForStore("smithbrothersfarms_delivery", date).Sum(nil))
 	client, calls, _ := fixtureClient(t, "", 0, nil)
 	provider := NewStaplesProvider(client)
 	_, err := provider.FetchWines(t.Context(), "smithbrothersfarms_delivery", nil)
