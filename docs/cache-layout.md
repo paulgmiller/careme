@@ -66,6 +66,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `mnfoodclub_order_transfers/` | Shared transfer results keyed by Careme user and form idempotency key; transfer_id is the partner ID | MN Food Club order POST and server-side status refresh | Provider form route and order view builder |
+| `instacart_order_transfers/` | Shared JSON `Transfer` keyed by Careme user ID and finalized-list idempotency key | Instacart order handler | Instacart order handler and cache-bound order view |
 | `kroger_order_transfers/` | Shared `orders/types.Transfer` results keyed by authenticated user and transfer ID | Kroger transfer POST and OAuth callback | Provider browser POST and OAuth callback |
 | `kroger_oauth_continuations/` | Posted request, user ID, idempotency key, and issued timestamp keyed by user and random OAuth state | Kroger authorization start | OAuth callback; accepted for ten minutes |
 | `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, selected variant IDs, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
@@ -244,3 +245,20 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - The same record is saved as `pending` before a cart write and overwritten with the result afterward. Repeated submissions reuse that result without retrying failed transfers. TODO: implement cache ETag reads and `IfMatch` updates to protect state transitions. Updates are currently unconditional, so racing submissions or OAuth callbacks may overwrite newer results or submit products twice. No separate submission or lifecycle subrecords are written.
 - Recipes asks a provider-owned view builder for the authenticated viewer’s saved handoff; it never reads provider cache keys or OAuth records directly. Its shopping-list form uses a native POST to the destination's [cart-transfer route](ordering.md). The provider handler redirects directly into OAuth when needed, redirects completed additions back to the shopping list, and returns HTTP errors when no outcome can be saved. The shopping list renders a cart link for completed or possibly applied writes, shows a failure label for failed transfers, retains its form for missing records, and fails on transfer-read errors. It has no browser transfer-status URL, polling, or connect-account control. The handler reads the single saved transfer. A failed final save leaves it pending; concurrent overwrites are not protected until ETag support is implemented.
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger uses the provider-specific transfer layout above.
+
+### Instacart transfers
+
+- `instacart_order_transfers/<user ID>/<idempotency key>` stores only the shared
+  `Transfer`: finalized-list `transfer_id`, typed status, and generated shopping
+  page URL as `cart_url`. Product acceptance is not confirmed by link creation,
+  so no per-item acceptance quantities are stored.
+- Creation conditionally reserves a `pending` transfer before the API call, then
+  saves `applied` or `failed`. Repeated posts reuse the record; they do not compare
+  request fingerprints or generate another shopping page. Confirmation-save
+  failures leave the reservation intact.
+- The view reads the authenticated user's transfer and renders the existing form,
+  cart link, or failure state. It never calls Instacart. Records have no automatic
+  expiry; generated Instacart links expire after 30 days and are retained as history.
+- The earlier `instacart_shopping_links/` payload-hash cache is no longer used.
+  Existing entries may remain on disk; there is no migration to fabricate shared
+  transfer outcomes from those prototype records.

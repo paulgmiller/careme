@@ -199,6 +199,49 @@ the handoff again. No request wrapper or customer-ID mapping is persisted. The p
 embeds the shared `Transfer` plus `user_id`; TODO: save that customer-ID mapping
 for future identity hints.
 
+## Instacart shopping lists
+
+Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers`. The provider
+registry currently offers Instacart only for Whole Foods (`wholefoods_*`) IDs. Mock
+mode still uses only the mock provider. `INSTACART_BASE_URL` defaults to
+`https://connect.instacart.com`; development keys use `https://connect.dev.instacart.tools`.
+
+Instacart follows the same native form, sign-in return, conditional reservation,
+and saved `Transfer` flow as Kroger and MN Food Club. The key is the finalized
+list hash, scoped to the authenticated Careme user. Reposts reuse the saved
+outcome without comparing the submitted payload. There are no query-string
+statuses, browser polling, extra recipe-handler interfaces, or multiple ordering
+forms. The cache-bound view reads the saved result and supplies the existing
+form, review link, or failure label. View rendering never calls Instacart.
+
+The API request creates a shopping-list page with every displayed item, including
+pantry ingredients and selected wines. Names drive matching; source product and
+variant IDs and source-store package counts are not Instacart identifiers or
+measurements. Positive numeric recipe amounts with supported units become
+`line_item_measurements`. Other amounts remain display text, and every original
+amount is retained for review. No ingredient is omitted for an unknown unit.
+Unlike catalog-based providers, Instacart requires nonempty item names and allows
+items without product IDs.
+
+An API success saves an `applied` handoff with the generated URL as `cart_url`.
+This confirms creation of the shopping page, not acceptance of any cart products;
+no accepted or rejected cart quantities are invented. The POST returns to the
+current request's local shopping-list URL, where the shared review control opens
+Instacart. The shopper selects a supported retailer, reviews matches and quantities,
+and adds products to their cart on Instacart. Careme does not select the source
+retailer or place an order.
+
+API errors and invalid URLs save `failed`; repeated posts do not retry. A failed
+confirmation save leaves `pending`, blocking another API submission. Pending
+records without a generated URL render no cart action. Creation POSTs are never
+automatically replayed or redirected, and the instrumented application HTTP client
+is injected at construction, as with other ordering clients.
+
+Generated links expire after 30 days. Transfer records remain saved history and
+are not refreshed or recreated on page load. A different finalized list has its
+own handoff. Legacy `instacart_shopping_links/` records are no longer read; only
+shared transfers are persisted under `instacart_order_transfers/`.
+
 ## Local development and E2E tests
 
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead

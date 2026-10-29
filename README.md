@@ -35,6 +35,8 @@ The application is configured via environment variables:
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
 - `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
+- `INSTACART_API_KEY` - server-side Instacart Developer Platform key enabling shopping-list handoff for Whole Foods store IDs.
+- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com`. Use `https://connect.dev.instacart.tools` with a development key.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
@@ -108,7 +110,11 @@ The shopping-list UI
 asks the provider for the current viewer's saved handoff during server rendering.
 Confirmed or possibly applied writes show a cart link instead of the form;
 transfer-read failures fail the page. There is no browser status fetch.
-Kroger and the opt-in MN Food Club adapter use this browser handoff. Food Club’s
+Kroger, the opt-in MN Food Club adapter, and Instacart use this browser handoff.
+Configured Kroger and MN Food Club destinations use their native providers;
+Instacart is currently offered only for Whole Foods store IDs. Mock mode uses only the mock provider.
+Instacart creates a shoppable list; users choose their retailer and add products
+to their cart there. Food Club’s
 partner API remains a proposal; configure it only against an agreed endpoint. Users review amounts and complete
 checkout with the provider. See [Cart transfers](docs/ordering.md) for browser
 navigation and OAuth details.

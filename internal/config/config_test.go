@@ -330,3 +330,11 @@ func TestLoadOnlyProvidersRequiresKrogerUnlessMocked(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadInstacart(t *testing.T) {
+	t.Setenv("INSTACART_API_KEY", "test-key")
+	t.Setenv("INSTACART_BASE_URL", "https://connect.dev.instacart.tools")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, InstacartConfig{APIKey: "test-key", BaseURL: "https://connect.dev.instacart.tools"}, cfg.Instacart)
+}
