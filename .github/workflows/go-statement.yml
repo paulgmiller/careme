@@ -19,13 +19,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - run: go install github.com/paulgmiller/go-statement@latest
+      - run: go install github.com/paulgmiller/go-statement@v0.0.0-20260911185303-76623bd85b8c
 
       - name: Report statement diff
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          go-statement diff "$BASE_SHA...HEAD" > statement-diff.txt
+          go-statement diff origin/master...HEAD > statement-diff.txt
           cat statement-diff.txt
           {
             echo '### Go statement diff'

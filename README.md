@@ -131,6 +131,21 @@ Secrets remain separate; the check reads manifests without accessing credentials
 or Kubernetes. It also runs in `k8s-lint`, which gates publishing and deployment
 in CI. It checks secret references, not the keys or values stored in the cluster.
 
+## Export checks and statement diffs
+
+`./task.sh lint` includes `./task.sh unexport`, which rejects types, functions,
+constants, and variables that can be private to their package. Struct fields
+retain their visibility. Run `./task.sh unexport-fix`, review the diff,
+and run `./task.sh verify-go` to apply the cleanup. The check uses a pinned version of
+[unloved](https://github.com/paulgmiller/unloved) through `tools/tool.mod`.
+Its README documents dynamic entry point exceptions and build configuration
+limits. The tool is maintained and tested in its own repository.
+
+`./task.sh statement-diff` reports Go statement debt changes from `origin/master`
+to the working tree. PR CI reports `origin/master...HEAD` in the Go statement diff
+job summary using a pinned version of `paulgmiller/go-statement`. This report is
+informational; no debt threshold is configured.
+
 ## Mail placement tests
 
 Send today's real recipe email through the production sender to test Gmail placement:

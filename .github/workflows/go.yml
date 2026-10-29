@@ -84,7 +84,7 @@ jobs:
             go.sum
             tools/tool.sum
 
-      - name: Run golangci-lint
+      - name: Run Go lint and unnecessary-export check
         run: ./task.sh lint
 
   crap:
