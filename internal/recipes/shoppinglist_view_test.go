@@ -678,23 +678,35 @@ func TestShoppingPageAndSelectionRenderSameCard(t *testing.T) {
 func TestShoppingImagesPollIndependently(t *testing.T) {
 	for _, ready := range []bool{false, true} {
 		t.Run(strconv.FormatBool(ready), func(t *testing.T) {
-			recipe := list.Recipes[0]
-			hash := recipe.ComputeHash()
-			w := httptest.NewRecorder()
-			writeShoppingListPage(t.Context(), w, shoppingListViewInput{
-				params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
-				list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
-				hash:         "list-hash",
-				recipeImages: map[string]bool{hash: ready},
-			})
-			body := assertHTTPSuccess(t, w)
-			if ready {
-				assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
-				assert.NotContains(t, body, `hx-trigger=`)
-			} else {
-				assert.Contains(t, body, `hx-trigger="every 5s"`)
-				assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
-				assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
+			for _, saved := range []bool{false, true} {
+				t.Run("saved="+strconv.FormatBool(saved), func(t *testing.T) {
+					recipe := list.Recipes[0]
+					hash := recipe.ComputeHash()
+					selection := recipeSelection{}
+					if saved {
+						selection.markSaved(hash)
+					}
+					w := httptest.NewRecorder()
+					writeShoppingListPage(t.Context(), w, shoppingListViewInput{
+						params:       DefaultParams(&locations.Location{ID: "store"}, time.Now()),
+						list:         ai.ShoppingList{Recipes: []ai.Recipe{recipe}},
+						hash:         "list-hash",
+						recipeImages: map[string]bool{hash: ready},
+						selection:    selection,
+					})
+					body := assertHTTPSuccess(t, w)
+					if ready {
+						assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
+						assert.NotContains(t, body, `hx-trigger=`)
+					} else if saved {
+						assert.Contains(t, body, `hx-trigger="every 5s"`)
+						assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
+						assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
+					} else {
+						assert.NotContains(t, body, `/image-panel`)
+						assert.NotContains(t, body, `hx-trigger=`)
+					}
+				})
 			}
 		})
 	}

@@ -182,6 +182,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 // A 204 leaves the polling placeholder intact; the ready image replaces it.
 func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	hash := r.PathValue("hash")
 	exists, err := s.images.Exists(r.Context(), hash)
 	if err != nil {
