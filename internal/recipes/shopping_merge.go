@@ -79,9 +79,7 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, recipe := range p.Saved {
-		catalog = append(catalog, wineCatalog[recipe.ComputeHash()]...)
-	}
+	catalog = append(catalog, wineCatalog...)
 	return ingredients, catalog, nil
 }
 

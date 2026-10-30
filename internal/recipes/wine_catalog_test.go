@@ -42,7 +42,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	require.NoError(t, rio.saveWineIngredients(t.Context(), hash, selected))
 	catalog, err = rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.NoError(t, err)
-	assert.Equal(t, selected, catalog[hash])
+	assert.Equal(t, selected, catalog)
 	purchases, err = prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, "selected-upc", purchases[1].Items[0].VariantID)
@@ -56,9 +56,6 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	body, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	assert.Equal(t, original, string(body), "writing a catalog snapshot does not change the saved pick")
-	// Existing snapshots are required to contain their chosen product.
-	_, err = prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, map[string][]ai.InputIngredient{hash: {}})
-	require.ErrorContains(t, err, "missing from its saved catalog")
 	require.NoError(t, store.Put(t.Context(), selectedWineIngredientsPrefix+hash, "{", cache.Unconditional()))
 	_, err = rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.ErrorContains(t, err, "decode selected wine ingredients")

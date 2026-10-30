@@ -14,15 +14,11 @@ type shoppingPurchaseItem struct {
 }
 
 // prepareShoppingPurchases adds late wine picks to the immutable food snapshot.
-func prepareShoppingPurchases(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection, wineCatalog map[string][]ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
+func prepareShoppingPurchases(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection, wineCatalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
 	if purchases == nil {
 		return nil, nil
 	}
-	var catalog []ai.InputIngredient
-	for _, recipe := range recipes {
-		catalog = append(catalog, wineCatalog[recipe.ComputeHash()]...)
-	}
-	products, err := shoppingCatalogLookup(catalog)
+	products, err := shoppingCatalogLookup(wineCatalog)
 	if err != nil {
 		return nil, err
 	}
@@ -35,23 +31,7 @@ func prepareShoppingPurchases(purchases []shoppingPurchaseGroup, recipes []ai.Re
 		wine := selection.Wines[0] // Use the same first pick as the recipe card.
 		item := ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}
 
-		itemProducts := products
-		if catalog, exists := wineCatalog[recipe.ComputeHash()]; exists {
-			matched := false
-			for _, product := range catalog {
-				if product.ProductID == wine.ProductID {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				return nil, fmt.Errorf("selected wine %q is missing from its saved catalog", wine.ProductID)
-			}
-		} else {
-			// Legacy picks must not borrow ordering IDs from another recipe's snapshot.
-			itemProducts = nil
-		}
-		wineItems = append(wineItems, prepareShoppingItem(item, itemProducts))
+		wineItems = append(wineItems, prepareShoppingItem(item, products))
 	}
 	if len(wineItems) == 0 {
 		return purchases, nil

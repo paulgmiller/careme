@@ -69,23 +69,17 @@ func (rio recipeio) wineIngredientsFromCache(ctx context.Context, hash string) (
 }
 
 // wineCatalogForRecipes loads the snapshots used for shopping-item enrichment.
-// Legacy picks have no snapshot and remain displayable without ordering IDs.
-func (rio recipeio) wineCatalogForRecipes(ctx context.Context, recipes []ai.Recipe) (map[string][]ai.InputIngredient, error) {
-	catalog := parallelism.NewSafeMap[string, []ai.InputIngredient](len(recipes))
-	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (struct{}, error) {
+// Missing snapshots are allowed for legacy picks; unmatched products remain display-only.
+func (rio recipeio) wineCatalogForRecipes(ctx context.Context, recipes []ai.Recipe) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(recipes, func(recipe ai.Recipe) ([]ai.InputIngredient, error) {
 		hash := recipe.ComputeHash()
 		ingredients, err := rio.wineIngredientsFromCache(ctx, hash)
 		if errors.Is(err, cache.ErrNotFound) {
-			return struct{}{}, nil
+			return nil, nil
 		}
 		if err != nil {
-			return struct{}{}, fmt.Errorf("load selected wine catalog for recipe %q: %w", hash, err)
+			return nil, fmt.Errorf("load selected wine catalog for recipe %q: %w", hash, err)
 		}
-		catalog.Set(hash, ingredients)
-		return struct{}{}, nil
+		return ingredients, nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return catalog.Clone(), nil
 }

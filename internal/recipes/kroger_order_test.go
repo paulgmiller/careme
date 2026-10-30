@@ -28,7 +28,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ProductID: "food", VariantID: "food-upc", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: new(float64(2)), Size: "1 lb"}}}}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
 	winePicks := map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}}
-	wineCatalog := map[string][]ai.InputIngredient{recipe.ComputeHash(): {{ProductID: "wine", VariantID: "wine-upc", Description: "Red wine", Size: "750mL"}}}
+	wineCatalog := []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red wine", Size: "750mL"}}
 	purchases, err := prepareShoppingPurchases(food, p.Saved, winePicks, wineCatalog)
 	require.NoError(t, err)
 	view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{

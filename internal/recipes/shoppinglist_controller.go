@@ -453,7 +453,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	var purchases []shoppingPurchaseGroup
 	var purchasesErr error
-	var wineCatalog map[string][]ai.InputIngredient
+	var wineCatalog []ai.InputIngredient
 	var wineCatalogErr error
 	recipeWG.Go(func() {
 		purchases, purchasesErr = s.cachedShoppingPurchases(ctx, hashParam)

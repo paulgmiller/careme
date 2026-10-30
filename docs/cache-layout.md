@@ -262,7 +262,8 @@ at `wine_selection_ingredients/v1/<recipe hash>` before generation returns a
 successful selection. Unknown selected product IDs and snapshot-write failures
 return errors. Shopping items join the saved picks to these snapshots by product
 ID using the same enrichment helper as food. Recipe Ingredient no longer carries
-VariantID. Older recommendations remain readable without catalog snapshots;
-their wine rows display but have no ordering variant ID. No UPC is inferred from
-legacy picks. Existing snapshots must contain the chosen product, and unreadable
-snapshots fail shopping-list preparation rather than silently dropping metadata.
+VariantID. Older recommendations remain readable without catalog snapshots; wine picks
+without a matching catalog product display but have no ordering variant ID.
+Unreadable snapshots fail shopping-list preparation rather than silently dropping
+metadata. Snapshot reads run concurrently and return a flat catalog for the
+shared product-ID lookup.
