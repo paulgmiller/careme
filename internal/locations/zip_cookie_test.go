@@ -61,12 +61,12 @@ func TestLocationsPageZipCookie(t *testing.T) {
 				scheme = "https"
 			}
 			req := httptest.NewRequest(http.MethodGet, scheme+"://careme.test/locations?"+tt.query, nil)
-			req.AddCookie(&http.Cookie{Name: zipCodeCookieName, Value: "98005"})
+			req.AddCookie(&http.Cookie{Name: ZipCodeCookieName, Value: "98005"})
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, req)
 
 			assert.Equal(t, tt.wantStatus, rr.Code, rr.Body.String())
-			cookie := findResponseCookie(rr, zipCodeCookieName)
+			cookie := findResponseCookie(rr, ZipCodeCookieName)
 			if tt.wantZip == "" {
 				assert.Nil(t, cookie, "search must preserve the previously saved ZIP")
 				return

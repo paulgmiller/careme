@@ -41,7 +41,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 
 // OrderView supplies the generic cart-transfer UI with Kroger endpoints.
 func OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
-	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ZipCode: input.ZipCode, ReturnURL: input.ReturnURL})
 	if err != nil {
 		return nil, fmt.Errorf("encode Kroger transfer request: %w", err)
 	}
