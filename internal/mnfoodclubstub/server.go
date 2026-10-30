@@ -17,34 +17,34 @@ import (
 	ordertypes "careme/internal/orders/types"
 )
 
-const TestToken = "caremetest-mnfoodclub-stub"
+const testToken = "caremetest-mnfoodclub-stub"
 
-type Item struct {
+type item struct {
 	ProductID string `json:"product_id"`
 	VariantID string `json:"variant_id,omitempty"`
 	Quantity  *int   `json:"quantity,omitempty"`
 }
-type Hints struct {
+type hints struct {
 	Emails          []string `json:"emails,omitempty"`
 	UserID          string   `json:"user_id,omitempty"`
 	StorefrontBrand string   `json:"storefront_brand,omitempty"`
 	ZipCode         string   `json:"zip_code,omitempty"`
 }
-type Request struct {
-	Items         []Item `json:"items"`
-	IdentityHints Hints  `json:"identity_hints"`
+type request struct {
+	Items         []item `json:"items"`
+	IdentityHints hints  `json:"identity_hints"`
 }
-type Response struct {
+type response struct {
 	ordertypes.Transfer
 	UserID string `json:"user_id"`
 }
 type record struct {
 	Created  time.Time
 	Key      string
-	Request  Request
-	Response Response
+	Request  request
+	Response response
 }
-type Server struct {
+type server struct {
 	mu        sync.Mutex
 	records   []*record
 	byID      map[string]*record
@@ -54,7 +54,7 @@ type Server struct {
 
 // New mounts the API and its single public HTML page under publicURL's path.
 func New(publicURL string) http.Handler {
-	s := &Server{publicURL: strings.TrimRight(publicURL, "/"), byID: make(map[string]*record), byKey: make(map[string]*record)}
+	s := &server{publicURL: strings.TrimRight(publicURL, "/"), byID: make(map[string]*record), byKey: make(map[string]*record)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.page)
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -79,14 +79,14 @@ func failure(w http.ResponseWriter, status int, code string) {
 }
 
 func authorized(w http.ResponseWriter, r *http.Request) bool {
-	if r.Header.Get("Authorization") != "Bearer "+TestToken {
+	if r.Header.Get("Authorization") != "Bearer "+testToken {
 		failure(w, 401, "unauthorized")
 		return false
 	}
 	return true
 }
 
-func (s *Server) create(w http.ResponseWriter, r *http.Request) {
+func (s *server) create(w http.ResponseWriter, r *http.Request) {
 	if !authorized(w, r) {
 		return
 	}
@@ -95,7 +95,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		failure(w, 400, "invalid_idempotency_key")
 		return
 	}
-	var input Request
+	var input request
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&input); err != nil || len(input.Items) == 0 {
@@ -139,7 +139,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := hex.EncodeToString(idBytes)
-	response := Response{Transfer: ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: s.publicURL + "/#" + id}, UserID: "stub-customer"}
+	response := response{Transfer: ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: s.publicURL + "/#" + id}, UserID: "stub-customer"}
 	for _, item := range input.Items {
 		response.Items = append(response.Items, ordertypes.TransferItem{ProductID: item.ProductID, AcceptedQuantity: *item.Quantity})
 	}
@@ -150,12 +150,12 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	writeResponse(w, response)
 }
 
-func writeResponse(w http.ResponseWriter, result Response) {
+func writeResponse(w http.ResponseWriter, result response) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-func (s *Server) get(w http.ResponseWriter, r *http.Request) {
+func (s *server) get(w http.ResponseWriter, r *http.Request) {
 	if !authorized(w, r) {
 		return
 	}
@@ -171,7 +171,7 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 
 var page = template.Must(template.New("orders").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Food Club test orders</title></head><body><h1>Food Club test orders</h1><p>Test stub. All quantities are accepted. State is lost on restart. Reload to see new orders.</p>{{range .}}<section id="{{.Response.TransferID}}"><h2>{{.Response.TransferID}}</h2><p>{{.Created}} — {{.Response.Status}}</p><p>Key: {{.Key}}</p><p>Identity hints: {{.Request.IdentityHints}}</p><table><thead><tr><th>Product</th><th>Variant</th><th>Accepted packages</th></tr></thead><tbody>{{range .Request.Items}}<tr><td>{{.ProductID}}</td><td>{{.VariantID}}</td><td>{{.Quantity}}</td></tr>{{end}}</tbody></table></section>{{else}}<p>No orders yet.</p>{{end}}</body></html>`))
 
-func (s *Server) page(w http.ResponseWriter, r *http.Request) {
+func (s *server) page(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	records := make([]*record, len(s.records))
 	for i, rec := range s.records {

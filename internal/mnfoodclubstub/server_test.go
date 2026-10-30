@@ -23,24 +23,24 @@ func TestAPI(t *testing.T) {
 		return w
 	}
 	body := `{"items":[{"product_id":"<script>bad</script>","variant_id":"v"}],"identity_hints":{"emails":["chef@example.com"]}}`
-	first := call("POST", "/v1/cart-transfers", "key", body, TestToken)
+	first := call("POST", "/v1/cart-transfers", "key", body, testToken)
 	require.Equal(t, 200, first.Code)
-	var result Response
+	var result response
 	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &result))
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, 1, result.Items[0].AcceptedQuantity)
-	assert.Equal(t, first.Body.String(), call("POST", "/v1/cart-transfers", "key", body, TestToken).Body.String())
-	assert.Equal(t, first.Body.String(), call("GET", "/v1/cart-transfers/"+result.TransferID, "", "", TestToken).Body.String())
-	assert.Equal(t, 409, call("POST", "/v1/cart-transfers", "key", `{"items":[{"product_id":"other"}]}`, TestToken).Code)
+	assert.Equal(t, first.Body.String(), call("POST", "/v1/cart-transfers", "key", body, testToken).Body.String())
+	assert.Equal(t, first.Body.String(), call("GET", "/v1/cart-transfers/"+result.TransferID, "", "", testToken).Body.String())
+	assert.Equal(t, 409, call("POST", "/v1/cart-transfers", "key", `{"items":[{"product_id":"other"}]}`, testToken).Code)
 	assert.Equal(t, 401, call("GET", "/v1/cart-transfers/"+result.TransferID, "", "", "bad").Code)
-	assert.Equal(t, 404, call("GET", "/v1/cart-transfers/unknown", "", "", TestToken).Code)
+	assert.Equal(t, 404, call("GET", "/v1/cart-transfers/unknown", "", "", testToken).Code)
 	for _, bad := range []string{`{`, `{"items":[]}`, `{"items":[{"product_id":"x","quantity":0}]}`, `{"items":[{"product_id":"x","quantity":-1}]}`, `{"items":[{"product_id":"x"},{"product_id":"x"}]}`, `{"items":[{"product_id":""}]}`} {
-		assert.Equal(t, 400, call("POST", "/v1/cart-transfers", "invalid", bad, TestToken).Code)
+		assert.Equal(t, 400, call("POST", "/v1/cart-transfers", "invalid", bad, testToken).Code)
 	}
 	var wg sync.WaitGroup
 	for range 20 {
 		wg.Go(func() {
-			assert.Equal(t, first.Body.String(), call("POST", "/v1/cart-transfers", "key", body, TestToken).Body.String())
+			assert.Equal(t, first.Body.String(), call("POST", "/v1/cart-transfers", "key", body, testToken).Body.String())
 		})
 	}
 	wg.Wait()
