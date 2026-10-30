@@ -27,14 +27,14 @@ const orderingTokenPrefix = "kroger_cart_tokens/"
 
 type OrderOptions struct {
 	Cache    cache.Cache
-	Client   orderClient
+	Client   *CartClient
 	TokenKey []byte
 	Origin   string
 	Auth     auth.AuthClient
 }
 
 type OrderHandler struct {
-	client   orderClient
+	client   *CartClient
 	cache    cache.Cache
 	tokenKey []byte
 	origin   string

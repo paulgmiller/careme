@@ -139,6 +139,8 @@ type pantryProvider interface {
 }
 
 // we drop extra categories here.
+// TODO(#1051): Revisit deduplication by ProductID: keeping the first row also
+// discards other variants. Selection may need to account for inventory or size.
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	seen := map[string]bool{}
 	var deduped []ai.InputIngredient

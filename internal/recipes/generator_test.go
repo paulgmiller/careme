@@ -531,11 +531,13 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	cached := []ai.InputIngredient{
 		{
 			ProductID:   "cached-pinot-noir",
+			VariantID:   "wine-upc",
 			Description: "Cached Pinot Noir",
 			Size:        "750mL",
 			AisleNumber: "wine",
 			PriceSale:   &salePrice,
 		},
+		{ProductID: "unselected-pinot-noir", VariantID: "other-upc", Description: "Other Pinot Noir", Size: "750mL"},
 	}
 	if err := rio.SaveIngredients(t.Context(), wineIngredientsCacheKey(style, location, cacheDate), cached); err != nil {
 		t.Fatalf("failed to seed wine ingredients cache: %v", err)
@@ -548,7 +550,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 			Commentary: "Great with your dish.",
 		},
 	}
-	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, nil)
+	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, rio)
 
 	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
 		Title:      "Roast Chicken",
@@ -569,6 +571,9 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	assert.Equal(t, "$18.99", got.Wines[0].Price)
+	snapshots, err := rio.wineIngredientsFromCache(t.Context(), (&ai.Recipe{Title: "Roast Chicken", WineStyles: []string{style}}).ComputeHash())
+	require.NoError(t, err)
+	assert.Equal(t, cached, snapshots, "retain the entire candidate catalog, including unselected wines")
 	if aiStub.recipe.Title != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipe.Title)
 	}
@@ -1542,4 +1547,12 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			assert.True(t, published.Slots[0].Reviewed)
 		})
 	}
+}
+
+func (noopRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
+}
+
+func (*captureRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
 }

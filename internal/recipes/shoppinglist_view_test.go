@@ -763,39 +763,6 @@ func TestFinalizedShoppingListRendersMergedQuantities(t *testing.T) {
 	}
 }
 
-func TestShoppingPurchasesWithWine(t *testing.T) {
-	recipe := ai.Recipe{Title: "Dinner"}
-	otherRecipe := ai.Recipe{Title: "Unsaved dinner"}
-	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Pork", Needed: "24 oz"}}}}
-	for _, tc := range []struct {
-		name            string
-		purchases       []shoppingPurchaseGroup
-		recommendations map[string]*ai.WineSelection
-		wantWine        bool
-	}{
-		{name: "late pick", purchases: food, recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {Name: "Backup wine"}}}}, wantWine: true},
-		{name: "missing pick", purchases: food},
-		{name: "empty pick", purchases: food, recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {}}},
-		{name: "unsaved recipe", purchases: food, recommendations: map[string]*ai.WineSelection{otherRecipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
-		{name: "not finalized", recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := shoppingPurchasesWithWine(tc.purchases, []ai.Recipe{recipe}, tc.recommendations)
-			if !tc.wantWine {
-				assert.Equal(t, tc.purchases, got)
-				return
-			}
-			require.Len(t, got, 2)
-			assert.Equal(t, food[0], got[0])
-			assert.Equal(t, "Wine", got[1].Aisle)
-			require.Len(t, got[1].Items, 1)
-			assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, got[1].Items[0].ShoppingItem)
-			assert.Equal(t, food, tc.purchases, "rendering must preserve the cached food groups")
-		})
-	}
-}
-
 func TestShoppingListFreshnessUsesShoppingDays(t *testing.T) {
 	zone, err := time.LoadLocation("America/Los_Angeles")
 	require.NoError(t, err)

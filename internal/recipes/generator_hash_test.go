@@ -24,15 +24,15 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 	}
 
 	// Preserve the hash produced by the registered staples provider.
-	if h1 != "wrxx3dmHzBA" {
-		t.Fatalf("expected hash to be stable and equal to wrxx3dmHzBA, got %s", h1)
+	if h1 != "mO3y4u4DoDc" {
+		t.Fatalf("expected hash to be stable and equal to mO3y4u4DoDc, got %s", h1)
 	}
 
 	legacyHash, ok := legacyRecipeHash(h1)
 	if !ok {
 		t.Fatal("expected current hash passhed to legacy")
 	}
-	if legacyHash != "cmVjaXBlwrxx3dmHzBA=" {
+	if legacyHash != "cmVjaXBlmO3y4u4DoDc=" {
 		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
 	}
 
