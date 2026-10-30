@@ -45,29 +45,6 @@ func (rio recipeio) saveWine(ctx context.Context, hash string, selection *ai.Win
 	return rio.Cache.Put(ctx, recipeWineCacheKey(hash), string(body), cache.Unconditional())
 }
 
-const selectedWineIngredientsPrefix = "wine_selection_ingredients/v1/"
-
-func (rio recipeio) saveWineIngredients(ctx context.Context, hash string, ingredients []ai.InputIngredient) error {
-	body, err := json.Marshal(ingredients)
-	if err != nil {
-		return fmt.Errorf("encode selected wine ingredients: %w", err)
-	}
-	return rio.Cache.Put(ctx, selectedWineIngredientsPrefix+hash, string(body), cache.Unconditional())
-}
-
-func (rio recipeio) wineIngredientsFromCache(ctx context.Context, hash string) ([]ai.InputIngredient, error) {
-	reader, err := rio.Cache.Get(ctx, selectedWineIngredientsPrefix+hash)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = reader.Close() }()
-	var ingredients []ai.InputIngredient
-	if err := json.NewDecoder(reader).Decode(&ingredients); err != nil {
-		return nil, fmt.Errorf("decode selected wine ingredients: %w", err)
-	}
-	return ingredients, nil
-}
-
 // waitForWine polls shared storage, so a pick may finish on any server.
 // A saved selection with no wines is complete; only a missing record is retried.
 func (rio recipeio) waitForWine(ctx context.Context, hash string) (*ai.WineSelection, error) {

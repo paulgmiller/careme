@@ -29,7 +29,7 @@ func (c *blockedWineReadCache) Get(ctx context.Context, key string) (io.ReadClos
 		c.started <- key
 		release = c.release
 	}
-	if strings.HasPrefix(key, selectedWineIngredientsPrefix) {
+	if strings.HasPrefix(key, ingredientsCachePrefix+"wines/") {
 		c.catalogs <- key
 		release = c.releaseCatalogs
 	}
@@ -52,7 +52,7 @@ func TestFinalizeFoodAndWineReadsOverlapAcrossRecipes(t *testing.T) {
 	store.foodKey = ingredientsCachePrefix + p.LocationHash()
 	for _, recipe := range p.Saved {
 		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red wine"}}}))
-		require.NoError(t, s.saveWineIngredients(t.Context(), recipe.ComputeHash(), []ai.InputIngredient{{ProductID: "wine", VariantID: "upc", Description: "Red wine", Size: "750mL"}}))
+		require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", VariantID: "upc", Description: "Red wine", Size: "750mL"}}))
 	}
 	type result struct {
 		ingredients []ai.Ingredient

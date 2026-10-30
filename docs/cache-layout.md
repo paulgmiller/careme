@@ -78,7 +78,6 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
 | `recipes/steps/` in the `recipe-images` backend | Generated instruction sketch bytes keyed by `<recipe_hash>/<one-based_step_number>` | `internal/recipes/step_image_controller.go` after a signed-in step image request | Recipe page and public step image endpoint |
 | `wine_recommendations/` | JSON ingredient-shaped wine picks and commentary keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
-| `wine_selection_ingredients/v1/` | Wine candidate InputIngredient snapshots keyed by recipe hash; UPC, size, and prices stay together | Wine generation before returning the picks | Shopping-list finalization |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
@@ -249,17 +248,20 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 Kroger selected item identity (#1045): store catalog signatures include
 `item-upc-v1/` before the staple definitions, refreshing staples and pantry
 snapshots. Wine candidate keys use `wines/`; wine recommendations retain
-`wine_recommendations/`, with selected catalog VariantIDs now stored separately
-under `wine_selection_ingredients/v1/`. Wine recommendation and candidate prefixes are unchanged. Existing `shopping_quantities/v7/` food snapshots
+`wine_recommendations/`; ordering VariantIDs come from the existing store/date/style
+candidate catalog under `ingredients/wines/`. The former
+`wine_selection_ingredients/v1/` recipe snapshots are no longer read or written. Existing `shopping_quantities/v7/` food snapshots
 are preserved; Kroger transfers missing any selected item UPC fail before cart
 submission and require recreating the list from refreshed catalogs. The former
 `kroger_product_upcs/v1/` cache is no longer read or written; cart submission uses
 only persisted VariantIDs, without guessing a mapping for old product IDs.
 
 Wine recommendations retain their existing ingredient-shaped JSON and
-`wine_recommendations/` keys. The full wine candidate catalog is stored separately
-at `wine_selection_ingredients/v1/<recipe hash>` before generation returns a
-successful selection. Snapshot-write failures return errors. Finalization polls
+`wine_recommendations/` keys. The full wine candidate catalog uses the existing
+`ingredients/wines/` cache keyed by normalized recipe styles, store, and date.
+Shopping finalization reads that catalog using the saved list’s store and date
+and each recipe’s styles; no additional per-recipe catalog is stored. Candidate
+cache-write failures return errors before generation returns a successful selection. Finalization polls
 the shared wine recommendation cache every 500 ms for saved wine picks
 (including completed empty results), combines food and wine needs and catalog
 snapshots by product ID, and merges quantities once.

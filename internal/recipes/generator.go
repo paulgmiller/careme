@@ -36,7 +36,6 @@ type staplesService interface {
 
 type recipeSaver interface {
 	SaveRecipe(ctx context.Context, recipes ai.Recipe) error
-	saveWineIngredients(context.Context, string, []ai.InputIngredient) error
 }
 
 type recipeCritiquer interface {
@@ -116,9 +115,6 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
 	if err != nil {
 		return nil, err
-	}
-	if err := g.saver.saveWineIngredients(ctx, recipe.ComputeHash(), wines); err != nil {
-		return nil, fmt.Errorf("save wine catalog: %w", err)
 	}
 	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
 	return selection, nil

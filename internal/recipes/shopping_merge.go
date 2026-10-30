@@ -105,8 +105,8 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 		if len(selection.Wines) == 0 {
 			return wineInput{}, nil
 		}
-		selectedCatalog, err := s.wineIngredientsFromCache(ctx, recipe.ComputeHash())
-		// Older picks remain displayable even if their ordering metadata was never stored.
+		selectedCatalog, err := s.IngredientsFromCache(ctx, wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date))
+		// Older picks remain displayable even if their candidate catalog is missing.
 		if err != nil && !errors.Is(err, cache.ErrNotFound) {
 			cancel()
 			return wineInput{}, fmt.Errorf("load selected wine catalog: %w", err)
