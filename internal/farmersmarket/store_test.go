@@ -81,7 +81,7 @@ func TestSaveUploadCreatesAndMergesNearbyMarket(t *testing.T) {
 
 func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
-	provider := NewStaplesProviderFromStore(store)
+	provider := newStaplesProviderFromStore(store)
 	uploader := NewUploader(store)
 	coordinates := geo.Coordinate{Lat: 47.61, Lon: -122.33}
 	currentDate, err := farmersMarketDate(time.Now(), coordinates)
@@ -106,13 +106,13 @@ func TestFetchStaplesReturnsCurrentStoreDateInventory(t *testing.T) {
 func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	store := NewStore(cacheStore)
-	provider := NewStaplesProviderFromStore(store)
-	locationID := LocationIDPrefix + "stale"
+	provider := newStaplesProviderFromStore(store)
+	locationID := locationIDPrefix + "stale"
 	coordinates := geo.Coordinate{Lat: 47.61, Lon: -122.33}
 	currentDate, err := farmersMarketDate(time.Now(), coordinates)
 	require.NoError(t, err)
 	olderDate := currentDate.AddDate(0, 0, -1)
-	require.NoError(t, store.saveMarket(t.Context(), Market{
+	require.NoError(t, store.saveMarket(t.Context(), marketRecord{
 		ID:         locationID,
 		Names:      []string{"Stale Market"},
 		Coordinate: coordinates,
@@ -129,7 +129,7 @@ func TestFetchStaplesIgnoresPreviousMarketDateInventory(t *testing.T) {
 
 	_, err = provider.FetchStaples(t.Context(), locationID)
 	require.ErrorIs(t, err, cache.ErrNotFound)
-	assert.False(t, NewLocationBackend(store).HasInventory(locationID))
+	assert.False(t, newLocationBackend(store).HasInventory(locationID))
 }
 
 func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *testing.T) {
@@ -150,7 +150,7 @@ func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *
 	})
 	require.NoError(t, err)
 
-	backend := NewLocationBackend(store)
+	backend := newLocationBackend(store)
 
 	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 	require.NoError(t, err)
@@ -158,20 +158,20 @@ func TestLocationBackendGetLocationsByCoordinatesReturnsNearbyFarmersMarkets(t *
 	assert.True(t, backend.HasInventory(got[0].ID))
 	assert.Equal(t, "Closer Market", got[0].Name)
 	assert.Equal(t, "Near Market", got[1].Name)
-	assert.Equal(t, ChainName, got[0].Chain)
+	assert.Equal(t, chainName, got[0].Chain)
 }
 
 func TestLocationBackendDropsMarketWithoutCoordinates(t *testing.T) {
 	store := NewStore(cache.NewInMemoryCache())
-	missingCoordinates := Market{
-		ID:        LocationIDPrefix + "missing-coordinates",
+	missingCoordinates := marketRecord{
+		ID:        locationIDPrefix + "missing-coordinates",
 		Names:     []string{"Old Market"},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 	require.NoError(t, store.saveMarket(t.Context(), missingCoordinates))
 
-	backend := NewLocationBackend(store)
+	backend := newLocationBackend(store)
 	got, err := backend.GetLocationsByCoordinates(t.Context(), geo.Coordinate{Lat: 47.61, Lon: -122.33})
 
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestExtractFarmersMarketIngredientsAnalyzesEachPhoto(t *testing.T) {
 		},
 	}
 
-	photos := []Photo{
+	photos := []photo{
 		{contentType: "image/jpeg", content: []byte("tomatoes")},
 		{contentType: "image/jpeg", content: []byte("radishes")},
 	}
@@ -304,7 +304,7 @@ func TestHandlePostDoesNotCallAIWhenLocationMissing(t *testing.T) {
 func TestHandlePostRejectsNonHTMXBeforeParsingUpload(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, &fakeExtractor{})
-	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
+	handler.parsePhotos = func(context.Context, *http.Request) ([]photo, error) {
 		t.Fatal("parsePhotos should not be called for non-HTMX posts")
 		return nil, nil
 	}
@@ -337,8 +337,8 @@ func TestHandlePostHTMXStartsAnalysisAndReturnsProgress(t *testing.T) {
 		})
 	})
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
-	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
-		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
+	handler.parsePhotos = func(context.Context, *http.Request) ([]photo, error) {
+		return []photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequest(t, "photos", "market.jpg", jpegBytes(t))
 	req.Header.Set("HX-Request", "true")
@@ -384,8 +384,8 @@ func TestHandlePostHTMXAcceptsCoordinates(t *testing.T) {
 		})
 	})
 	handler := newTestHandler(t, fixedAuth{userID: "user-1"}, extractor)
-	handler.parsePhotos = func(context.Context, *http.Request) ([]Photo, error) {
-		return []Photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
+	handler.parsePhotos = func(context.Context, *http.Request) ([]photo, error) {
+		return []photo{{contentType: "image/jpeg", content: []byte("apples")}}, nil
 	}
 	req := multipartRequestWithFields(t, map[string]string{
 		"lat": "47.610000",
@@ -542,7 +542,7 @@ func TestHandleGetRedirectsAnonymousUser(t *testing.T) {
 	assert.Contains(t, rr.Header().Get("Location"), "/sign-in")
 }
 
-func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExtractor) *Handler {
+func newTestHandler(t *testing.T, authClient authClient, extractor IngredientExtractor) *handler {
 	t.Helper()
 	cacheStore := cache.NewInMemoryCache()
 	return NewHandler(

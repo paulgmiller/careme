@@ -27,9 +27,9 @@ const (
 	produceStapleTake = 250
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+var defaultStaplesSignature = lo.Must(json.Marshal(stapleCategories()))
 
-type StapleCategory struct {
+type stapleCategory struct {
 	Name  string `json:"name"`
 	Slug  string `json:"slug"`
 	Limit int    `json:"limit"`
@@ -77,11 +77,11 @@ func newStaplesProviderWithCache(client productClient, cacheStore cache.Cache) s
 }
 
 func (p identityProvider) IsID(locationID string) bool {
-	return IsID(locationID)
+	return isID(locationID)
 }
 
 func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	if !IsID(locationID) {
+	if !isID(locationID) {
 		return nil, fmt.Errorf("ALDI location id %q is invalid", locationID)
 	}
 
@@ -91,7 +91,7 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	}
 	storeID := strings.TrimSpace(summary.InstoreShopID)
 	postalCode := strings.TrimSpace(summary.ZipCode)
-	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(stapleCategories(), func(category stapleCategory) ([]ai.InputIngredient, error) {
 		items, err := p.client.Products(ctx, storeID, postalCode, category.Slug, query.SearchOptions{
 			First: category.Limit,
 		})
@@ -116,7 +116,7 @@ func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []
 	storeID := strings.TrimSpace(summary.InstoreShopID)
 	postalCode := strings.TrimSpace(summary.ZipCode)
 
-	return parallelism.Flatten(Wines(), func(category StapleCategory) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(wines(), func(category stapleCategory) ([]ai.InputIngredient, error) {
 		items, err := p.client.Products(ctx, storeID, postalCode, category.Slug, query.SearchOptions{
 			First: category.Limit,
 		})
@@ -153,8 +153,8 @@ func (p staplesProvider) storeSummary(ctx context.Context, locationID string) (S
 	return summary, nil
 }
 
-func StapleCategories() []StapleCategory {
-	return []StapleCategory{
+func stapleCategories() []stapleCategory {
+	return []stapleCategory{
 		{Name: "beef", Slug: "n-beef-67693", Limit: bigStapleTake},
 		{Name: "chicken", Slug: "n-chicken-81381", Limit: bigStapleTake},
 		{Name: "fruit", Slug: "n-fresh-fruits-35754", Limit: produceStapleTake},
@@ -167,14 +167,14 @@ func StapleCategories() []StapleCategory {
 	}
 }
 
-func Wines() []StapleCategory {
-	return []StapleCategory{
+func wines() []stapleCategory {
+	return []stapleCategory{
 		{Name: "red wine", Slug: "rc-red-wine-category", Limit: bigStapleTake},
 		{Name: "white wine", Slug: "rc-white-wine", Limit: bigStapleTake},
 	}
 }
 
-func itemToIngredient(item query.Item, category StapleCategory) ai.InputIngredient {
+func itemToIngredient(item query.Item, category stapleCategory) ai.InputIngredient {
 	productID := strings.TrimSpace(item.ProductID)
 	if productID == "" {
 		productID = strings.TrimSpace(item.ID)

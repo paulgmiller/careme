@@ -1,0 +1,52 @@
+# Food Club test stub
+
+The standalone `cmd/mnfoodclubstub` service implements the proposed Food Club
+ordering API for `caremetest`. It always returns `applied`, accepts every requested
+package, and returns the fixed customer ID `stub-customer`. It does not simulate
+login, stock, or product lookup.
+
+The public page at <https://test.careme.cooking/mnfoodclub-stub/> lists all orders,
+newest first, including product IDs, variants, quantities, and identity hints.
+Use test identities: this page is intentionally public. Reload to see new orders.
+Each returned `cart_url` links to that order on this page.
+
+The API requires `Authorization: Bearer caremetest-mnfoodclub-stub`. This is a
+non-secret test token, not a real Food Club credential.
+
+- `POST /v1/cart-transfers` takes the documented JSON body and `Idempotency-Key`
+  header. Omitted quantities default to one. Repeating the same key and request
+  returns the original result; changing the request with the same key returns 409.
+- `GET /v1/cart-transfers/{transfer_id}` returns the saved result, or 404.
+- Invalid requests, nonpositive quantities, and duplicate product IDs return 400.
+
+All records and idempotency keys live in memory. The deployment uses one replica
+and recreates it on rollout; a restart clears everything. Careme's previously
+saved references will then return 404. There is no database or reset endpoint.
+
+## Run locally
+
+```sh
+go run ./cmd/mnfoodclubstub -addr :8080 -public-url http://localhost:8080
+```
+
+```sh
+curl http://localhost:8080/v1/cart-transfers \
+  -H 'Authorization: Bearer caremetest-mnfoodclub-stub' \
+  -H 'Idempotency-Key: local-example' \
+  -H 'Content-Type: application/json' \
+  -d '{"items":[{"product_id":"101","variant_id":"1005","quantity":3}]}'
+```
+
+Open <http://localhost:8080/> to see the order. `-public-url` may include a path
+prefix; all service routes, including `/ready`, are mounted beneath it.
+
+## Deployment
+
+The existing image pipeline builds `careme-mnfoodclubstub` using the shared
+Dockerfile. `deploy/deploy.sh <ref> caremetest` applies
+`deploy/mnfoodclub-stub.yaml` and configures Careme's `MNFOODCLUB_ORDER_API_URL`
+and `MNFOODCLUB_ORDER_ACCESS_TOKEN` to use it. The API URL includes the
+`/mnfoodclub-stub` prefix; the client appends `/v1/cart-transfers`.
+
+The production deployment excludes the stub manifest and these environment
+overrides. Deploy after publishing the images for the selected ref, as usual.

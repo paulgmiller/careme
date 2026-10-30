@@ -61,8 +61,8 @@ func TestStorageGetByIDNotFound(t *testing.T) {
 	storage := NewStorage(fc)
 
 	_, err := storage.GetByID("missing")
-	if err == nil || err != ErrNotFound {
-		t.Fatalf("GetByID() error = %v, want %v", err, ErrNotFound)
+	if err == nil || err != errNotFound {
+		t.Fatalf("GetByID() error = %v, want %v", err, errNotFound)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestStorageGetByEmailNotFound(t *testing.T) {
 	storage := NewStorage(fc)
 
 	_, err := storage.GetByEmail("missing@example.com")
-	if err == nil || err != ErrNotFound {
-		t.Fatalf("GetByEmail() error = %v, want %v", err, ErrNotFound)
+	if err == nil || err != errNotFound {
+		t.Fatalf("GetByEmail() error = %v, want %v", err, errNotFound)
 	}
 }
 

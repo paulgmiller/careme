@@ -21,6 +21,7 @@ short_len=7
 public_origin="${PUBLIC_ORIGIN:-}"
 ingress_host="${INGRESS_HOST:-}"
 store_disable_env_yaml=""
+order_stub_env_yaml=""
 
 if [[ -z "${ingress_host}" ]]; then
   case "${namespace}" in
@@ -51,7 +52,12 @@ publix_abck_schedule="15 */6 * * *"
 wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
-  manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
+  manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}" "deploy/mnfoodclub-stub.yaml")
+  order_stub_env_yaml='
+            - name: MNFOODCLUB_ORDER_API_URL
+              value: "https://test.careme.cooking/mnfoodclub-stub"
+            - name: MNFOODCLUB_ORDER_ACCESS_TOKEN
+              value: "caremetest-mnfoodclub-stub"'
   store_disable_env_yaml='
             - name: WEGMANS_ENABLE
               value: "false"'
@@ -87,6 +93,7 @@ fi
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
+export ORDER_STUB_ENV_YAML="${order_stub_env_yaml}"
 export STORE_DISABLE_ENV_YAML="${store_disable_env_yaml}"
 export ADVERTISED_RECIPES_SCHEDULE="${advertised_recipes_schedule}"
 export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
@@ -156,7 +163,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
+  git show "${ref}:${manifest_path}" | envsubst '${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
     if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
       kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
     else
@@ -169,3 +176,7 @@ echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w
 echo "Waiting for rollout of deployment/ingredient-review"
 kubectl rollout status deployment/ingredient-review -n "${namespace}" -w
+
+if [[ "${namespace}" == "caremetest" ]]; then
+  kubectl rollout status deployment/mnfoodclub-stub -n caremetest -w
+fi

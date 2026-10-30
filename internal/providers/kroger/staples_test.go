@@ -1,6 +1,7 @@
 package kroger
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
 	const locationID = "70500874"
 	signature := mustJSONSignature(defaultStaples())
-	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	want := cachekey.NewHash(locationID, date, "item-upc-v1/"+signature).Sum(nil)
 	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
@@ -122,7 +123,7 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	provider := StaplesProvider{client: client}
+	provider := staplesProvider{client: client}
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
@@ -143,7 +144,7 @@ func TestStaplesProvider_FetchPantry_UsesPantrySearchTerms(t *testing.T) {
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
 	require.NoError(t, err)
 
-	got, err := (StaplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
+	got, err := (staplesProvider{client: client}).FetchPantry(t.Context(), "70500874")
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	for i, term := range PantryCategories() {
@@ -184,8 +185,9 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	regular := float32(4.99)
 	sale := float32(3.49)
 	categories := []string{"Produce", "Fresh Fruit"}
-	ingredient := inputIngredientFromKrogerIngredient(Ingredient{
+	ingredient := inputIngredientFromKrogerIngredient(ingredient{
 		ProductId:    new(" apple-1 "),
+		ItemId:       new(" apple-upc "),
 		AisleNumber:  new(" 12 "),
 		Brand:        new(" Orchard Co "),
 		Description:  new(" Honeycrisp Apple "),
@@ -196,6 +198,7 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	}, 0)
 
 	assert.Equal(t, "apple-1", ingredient.ProductID)
+	assert.Equal(t, "apple-upc", ingredient.VariantID)
 	assert.Equal(t, "12", ingredient.AisleNumber)
 	assert.Equal(t, "Orchard Co", ingredient.Brand)
 	assert.Equal(t, "Honeycrisp Apple", ingredient.Description)
@@ -205,4 +208,56 @@ func TestInputIngredientFromKrogerIngredientMapsFields(t *testing.T) {
 	require.NotNil(t, ingredient.PriceSale)
 	assert.Equal(t, sale, *ingredient.PriceSale)
 	assert.Equal(t, categories, ingredient.Categories)
+}
+
+func TestSearchIngredientsSelectsItemByInventory(t *testing.T) {
+	item := func(id, stock string, priced bool) products.ProductsProductItemModel {
+		value := products.ProductsProductItemModel{ItemId: new(id), Size: new(id + " size")}
+		if stock != "" {
+			value.Inventory = &products.ProductsProductItemInventoryModel{StockLevel: new(products.ProductsProductItemInventoryModelStockLevel(stock))}
+		}
+		if priced {
+			value.Price = &products.ProductsProductItemPriceModel{Regular: new(float32(4)), Promo: new(float32(3))}
+		}
+		return value
+	}
+	for _, tc := range []struct {
+		name  string
+		items []products.ProductsProductItemModel
+		want  string
+	}{
+		{"high beats low", []products.ProductsProductItemModel{item("low", "LOW", true), item("high", "HIGH", true)}, "high"},
+		{"high remains ahead of low", []products.ProductsProductItemModel{item("high", "HIGH", true), item("low", "LOW", true)}, "high"},
+		{"low beats unknown", []products.ProductsProductItemModel{item("unknown", "", true), item("low", "LOW", true)}, "low"},
+		{"high ties keep first", []products.ProductsProductItemModel{item("first", "HIGH", true), item("second", "HIGH", true)}, "first"},
+		{"unknown ties keep first", []products.ProductsProductItemModel{item("first", "", true), item("second", "", true)}, "first"},
+		{"unrecognized stock is unknown", []products.ProductsProductItemModel{item("unknown", "FUTURE_VALUE", true), item("low", "LOW", true)}, "low"},
+		{"unpriced high is excluded", []products.ProductsProductItemModel{item("high", "HIGH", false), item("low", "LOW", true)}, "low"},
+		{"out of stock is excluded", []products.ProductsProductItemModel{item("out", "TEMPORARILY_OUT_OF_STOCK", true), item("unknown", "", true)}, "unknown"},
+		{"none eligible", []products.ProductsProductItemModel{item("out", "TEMPORARILY_OUT_OF_STOCK", true), item("unpriced", "HIGH", false)}, ""},
+		{"empty items", []products.ProductsProductItemModel{}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{"data": []any{map[string]any{"productId": "food", "description": "Food", "categories": []string{"Produce"}, "items": tc.items}}})
+			require.NoError(t, err)
+			client, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(&http.Client{Transport: cartRoundTrip(func(r *http.Request) (*http.Response, error) {
+				assert.Equal(t, "70500874", r.URL.Query().Get("filter.locationId"))
+				return cartResponse(http.StatusOK, string(body)), nil
+			})}))
+			require.NoError(t, err)
+			got, err := searchIngredients(t.Context(), client, "70500874", "food", []string{"*"}, false, 0)
+			require.NoError(t, err)
+			if tc.want == "" {
+				assert.Empty(t, got)
+				return
+			}
+			require.Len(t, got, 1)
+			selected := inputIngredientFromKrogerIngredient(got[0], 0)
+			assert.Equal(t, "food", selected.ProductID)
+			assert.Equal(t, tc.want, selected.VariantID)
+			assert.Equal(t, tc.want+" size", selected.Size)
+			assert.Equal(t, float32(4), *selected.PriceRegular)
+			assert.Equal(t, float32(3), *selected.PriceSale)
+		})
+	}
 }

@@ -63,7 +63,7 @@ func TestResolveStoreDetectsMissingRedirect(t *testing.T) {
 func TestResolveStoreRequiresNumericID(t *testing.T) {
 	t.Parallel()
 
-	client := NewClient(nil)
+	client := newClient(nil)
 	_, err := client.ResolveStore(context.Background(), "abc")
 	if err == nil || !strings.Contains(err.Error(), "must be numeric") {
 		t.Fatalf("unexpected error: %v", err)
@@ -103,7 +103,7 @@ func TestStoreSummaryFetchesAndParsesCanonicalPage(t *testing.T) {
 func TestExtractStoreSummaryParsesEmbeddedStorePayload(t *testing.T) {
 	t.Parallel()
 
-	summary, err := ExtractStoreSummary("https://www.publix.com/locations/1083-publix-at-university-town-center", []byte(sampleStoreHTML))
+	summary, err := extractStoreSummary("https://www.publix.com/locations/1083-publix-at-university-town-center", []byte(sampleStoreHTML))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestExtractStoreSummaryParsesEmbeddedStorePayload(t *testing.T) {
 func TestExtractStoreSummaryErrorsWhenPayloadMissing(t *testing.T) {
 	t.Parallel()
 
-	_, err := ExtractStoreSummary("https://www.publix.com/locations/1083", []byte("<html><body>no store here</body></html>"))
+	_, err := extractStoreSummary("https://www.publix.com/locations/1083", []byte("<html><body>no store here</body></html>"))
 	if err == nil || !strings.Contains(err.Error(), "payload not found") {
 		t.Fatalf("unexpected error: %v", err)
 	}

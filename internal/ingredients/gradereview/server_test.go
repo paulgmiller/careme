@@ -52,13 +52,13 @@ func TestHandlerSkipsUngradedIngredients(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Asparagus")
 	assert.NotContains(t, rr.Body.String(), "Ungraded item")
 	store := newTestStore(c, map[string][]ai.InputIngredient{"a": {ungraded, graded}})
-	require.NoError(t, store.Save(t.Context(), "a", catalogGradeKey(graded), VerdictCorrect, testReviewTime))
+	require.NoError(t, store.save(t.Context(), "a", catalogGradeKey(graded), verdictCorrect, testReviewTime))
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "No grades left to review")
 	// An ungraded catalog item cannot be submitted as a review.
-	require.ErrorIs(t, store.Save(t.Context(), "a", "catalog-v1/"+ungraded.Hash()+"/0", VerdictCorrect, testReviewTime), cache.ErrNotFound)
+	require.ErrorIs(t, store.save(t.Context(), "a", "catalog-v1/"+ungraded.Hash()+"/0", verdictCorrect, testReviewTime), cache.ErrNotFound)
 }
 
 func TestHandlerMissingCatalog(t *testing.T) {
@@ -81,7 +81,7 @@ func TestHandlerRejectsInvalidReview(t *testing.T) {
 func TestChangedScoreCanBeReviewedAgain(t *testing.T) {
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}}
 	s := newTestStore(cache.NewInMemoryCache(), map[string][]ai.InputIngredient{"a": {ingredient}})
-	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
+	require.NoError(t, s.save(t.Context(), "a", catalogGradeKey(ingredient), verdictCorrect, testReviewTime))
 	ingredient.Grade = &ai.IngredientGrade{Score: 9, Reason: "Fresh"}
 	s.entries["b"] = &catalogEntry{location: &locations.Location{ID: "b"}, ingredients: []ai.InputIngredient{ingredient}}
 	_, candidate, err := s.Next(t.Context(), "b")
@@ -123,11 +123,11 @@ func TestReviewSnapshotExcludesEmbeddings(t *testing.T) {
 	ingredient := ai.InputIngredient{ProductID: "one", Grade: &ai.IngredientGrade{Score: 8, Reason: "Fresh"}, Embedding: ai.IngredientEmbedding{1, 0}}
 	s := newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}})
 	key := catalogGradeKey(ingredient)
-	require.NoError(t, s.Save(t.Context(), "a", key, VerdictCorrect, testReviewTime))
+	require.NoError(t, s.save(t.Context(), "a", key, verdictCorrect, testReviewTime))
 	reader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, reader.Close()) }()
-	var review Review
+	var review reviewRecord
 	require.NoError(t, json.NewDecoder(reader).Decode(&review))
 	assert.Empty(t, review.Ingredient.Embedding)
 	assert.NotEmpty(t, ingredient.Embedding)

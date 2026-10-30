@@ -10,7 +10,7 @@ import (
 
 func TestSalesListsOnlyDiscountedIngredients(t *testing.T) {
 	t.Parallel()
-	got := Sales([]ai.InputIngredient{
+	got := sales([]ai.InputIngredient{
 		{
 			Description:  "Full Price Chicken",
 			PriceRegular: new(float32(10)),

@@ -41,7 +41,7 @@ func (f *failingIngredientCache) IngredientsFromCache(context.Context, string) (
 	return nil, f.err
 }
 
-func loadTestCatalog(t *testing.T, store *Store, id string) (*locations.Location, []ai.InputIngredient, error) {
+func loadTestCatalog(t *testing.T, store *store, id string) (*locations.Location, []ai.InputIngredient, error) {
 	t.Helper()
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -130,7 +130,7 @@ func (c *countingIngredientCache) IngredientsFromCache(context.Context, string) 
 	return []ai.InputIngredient{{ProductID: "one", Grade: &ai.IngredientGrade{Score: c.calls, Reason: "Cached grade"}}}, nil
 }
 
-func newTestCachedCatalog() (*Store, *countingIngredientCache) {
+func newTestCachedCatalog() (*store, *countingIngredientCache) {
 	lat, lon := 44.98, -93.26
 	ingredients := &countingIngredientCache{}
 	return NewStore(cache.NewInMemoryCache(), fakeLocationLookup{location: &locations.Location{ID: "70100023", Lat: &lat, Lon: &lon}}, ingredients), ingredients
@@ -210,7 +210,7 @@ func TestRemoveReviewedReleasesItemsOnlyInActiveCatalog(t *testing.T) {
 	require.NoError(t, err)
 	_, _, err = loadTestCatalog(t, catalog, "b")
 	require.NoError(t, err)
-	require.NoError(t, catalog.Save(t.Context(), "a", catalogGradeKey(shared), VerdictCorrect, testReviewTime))
+	require.NoError(t, catalog.save(t.Context(), "a", catalogGradeKey(shared), verdictCorrect, testReviewTime))
 	_, items, err := loadTestCatalog(t, catalog, "a")
 	require.NoError(t, err)
 	assert.Equal(t, []ai.InputIngredient{remaining}, items)
@@ -221,7 +221,7 @@ func TestRemoveReviewedReleasesItemsOnlyInActiveCatalog(t *testing.T) {
 	_, otherStore, err := loadTestCatalog(t, catalog, "b")
 	require.NoError(t, err)
 	assert.Equal(t, []ai.InputIngredient{shared, remaining}, otherStore)
-	require.NoError(t, catalog.Save(t.Context(), "a", catalogGradeKey(remaining), VerdictCorrect, testReviewTime))
+	require.NoError(t, catalog.save(t.Context(), "a", catalogGradeKey(remaining), verdictCorrect, testReviewTime))
 	assert.Nil(t, catalog.entries["a"].ingredients)
 }
 
@@ -238,7 +238,7 @@ func TestNextRemovesReviewsFromOtherStores(t *testing.T) {
 	}
 	store := catalog
 	for _, ingredient := range []ai.InputIngredient{first, second} {
-		require.NoError(t, store.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
+		require.NoError(t, store.save(t.Context(), "a", catalogGradeKey(ingredient), verdictCorrect, testReviewTime))
 	}
 	response := httptest.NewRecorder()
 	NewHandler(catalog).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader?location=b", nil))
@@ -310,6 +310,6 @@ func TestCatalogReadConcurrentWithRemoval(t *testing.T) {
 			assert.NoError(t, err)
 		}
 	})
-	requests.Go(func() { assert.NoError(t, catalog.Save(t.Context(), "a", key, VerdictCorrect, testReviewTime)) })
+	requests.Go(func() { assert.NoError(t, catalog.save(t.Context(), "a", key, verdictCorrect, testReviewTime)) })
 	requests.Wait()
 }

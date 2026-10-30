@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newOrderTest(t *testing.T, api http.HandlerFunc) (*OrderHandler, *OrderClient, cache.Cache) {
+func newOrderTest(t *testing.T, api http.HandlerFunc) (*orderHandler, *orderClient, cache.Cache) {
 	t.Helper()
 	server := httptest.NewServer(api)
 	t.Cleanup(server.Close)
@@ -39,7 +39,7 @@ func orderInput() ordertypes.TransferRequest {
 	}
 }
 
-func postTransfer(t *testing.T, h *OrderHandler, input ordertypes.TransferRequest) *httptest.ResponseRecorder {
+func postTransfer(t *testing.T, h *orderHandler, input ordertypes.TransferRequest) *httptest.ResponseRecorder {
 	t.Helper()
 	body, err := json.Marshal(input)
 	require.NoError(t, err)

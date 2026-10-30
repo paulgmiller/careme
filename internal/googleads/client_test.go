@@ -125,7 +125,7 @@ func TestClientCreateAndRemoveCampaignCriteriaRequestShapes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"customers/123/campaignCriteria/456~1"}, created)
 
-	err = client.RemoveCampaignCriteria(context.Background(), "123", []string{"customers/123/campaignCriteria/456~1"})
+	err = client.removeCampaignCriteria(context.Background(), "123", []string{"customers/123/campaignCriteria/456~1"})
 	require.NoError(t, err)
 	assert.True(t, sawCreate)
 	assert.True(t, sawRemove)
@@ -249,7 +249,7 @@ func TestClientCreateStoreAdGroupResourcesRequestShapes(t *testing.T) {
 
 func newTestClient(t *testing.T, baseURL string) *Client {
 	t.Helper()
-	client, err := NewClient(Config{
+	client, err := NewClient(config{
 		DeveloperToken:  "dev-token",
 		ClientID:        "client-id",
 		ClientSecret:    "client-secret",
