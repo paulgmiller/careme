@@ -53,7 +53,8 @@ selected shopping day. Older daily MNFoodClub params now use weekly hashing too;
 their recomputed hashes can change. TC Farm and Nelson Grass Farm no longer read
 MN Food Club's shared weekly entries; each storefront generates its own recipes.
 
-Cache prefixes, signatures, FNV byte order, and Base64 encoding are unchanged.
+FNV byte order and Base64 encoding are unchanged. Kroger catalog signatures
+are versioned below to retain selected item IDs; existing wine cache prefixes are unchanged.
 Params retain their supplied timestamps and have no date-hash version marker.
 Wine cache keys keep their existing calendar-date and style hashing formula.
 
@@ -62,7 +63,6 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |
 | `location/kroger-v2/` | JSON `locations.Location` keyed by Kroger store ID, preserving the API chain name | Kroger location lookups and searches via `internal/locations/storage.go` | Kroger lookup by ID via `internal/locations/storage.go` |
 | `shoppinglist/` | JSON `ai.ShoppingList` keyed by shopping hash | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`FromCache`) |
-| `kroger_product_upcs/v1/` | Successful UPC strings keyed by SHA-256 of store ID, NUL, and product ID; no expiry or availability data | Kroger cached order client | Kroger cached order client |
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `mnfoodclub_order_transfers/` | Shared transfer results keyed by Careme user and form idempotency key; transfer_id is the partner ID | MN Food Club order POST and server-side status refresh | Provider form route and order view builder |
@@ -77,7 +77,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `recipe/` | JSON `ai.Recipe` (one recipe per hash) | `internal/recipes/io.go` (`SaveShoppingList`) | `internal/recipes/io.go` (`SingleFromCache`) |
 | `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
 | `recipes/steps/` in the `recipe-images` backend | Generated instruction sketch bytes keyed by `<recipe_hash>/<one-based_step_number>` | `internal/recipes/step_image_controller.go` after a signed-in step image request | Recipe page and public step image endpoint |
-| `wine_recommendations/` | Plain text wine recommendation keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
+| `wine_recommendations/` | JSON ingredient-shaped wine picks and commentary keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
@@ -183,7 +183,7 @@ Compatibility implications:
   - `farmersmarket/` for Farmers Market data
 - Blob names in Azure match the same key strings listed above inside their respective containers.
 - `internal/ingredients/cachekey.ForStore` owns the staple ingredient hash suffix, shared by recipe params and cached produce scoring. It uses raw URL-safe Base64 of FNV-64a over location ID, the supplied store date (`YYYY-MM-DD`), and backend staple signature, in that order. The `ingredients/` prefix and existing hashes are unchanged.
-- Live MN Food Club, TC Farm, and Nelson Grass Farm store IDs use a backend signature computed as the lowercase hexadecimal SHA-256 hash of `mnfoodclub-bigcommerce-v1` followed by the static produce share descriptions, joined with newlines (no trailing newline). This invalidates the former scraped staple snapshots; share inventory changes also change the signature automatically. The API import includes every page of visible, available products across all categories, excludes tracked out-of-stock products and disabled variants, and appends the static produce share ingredients. Each static entry includes its share name and carries a preassigned 10/10 grade; the October 19–24 inventory has 33 entries across six shares and no listed substitutions. Wine candidates include every page of BigCommerce category 178 (Wine & Wine Alternatives). They retain the existing style/location/date wine cache keys, so previously cached wine results remain until the next store date. Staples retain the store-day `ingredients/` layout, with each delivery storefront using its own Monday hash; there is no new container or prefix.
+- Live MN Food Club, TC Farm, and Nelson Grass Farm store IDs use a backend signature computed as the lowercase hexadecimal SHA-256 hash of `mnfoodclub-bigcommerce-v1` followed by the static produce share descriptions, joined with newlines (no trailing newline). This invalidates the former scraped staple snapshots; share inventory changes also change the signature automatically. The API import includes every page of visible, available products across all categories, excludes tracked out-of-stock products and disabled variants, and appends the static produce share ingredients. Each static entry includes its share name and carries a preassigned 10/10 grade; the October 19–24 inventory has 33 entries across six shares and no listed substitutions. Wine candidates include every page of BigCommerce category 178 (Wine & Wine Alternatives). They use style/location/date wine cache keys under `wines/`. Staples retain the store-day `ingredients/` layout, with each delivery storefront using its own Monday hash; there is no new container or prefix.
 - Kroger location entries use `location/kroger-v2/<store ID>`. This version invalidates legacy `location/<Kroger store ID>` entries so Kroger locations reload their API chain names. Legacy entries remain stored but are not read by Kroger lookups. Other providers retain their existing keys; Walmart relies on those entries because its backend does not support lookup by ID. Location snapshots inside saved recipe parameters are separate and retain their original values.
 - MNFoodClub delivery searches return three storefronts with stable IDs: `mnfoodclub_delivery` (MN Food Club), `tcfarm_delivery` (TC Farm), and `nelsongrassfarm_delivery` (Nelson Grass Farm), each with coordinates from the current search and the same delivery coverage. All three delivery IDs and other `mnfoodclub_*` IDs bypass reads and writes in the `location/` cache, including any previously cached search points. Lookup by ID resolves directly through the backend to its Blaine coordinates. Ingredient and recipe caches use each storefront’s own ID, Monday shopping-week date, and backend staple signature. The storefronts retain separate ingredient, recipe, and parameter cache entries. Renaming TC Farm and Nelson Grass Farm leaves these canonical hashes unchanged; wine candidate keys include the storefront ID and are fetched again under the new IDs.
 - Live `smithbrothersfarms_*` store IDs use the lowercase hexadecimal SHA-256 hash of the ordered produce, meat/poultry, dairy/eggs, yogurt, organic harvest-box, and standard harvest-box URLs followed by the parser version (`v1`), joined with newlines with no trailing newline. They use the existing `ingredients/` layout with the store-local shopping date anchored to Monday after applying the 9 AM boundary, matching MN Food Club’s weekly policy. Ingredient and recipe hashes are shared throughout that shopping week; non-Monday daily hashes are no longer used for new requests, while existing shared hash links retain their saved lists. No new cache container or key prefix is added. Box contents are fetched live on a cache miss and replace whole-box products. Synthetic ingredient IDs use `smithbrothersfarms_<box-slug>_<SHA-256 of bullet text>`, keeping the two boxes distinct and IDs stable across list reordering. Each box ingredient includes its box name and a preassigned 10/10 produce-share grade, with no individual price or quantity.
@@ -226,7 +226,7 @@ zero-based value, label, and probability. The `probabilities-v1` cache version
 suffix ensures older grades without distributions are refreshed. The rubric,
 score conversion, and Responses grade versions are unchanged.
 Wine pairing now uses `gpt-6-luna`, while existing
-`wine_recommendations/<recipe_hash>` records remain valid and are reused.
+`wine_recommendations/<recipe_hash>` records from the current version are reused.
 
 The ingredients CLI fetches the selected store's current staple catalog, reuses
 cached grades and embeddings, embeds the query description, and ranks that
@@ -244,3 +244,36 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - The same record is saved as `pending` before a cart write and overwritten with the result afterward. Repeated submissions reuse that result without retrying failed transfers. TODO: implement cache ETag reads and `IfMatch` updates to protect state transitions. Updates are currently unconditional, so racing submissions or OAuth callbacks may overwrite newer results or submit products twice. No separate submission or lifecycle subrecords are written.
 - Recipes asks a provider-owned view builder for the authenticated viewer’s saved handoff; it never reads provider cache keys or OAuth records directly. Its shopping-list form uses a native POST to the destination's [cart-transfer route](ordering.md). The provider handler redirects directly into OAuth when needed, redirects completed additions back to the shopping list, and returns HTTP errors when no outcome can be saved. The shopping list renders a cart link for completed or possibly applied writes, shows a failure label for failed transfers, retains its form for missing records, and fails on transfer-read errors. It has no browser transfer-status URL, polling, or connect-account control. The handler reads the single saved transfer. A failed final save leaves it pending; concurrent overwrites are not protected until ETag support is implemented.
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger uses the provider-specific transfer layout above.
+
+Kroger selected item identity (#1045): store catalog signatures include
+`item-upc-v1/` before the staple definitions, refreshing staples and pantry
+snapshots. Wine candidate keys use `wines/`; wine recommendations retain
+`wine_recommendations/`; ordering VariantIDs come from the existing store/date/style
+candidate catalog under `ingredients/wines/`. The former
+`wine_selection_ingredients/v1/` recipe snapshots are no longer read or written. Existing `shopping_quantities/v7/` food snapshots
+are preserved; Kroger transfers missing any selected item UPC fail before cart
+submission and require recreating the list from refreshed catalogs. The former
+`kroger_product_upcs/v1/` cache is no longer read or written; cart submission uses
+only persisted VariantIDs, without guessing a mapping for old product IDs.
+
+Wine recommendations retain their existing ingredient-shaped JSON and
+`wine_recommendations/` keys. The full wine candidate catalog uses the existing
+`ingredients/wines/` cache keyed by normalized recipe styles, store, and date.
+Shopping finalization reads that catalog using the saved list’s store and date
+and each recipe’s styles; no additional per-recipe catalog is stored. Candidate
+cache-write failures return errors before generation returns a successful selection. Finalization polls
+the shared wine recommendation cache every 500 ms for saved wine picks
+(including completed empty results), combines food and wine needs and catalog
+snapshots by product ID, and merges quantities once.
+Wine polling has a 30-second deadline; missing picks are logged as errors and
+treated as no wine for that recipe without starting generation. Food and completed
+wine picks still finalize. Request cancellation and cache errors leave no
+finalized shopping snapshot. Rendering reads saved shopping items and never
+appends late wine picks. Recipe Ingredient
+no longer carries VariantID. Older recommendations remain readable without
+catalog snapshots; wine picks without a matching catalog product display but
+have no ordering variant ID. Unreadable snapshots fail shopping-list preparation
+rather than silently dropping metadata. Food and per-recipe wine preparation
+run concurrently. Each wine pick and its catalog are loaded during finalization,
+not during page rendering. Existing finalized snapshots remain immutable; late
+picks do not change them.

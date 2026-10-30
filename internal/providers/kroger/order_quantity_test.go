@@ -16,15 +16,14 @@ import (
 
 func TestKrogerOrderPackageQuantities(t *testing.T) {
 	for _, tc := range []struct {
-		name, productID, reason string
-		buy                     *float64
-		quantity                int
+		name, productID string
+		buy             *float64
+		quantity        int
 	}{
 		{name: "default", productID: "food", quantity: 1},
 		{name: "whole packages", productID: "food", buy: new(float64(3)), quantity: 3},
 		{name: "fraction of package", productID: "food", buy: new(float64(0.5)), quantity: 1},
 		{name: "round up", productID: "food", buy: new(float64(2.2)), quantity: 3},
-		{name: "unavailable", productID: "missing", buy: new(float64(3.2)), quantity: 4, reason: "product_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
@@ -39,18 +38,12 @@ func TestKrogerOrderPackageQuantities(t *testing.T) {
 			})
 			saveShopper(t, a, time.Now().Add(time.Hour))
 			form := orderForm()
-			setOrderField(t, form, "items", []ai.ShoppingItem{{ProductID: tc.productID, Name: "Milk", Buy: tc.buy}})
+			setOrderField(t, form, "items", []ai.ShoppingItem{{ProductID: tc.productID, VariantID: "food-upc", Name: "Milk", Buy: tc.buy}})
 			result := transferResponse(t, a, postOrder(orderMux(a), form))
 			want := ordertypes.TransferItem{ProductID: tc.productID, Name: "Milk"}
-			if tc.reason == "" {
-				want.AcceptedQuantity = tc.quantity
-				assert.Equal(t, ordertypes.TransferApplied, result.Status)
-				assert.Equal(t, 1, calls)
-			} else {
-				want.RejectedQuantity, want.RejectionReason = tc.quantity, tc.reason
-				assert.Equal(t, ordertypes.TransferFailed, result.Status)
-				assert.Zero(t, calls)
-			}
+			want.AcceptedQuantity = tc.quantity
+			assert.Equal(t, ordertypes.TransferApplied, result.Status)
+			assert.Equal(t, 1, calls)
 			assert.Equal(t, []ordertypes.TransferItem{want}, result.Items)
 		})
 	}
@@ -69,7 +62,7 @@ func TestKrogerInvalidPackageQuantityDefaultsToOne(t *testing.T) {
 			return cartResponse(http.StatusNoContent, ""), nil
 		})
 		input := mustOrderRequest(t)
-		input.Items = []ai.ShoppingItem{{ProductID: "food", Name: "Milk", Buy: &buy}}
+		input.Items = []ai.ShoppingItem{{ProductID: "food", VariantID: "food-upc", Name: "Milk", Buy: &buy}}
 		result, err := a.order(t.Context(), "list", input, cartToken{AccessToken: "shopper"})
 		require.NoError(t, err)
 		assert.Equal(t, 1, calls)

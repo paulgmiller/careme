@@ -167,10 +167,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, newHash)
-	if err == nil {
-		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog)
-	}
+	err = s.finalizeShoppingPurchases(ctx, newHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
 		http.Error(w, "Could not build your shopping list. Try again, chef", http.StatusInternalServerError)
@@ -451,14 +448,18 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		})
 
 	}
+	var purchases []shoppingPurchaseGroup
+	var purchasesErr error
+	recipeWG.Go(func() {
+		purchases, purchasesErr = s.cachedShoppingPurchases(ctx, hashParam)
+	})
 	recipeWG.Wait()
-
-	purchases, err := s.cachedShoppingPurchases(ctx, hashParam)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
+	if purchasesErr != nil && !errors.Is(purchasesErr, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", purchasesErr)
 		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
 		return
 	}
+	winepicks := wines.Clone()
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
@@ -466,7 +467,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		params:               p,
 		purchases:            purchases,
 		list:                 *slist,
-		wineRecommendations:  wines.Clone(),
+		wineRecommendations:  winepicks,
 		recipeImages:         images.Clone(),
 		currentUser:          currentUser,
 		hash:                 hashParam,
@@ -477,7 +478,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
 	if err == nil && view.Finalized && view.ServerSignedIn {
-		err = s.populateOrderView(ctx, &view)
+		err = s.populateOrderView(r, &view)
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)

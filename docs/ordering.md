@@ -41,46 +41,54 @@ shopping list after a transfer.
 
 ## Kroger navigation
 
-### Product and item identity: current behavior and proposed follow-up
+### Product and item identity
 
-Kroger's product schema has a product ID, a product-level UPC, and an `items`
-array. Each item has its own `itemId` (documented as the item's UPC), size,
-price, and inventory. The schema permits multiple items but does not explain
-their relationship well enough to assume their UPCs are interchangeable.
+Kroger catalog search selects one priced item per product, preferring HIGH stock,
+then LOW, then unknown inventory. Temporarily out-of-stock items remain excluded;
+ties preserve API order. The selected item's `itemId` is retained as
+`InputIngredient.VariantID`, together with that item's size and prices.
+`ProductID` remains the recipe reference. Shared deduplication still collapses
+repeated product IDs across searches. Independently selecting multiple variants
+would require broader changes to recipe identity and merging.
 
-Currently, `searchIngredients` emits one ingredient per priced, in-stock item,
-using `product.productId` for identity and the item's size and price. It drops
-`item.itemId`. The shared catalog deduplicates by product ID and keeps the first
-row. Recipe ingredients and shopping merging also identify products by product
-ID. Cart preparation subsequently looks up the product again and chooses the
-first nonempty item UPC; that need not identify the item whose size was used
-to calculate purchase quantities.
+Size-based selection remains an alternative for
+[#1051](https://github.com/paulgmiller/careme/issues/1051). Inventory ranking applies
+when catalogs are fetched again; existing cached catalogs and finalized shopping
+snapshots retain their selected items.
 
-The proposed follow-up is to retain the selected item's UPC in `VariantID`:
+Finalization loads food ingredients and each saved recipe's first wine pick,
+combines both catalogs into one product-ID lookup, and merges their quantities
+once. Each wine pick contributes one bottle per recipe; repeated wines are merged
+like repeated food ingredients. Catalog metadata (VariantID, size, aisle, and name)
+is attached before the complete shopping snapshot is saved. Page rendering reads
+that snapshot without loading wine catalogs, enriching items, or appending wine.
+Existing finalized snapshots remain unchanged.
 
-- `ProductID` remains Kroger's `product.productId`, used for recipe references.
-- `VariantID` holds that row's `item.itemId`, used as the cart UPC. Preserve it
-  with the same item's size and price. This matches the field's existing role
-  as the selected provider variant for ordering; it is not an AI-generated value.
-- Keep the existing single selected row per product ID. Supporting multiple
-  independently selectable items under one product ID would require changes to
-  recipe identity, deduplication, and shopping merging, beyond copying a field.
-- The shopping display already attaches `VariantID` from the selected catalog
-  row to the persisted shopping item, and transfer requests preserve it. Kroger
-  ordering should consume it directly rather than resolve the product again.
-- Wine needs equivalent propagation: wine recipe ingredients currently lack
-  `VariantID`, and the shopping wine rows only copy their product ID. Updating
-  staples alone will not eliminate wine lookups.
-- Older catalog snapshots and finalized lists lack this identifier. Define their
-  refresh or migration behavior before requiring it. A product-only lookup
-  cannot reconstruct a previously selected item's identity unambiguously when
-  multiple distinct item UPCs exist; do not silently choose a replacement.
+Saving a recipe starts wine picking in the background. Finalization polls the
+shared wine recommendation cache every 500 ms, so picking can finish on another
+server. A saved WineSelection, including an empty wines array, means picking is
+complete. Finalization does not start another pick. Wine polling waits at most
+30 seconds. Missing results are logged as errors and treated as no wine for that
+recipe, including background picks that failed without saving a result. Food
+and completed wine picks still finalize. Request cancellation, cache read errors,
+and decoding errors return errors without saving a shopping snapshot. The AI
+quantity merge runs after input preparation.
 
-This is a documented follow-up, not implemented behavior. Product-level `upc`
-is not a justified substitute for preserving the selected item's identity.
-Location filtering belongs in catalog selection for store prices and availability;
-it is not needed to submit an already selected UPC to the cart. Availability
-rechecking during shopping-list merging remains a separate TODO.
+Wine recommendations retain their existing ingredient-shaped JSON and
+`wine_recommendations/` keys. The full candidate InputIngredient catalog is stored
+separately at `wine_selection_ingredients/v1/<recipe hash>`. Older picks remain displayable;
+without a matching catalog product they have no ordering variant ID. Cart transfer
+uses only persisted shopping-item identifiers and performs no product-detail
+lookup or availability recheck.
+
+Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
+pantry snapshots. Wine candidates retain `wines/` keys and recommendations retain
+`wine_recommendations/`; selected catalog rows use the separate
+`wine_selection_ingredients/v1/` prefix.
+Existing finalized food snapshots remain immutable. Transfers containing any item
+without a selected UPC fail before writing the cart; recreate those lists from a
+refreshed catalog. There is no migration from product ID or product-level `upc`:
+multiple item UPCs make the original choice impossible to reconstruct safely.
 
 See the checked-in `products.productModel` and `products.productItemModel` schemas
 in `internal/providers/kroger/products/openapi.json` and
@@ -107,7 +115,7 @@ saving a transfer or contacting Kroger.
 
 Kroger sends the requested `buy` quantity for each product, rounding
 up to whole packages and defaulting to one when `buy` is absent. Successful writes record
-accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
+accepted package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
@@ -115,8 +123,8 @@ A cart transfer never checks out or places an order.
 OAuth denial, a missing code, or token exchange/storage errors return ordinary
 HTTP errors on the provider route. They do not create an order transfer.
 
-After authentication succeeds, the handler creates a pending transfer. Product
-lookup errors, no matched products, and cart write errors are saved as failed.
+After authentication succeeds, the handler creates a pending transfer. Missing
+selected item UPCs and cart write errors are saved as failed.
 Both successful and failed transfers redirect to the request’s shopping-list URL.
 The shopping list replaces the form with “Add to cart failed.” for a failed
 transfer. There is no retry control, and repeated posts or OAuth callbacks reuse
@@ -159,8 +167,11 @@ required except for HTTP localhost endpoints used in tests.
 
 The adapter sends JSON to `/v1/cart-transfers` with the partner bearer token and
 an integration-wide idempotency key derived from the Careme user ID and list key.
-Only the authenticated shopper’s account email is sent as an identity hint.
-Careme IDs are never passed as Food Club customer IDs. Customer-ID, ZIP, and
+The authenticated shopper’s account email and the ZIP saved in the
+`careme_zip_code` cookie from their location search are sent as identity hints.
+The shopping form carries this optional `zip_code` alongside `location`; it is
+separate from the store’s ZIP and omitted when no ZIP cookie is present.
+Careme IDs are never passed as Food Club customer IDs. Customer-ID and
 storefront-brand hints are currently omitted.
 
 Each product is sent once. Package counts come from `buy`, rounded up to whole

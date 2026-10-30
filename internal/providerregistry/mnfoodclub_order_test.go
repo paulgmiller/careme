@@ -25,11 +25,13 @@ func TestFoodClubOrderingForAllStorefronts(t *testing.T) {
 		assert.Equal(t, "/v1/cart-transfers", r.URL.Path)
 		assert.Equal(t, "Bearer partner-secret", r.Header.Get("Authorization"))
 		var body struct {
-			Items []struct {
+			IdentityHints map[string]any `json:"identity_hints"`
+			Items         []struct {
 				VariantID string `json:"variant_id"`
 			} `json:"items"`
 		}
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "00501", body.IdentityHints["zip_code"])
 		if assert.Len(t, body.Items, 1) {
 			assert.Equal(t, "variant-1005", body.Items[0].VariantID)
 		}
@@ -47,7 +49,7 @@ func TestFoodClubOrderingForAllStorefronts(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			location, err := mnfoodclub.NewLocationBackend().GetLocationByID(t.Context(), id)
 			require.NoError(t, err)
-			input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: id, Location: *location, Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "variant-1005", Name: "Chicken"}}, ReturnURL: "/recipes?h=" + id}
+			input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: id, Location: *location, ZipCode: "00501", Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "variant-1005", Name: "Chicken"}}, ReturnURL: "/recipes?h=" + id}
 			builder := factory.NewOrderViewBuilder(options.Cache)
 			view, err := builder.OrderView(t.Context(), input)
 			require.NoError(t, err)
@@ -59,6 +61,11 @@ func TestFoodClubOrderingForAllStorefronts(t *testing.T) {
 			assert.Contains(t, body.String(), `method="POST"`)
 			assert.Contains(t, body.String(), `name="idempotency_key"`)
 			assert.NotContains(t, body.String(), "partner-secret")
+			var posted ordertypes.TransferRequest
+			require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &posted))
+			assert.Equal(t, "00501", posted.ZipCode)
+			assert.Equal(t, *location, posted.Location)
+			assert.Contains(t, body.String(), "00501")
 			form := url.Values{"idempotency_key": {view.IdempotencyKey}, "transfer_request": {view.TransferRequestJSON}}
 			r := httptest.NewRequest(http.MethodPost, view.TransferURL, strings.NewReader(form.Encode()))
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")

@@ -28,7 +28,7 @@ type krogerTokenManager struct {
 	mu           sync.Mutex
 }
 
-func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *krogerTokenManager {
+func newKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *krogerTokenManager {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -72,7 +72,7 @@ func withRetries(baseClient *http.Client) *http.Client {
 }
 
 func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
-	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
+	tokenManager := newKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
 
 	return func(editorCtx context.Context, req *http.Request) error {
 		token, err := tokenManager.getToken(editorCtx)
