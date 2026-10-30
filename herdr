@@ -33,10 +33,9 @@ if git -C "$src" show-ref --verify --quiet "refs/heads/$name"; then
 fi
 
 git -C "$src" fetch origin master
-exec herdr worktree create \
-  --cwd "$src" \
-  --branch "$name" \
-  --base origin/master \
-  --path "$dest" \
+# Create the checkout directly so Herdr opens an independent top-level workspace.
+git -C "$src" worktree add -b "$name" "$dest" origin/master
+exec herdr workspace create \
+  --cwd "$dest" \
   --label "$name" \
   --focus
