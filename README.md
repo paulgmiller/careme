@@ -255,6 +255,10 @@ the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 For a test-site cart handoff walkthrough and standalone mock API, see
 [MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
 available at `/mnfoodclub-demo/` only when `ENABLE_MOCKS` is enabled.
+
+For the standalone API service wired into `caremetest`, see the
+[Food Club test stub](docs/mnfoodclub-stub.md).
+
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.
 Missing credentials fail client construction when the staples backends are
