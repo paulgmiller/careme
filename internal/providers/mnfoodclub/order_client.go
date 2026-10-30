@@ -34,14 +34,14 @@ type handoffResponse struct {
 	UserID string `json:"user_id,omitempty"`
 }
 
-// OrderClient calls the proposed partner API with credentials separate from BigCommerce.
-type OrderClient struct {
+// orderClient calls the proposed partner API with credentials separate from BigCommerce.
+type orderClient struct {
 	endpoint   string
 	token      string
 	httpClient *http.Client
 }
 
-func NewOrderClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*OrderClient, error) {
+func NewOrderClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*orderClient, error) {
 	base, err := url.Parse(cfg.OrderAPIURL)
 	if err != nil || !validOrderURL(base) || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
 		return nil, fmt.Errorf("MNFOODCLUB_ORDER_API_URL must be an absolute HTTPS URL (HTTP localhost is allowed for testing)")
@@ -49,7 +49,7 @@ func NewOrderClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*Orde
 	if strings.TrimSpace(cfg.OrderAccessToken) == "" {
 		return nil, fmt.Errorf("MN Food Club ordering requires MNFOODCLUB_ORDER_ACCESS_TOKEN")
 	}
-	return &OrderClient{endpoint: strings.TrimRight(base.String(), "/") + "/v1/cart-transfers", token: cfg.OrderAccessToken, httpClient: httpClient}, nil
+	return &orderClient{endpoint: strings.TrimRight(base.String(), "/") + "/v1/cart-transfers", token: cfg.OrderAccessToken, httpClient: httpClient}, nil
 }
 
 func validOrderURL(u *url.URL) bool {
@@ -59,7 +59,7 @@ func validOrderURL(u *url.URL) bool {
 	return u.Scheme == "https" || (u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"))
 }
 
-func (c *OrderClient) create(ctx context.Context, key string, input handoffRequest) (handoffResponse, error) {
+func (c *orderClient) create(ctx context.Context, key string, input handoffRequest) (handoffResponse, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
 		return handoffResponse{}, fmt.Errorf("encode MN Food Club transfer: %w", err)
@@ -71,7 +71,7 @@ func (c *OrderClient) create(ctx context.Context, key string, input handoffReque
 	return result, result.validate(input.Items)
 }
 
-func (c *OrderClient) status(ctx context.Context, id string) (handoffResponse, error) {
+func (c *orderClient) status(ctx context.Context, id string) (handoffResponse, error) {
 	if id == "" {
 		return handoffResponse{}, fmt.Errorf("MN Food Club transfer has no partner ID yet")
 	}
@@ -85,7 +85,7 @@ func (c *OrderClient) status(ctx context.Context, id string) (handoffResponse, e
 	return result, result.validate(nil)
 }
 
-func (c *OrderClient) request(ctx context.Context, method, endpoint, key string, body []byte) (handoffResponse, error) {
+func (c *orderClient) request(ctx context.Context, method, endpoint, key string, body []byte) (handoffResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return handoffResponse{}, fmt.Errorf("create MN Food Club request: %w", err)

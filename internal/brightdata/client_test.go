@@ -13,7 +13,7 @@ import (
 func TestNewClient_RequiresAPIKey(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewClient("", nil)
+	_, err := newClient("", nil)
 	if err == nil || !strings.Contains(err.Error(), "api key is required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,17 +39,17 @@ func TestScrape_BuildsRequestAndReturnsRawBody(t *testing.T) {
 		return jsonHTTPResponse(http.StatusOK, `[{"name":"Red Bull"},{"name":"OLIPOP"}]`), nil
 	})
 
-	resp, err := client.Scrape(context.Background(), "gd_m693oc1r1gebnayxq", []walmartInput{
+	resp, err := client.scrape(context.Background(), "gd_m693oc1r1gebnayxq", []walmartInput{
 		{
 			URL:      "https://www.walmart.com/ip/5332753715",
 			ZipCode:  "33177",
 			StoreID:  "6397",
 			MaxItems: 4,
 		},
-	}, ScrapeOptions{
+	}, scrapeOptions{
 		Notify:        false,
 		IncludeErrors: true,
-		Format:        FormatJSON,
+		Format:        formatJSON,
 	})
 	if err != nil {
 		t.Fatalf("scrape: %v", err)
@@ -97,7 +97,7 @@ func TestScrape_ReturnsSnapshotIDOnAccepted(t *testing.T) {
 		return jsonHTTPResponse(http.StatusAccepted, `{"snapshot_id":"s_123","message":"still running"}`), nil
 	})
 
-	resp, err := client.Scrape(context.Background(), "gd_test", []map[string]string{{"url": "https://example.com"}}, ScrapeOptions{})
+	resp, err := client.scrape(context.Background(), "gd_test", []map[string]string{{"url": "https://example.com"}}, scrapeOptions{})
 	if err != nil {
 		t.Fatalf("scrape: %v", err)
 	}
@@ -122,11 +122,11 @@ func TestTrigger_BuildsRawInputArray(t *testing.T) {
 		return jsonHTTPResponse(http.StatusOK, `{"snapshot_id":"s_async"}`), nil
 	})
 
-	resp, err := client.Trigger(context.Background(), "gd_async", []map[string]string{
+	resp, err := client.trigger(context.Background(), "gd_async", []map[string]string{
 		{"url": "https://www.walmart.com/ip/5332753715", "zip_code": "33177", "store_id": "6397"},
-	}, TriggerOptions{
+	}, triggerOptions{
 		IncludeErrors: true,
-		Format:        FormatNDJSON,
+		Format:        formatNDJSON,
 	})
 	if err != nil {
 		t.Fatalf("trigger: %v", err)
@@ -168,7 +168,7 @@ func TestWaitAndDownload_PollsThenReturnsBody(t *testing.T) {
 		}
 	})
 
-	resp, err := client.WaitAndDownload(context.Background(), "s_ready", time.Millisecond, DownloadOptions{Format: FormatJSON})
+	resp, err := client.waitAndDownload(context.Background(), "s_ready", time.Millisecond, downloadOptions{Format: formatJSON})
 	if err != nil {
 		t.Fatalf("wait and download: %v", err)
 	}
@@ -191,14 +191,14 @@ func TestDownloadSnapshot_NotReady(t *testing.T) {
 		return jsonHTTPResponse(http.StatusAccepted, `{"status":"building","message":"Snapshot is building, try again in 10s"}`), nil
 	})
 
-	resp, err := client.DownloadSnapshot(context.Background(), "s_building", DownloadOptions{})
+	resp, err := client.downloadSnapshot(context.Background(), "s_building", downloadOptions{})
 	if err != nil {
 		t.Fatalf("download snapshot: %v", err)
 	}
 	if resp.Ready {
 		t.Fatal("expected not-ready response")
 	}
-	if resp.Status != SnapshotStatusBuilding {
+	if resp.Status != snapshotStatusBuilding {
 		t.Fatalf("unexpected status: %q", resp.Status)
 	}
 }
@@ -216,13 +216,13 @@ func TestDeliverToAzure_BuildsDeliveryRequest(t *testing.T) {
 		return jsonHTTPResponse(http.StatusOK, `{"delivery_id":"d_123"}`), nil
 	})
 
-	resp, err := client.DeliverToAzure(context.Background(), "s_ready", AzureDeliveryOptions{
+	resp, err := client.deliverToAzure(context.Background(), "s_ready", azureDeliveryOptions{
 		Container:        "brightdata-results",
 		Account:          "acct",
 		Key:              "base64-key",
 		Directory:        "walmart/2026-03-25",
 		FilenameTemplate: "snapshot_{{id}}",
-		Extension:        DeliveryExtensionJSON,
+		Extension:        deliveryExtensionJSON,
 		Compress:         true,
 		BatchSize:        1000,
 	})
@@ -261,10 +261,10 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
 
-func newTestClient(t *testing.T, fn roundTripFunc) *Client {
+func newTestClient(t *testing.T, fn roundTripFunc) *client {
 	t.Helper()
 
-	client, err := NewClientWithBaseURL("https://api.example.test", "test-token", &http.Client{
+	client, err := newClientWithBaseURL("https://api.example.test", "test-token", &http.Client{
 		Transport: fn,
 	})
 	if err != nil {

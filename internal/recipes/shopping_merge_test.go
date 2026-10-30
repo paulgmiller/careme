@@ -269,7 +269,7 @@ func TestShoppingPageAppendsLateWinePicksWithoutMerging(t *testing.T) {
 	assert.NotContains(t, render(), "Red wine")
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
 	for _, recipe := range p.Saved {
-		require.NoError(t, s.SaveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine, {Name: "Other wine"}}}))
+		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine, {Name: "Other wine"}}}))
 	}
 	body := render()
 	require.Contains(t, body, `id="shopping-list-section"`)

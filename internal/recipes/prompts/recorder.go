@@ -11,7 +11,7 @@ import (
 	"careme/internal/cache"
 )
 
-const CachePrefix = "recipe_prompts/"
+const cachePrefix = "recipe_prompts/"
 
 type cacheRecorder struct {
 	cache cache.Cache
@@ -60,5 +60,5 @@ func (r cacheRecorder) RecordPrompt(ctx context.Context, record *ai.PromptRecord
 }
 
 func promptRecordCacheKey(record ai.PromptRecord) string {
-	return CachePrefix + record.ResponseID
+	return cachePrefix + record.ResponseID
 }

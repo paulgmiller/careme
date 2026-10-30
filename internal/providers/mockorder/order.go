@@ -18,16 +18,16 @@ import (
 
 const transferURL = "/mock/order-transfers"
 
-type Handler struct {
+type handler struct {
 	cache cache.Cache
 	auth  auth.AuthClient
 }
 
-func NewHandler(c cache.Cache, authClient auth.AuthClient) *Handler {
-	return &Handler{cache: c, auth: authClient}
+func NewHandler(c cache.Cache, authClient auth.AuthClient) *handler {
+	return &handler{cache: c, auth: authClient}
 }
 
-func (h *Handler) Register(routes routing.Registrar) {
+func (h *handler) Register(routes routing.Registrar) {
 	routes.Handle("POST "+transferURL, http.NewCrossOriginProtection().Handler(http.HandlerFunc(h.transfer)))
 	routes.HandleFunc("GET "+transferURL+"/{id}", h.cart)
 }
@@ -77,7 +77,7 @@ func OrderView(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInp
 	return &ordertypes.OrderView{TransferURL: transferURL, TransferLabel: "Add to mock cart", IdempotencyKey: input.ListKey, TransferRequestJSON: string(body)}, nil
 }
 
-func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
+func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
@@ -124,7 +124,7 @@ func (h *Handler) transfer(w http.ResponseWriter, r *http.Request) {
 }
 
 // cart lets the local Review cart link display the mock's saved result.
-func (h *Handler) cart(w http.ResponseWriter, r *http.Request) {
+func (h *handler) cart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if !validKey(r.PathValue("id")) {
 		http.Error(w, "Invalid mock transfer ID", http.StatusBadRequest)

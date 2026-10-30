@@ -25,18 +25,18 @@ type Storage struct {
 }
 
 var (
-	ErrNotFound                = errors.New("user not found")
-	ErrPartnerNotFound         = errors.New("partner account not found")
-	ErrPartnerSelf             = errors.New("user cannot partner with themselves")
-	ErrUserAlreadyHasPartner   = errors.New("user already has a partner")
-	ErrPartnerUnavailable      = errors.New("partner is unavailable")
-	ErrNoPartner               = errors.New("user does not have a partner")
-	ErrNoIncomingPartner       = errors.New("user does not have an incoming partner request")
-	ErrPartnershipInconsistent = errors.New("partnership is not reciprocal")
+	errNotFound                = errors.New("user not found")
+	errPartnerNotFound         = errors.New("partner account not found")
+	errPartnerSelf             = errors.New("user cannot partner with themselves")
+	errUserAlreadyHasPartner   = errors.New("user already has a partner")
+	errPartnerUnavailable      = errors.New("partner is unavailable")
+	errNoPartner               = errors.New("user does not have a partner")
+	errNoIncomingPartner       = errors.New("user does not have an incoming partner request")
+	errPartnershipInconsistent = errors.New("partnership is not reciprocal")
 )
 
 const (
-	CookieName         = "careme_user"
+	cookieName         = "careme_user"
 	userPrefix         = "users/"
 	emailPrefix        = "email2user/"
 	shoppingListLimit  = 2
@@ -68,7 +68,7 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	userBytes, err := s.cache.Get(context.TODO(), userPrefix+id)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
-			return nil, ErrNotFound
+			return nil, errNotFound
 		}
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *Storage) GetByEmail(email string) (*utypes.User, error) {
 	id, err := s.cache.Get(context.TODO(), emailPrefix+normalized)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
-			return nil, ErrNotFound
+			return nil, errNotFound
 		}
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (s *Storage) findOrCreateFromClerk(ctx context.Context, clerkUserID string,
 		return user, nil
 	}
 
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	if err != nil && !errors.Is(err, errNotFound) {
 		return nil, err
 	}
 
@@ -192,13 +192,13 @@ func (s *Storage) partner(user *utypes.User) (*utypes.User, error) {
 	}
 	partner, err := s.GetByID(partnerID)
 	if err != nil {
-		return nil, fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+		return nil, fmt.Errorf("load partner: %w", errors.Join(errPartnershipInconsistent, err))
 	}
 	// Both records must describe the same pending or accepted relationship. A
 	// one-sided reference can be left behind because the cache cannot update the
 	// two user records atomically.
 	if partnershipStageFor(user, partner) == partnershipStageNone {
-		return nil, ErrPartnershipInconsistent
+		return nil, errPartnershipInconsistent
 	}
 	return partner, nil
 }
@@ -228,22 +228,22 @@ func partnershipStageFor(user, partner *utypes.User) partnershipStage {
 	}
 }
 
-func (s *Storage) RequestPartner(currentUser *utypes.User, email string) error {
+func (s *Storage) requestPartner(currentUser *utypes.User, email string) error {
 	partner, err := s.GetByEmail(email)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return ErrPartnerNotFound
+		if errors.Is(err, errNotFound) {
+			return errPartnerNotFound
 		}
 		return fmt.Errorf("find partner by email: %w", err)
 	}
 	if currentUser.ID == partner.ID {
-		return ErrPartnerSelf
+		return errPartnerSelf
 	}
 	if currentUser.PartnerID != "" || currentUser.PendingPartnerID != "" {
-		return ErrUserAlreadyHasPartner
+		return errUserAlreadyHasPartner
 	}
 	if partner.PartnerID != "" || partner.PendingPartnerID != "" {
-		return ErrPartnerUnavailable
+		return errPartnerUnavailable
 	}
 
 	currentUser.PartnerID = partner.ID
@@ -262,16 +262,16 @@ func (s *Storage) RequestPartner(currentUser *utypes.User, email string) error {
 	return nil
 }
 
-func (s *Storage) AcceptPartner(currentUser *utypes.User) error {
+func (s *Storage) acceptPartner(currentUser *utypes.User) error {
 	if currentUser.PendingPartnerID == "" || currentUser.PartnerID != "" {
-		return ErrNoIncomingPartner
+		return errNoIncomingPartner
 	}
 	partner, err := s.GetByID(currentUser.PendingPartnerID)
 	if err != nil {
-		return fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+		return fmt.Errorf("load partner: %w", errors.Join(errPartnershipInconsistent, err))
 	}
 	if partnershipStageFor(currentUser, partner) != partnershipStageIncoming {
-		return ErrPartnershipInconsistent
+		return errPartnershipInconsistent
 	}
 
 	currentUser.PartnerID = currentUser.PendingPartnerID
@@ -282,20 +282,20 @@ func (s *Storage) AcceptPartner(currentUser *utypes.User) error {
 	return nil
 }
 
-func (s *Storage) UnlinkPartner(currentUser *utypes.User) error {
+func (s *Storage) unlinkPartner(currentUser *utypes.User) error {
 	partnerID := currentUser.PartnerID
 	if currentUser.PendingPartnerID != "" {
 		partnerID = currentUser.PendingPartnerID
 	}
 	if partnerID == "" {
-		return ErrNoPartner
+		return errNoPartner
 	}
 	partner, err := s.GetByID(partnerID)
 	if err != nil {
-		return fmt.Errorf("load partner: %w", errors.Join(ErrPartnershipInconsistent, err))
+		return fmt.Errorf("load partner: %w", errors.Join(errPartnershipInconsistent, err))
 	}
 	if partnershipStageFor(currentUser, partner) == partnershipStageNone {
-		return ErrPartnershipInconsistent
+		return errPartnershipInconsistent
 	}
 
 	currentPartnerID := currentUser.PartnerID

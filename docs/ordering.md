@@ -41,6 +41,53 @@ shopping list after a transfer.
 
 ## Kroger navigation
 
+### Product and item identity: current behavior and proposed follow-up
+
+Kroger's product schema has a product ID, a product-level UPC, and an `items`
+array. Each item has its own `itemId` (documented as the item's UPC), size,
+price, and inventory. The schema permits multiple items but does not explain
+their relationship well enough to assume their UPCs are interchangeable.
+
+Currently, `searchIngredients` emits one ingredient per priced, in-stock item,
+using `product.productId` for identity and the item's size and price. It drops
+`item.itemId`. The shared catalog deduplicates by product ID and keeps the first
+row. Recipe ingredients and shopping merging also identify products by product
+ID. Cart preparation subsequently looks up the product again and chooses the
+first nonempty item UPC; that need not identify the item whose size was used
+to calculate purchase quantities.
+
+The proposed follow-up is to retain the selected item's UPC in `VariantID`:
+
+- `ProductID` remains Kroger's `product.productId`, used for recipe references.
+- `VariantID` holds that row's `item.itemId`, used as the cart UPC. Preserve it
+  with the same item's size and price. This matches the field's existing role
+  as the selected provider variant for ordering; it is not an AI-generated value.
+- Keep the existing single selected row per product ID. Supporting multiple
+  independently selectable items under one product ID would require changes to
+  recipe identity, deduplication, and shopping merging, beyond copying a field.
+- The shopping display already attaches `VariantID` from the selected catalog
+  row to the persisted shopping item, and transfer requests preserve it. Kroger
+  ordering should consume it directly rather than resolve the product again.
+- Wine needs equivalent propagation: wine recipe ingredients currently lack
+  `VariantID`, and the shopping wine rows only copy their product ID. Updating
+  staples alone will not eliminate wine lookups.
+- Older catalog snapshots and finalized lists lack this identifier. Define their
+  refresh or migration behavior before requiring it. A product-only lookup
+  cannot reconstruct a previously selected item's identity unambiguously when
+  multiple distinct item UPCs exist; do not silently choose a replacement.
+
+This is a documented follow-up, not implemented behavior. Product-level `upc`
+is not a justified substitute for preserving the selected item's identity.
+Location filtering belongs in catalog selection for store prices and availability;
+it is not needed to submit an already selected UPC to the cart. Availability
+rechecking during shopping-list merging remains a separate TODO.
+
+See the checked-in `products.productModel` and `products.productItemModel` schemas
+in `internal/providers/kroger/products/openapi.json` and
+[Kroger's response documentation](https://www.postman.com/kroger/the-kroger-co-s-public-workspace/documentation/nryx3kn/kroger-partner-apis?entity=request-4826685-c459db82-57d0-49d8-9bcd-1f6550558606).
+
+### Transfer flow
+
 1. The POST checks the shopper’s encrypted per-user token and refreshes it when needed.
 2. If a Kroger connection is needed, it immediately returns a 303 redirect to
    Kroger OAuth. The shopper does not have to click a separate connect button.

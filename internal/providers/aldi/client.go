@@ -21,15 +21,15 @@ import (
 const (
 	Container        = "aldi"
 	StoreCachePrefix = "aldi/stores/"
-	LocationIDPrefix = "aldi_"
+	locationIDPrefix = "aldi_"
 	DefaultBaseURL   = "https://locator.uberall.com"
-	DefaultShopURL   = "https://www.aldi.us"
+	defaultShopURL   = "https://www.aldi.us"
 	DefaultWidgetKey = "LETA2YVm6txbe0b9lS297XdxDX4qVQ" // what is this?
-	DefaultLanguage  = "en_US"
-	DefaultCountry   = "US"
+	defaultLanguage  = "en_US"
+	defaultCountry   = "US"
 )
 
-type Client struct {
+type client struct {
 	BaseURL    string
 	ShopURL    string
 	WidgetKey  string
@@ -38,10 +38,10 @@ type Client struct {
 	HTTPClient *http.Client
 
 	shopCookies []*http.Cookie
-	shopsByZip  map[string][]Shop
+	shopsByZip  map[string][]shop
 }
 
-type SourceLocation struct {
+type sourceLocation struct {
 	ID              int64   `json:"id"`
 	Identifier      string  `json:"identifier"`
 	Name            string  `json:"name"`
@@ -68,20 +68,20 @@ type StoreSummary struct {
 	Lon           *float64 `json:"lon,omitempty"`
 }
 
-type Shop struct {
+type shop struct {
 	ID                string      `json:"id"`
 	Name              string      `json:"name"`
 	RetailerKey       string      `json:"retailer_key"`
 	PhoneNumber       string      `json:"phone_number"`
 	FulfillmentOption string      `json:"fulfillment_option"`
-	Address           ShopAddress `json:"address"`
+	Address           shopAddress `json:"address"`
 	RetailerLogoURL   string      `json:"retailer_logo_url"`
 	BackgroundColor   string      `json:"background_color_hex"`
 	LocationName      string      `json:"location_name"`
 	LocationCode      string      `json:"location_code"`
 }
 
-type ShopAddress struct {
+type shopAddress struct {
 	StreetAddress string `json:"street_address"`
 	City          string `json:"city"`
 	State         string `json:"state"`
@@ -90,7 +90,7 @@ type ShopAddress struct {
 }
 
 type shopsResponse struct {
-	Shops []Shop `json:"shops"`
+	Shops []shop `json:"shops"`
 	Error *struct {
 		Message string `json:"message"`
 		Code    string `json:"code"`
@@ -101,15 +101,11 @@ type allLocationsResponse struct {
 	Status   string `json:"status"`
 	Message  string `json:"message"`
 	Response struct {
-		Locations []SourceLocation `json:"locations"`
+		Locations []sourceLocation `json:"locations"`
 	} `json:"response"`
 }
 
-func NewClient(httpClient *http.Client) *Client {
-	return NewClientWithBaseURL(DefaultBaseURL, DefaultWidgetKey, httpClient)
-}
-
-func NewClientWithBaseURL(baseURL, widgetKey string, httpClient *http.Client) *Client {
+func NewClientWithBaseURL(baseURL, widgetKey string, httpClient *http.Client) *client {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -122,18 +118,18 @@ func NewClientWithBaseURL(baseURL, widgetKey string, httpClient *http.Client) *C
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	return &Client{
+	return &client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
-		ShopURL:    DefaultShopURL,
+		ShopURL:    defaultShopURL,
 		WidgetKey:  widgetKey,
-		Language:   DefaultLanguage,
-		Country:    DefaultCountry,
+		Language:   defaultLanguage,
+		Country:    defaultCountry,
 		HTTPClient: httpClient,
-		shopsByZip: make(map[string][]Shop),
+		shopsByZip: make(map[string][]shop),
 	}
 }
 
-func (c *Client) AllLocations(ctx context.Context) ([]SourceLocation, error) {
+func (c *client) allLocations(ctx context.Context) ([]sourceLocation, error) {
 	if strings.TrimSpace(c.WidgetKey) == "" {
 		return nil, errors.New("widget key is required")
 	}
@@ -144,8 +140,8 @@ func (c *Client) AllLocations(ctx context.Context) ([]SourceLocation, error) {
 	}
 
 	params := endpoint.Query()
-	params.Set("language", valueOrDefault(c.Language, DefaultLanguage))
-	params.Set("country", valueOrDefault(c.Country, DefaultCountry))
+	params.Set("language", valueOrDefault(c.Language, defaultLanguage))
+	params.Set("country", valueOrDefault(c.Country, defaultCountry))
 	endpoint.RawQuery = params.Encode()
 
 	var response allLocationsResponse
@@ -155,8 +151,8 @@ func (c *Client) AllLocations(ctx context.Context) ([]SourceLocation, error) {
 	return response.Response.Locations, nil
 }
 
-func (c *Client) StoreSummaries(ctx context.Context) ([]*StoreSummary, error) {
-	locations, err := c.AllLocations(ctx)
+func (c *client) StoreSummaries(ctx context.Context) ([]*StoreSummary, error) {
+	locations, err := c.allLocations(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -172,12 +168,12 @@ func (c *Client) StoreSummaries(ctx context.Context) ([]*StoreSummary, error) {
 	return summaries, nil
 }
 
-func (c *Client) InStoreShopID(ctx context.Context, summary *StoreSummary) (string, error) {
+func (c *client) InStoreShopID(ctx context.Context, summary *StoreSummary) (string, error) {
 	if summary == nil {
 		return "", errors.New("store summary is required")
 	}
 
-	shops, err := c.ShopsByPostalCode(ctx, summary.ZipCode)
+	shops, err := c.shopsByPostalCode(ctx, summary.ZipCode)
 	if err != nil {
 		return "", err
 	}
@@ -189,7 +185,7 @@ func (c *Client) InStoreShopID(ctx context.Context, summary *StoreSummary) (stri
 	return shop.ID, nil
 }
 
-func (c *Client) ShopsByPostalCode(ctx context.Context, postalCode string) ([]Shop, error) {
+func (c *client) shopsByPostalCode(ctx context.Context, postalCode string) ([]shop, error) {
 	postalCode = strings.TrimSpace(postalCode)
 	if postalCode == "" {
 		return nil, errors.New("postal code is required")
@@ -220,7 +216,7 @@ func (c *Client) ShopsByPostalCode(ctx context.Context, postalCode string) ([]Sh
 	return response.Shops, nil
 }
 
-func (c *Client) ensureShopSession(ctx context.Context) error {
+func (c *client) ensureShopSession(ctx context.Context) error {
 	if len(c.shopCookies) > 0 {
 		return nil
 	}
@@ -229,7 +225,7 @@ func (c *Client) ensureShopSession(ctx context.Context) error {
 	return c.shopJSON(ctx, http.MethodPost, endpoint, bytes.NewReader([]byte("{}")), nil)
 }
 
-func (c *Client) shopJSON(ctx context.Context, method, endpoint string, body io.Reader, dest any) error {
+func (c *client) shopJSON(ctx context.Context, method, endpoint string, body io.Reader, dest any) error {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
 		return fmt.Errorf("build shop request: %w", err)
@@ -284,8 +280,8 @@ func mergeCookies(existing, next []*http.Cookie) []*http.Cookie {
 	return merged
 }
 
-func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
-	var candidates []Shop
+func findInStoreShop(summary *StoreSummary, shops []shop) (shop, bool) {
+	var candidates []shop
 	cities := map[string]bool{}
 	var aldis, instores int
 	for _, shop := range shops {
@@ -309,7 +305,7 @@ func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
 
 	if len(candidates) == 0 {
 		slog.Warn("no aldi in store shops", "len", len(shops), "aldis", aldis, "instores", instores, "city", summary.City, "state", summary.State, "other_cities", lo.Keys(cities))
-		return Shop{}, false
+		return shop{}, false
 	}
 
 	if len(candidates) == 1 {
@@ -346,24 +342,24 @@ func findInStoreShop(summary *StoreSummary, shops []Shop) (Shop, bool) {
 	for fulfillment, ties := range tiedByFulfillment {
 		if ties > 1 {
 			slog.Warn("multiple ALDI shop candidates tied after address matching", "address", summary.Address, "fulfillment", fulfillment, "score", bestScore, "ties", ties)
-			return Shop{}, false
+			return shop{}, false
 		}
 	}
 	return best, true
 }
 
-func isInStoreFulfillment(shop Shop) bool {
+func isInStoreFulfillment(shop shop) bool {
 	return strings.EqualFold(strings.TrimSpace(shop.FulfillmentOption), "instore")
 }
 
-func fulfillmentRank(shop Shop) int {
+func fulfillmentRank(shop shop) int {
 	if isInStoreFulfillment(shop) {
 		return 1
 	}
 	return 0
 }
 
-func normalizedFulfillment(shop Shop) string {
+func normalizedFulfillment(shop shop) string {
 	return normalizeComparable(shop.FulfillmentOption)
 }
 
@@ -400,7 +396,7 @@ func comparableWordSet(value string) map[string]bool {
 	return set
 }
 
-func normalizeLocation(location SourceLocation) (*StoreSummary, error) {
+func normalizeLocation(location sourceLocation) (*StoreSummary, error) {
 	identifier := strings.TrimSpace(location.Identifier)
 	if identifier == "" {
 		return nil, errors.New("missing identifier")
@@ -430,7 +426,7 @@ func normalizeLocation(location SourceLocation) (*StoreSummary, error) {
 	}
 
 	summary := &StoreSummary{
-		ID:         LocationIDPrefix + identifier,
+		ID:         locationIDPrefix + identifier,
 		StoreID:    location.ID,
 		Identifier: identifier,
 		Name:       name,
@@ -480,7 +476,7 @@ func valueOrDefault(value, fallback string) string {
 	return value
 }
 
-func locationIdentifier(location SourceLocation) string {
+func locationIdentifier(location sourceLocation) string {
 	if strings.TrimSpace(location.Identifier) != "" {
 		return strings.TrimSpace(location.Identifier)
 	}
@@ -490,7 +486,7 @@ func locationIdentifier(location SourceLocation) string {
 	return "unknown"
 }
 
-func (c *Client) getJSON(ctx context.Context, endpoint string, dest any) error {
+func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)

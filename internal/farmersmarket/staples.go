@@ -18,10 +18,10 @@ func NewStaplesProvider() (*staplesProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
 	}
-	return NewStaplesProviderFromStore(NewStore(cacheStore)), nil
+	return newStaplesProviderFromStore(NewStore(cacheStore)), nil
 }
 
-func NewStaplesProviderFromStore(store *store) *staplesProvider {
+func newStaplesProviderFromStore(store *store) *staplesProvider {
 	if store == nil {
 		panic("nil store given to staples provider")
 	}

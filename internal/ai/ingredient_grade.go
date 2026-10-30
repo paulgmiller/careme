@@ -141,20 +141,20 @@ type ingredientGrader struct {
 	oai          openai.Client
 }
 
-func ingredientGradeCacheVersion(model, systemInstruction string) string {
+func hashIngredientGradeVersion(model, systemInstruction string) string {
 	fnv := fnv.New128a()
 	lo.Must(io.WriteString(fnv, model))
 	lo.Must(io.WriteString(fnv, systemInstruction))
 	return base64.RawURLEncoding.EncodeToString(fnv.Sum(nil))
 }
 
-// IngredientGradeCacheVersion returns the cache version for the current grading prompt and model.
-func IngredientGradeCacheVersion(model string) string {
+// ingredientGradeCacheVersion returns the cache version for the current grading prompt and model.
+func ingredientGradeCacheVersion(model string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	return ingredientGradeCacheVersion(model, ingredientGradeSystemInstruction)
+	return hashIngredientGradeVersion(model, ingredientGradeSystemInstruction)
 }
 
 func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredientGrader {
@@ -171,7 +171,7 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	return &ingredientGrader{
 		oai:          aiClient,
 		model:        model,
-		cacheVersion: IngredientGradeCacheVersion(model),
+		cacheVersion: ingredientGradeCacheVersion(model),
 		schema:       ingredientGradeJSONSchema(),
 	}
 }

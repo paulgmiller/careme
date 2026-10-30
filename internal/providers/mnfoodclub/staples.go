@@ -12,8 +12,8 @@ import (
 	"careme/internal/ingredients/cachekey"
 )
 
-// WeekStartDay anchors weekly cache keys and campaign generation.
-const WeekStartDay = time.Monday
+// weekStartDay anchors weekly cache keys and campaign generation.
+const weekStartDay = time.Monday
 
 const catalogVersion = "mnfoodclub-bigcommerce-v1"
 
@@ -24,7 +24,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	date = date.AddDate(0, 0, -int((date.Weekday()-WeekStartDay+7)%7))
+	date = date.AddDate(0, 0, -int((date.Weekday()-weekStartDay+7)%7))
 	signatureParts := []string{catalogVersion}
 	for _, ingredient := range produceShareIngredients() {
 		signatureParts = append(signatureParts, ingredient.Description)
@@ -47,22 +47,22 @@ type ingredientClient interface {
 	Fetch(context.Context, int) ([]ai.InputIngredient, error)
 }
 
-// StaplesProvider serves the API catalog and static produce shares for every
+// staplesProvider serves the API catalog and static produce shares for every
 // MN Food Club, TC Farm, and Nelson Grass Farm delivery location.
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	client ingredientClient
 }
 
-func NewStaplesProvider(client ingredientClient) StaplesProvider {
-	return StaplesProvider{client: client}
+func NewStaplesProvider(client ingredientClient) staplesProvider {
+	return staplesProvider{client: client}
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}
-	ingredients, err := p.client.Fetch(ctx, AllCategories)
+	ingredients, err := p.client.Fetch(ctx, allCategories)
 	if err != nil {
 		return nil, fmt.Errorf("fetch MNFoodClub staples: %w", err)
 	}
@@ -70,7 +70,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 // FetchWines fetches every page of wines and wine alternatives.
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)
 	}

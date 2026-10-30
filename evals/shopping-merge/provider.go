@@ -16,6 +16,7 @@ type shoppingMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)
 }
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(ctx)
 	if err != nil {

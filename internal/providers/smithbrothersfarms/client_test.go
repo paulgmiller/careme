@@ -28,7 +28,7 @@ type trackedBody struct {
 
 func (b *trackedBody) Close() error { b.closed = true; return nil }
 
-func fixtureClient(t *testing.T, failURL string, status int, failure error) (*Client, *[]string, *[]*trackedBody) {
+func fixtureClient(t *testing.T, failURL string, status int, failure error) (*client, *[]string, *[]*trackedBody) {
 	t.Helper()
 	pages := map[string]string{
 		stapleURLs[0]: fixture(t, "produce"), stapleURLs[1]: fixture(t, "meat"),

@@ -231,7 +231,7 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 		t.Fatalf("failed to seed recipe entry: %v", err)
 	}
 
-	if err := rio.SaveWine(t.Context(), hash, &ai.WineSelection{
+	if err := rio.saveWine(t.Context(), hash, &ai.WineSelection{
 		Commentary: "Try a tempranillo.",
 		Wines:      []ai.Ingredient{{Name: "Tempranillo", Quantity: "750mL", Price: "$12.99"}},
 	}); err != nil {
@@ -242,7 +242,7 @@ func TestSaveWine_UsesNonConflictingPrefixWhenRecipeKeyAlreadyExists(t *testing.
 		t.Fatalf("expected wine recommendation at prefixed key: %v", err)
 	}
 
-	got, err := rio.WineFromCache(t.Context(), hash)
+	got, err := rio.wineFromCache(t.Context(), hash)
 	if err != nil {
 		t.Fatalf("WineFromCache failed: %v", err)
 	}

@@ -24,27 +24,27 @@ func freshBuild(_ context.Context, _ string) (string, error) {
 func TestCategorySizeMatchesPricedSKU(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		skus []SKU
+		skus []sku
 		want string
 	}{
-		{"curbside preferred", []SKU{
-			{CustomerFriendlySize: "8 oz", ContextPrices: []ItemPrice{{Context: "ONLINE", ListPrice: &DisplayPrice{Amount: new(float32(4))}}}},
-			{CustomerFriendlySize: " 16 oz ", ContextPrices: []ItemPrice{{Context: "CURBSIDE", ListPrice: &DisplayPrice{Amount: new(float32(7))}}}},
+		{"curbside preferred", []sku{
+			{CustomerFriendlySize: "8 oz", ContextPrices: []itemPrice{{Context: "ONLINE", ListPrice: &displayPrice{Amount: new(float32(4))}}}},
+			{CustomerFriendlySize: " 16 oz ", ContextPrices: []itemPrice{{Context: "CURBSIDE", ListPrice: &displayPrice{Amount: new(float32(7))}}}},
 		}, "16 oz"},
-		{"average weight", []SKU{{CustomerFriendlySize: "Avg. 2.0 lbs", ContextPrices: []ItemPrice{{Context: "ONLINE", SalePrice: &DisplayPrice{Amount: new(float32(10))}}}}}, "Avg. 2.0 lbs"},
+		{"average weight", []sku{{CustomerFriendlySize: "Avg. 2.0 lbs", ContextPrices: []itemPrice{{Context: "ONLINE", SalePrice: &displayPrice{Amount: new(float32(10))}}}}}, "Avg. 2.0 lbs"},
 		{"no SKUs", nil, ""},
-		{"unpriced SKU", []SKU{{CustomerFriendlySize: "8 oz"}}, ""},
-		{"priced SKU without size", []SKU{{ContextPrices: []ItemPrice{{Context: "CURBSIDE", ListPrice: &DisplayPrice{Amount: new(float32(4))}}}}}, ""},
+		{"unpriced SKU", []sku{{CustomerFriendlySize: "8 oz"}}, ""},
+		{"priced SKU without size", []sku{{ContextPrices: []itemPrice{{Context: "CURBSIDE", ListPrice: &displayPrice{Amount: new(float32(4))}}}}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var response categoryResponse
-			response.PageProps.Layout.VisualComponents = []categoryProductCollection{{Items: []Product{{TypeName: "Product", ID: "pork", SKUs: tc.skus}}}}
+			response.PageProps.Layout.VisualComponents = []categoryProductCollection{{Items: []product{{TypeName: "Product", ID: "pork", SKUs: tc.skus}}}}
 			body, err := json.Marshal(response)
 			require.NoError(t, err)
 			page, err := decodeCategoryPagePayload(strings.NewReader(string(body)), 1)
 			require.NoError(t, err)
 			require.Len(t, page.Products, 1)
-			ingredient := productToIngredient(page.Products[0], StapleCategory{Name: "pork"})
+			ingredient := productToIngredient(page.Products[0], stapleCategory{Name: "pork"})
 			assert.Equal(t, tc.want, ingredient.Size)
 		})
 	}
@@ -61,7 +61,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL: server.URL,
 		LoadBuildID: func(_ context.Context, _ string) (string, error) {
 			return "test-build", nil
@@ -69,7 +69,7 @@ func TestCategoryPageBuildsExpectedRequest(t *testing.T) {
 		HTTPClient: server.Client(),
 	})
 
-	page, err := client.categoryPage(context.Background(), CategoryOptions{
+	page, err := client.categoryPage(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -115,13 +115,13 @@ func TestCategoryPageBuildsExpectedRequestForBeef(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	_, err := client.categoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "465",
 		ParentID: "490110",
@@ -151,7 +151,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
 
@@ -161,7 +161,7 @@ func TestCategoryPageRefreshesBuildIDWhenMissing(t *testing.T) {
 		},
 	})
 
-	_, err := client.categoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -198,7 +198,7 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:    server.URL,
 		HTTPClient: server.Client(),
 
@@ -209,7 +209,7 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 	})
 	client.buildID = "stale-build"
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -238,13 +238,13 @@ func TestCategoryRefreshesBuildIDAfterFirstPage404(t *testing.T) {
 func TestCategoryReturnsBuildIDLoadError(t *testing.T) {
 	t.Parallel()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		LoadBuildID: func(context.Context, string) (string, error) {
 			return "", errors.New("homepage blocked")
 		},
 	})
 
-	_, err := client.categoryPage(context.Background(), CategoryOptions{
+	_, err := client.categoryPage(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -495,13 +495,13 @@ func TestCategoryPaginatesByPage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -544,13 +544,13 @@ func TestCategoryCarriesSearchContextTokenBetweenPages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -593,13 +593,13 @@ func TestCategoryStopsAtTotal(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -638,13 +638,13 @@ func TestCategoryStopsAtLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -680,13 +680,13 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewQueryClient(QueryClientConfig{
+	client := newQueryClient(queryClientConfig{
 		BaseURL:     server.URL,
 		LoadBuildID: freshBuild,
 		HTTPClient:  server.Client(),
 	})
 
-	products, err := client.Category(context.Background(), CategoryOptions{
+	products, err := client.Category(context.Background(), categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -704,7 +704,7 @@ func TestCategoryStopsPagePaginationOnLaterHTTPError(t *testing.T) {
 func TestCategoryValidation(t *testing.T) {
 	t.Parallel()
 
-	valid := CategoryOptions{
+	valid := categoryOptions{
 		Reese84:  "test-reese",
 		StoreID:  "92",
 		ParentID: "490020",
@@ -714,33 +714,33 @@ func TestCategoryValidation(t *testing.T) {
 
 	tests := []struct {
 		name string
-		opts CategoryOptions
+		opts categoryOptions
 		want string
 	}{
 		{
 			name: "missing reese84",
-			opts: withOption(valid, func(o *CategoryOptions) {
+			opts: withOption(valid, func(o *categoryOptions) {
 				o.Reese84 = ""
 			}),
 			want: "reese84 token is required",
 		},
 		{
 			name: "missing store",
-			opts: withOption(valid, func(o *CategoryOptions) {
+			opts: withOption(valid, func(o *categoryOptions) {
 				o.StoreID = ""
 			}),
 			want: "store id is required",
 		},
 		{
 			name: "missing parent",
-			opts: withOption(valid, func(o *CategoryOptions) {
+			opts: withOption(valid, func(o *categoryOptions) {
 				o.ParentID = ""
 			}),
 			want: "parent category id is required",
 		},
 		{
 			name: "missing child",
-			opts: withOption(valid, func(o *CategoryOptions) {
+			opts: withOption(valid, func(o *categoryOptions) {
 				o.ChildID = ""
 			}),
 			want: "child category id is required",
@@ -792,7 +792,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewQueryClient(QueryClientConfig{
+			client := newQueryClient(queryClientConfig{
 				BaseURL: server.URL,
 				LoadBuildID: func(_ context.Context, _ string) (string, error) {
 					return "fresh-build", nil
@@ -800,7 +800,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 				HTTPClient: server.Client(),
 			})
 
-			_, err := client.categoryPage(context.Background(), CategoryOptions{
+			_, err := client.categoryPage(context.Background(), categoryOptions{
 				Reese84:  "test-reese",
 				StoreID:  "92",
 				ParentID: "490020",
@@ -814,7 +814,7 @@ func TestCategoryPageReturnsHTTPAndJSONErrors(t *testing.T) {
 	}
 }
 
-func withOption(opts CategoryOptions, mutate func(*CategoryOptions)) CategoryOptions {
+func withOption(opts categoryOptions, mutate func(*categoryOptions)) categoryOptions {
 	mutate(&opts)
 	return opts
 }

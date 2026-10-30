@@ -39,7 +39,7 @@ func TestParseStorePageURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, got := ParseStorePageURL(tc.url)
+			_, got := parseStorePageURL(tc.url)
 			if got != tc.want {
 				t.Fatalf("ParseStorePageURL(%q) = %v, want %v", tc.url, got, tc.want)
 			}
@@ -77,7 +77,7 @@ func TestExtractStoreSummaryFromJSONLD(t *testing.T) {
 		`</head><body><h1>Robstown H-E-B</h1><div>Corporate #22</div></body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	summary, err := extractStoreSummary(pageURL, []byte(html))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestExtractStoreSummaryFallsBackToBodyAndURL(t *testing.T) {
 		`</body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	summary, err := extractStoreSummary(pageURL, []byte(html))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestExtractStoreSummaryFallsBackToGenericEmbeddedJSON(t *testing.T) {
 		`</head><body><h1>Stephenville H-E-B</h1></body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	summary, err := extractStoreSummary(pageURL, []byte(html))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestExtractStoreSummaryPrefersURLStoreIDOverGenericJSONID(t *testing.T) {
 		`</head><body><h1>Big Spring H-E-B</h1></body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html))
+	summary, err := extractStoreSummary(pageURL, []byte(html))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestExtractStoreSummaryRequiresAddress(t *testing.T) {
 	pageURL := "https://www.heb.com/heb-store/US/tx/robstown/robstown-h-e-b-22"
 	html := `<!doctype html><html><body><h1>Robstown H-E-B</h1><div>Corporate #22</div></body></html>`
 
-	_, err := ExtractStoreSummary(pageURL, []byte(html))
+	_, err := extractStoreSummary(pageURL, []byte(html))
 	if err == nil {
 		t.Fatal("expected missing address error")
 	}

@@ -56,11 +56,27 @@ tasks:
       - go vet ./...
 
   lint:
-    desc: Run golangci-lint
+    desc: Run golangci-lint and check unnecessary exports
     deps:
       - golangci-lint
     cmds:
       - ./bin/golangci-lint run ./... --timeout=5m
+      - task: unexport
+
+  unexport:
+    desc: Check for exports used only inside their package
+    cmds:
+      - ./tool.sh unloved
+
+  unexport-fix:
+    desc: Unexport package-private declarations (review changes and run verify-go)
+    cmds:
+      - ./tool.sh unloved -fix
+
+  statement-diff:
+    desc: Compare Go statement debt against origin/master
+    cmds:
+      - ./tool.sh go-statement diff origin/master
 
   crap:
     desc: Run go-crap complexity scan

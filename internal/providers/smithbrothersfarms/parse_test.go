@@ -19,7 +19,7 @@ func fixture(t *testing.T, name string) string {
 }
 
 func TestParseCatalog(t *testing.T) {
-	produce, err := Parse(strings.NewReader(fixture(t, "produce")))
+	produce, err := parse(strings.NewReader(fixture(t, "produce")))
 	require.NoError(t, err)
 	require.Len(t, produce, 3) // Both whole-box cards were removed.
 	assert.Equal(t, "4197", produce[0].ProductID)
@@ -31,7 +31,7 @@ func TestParseCatalog(t *testing.T) {
 	require.NotNil(t, produce[0].PriceSale)
 	assert.Equal(t, float32(5.99), *produce[0].PriceRegular)
 	assert.Equal(t, float32(4.99), *produce[0].PriceSale)
-	meat, err := Parse(strings.NewReader(fixture(t, "meat")))
+	meat, err := parse(strings.NewReader(fixture(t, "meat")))
 	require.NoError(t, err)
 	require.Len(t, meat, 3)
 	assert.Equal(t, "5023", meat[0].ProductID)
@@ -42,7 +42,7 @@ func TestParseCatalog(t *testing.T) {
 	assert.Equal(t, float32(16.99), *meat[0].PriceRegular)
 	assert.Nil(t, meat[0].PriceSale)
 	assert.Equal(t, []string{"Meat", "Poultry"}, meat[2].Categories)
-	dairy, err := Parse(strings.NewReader(fixture(t, "dairy-eggs")))
+	dairy, err := parse(strings.NewReader(fixture(t, "dairy-eggs")))
 	require.NoError(t, err)
 	require.Len(t, dairy, 2)
 	assert.Equal(t, "317", dairy[1].ProductID)
@@ -52,7 +52,7 @@ func TestParseCatalog(t *testing.T) {
 	assert.Equal(t, []string{"Dairy", "Conventional Milk"}, dairy[1].Categories)
 	require.NotNil(t, dairy[1].PriceRegular)
 	assert.Equal(t, float32(3.49), *dairy[1].PriceRegular)
-	yogurt, err := Parse(strings.NewReader(fixture(t, "yogurt")))
+	yogurt, err := parse(strings.NewReader(fixture(t, "yogurt")))
 	require.NoError(t, err)
 	require.Len(t, yogurt, 1)
 	assert.Equal(t, "5057", yogurt[0].ProductID)
@@ -78,7 +78,7 @@ func TestParseCatalogFailures(t *testing.T) {
 		{"regular price", strings.Replace(valid, `<span class="price">`, `<span class="old-price">bad</span><span class="price">`, 1), "regular price"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := Parse(strings.NewReader(test.html))
+			got, err := parse(strings.NewReader(test.html))
 			require.ErrorContains(t, err, test.want)
 			assert.Nil(t, got)
 		})
@@ -99,7 +99,7 @@ func TestParseHarvestBoxes(t *testing.T) {
 	}
 	for i, file := range []string{"organic-box", "standard-box"} {
 		box := harvestBoxes[i]
-		got, err := ParseHarvestBox(strings.NewReader(fixture(t, file)), baseURL+"/"+box.slug, box.name)
+		got, err := parseHarvestBox(strings.NewReader(fixture(t, file)), baseURL+"/"+box.slug, box.name)
 		require.NoError(t, err)
 		require.Len(t, got, len(expected[i]))
 		for j, item := range got {
@@ -112,12 +112,12 @@ func TestParseHarvestBoxes(t *testing.T) {
 		}
 	}
 	html := `<div class="full-description"><p><ul><li>  Apples &amp; <b>Pears</b> </li></ul></p></div>`
-	first, err := ParseHarvestBox(strings.NewReader(html), baseURL+"/"+harvestBoxes[0].slug, "Organic Produce Box")
+	first, err := parseHarvestBox(strings.NewReader(html), baseURL+"/"+harvestBoxes[0].slug, "Organic Produce Box")
 	require.NoError(t, err)
-	other, err := ParseHarvestBox(strings.NewReader(html), baseURL+"/"+harvestBoxes[1].slug, "Produce Box")
+	other, err := parseHarvestBox(strings.NewReader(html), baseURL+"/"+harvestBoxes[1].slug, "Produce Box")
 	require.NoError(t, err)
 	assert.NotEqual(t, first[0].ProductID, other[0].ProductID)
-	reordered, err := ParseHarvestBox(strings.NewReader(strings.Replace(html, "<ul>", "<ul><li>Banana</li>", 1)), baseURL+"/"+harvestBoxes[0].slug, "Organic Produce Box")
+	reordered, err := parseHarvestBox(strings.NewReader(strings.Replace(html, "<ul>", "<ul><li>Banana</li>", 1)), baseURL+"/"+harvestBoxes[0].slug, "Organic Produce Box")
 	require.NoError(t, err)
 	assert.Equal(t, first[0].ProductID, reordered[1].ProductID)
 	assert.Equal(t, "Organic Produce Box — Apples & Pears", first[0].Description)
@@ -125,7 +125,7 @@ func TestParseHarvestBoxes(t *testing.T) {
 
 func TestHarvestBoxFailures(t *testing.T) {
 	for _, html := range []string{"", `<div class="full-description">no list</div>`, `<div class="full-description"><ul></ul></div>`, `<div class="full-description"><ul><li>Apple</li><li> </li></ul></div>`} {
-		got, err := ParseHarvestBox(strings.NewReader(html), baseURL+"/harvest-produce-box", "Produce Box")
+		got, err := parseHarvestBox(strings.NewReader(html), baseURL+"/harvest-produce-box", "Produce Box")
 		require.Error(t, err)
 		assert.Nil(t, got)
 	}
@@ -138,9 +138,9 @@ func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 func TestParseReadFailure(t *testing.T) {
 	want := errors.New("read failed")
 	for _, parse := range []func(io.Reader) error{
-		func(r io.Reader) error { _, err := Parse(r); return err },
+		func(r io.Reader) error { _, err := parse(r); return err },
 		func(r io.Reader) error {
-			_, err := ParseHarvestBox(r, baseURL+"/harvest-produce-box", "Produce Box")
+			_, err := parseHarvestBox(r, baseURL+"/harvest-produce-box", "Produce Box")
 			return err
 		},
 	} {

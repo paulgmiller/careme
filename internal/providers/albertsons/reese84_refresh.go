@@ -20,34 +20,34 @@ type CookieParams struct {
 	WaitAfterNavigation time.Duration
 }
 
-func FetchCookie(ctx context.Context, browser cookieBrowser, params CookieParams) (CookieRecord, error) {
+func FetchCookie(ctx context.Context, browser cookieBrowser, params CookieParams) (cookieRecord, error) {
 	if browser == nil {
-		return CookieRecord{}, errors.New("browser is required")
+		return cookieRecord{}, errors.New("browser is required")
 	}
 
 	params.TargetURL = strings.TrimSpace(params.TargetURL)
 	if params.TargetURL == "" {
-		return CookieRecord{}, errors.New("target URL is required")
+		return cookieRecord{}, errors.New("target URL is required")
 	}
 
 	params.CookieName = strings.TrimSpace(params.CookieName)
 	if params.CookieName == "" {
-		return CookieRecord{}, errors.New("cookie name is required")
+		return cookieRecord{}, errors.New("cookie name is required")
 	}
 
 	cookies, err := browser.Cookies(ctx, params.TargetURL, brightdata.BrowserOptions{
 		WaitAfterNavigation: params.WaitAfterNavigation,
 	})
 	if err != nil {
-		return CookieRecord{}, fmt.Errorf("browser cookie fetch: %w", err)
+		return cookieRecord{}, fmt.Errorf("browser cookie fetch: %w", err)
 	}
 
 	cookie, ok := brightdata.CookieNamed(cookies, params.CookieName)
 	if !ok {
-		return CookieRecord{}, fmt.Errorf("cookie %q not found in browser session", params.CookieName)
+		return cookieRecord{}, fmt.Errorf("cookie %q not found in browser session", params.CookieName)
 	}
 
-	record := CookieRecord{
+	record := cookieRecord{
 		Cookie:    cookie.Value,
 		FetchedAt: time.Now().UTC(),
 		SourceURL: params.TargetURL,

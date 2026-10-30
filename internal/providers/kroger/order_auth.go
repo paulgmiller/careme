@@ -27,14 +27,14 @@ const orderingTokenPrefix = "kroger_cart_tokens/"
 
 type OrderOptions struct {
 	Cache    cache.Cache
-	Client   *CartClient
+	Client   orderClient
 	TokenKey []byte
 	Origin   string
 	Auth     auth.AuthClient
 }
 
 type OrderHandler struct {
-	client   *CartClient
+	client   orderClient
 	cache    cache.Cache
 	tokenKey []byte
 	origin   string
@@ -51,7 +51,7 @@ func NewOrderHandler(options OrderOptions) (*OrderHandler, error) {
 	return &OrderHandler{client: options.Client, cache: options.Cache, tokenKey: append([]byte(nil), options.TokenKey...), origin: options.Origin, auth: options.Auth}, nil
 }
 
-func (a *OrderHandler) saveToken(ctx context.Context, userID string, token CartToken) error {
+func (a *OrderHandler) saveToken(ctx context.Context, userID string, token cartToken) error {
 	block, err := aes.NewCipher(a.tokenKey)
 	if err != nil {
 		return err
@@ -72,38 +72,38 @@ func (a *OrderHandler) saveToken(ctx context.Context, userID string, token CartT
 	return a.cache.Put(ctx, orderingTokenPrefix+userID, base64.StdEncoding.EncodeToString(ciphertext), cache.Unconditional())
 }
 
-func (a *OrderHandler) loadToken(ctx context.Context, userID string) (CartToken, error) {
+func (a *OrderHandler) loadToken(ctx context.Context, userID string) (cartToken, error) {
 	reader, err := a.cache.Get(ctx, orderingTokenPrefix+userID)
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	defer func() { _ = reader.Close() }()
 	encoded, err := io.ReadAll(io.LimitReader(reader, 8192))
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	ciphertext, err := base64.StdEncoding.DecodeString(string(encoded))
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	block, err := aes.NewCipher(a.tokenKey)
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	aead, err := cipher.NewGCM(block)
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	if len(ciphertext) < aead.NonceSize() {
-		return CartToken{}, fmt.Errorf("short Kroger token record")
+		return cartToken{}, fmt.Errorf("short Kroger token record")
 	}
 	plaintext, err := aead.Open(nil, ciphertext[:aead.NonceSize()], ciphertext[aead.NonceSize():], []byte(userID))
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
-	var token CartToken
+	var token cartToken
 	if err := json.Unmarshal(plaintext, &token); err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	return token, nil
 }
@@ -121,24 +121,24 @@ func oauthContinuationKey(userID, state string) string {
 
 var errConnectionRequired = errors.New("account connection required")
 
-func (a *OrderHandler) shopperToken(ctx context.Context, userID string) (CartToken, error) {
+func (a *OrderHandler) shopperToken(ctx context.Context, userID string) (cartToken, error) {
 	token, err := a.loadToken(ctx, userID)
 	if errors.Is(err, cache.ErrNotFound) {
-		return CartToken{}, errConnectionRequired
+		return cartToken{}, errConnectionRequired
 	}
 	if err != nil {
-		return CartToken{}, fmt.Errorf("load Kroger shopper token: %w", err)
+		return cartToken{}, fmt.Errorf("load Kroger shopper token: %w", err)
 	}
 	if token.AccessToken == "" {
-		return CartToken{}, errConnectionRequired
+		return cartToken{}, errConnectionRequired
 	}
 	if time.Now().After(token.ExpiresAt.Add(-time.Minute)) {
-		token, err = a.client.Refresh(ctx, token.RefreshToken)
+		token, err = a.client.refresh(ctx, token.RefreshToken)
 		if err != nil {
-			return CartToken{}, fmt.Errorf("refresh Kroger shopper token: %w", err)
+			return cartToken{}, fmt.Errorf("refresh Kroger shopper token: %w", err)
 		}
 		if err = a.saveToken(ctx, userID, token); err != nil {
-			return CartToken{}, fmt.Errorf("save Kroger shopper token: %w", err)
+			return cartToken{}, fmt.Errorf("save Kroger shopper token: %w", err)
 		}
 	}
 	return token, nil
@@ -158,7 +158,7 @@ func (a *OrderHandler) startAuthorization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "careme_kroger_state", Value: state, Path: "/kroger/callback", MaxAge: 600, HttpOnly: true, Secure: strings.HasPrefix(a.origin, "https://"), SameSite: http.SameSiteLaxMode})
-	destination, err := a.client.AuthorizationURL(state, banner)
+	destination, err := a.client.authorizationURL(state, banner)
 	if err != nil {
 		http.Error(w, "Unable to start Kroger connection", http.StatusInternalServerError)
 		return
@@ -208,7 +208,7 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Kroger did not finish connecting your account.", http.StatusBadRequest)
 		return
 	}
-	token, err := a.client.Exchange(r.Context(), code)
+	token, err := a.client.exchange(r.Context(), code)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Kroger token exchange failed", "error", err)
 		http.Error(w, "Unable to connect to Kroger.", http.StatusInternalServerError)

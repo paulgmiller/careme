@@ -20,7 +20,7 @@ func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	t.Parallel()
 	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
 	const locationID = "aldi_F100"
-	raw, err := json.Marshal(StapleCategories())
+	raw, err := json.Marshal(stapleCategories())
 	require.NoError(t, err)
 	signature := string(raw)
 	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
@@ -39,8 +39,8 @@ func TestIdentityProviderIsID(t *testing.T) {
 func TestStapleCategoriesIncludesRequestedSlugs(t *testing.T) {
 	t.Parallel()
 
-	got := make([]string, 0, len(StapleCategories()))
-	for _, category := range StapleCategories() {
+	got := make([]string, 0, len(stapleCategories()))
+	for _, category := range stapleCategories() {
 		got = append(got, category.Slug)
 	}
 

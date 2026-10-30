@@ -530,7 +530,7 @@ func TestHandleGenerate_UsesStoredUserDirectiveInSavedParamsAndHash(t *testing.T
 		t.Fatalf("failed to save user directive: %v", err)
 	}
 
-	expectedParams, err := ParseGenerationForm(t.Context(), req, staticLocationLookup{location: location})
+	expectedParams, err := parseGenerationForm(t.Context(), req, staticLocationLookup{location: location})
 	if err != nil {
 		t.Fatalf("failed to build expected params: %v", err)
 	}
@@ -1027,7 +1027,7 @@ func TestHandleSingle_IncludesCachedWineRecommendation(t *testing.T) {
 	}
 	recipeHash := recipe.ComputeHash()
 	saveRecipesForOrigin(t, s, originHash, recipe)
-	if err := s.SaveWine(t.Context(), recipeHash, &ai.WineSelection{
+	if err := s.saveWine(t.Context(), recipeHash, &ai.WineSelection{
 		Wines: []ai.Ingredient{
 			{Name: "Light Pinot Noir", Price: "$13.99"},
 		},
@@ -1227,7 +1227,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	require.NoError(t, s.SaveParams(t.Context(), params))
 	require.NoError(t, s.SaveRecipe(t.Context(), original))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, shoppingListHash))
-	require.NoError(t, s.SaveThread(t.Context(), originalHash, []RecipeThreadEntry{{
+	require.NoError(t, s.saveThread(t.Context(), originalHash, []RecipeThreadEntry{{
 		Question:   "Can I use skirt steak?",
 		Answer:     "Yes.",
 		ResponseID: "resp-question",
@@ -2031,7 +2031,7 @@ func TestHandleSaveRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load stale hash selection: %v", err)
 	}
-	if !staleSelection.Empty() {
+	if !staleSelection.empty() {
 		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
 	}
 }
@@ -2183,7 +2183,7 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 	assert.Equal(t, 1, g.winePickCalls)
 	assert.Equal(t, 1, ig.imageCalls)
 
-	wine, err := s.WineFromCache(t.Context(), recipeHash)
+	wine, err := s.wineFromCache(t.Context(), recipeHash)
 	require.NoError(t, err)
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
@@ -2429,7 +2429,7 @@ func TestHandleDismissRecipe_UsesRequestHashForSelectionKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load stale hash selection: %v", err)
 	}
-	if !staleSelection.Empty() {
+	if !staleSelection.empty() {
 		t.Fatalf("expected no selection under stale origin hash, got %#v", staleSelection)
 	}
 }
