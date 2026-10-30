@@ -260,16 +260,16 @@ Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. Selected wine catalog rows are stored separately
 at `wine_selection_ingredients/v1/<recipe hash>` before generation returns a
 successful selection. Unknown selected product IDs and snapshot-write failures
-return errors. Finalization polls the shared wine recommendation cache every 500 ms for saved
-wine picks (including completed empty results),
-combines food and wine needs and catalog snapshots by product ID, and merges
-quantities once. Input preparation has a 30-second deadline; missing picks time
-out without starting generation. Errors leave no
-finalized shopping snapshot. Rendering reads saved shopping items and never
-appends late wine picks. Recipe Ingredient no longer carries
-VariantID. Older recommendations remain readable without catalog snapshots; wine picks
-without a matching catalog product display but have no ordering variant ID.
-Unreadable snapshots fail shopping-list preparation rather than silently dropping
-metadata. Food and per-recipe wine preparation run concurrently. Each wine pick and its
-catalog are loaded during finalization, not during page rendering. Existing
-finalized snapshots remain immutable; late picks do not change them.
+return errors. Finalization polls the shared wine recommendation cache every
+500 ms for saved wine picks (including completed empty results), combines food
+and wine needs and catalog snapshots by product ID, and merges quantities once.
+Input preparation has a 30-second deadline; missing picks time out without
+starting generation. Errors leave no finalized shopping snapshot. Rendering
+reads saved shopping items and never appends late wine picks. Recipe Ingredient
+no longer carries VariantID. Older recommendations remain readable without
+catalog snapshots; wine picks without a matching catalog product display but
+have no ordering variant ID. Unreadable snapshots fail shopping-list preparation
+rather than silently dropping metadata. Food and per-recipe wine preparation
+run concurrently. Each wine pick and its catalog are loaded during finalization,
+not during page rendering. Existing finalized snapshots remain immutable; late
+picks do not change them.
