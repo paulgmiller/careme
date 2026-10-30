@@ -60,6 +60,9 @@ func TestKrogerOldSnapshotsRequireSelectedItemUPC(t *testing.T) {
 			return nil, nil
 		})
 		input := mustOrderRequest(t)
+		for i := range items {
+			items[i].Buy = new(float64(1))
+		}
 		input.Items = items
 		result, err := a.order(t.Context(), "old-list", input, cartToken{AccessToken: "shopper"})
 		require.ErrorContains(t, err, "missing selected item UPC")

@@ -80,7 +80,7 @@ func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shopping
 		}
 	}
 	if len(withoutBuy) > 0 {
-		result = append(result, shoppingPurchaseGroup{Aisle: "Check amounts", Items: withoutBuy})
+		result = append(result, shoppingPurchaseGroup{Aisle: "Have at home", Items: withoutBuy})
 	}
 	return result
 }

@@ -21,7 +21,7 @@ func TestShoppingItemPackageQuantity(t *testing.T) {
 		buy  *float64
 		want int
 	}{
-		{name: "default", want: 1},
+		{name: "no purchase quantity", want: 0},
 		{name: "whole packages", buy: new(float64(3)), want: 3},
 		{name: "fraction of a package", buy: new(float64(0.5)), want: 1},
 		{name: "round up", buy: new(float64(2.2)), want: 3},

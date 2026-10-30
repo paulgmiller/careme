@@ -25,7 +25,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func TestFoodClubCartSeparatesManualShopping(t *testing.T) {
+func TestFoodClubCartExcludesItemsWithoutBuy(t *testing.T) {
 	api := httptest.NewServer(mnfoodclubstub.New("https://test.careme.cooking/mnfoodclub-stub"))
 	t.Cleanup(api.Close)
 	client, err := mnfoodclub.NewOrderClient(config.MNFoodClubConfig{OrderAPIURL: api.URL + "/mnfoodclub-stub", OrderAccessToken: "caremetest-mnfoodclub-stub"}, api.Client())
@@ -42,8 +42,9 @@ func TestFoodClubCartSeparatesManualShopping(t *testing.T) {
 	require.NoError(t, s.populateOrderView(httptest.NewRequest(http.MethodGet, "/recipes?h=list", nil), &view))
 	var body bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_order_form", view.Order))
-	assert.Contains(t, body.String(), "Check these separately")
-	assert.Contains(t, body.String(), "Plain dry breadcrumbs &amp; herbs: ¼ cup")
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_purchase_section", view))
+	assert.Contains(t, body.String(), "Plain dry breadcrumbs &amp; herbs")
+	assert.Contains(t, body.String(), "¼ cup")
 	form := url.Values{}
 	tokenizer := html.NewTokenizer(strings.NewReader(body.String()))
 	for tokenType := tokenizer.Next(); tokenType != html.ErrorToken; tokenType = tokenizer.Next() {
@@ -72,13 +73,16 @@ func TestFoodClubCartSeparatesManualShopping(t *testing.T) {
 	assert.NotEmpty(t, view.Order.ReviewCartURL)
 	body.Reset()
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_order_form", view.Order))
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_purchase_section", view))
 	assert.Contains(t, body.String(), "Review cart")
-	assert.Contains(t, body.String(), "Plain dry breadcrumbs &amp; herbs: ¼ cup")
+	assert.Contains(t, body.String(), "Plain dry breadcrumbs &amp; herbs")
+	assert.Contains(t, body.String(), "¼ cup")
 	assert.NotContains(t, body.String(), "<form")
-	assert.Contains(t, body.String(), "Garlic: 6 cloves")
+	assert.Contains(t, body.String(), "Garlic")
+	assert.Contains(t, body.String(), "6 cloves")
 }
 
-func TestOrderViewOnlyManualShoppingHasNoTransferForm(t *testing.T) {
+func TestOrderViewOnlyItemsWithoutBuyHasNoTransferForm(t *testing.T) {
 	for _, productID := range []string{"", "  "} {
 		t.Run(productID, func(t *testing.T) {
 			s := newTestServer(t)
@@ -90,7 +94,9 @@ func TestOrderViewOnlyManualShoppingHasNoTransferForm(t *testing.T) {
 			require.NoError(t, s.populateOrderView(httptest.NewRequest(http.MethodGet, "/recipes", nil), &view))
 			var body bytes.Buffer
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_order_form", view.Order))
-			assert.Contains(t, body.String(), "Breadcrumbs: ¼ cup")
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_purchase_section", view))
+			assert.Contains(t, body.String(), "Breadcrumbs")
+			assert.Contains(t, body.String(), "¼ cup")
 			assert.NotContains(t, body.String(), "<form")
 		})
 	}

@@ -45,7 +45,7 @@ func TestWineCandidateCatalogPreservesRecommendationAndEnrichesShoppingItem(t *t
 	assert.Equal(t, "Catalog red", prepared[0].Name)
 	assert.Equal(t, "750mL", prepared[0].Size)
 	assert.Equal(t, "1 bottle", prepared[0].Needed)
-	assert.Equal(t, 1, prepared[0].PackageQuantity())
+	assert.Zero(t, prepared[0].PackageQuantity(), "catalog metadata must not invent a purchase quantity")
 	reader, err := store.Get(t.Context(), recipeWineCacheKey(hash))
 	require.NoError(t, err)
 	defer func() { _ = reader.Close() }()

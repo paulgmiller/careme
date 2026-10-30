@@ -76,17 +76,23 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 	var items []cartItem
 	var accepted []ordertypes.TransferItem
 	for _, item := range input.Items {
+		quantity := item.PackageQuantity()
+		if quantity == 0 {
+			continue
+		}
 		if strings.TrimSpace(item.ProductID) == "" {
 			return transfer, fmt.Errorf("kroger order item %q: missing product ID", item.Name)
 		}
 		if strings.TrimSpace(item.VariantID) == "" {
 			return transfer, fmt.Errorf("kroger order product %q: missing selected item UPC; rebuild the shopping list with a refreshed catalog", item.ProductID)
 		}
-		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
 		items = append(items, cartItem{UPC: item.VariantID, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
+	}
+	if len(items) == 0 {
+		return transfer, fmt.Errorf("kroger order has no purchase quantities")
 	}
 	if err := a.client.add(ctx, token.AccessToken, items); err != nil {
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)

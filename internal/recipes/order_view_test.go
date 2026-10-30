@@ -35,7 +35,6 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		view.User = &utypes.User{ID: "viewer"}
 	}
 	require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?destination_status=ready", nil), &view))
-	assert.Equal(t, []ai.ShoppingItem{{Name: "Wine", Needed: "1 bottle"}}, view.Order.ManualShoppingItems)
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))

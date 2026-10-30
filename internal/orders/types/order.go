@@ -18,10 +18,8 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
-	// ManualShoppingItems lack a purchase quantity or store product ID and are excluded from the cart form.
-	ManualShoppingItems []ai.ShoppingItem
-	TransferFailed      bool
-	ReviewCartURL       string
+	TransferFailed bool
+	ReviewCartURL  string
 	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
 	IdempotencyKey string
 	// TransferURL accepts the shopping form POST to create or resume a cart transfer.
