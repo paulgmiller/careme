@@ -74,8 +74,8 @@ errors leave no shopping snapshot, so finalization can be retried after the wine
 result is saved. The AI quantity merge runs after input preparation.
 
 Wine recommendations retain their existing ingredient-shaped JSON and
-`wine_recommendations/` keys. Selected InputIngredient rows are stored separately
-at `wine_selection_ingredients/v1/<recipe hash>`. Older picks remain displayable;
+`wine_recommendations/` keys. The full candidate InputIngredient catalog is stored
+separately at `wine_selection_ingredients/v1/<recipe hash>`. Older picks remain displayable;
 without a matching catalog product they have no ordering variant ID. Cart transfer
 uses only persisted shopping-item identifiers and performs no product-detail
 lookup or availability recheck.
