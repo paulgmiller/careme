@@ -59,9 +59,11 @@ snapshots retain their selected items.
 Food shopping snapshots persist the catalog VariantID. Wine recommendations
 retain their existing ingredient-shaped JSON. Their selected InputIngredient
 rows are saved separately by recipe hash before generation returns. Shopping
-items join those rows to wine picks by product ID, using the same enrichment
-helper as food to attach VariantID, package size, and catalog name. Old wine
-recommendations without those catalog snapshots remain visible but have no
+preparation combines catalog rows into a product-ID lookup before food quantity
+merging, then attaches VariantID, package size, aisle, and catalog name to the
+resulting shopping items. Late wine picks use the same preparation helper with
+their saved catalog rows. View builders receive prepared purchases and perform
+no catalog lookups or metadata enrichment. Old wine recommendations without those catalog snapshots remain visible but have no
 ordering variant ID. Cart transfer submits these saved identifiers as UPCs
 with the calculated whole-package quantities. It performs no product-detail
 request or availability recheck, and the product-to-UPC lookup/cache is removed.

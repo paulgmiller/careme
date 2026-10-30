@@ -28,7 +28,6 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 }
 
 func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
-	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
 	exists, err := s.Cache.Exists(ctx, key)
@@ -39,11 +38,16 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 		return nil
 	}
 
-	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
+	products, err := shoppingCatalogLookup(catalog)
 	if err != nil {
 		return err
 	}
-	purchases := shoppingPurchasesForDisplay(merged, catalog)
+
+	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, ai.MatchingShoppingCatalog(ingredients, catalog))
+	if err != nil {
+		return err
+	}
+	purchases := shoppingPurchasesForDisplay(prepareShoppingItems(merged, products))
 	body, err := json.Marshal(purchases)
 	if err != nil {
 		return err
@@ -70,6 +74,13 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	catalog, err := s.IngredientsFromCache(ctx, p.LocationHash())
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return nil, nil, fmt.Errorf("load shopping catalog: %w", err)
+	}
+	wineCatalog, err := s.wineCatalogForRecipes(ctx, p.Saved)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, recipe := range p.Saved {
+		catalog = append(catalog, wineCatalog[recipe.ComputeHash()]...)
 	}
 	return ingredients, catalog, nil
 }

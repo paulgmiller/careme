@@ -35,7 +35,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	picks := map[string]*ai.WineSelection{hash: recommendation}
 	catalog, err := rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.NoError(t, err)
-	purchases, err := shoppingPurchasesWithWine(food, []ai.Recipe{recipe}, picks, catalog)
+	purchases, err := prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, catalog)
 	require.NoError(t, err)
 	assert.Empty(t, purchases[1].Items[0].VariantID, "legacy recommendation identifiers are not used for ordering")
 	selected := []ai.InputIngredient{{ProductID: "wine", VariantID: "selected-upc", Description: "Catalog red", Size: "750mL", PriceRegular: new(float32(15)), PriceSale: new(float32(13))}}
@@ -43,7 +43,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	catalog, err = rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.NoError(t, err)
 	assert.Equal(t, selected, catalog[hash])
-	purchases, err = shoppingPurchasesWithWine(food, []ai.Recipe{recipe}, picks, catalog)
+	purchases, err = prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, "selected-upc", purchases[1].Items[0].VariantID)
 	assert.Equal(t, "Catalog red", purchases[1].Items[0].Name)
@@ -57,7 +57,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	require.NoError(t, err)
 	assert.Equal(t, original, string(body), "writing a catalog snapshot does not change the saved pick")
 	// Existing snapshots are required to contain their chosen product.
-	_, err = shoppingPurchasesWithWine(food, []ai.Recipe{recipe}, picks, map[string][]ai.InputIngredient{hash: {}})
+	_, err = prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, map[string][]ai.InputIngredient{hash: {}})
 	require.ErrorContains(t, err, "missing from its saved catalog")
 	require.NoError(t, store.Put(t.Context(), selectedWineIngredientsPrefix+hash, "{", cache.Unconditional()))
 	_, err = rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})

@@ -451,23 +451,34 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		})
 
 	}
+	var purchases []shoppingPurchaseGroup
+	var purchasesErr error
+	var wineCatalog map[string][]ai.InputIngredient
+	var wineCatalogErr error
+	recipeWG.Go(func() {
+		purchases, purchasesErr = s.cachedShoppingPurchases(ctx, hashParam)
+		if purchasesErr != nil || purchases == nil {
+			return
+		}
+		wineCatalog, wineCatalogErr = s.wineCatalogForRecipes(ctx, p.Saved)
+	})
 	recipeWG.Wait()
-
-	purchases, err := s.cachedShoppingPurchases(ctx, hashParam)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", err)
+	if purchasesErr != nil && !errors.Is(purchasesErr, cache.ErrNotFound) {
+		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", purchasesErr)
+		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
+		return
+	}
+	if wineCatalogErr != nil {
+		slog.ErrorContext(ctx, "failed to load selected wine catalog", "error", wineCatalogErr)
 		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
 		return
 	}
 
-	var wineCatalog map[string][]ai.InputIngredient
-	if purchases != nil {
-		wineCatalog, err = s.wineCatalogForRecipes(ctx, p.Saved)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load selected wine catalog", "error", err)
-			http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
-			return
-		}
+	purchases, err := prepareShoppingPurchases(purchases, p.Saved, wines.Clone(), wineCatalog)
+	if err != nil {
+		slog.ErrorContext(ctx, "prepare shopping items", "error", err)
+		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
+		return
 	}
 
 	help := r.URL.Query().Get(QueryArgHelp)
@@ -477,7 +488,6 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		purchases:            purchases,
 		list:                 *slist,
 		wineRecommendations:  wines.Clone(),
-		wineCatalog:          wineCatalog,
 		recipeImages:         images.Clone(),
 		currentUser:          currentUser,
 		hash:                 hashParam,

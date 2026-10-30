@@ -8,6 +8,7 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/v2/"
@@ -70,17 +71,21 @@ func (rio recipeio) wineIngredientsFromCache(ctx context.Context, hash string) (
 // wineCatalogForRecipes loads the snapshots used for shopping-item enrichment.
 // Legacy picks have no snapshot and remain displayable without ordering IDs.
 func (rio recipeio) wineCatalogForRecipes(ctx context.Context, recipes []ai.Recipe) (map[string][]ai.InputIngredient, error) {
-	catalog := make(map[string][]ai.InputIngredient, len(recipes))
-	for _, recipe := range recipes {
+	catalog := parallelism.NewSafeMap[string, []ai.InputIngredient](len(recipes))
+	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (struct{}, error) {
 		hash := recipe.ComputeHash()
 		ingredients, err := rio.wineIngredientsFromCache(ctx, hash)
 		if errors.Is(err, cache.ErrNotFound) {
-			continue
+			return struct{}{}, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("load selected wine catalog for recipe %q: %w", hash, err)
+			return struct{}{}, fmt.Errorf("load selected wine catalog for recipe %q: %w", hash, err)
 		}
-		catalog[hash] = ingredients
+		catalog.Set(hash, ingredients)
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return catalog, nil
+	return catalog.Clone(), nil
 }

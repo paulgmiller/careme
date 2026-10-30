@@ -27,11 +27,14 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	p.Saved = []ai.Recipe{recipe}
 	food := []shoppingPurchaseGroup{{Aisle: "Meat", Items: []shoppingPurchaseItem{{ProductID: "food", VariantID: "food-upc", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: new(float64(2)), Size: "1 lb"}}}}
 	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
+	winePicks := map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}}
+	wineCatalog := map[string][]ai.InputIngredient{recipe.ComputeHash(): {{ProductID: "wine", VariantID: "wine-upc", Description: "Red wine", Size: "750mL"}}}
+	purchases, err := prepareShoppingPurchases(food, p.Saved, winePicks, wineCatalog)
+	require.NoError(t, err)
 	view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
-		params: p, list: ai.ShoppingList{Recipes: p.Saved}, purchases: food, hash: p.Hash(),
+		params: p, list: ai.ShoppingList{Recipes: p.Saved}, purchases: purchases, hash: p.Hash(),
 		currentUser:         &utypes.User{ID: "user", Email: []string{"chef@example.test"}},
-		wineCatalog:         map[string][]ai.InputIngredient{recipe.ComputeHash(): {{ProductID: "wine", VariantID: "wine-upc", Description: "Red wine", Size: "750mL"}}},
-		wineRecommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {ProductID: "other", Name: "Other wine"}}}},
+		wineRecommendations: winePicks,
 	})
 	require.NoError(t, err)
 	if view.User == nil {
