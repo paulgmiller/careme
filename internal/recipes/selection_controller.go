@@ -217,7 +217,7 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 }
 
 func (s *server) wineRecommendationForCard(ctx context.Context, recipeHash string) *ai.WineSelection {
-	wineRecommendation, err := s.WineFromCache(ctx, recipeHash)
+	wineRecommendation, err := s.wineFromCache(ctx, recipeHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
 			slog.ErrorContext(ctx, "failed to load cached wine recommendation for recipe card render", "recipe_hash", recipeHash, "error", err)
@@ -248,7 +248,7 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 }
 
 func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
-	exists, err := s.WineExists(ctx, recipeHash)
+	exists, err := s.wineExists(ctx, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
 		return
@@ -262,7 +262,7 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
 		return
 	}
-	if err := s.SaveWine(ctx, recipeHash, selection); err != nil {
+	if err := s.saveWine(ctx, recipeHash, selection); err != nil {
 		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
 	}
 }

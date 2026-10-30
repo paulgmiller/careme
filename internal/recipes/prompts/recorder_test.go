@@ -32,7 +32,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 		t.Fatalf("RecordPrompt returned error: %v", err)
 	}
 
-	keys, err := cacheStore.List(context.Background(), CachePrefix, "")
+	keys, err := cacheStore.List(context.Background(), cachePrefix, "")
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestCachePromptRecorderStoresPromptRecord(t *testing.T) {
 		t.Fatalf("unexpected prompt cache key: %s", keys[0])
 	}
 
-	reader, err := cacheStore.Get(context.Background(), CachePrefix+keys[0])
+	reader, err := cacheStore.Get(context.Background(), cachePrefix+keys[0])
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}

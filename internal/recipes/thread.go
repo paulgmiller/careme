@@ -21,7 +21,7 @@ type RecipeThreadEntry struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-func (rio recipeio) ThreadFromCache(ctx context.Context, hash string) ([]RecipeThreadEntry, error) {
+func (rio recipeio) threadFromCache(ctx context.Context, hash string) ([]RecipeThreadEntry, error) {
 	thread, err := rio.Cache.Get(ctx, recipeThreadPrefix+hash)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func (rio recipeio) ThreadFromCache(ctx context.Context, hash string) ([]RecipeT
 	return entries, nil
 }
 
-func (rio recipeio) SaveThread(ctx context.Context, hash string, entries []RecipeThreadEntry) error {
+func (rio recipeio) saveThread(ctx context.Context, hash string, entries []RecipeThreadEntry) error {
 	threadJSON := lo.Must(json.Marshal(entries))
 	if err := rio.Cache.Put(ctx, recipeThreadPrefix+hash, string(threadJSON), cache.Unconditional()); err != nil {
 		slog.ErrorContext(ctx, "failed to cache recipe thread", "hash", hash, "error", err)

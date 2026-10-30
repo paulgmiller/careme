@@ -16,7 +16,7 @@ import (
 	"careme/internal/routing"
 )
 
-type Server struct {
+type server struct {
 	cache        cache.ListCache
 	publicOrigin string
 	locations    locationLookup
@@ -36,15 +36,15 @@ Sitemap: %s/sitemap.xml
 `
 )
 
-func New(c cache.ListCache, publicOrigin string, locations locationLookup) *Server {
-	return &Server{
+func New(c cache.ListCache, publicOrigin string, locations locationLookup) *server {
+	return &server{
 		cache:        c,
 		publicOrigin: publicOrigin,
 		locations:    locations,
 	}
 }
 
-func (s *Server) Register(mux routing.Registrar) {
+func (s *server) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 }
@@ -60,7 +60,7 @@ type urlEntry struct {
 	LastMod string `xml:"lastmod,omitempty"`
 }
 
-func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	feedbackHashes, err := s.cache.List(ctx, feedback.RecipeFeedbackPrefix(), "")
 	if err != nil {
@@ -101,7 +101,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
+func (s *server) advertisedRecipeURLs(ctx context.Context) []string {
 	locs := campaigns.AdvertisedRecipeLocations()
 
 	var urls []string
@@ -141,7 +141,7 @@ func (s *Server) advertisedRecipeURLs(ctx context.Context) []string {
 	return urls
 }
 
-func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	full := fmt.Sprintf(robots, s.publicOrigin)
 	if _, err := w.Write([]byte(full)); err != nil {

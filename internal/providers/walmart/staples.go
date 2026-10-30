@@ -11,20 +11,20 @@ import (
 	"careme/internal/ingredients/cachekey"
 )
 
-const UnsupportedStaplesSignature = "unsupported-staples-v1"
+const unsupportedStaplesSignature = "unsupported-staples-v1"
 
 type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, UnsupportedStaplesSignature)
+	return cachekey.NewHash(locationID, date, unsupportedStaplesSignature)
 }
 
-func NewStaplesProvider() StaplesProvider {
-	return StaplesProvider{}
+func NewStaplesProvider() staplesProvider {
+	return staplesProvider{}
 }
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 }
 
@@ -52,10 +52,10 @@ func (*identityProvider) HasInventory(locationID string) bool {
 	return false
 }
 
-func (p StaplesProvider) FetchStaples(_ context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(_ context.Context, locationID string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("staples provider does not support location %q", locationID)
 }
 
-func (p StaplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
 }

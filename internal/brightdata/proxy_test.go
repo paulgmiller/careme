@@ -12,7 +12,7 @@ import (
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
 	t.Parallel()
 
-	if (ProxyConfig{}).Enabled() {
+	if (ProxyConfig{}).enabled() {
 		t.Fatalf("Empty config should not be enabled")
 	}
 }
@@ -23,7 +23,7 @@ func TestProxyConfigValidate_RejectsPartialConfig(t *testing.T) {
 	enabled := (ProxyConfig{
 		Host: "brd.superproxy.io",
 		Port: "33335",
-	}).Enabled()
+	}).enabled()
 	if enabled {
 		t.Fatal("expected diabled when only host and port provided")
 	}

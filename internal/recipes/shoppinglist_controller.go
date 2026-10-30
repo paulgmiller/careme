@@ -351,7 +351,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	if hashParam == "" {
 		// FormValue also reads URL query parameters, so links such as
 		// /recipes?location=<id> can be redirected to their canonical hash URL.
-		p, err := ParseGenerationForm(ctx, r, s.locServer)
+		p, err := parseGenerationForm(ctx, r, s.locServer)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("invalid query parameters: %v", err), http.StatusBadRequest)
 			return
@@ -436,7 +436,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	var recipeWG sync.WaitGroup
 	for recipeHash := range finishedRecipes {
 		recipeWG.Go(func() {
-			wineRecommendation, wineErr := s.WineFromCache(ctx, recipeHash)
+			wineRecommendation, wineErr := s.wineFromCache(ctx, recipeHash)
 			if wineErr != nil {
 				if !errors.Is(wineErr, cache.ErrNotFound) {
 					slog.ErrorContext(ctx, "failed to load cached wine recommendation for shopping list render", "recipe_hash", recipeHash, "error", wineErr)
@@ -498,7 +498,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p, err := ParseGenerationForm(ctx, r, s.locServer)
+	p, err := parseGenerationForm(ctx, r, s.locServer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid form parameters: %v", err), http.StatusBadRequest)
 		return

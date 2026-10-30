@@ -12,7 +12,7 @@ import (
 	"careme/internal/ai"
 )
 
-type OrderViewBuilder interface {
+type orderViewBuilder interface {
 	OrderView(context.Context, ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
 }
 

@@ -13,7 +13,7 @@ import (
 
 const InitialMessage = "Your meals are taking shape. You can add finished recipes as they arrive."
 
-func Sales(ings []ai.InputIngredient) []string {
+func sales(ings []ai.InputIngredient) []string {
 	sales := lo.Filter(ings, func(ing ai.InputIngredient, _ int) bool {
 		return ing.PercentOff() > 0
 	})
@@ -32,7 +32,7 @@ func Sales(ings []ai.InputIngredient) []string {
 func Ingredients(ings []ai.InputIngredient, originalCount int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Considering %d out of %d ingredients\n", len(ings), originalCount)
-	for _, sale := range Sales(ings) {
+	for _, sale := range sales(ings) {
 		b.WriteString(sale)
 		b.WriteString("\n")
 	}

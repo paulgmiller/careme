@@ -90,8 +90,8 @@ func TestUPCCacheDoesNotStoreMissingProducts(t *testing.T) {
 		return cartResponse(404, `{}`), nil
 	})}
 	for range 2 {
-		_, err := a.client.ProductUPC(t.Context(), "missing", "store")
-		require.ErrorIs(t, err, ErrProductUnavailable)
+		_, err := a.client.productUPC(t.Context(), "missing", "store")
+		require.ErrorIs(t, err, errProductUnavailable)
 	}
 	assert.Equal(t, 2, calls)
 }

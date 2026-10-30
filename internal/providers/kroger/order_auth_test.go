@@ -26,7 +26,7 @@ func newTestOrderHandler(t *testing.T, client *CartClient) *OrderHandler {
 
 func TestOrderingTokenEncryptionAndUserBinding(t *testing.T) {
 	adapter := newTestOrderHandler(t, &CartClient{})
-	token := CartToken{AccessToken: "secret-shopper-token", RefreshToken: "secret-refresh", ExpiresAt: time.Now().Add(time.Hour).UTC()}
+	token := cartToken{AccessToken: "secret-shopper-token", RefreshToken: "secret-refresh", ExpiresAt: time.Now().Add(time.Hour).UTC()}
 	require.NoError(t, adapter.saveToken(t.Context(), "user-one", token))
 	reader, err := adapter.cache.Get(t.Context(), "kroger_cart_tokens/user-one")
 	require.NoError(t, err)
@@ -44,5 +44,5 @@ func TestOrderingTokenEncryptionAndUserBinding(t *testing.T) {
 }
 
 func testCartClient(a *OrderHandler) *CartClient {
-	return a.client.(*CachedOrderClient).orderClient.(*CartClient)
+	return a.client.(*cachedOrderClient).orderClient.(*CartClient)
 }

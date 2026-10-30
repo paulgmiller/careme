@@ -12,24 +12,24 @@ import (
 
 // orderClient provides Kroger authorization, product resolution, and cart writes.
 type orderClient interface {
-	AuthorizationURL(state, banner string) (string, error)
-	Exchange(context.Context, string) (CartToken, error)
-	Refresh(context.Context, string) (CartToken, error)
-	ProductUPC(ctx context.Context, productID, locationID string) (string, error)
-	Add(context.Context, string, []CartItem) error
+	authorizationURL(state, banner string) (string, error)
+	exchange(context.Context, string) (cartToken, error)
+	refresh(context.Context, string) (cartToken, error)
+	productUPC(ctx context.Context, productID, locationID string) (string, error)
+	add(context.Context, string, []cartItem) error
 }
 
-// CachedOrderClient decorates UPC lookups; authorization and cart writes pass through.
-type CachedOrderClient struct {
+// cachedOrderClient decorates UPC lookups; authorization and cart writes pass through.
+type cachedOrderClient struct {
 	orderClient
 	cache cache.Cache
 }
 
-func NewCachedOrderClient(client orderClient, store cache.Cache) *CachedOrderClient {
-	return &CachedOrderClient{orderClient: client, cache: store}
+func NewCachedOrderClient(client orderClient, store cache.Cache) *cachedOrderClient {
+	return &cachedOrderClient{orderClient: client, cache: store}
 }
 
-func (c *CachedOrderClient) ProductUPC(ctx context.Context, productID, locationID string) (string, error) {
+func (c *cachedOrderClient) productUPC(ctx context.Context, productID, locationID string) (string, error) {
 	key := fmt.Sprintf("kroger_product_upcs/v1/%x", sha256.Sum256([]byte(locationID+"\x00"+productID)))
 	reader, err := c.cache.Get(ctx, key)
 	if err == nil {
@@ -43,7 +43,7 @@ func (c *CachedOrderClient) ProductUPC(ctx context.Context, productID, locationI
 	if !errors.Is(err, cache.ErrNotFound) {
 		return "", fmt.Errorf("read Kroger UPC cache: %w", err)
 	}
-	upc, err := c.orderClient.ProductUPC(ctx, productID, locationID)
+	upc, err := c.orderClient.productUPC(ctx, productID, locationID)
 	if err != nil {
 		return "", err
 	}

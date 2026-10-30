@@ -13,48 +13,51 @@ const (
 	aboutAlbumPreviewPrefix = "https://images.northbriton.net/cdn-cgi/image/width=800/https://images.northbriton.net/"
 )
 
-type AboutAlbumPhoto struct {
+type aboutAlbumPhoto struct {
 	Comment    string
 	ImageID    string
 	RecipeHash string
 }
 
-func (p AboutAlbumPhoto) FullURL() string {
+//unexport:ignore called by html/template
+func (p aboutAlbumPhoto) FullURL() string {
 	return aboutAlbumImageBaseURL + p.ImageID
 }
 
-func (p AboutAlbumPhoto) PreviewURL() string {
+//unexport:ignore called by html/template
+func (p aboutAlbumPhoto) PreviewURL() string {
 	return aboutAlbumPreviewPrefix + p.ImageID
 }
 
-func (p AboutAlbumPhoto) CommentHTML() template.HTML {
+//unexport:ignore called by html/template
+func (p aboutAlbumPhoto) CommentHTML() template.HTML {
 	if p.Comment == "" {
 		return ""
 	}
 	return template.HTML("<!-- " + html.EscapeString(p.Comment) + " -->")
 }
 
-type AboutPageData struct {
+type aboutPageData struct {
 	ClarityScript   template.HTML
 	GoogleTagScript template.HTML
 	Style           seasons.Style
-	AlbumPhotos     []AboutAlbumPhoto
+	AlbumPhotos     []aboutAlbumPhoto
 }
 
-func NewAboutPageData(ctx context.Context, style seasons.Style) AboutPageData {
-	return AboutPageData{
+func NewAboutPageData(ctx context.Context, style seasons.Style) aboutPageData {
+	return aboutPageData{
 		ClarityScript:   ClarityScript(ctx),
 		GoogleTagScript: GoogleTagScript(),
 		Style:           style,
-		AlbumPhotos:     DefaultAboutAlbumPhotos(),
+		AlbumPhotos:     cloneAboutAlbumPhotos(),
 	}
 }
 
-func DefaultAboutAlbumPhotos() []AboutAlbumPhoto {
-	return append([]AboutAlbumPhoto(nil), defaultAboutAlbumPhotos...)
+func cloneAboutAlbumPhotos() []aboutAlbumPhoto {
+	return append([]aboutAlbumPhoto(nil), defaultAboutAlbumPhotos...)
 }
 
-var defaultAboutAlbumPhotos = []AboutAlbumPhoto{
+var defaultAboutAlbumPhotos = []aboutAlbumPhoto{
 	{Comment: "Dungeness crab pasta", ImageID: "AP1GczMBNFe2Ol-2vq1uZybQcd1y5P1vu4jqNbbtX4U0uvc_GSIlszulZjtIzGIxtgEm6hHPoPLOV8BqzDyMdSzSl4qCGyTlV2fSyyYnq_ipUEREpthJs6Uf", RecipeHash: "SNsa7tJ414rhmrw56fjqiw=="},
 	{Comment: "tri-tip and polenta", ImageID: "AP1GczPKKoL9ZZ3nmrcjf0d6tgLazTkNk2Yii2YfVhaRJoTA9Aap264ABsKEm5cqFJwKByELDuiMFas_z0KyjjvBRmEHL_yRHrTTIXbdT-7jKX1mqFKKejAp", RecipeHash: "le76qpHPhb-EK2KB7TqGZA=="},
 	{Comment: "Tomato Paprika Chicken thighs", ImageID: "AP1GczO7v4JPGuK09-1TPLFz0SpUL2XghE8lxK_5Sn153pRGc_DlBZhslyqCOd3vfibyqCw6eWLca3-DHj0zFChi4rJBpeQuHOqFOdThjhj81KnngZ-Fs0Fy", RecipeHash: "Z-EeQGRhSw5549Xh5L4Y3w=="},

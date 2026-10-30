@@ -19,17 +19,17 @@ import (
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
-// AllCategories selects the full catalog without a category filter.
-const AllCategories = 0
+// allCategories selects the full catalog without a category filter.
+const allCategories = 0
 
-// Client reads the complete store catalog using a store-level access token.
+// client reads the complete store catalog using a store-level access token.
 // Required credentials are checked at construction.
-type Client struct {
+type client struct {
 	config     config.MNFoodClubConfig
 	httpClient *http.Client
 }
 
-func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*Client, error) {
+func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*client, error) {
 	if strings.TrimSpace(cfg.APIPath) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
 		return nil, fmt.Errorf("MNFoodClub requires MNFOODCLUB_API_PATH and MNFOODCLUB_ACCESS_TOKEN")
 	}
@@ -37,7 +37,7 @@ func NewClient(cfg config.MNFoodClubConfig, httpClient *http.Client) (*Client, e
 	retryClient.HTTPClient = httpClient
 	retryClient.RequestLogHook = httpretry.LogRetry("mnfoodclub")
 	retryClient.Backoff = catalogBackoff
-	return &Client{config: cfg, httpClient: retryClient.StandardClient()}, nil
+	return &client{config: cfg, httpClient: retryClient.StandardClient()}, nil
 }
 
 // catalogBackoff honors BigCommerce's X-Rate-Limit-Time-Reset-Ms (milliseconds)
@@ -61,7 +61,7 @@ func catalogBackoff(min, max time.Duration, attempt int, resp *http.Response) ti
 	return retryablehttp.DefaultBackoff(min, max, attempt, resp)
 }
 
-func (c *Client) catalogURL() (*url.URL, error) {
+func (c *client) catalogURL() (*url.URL, error) {
 	u, err := url.Parse(strings.TrimSpace(c.config.APIPath))
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, fmt.Errorf("invalid MNFOODCLUB_API_PATH: expected an absolute store API URL")
@@ -84,7 +84,7 @@ type catalogPage[T any] struct {
 	} `json:"meta"`
 }
 
-func catalogItems[T any](ctx context.Context, c *Client, base *url.URL, resource string, filters url.Values) ([]T, error) {
+func catalogItems[T any](ctx context.Context, c *client, base *url.URL, resource string, filters url.Values) ([]T, error) {
 	var items []T
 	for page := 1; ; page++ {
 		u := *base
@@ -107,7 +107,7 @@ func catalogItems[T any](ctx context.Context, c *Client, base *url.URL, resource
 	}
 }
 
-func (c *Client) getPage(ctx context.Context, pageURL string, result any) error {
+func (c *client) getPage(ctx context.Context, pageURL string, result any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return fmt.Errorf("create catalog request: %w", err)
@@ -130,13 +130,13 @@ func (c *Client) getPage(ctx context.Context, pageURL string, result any) error 
 
 // Fetch returns every eligible product, optionally restricted to one category.
 // Use AllCategories to fetch products across all categories.
-func (c *Client) Fetch(ctx context.Context, categoryID int) ([]ai.InputIngredient, error) {
+func (c *client) Fetch(ctx context.Context, categoryID int) ([]ai.InputIngredient, error) {
 	base, err := c.catalogURL()
 	if err != nil {
 		return nil, err
 	}
 	filters := url.Values{"is_visible": {"true"}, "include": {"variants"}, "sort": {"id"}, "direction": {"asc"}}
-	if categoryID != AllCategories {
+	if categoryID != allCategories {
 		filters.Set("categories:in", strconv.Itoa(categoryID))
 	}
 	products, err := catalogItems[catalogProduct](ctx, c, base, "products", filters)
