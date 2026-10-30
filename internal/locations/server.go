@@ -23,7 +23,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const zipCodeCookieName = "careme_zip_code"
+const ZipCodeCookieName = "careme_zip_code"
 
 type userLookup interface {
 	FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error)
@@ -78,7 +78,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 		}
 		if zip := strings.TrimSpace(r.URL.Query().Get("zip")); zip != "" {
 			http.SetCookie(w, &http.Cookie{
-				Name:     zipCodeCookieName,
+				Name:     ZipCodeCookieName,
 				Value:    zip,
 				Path:     "/",
 				MaxAge:   int((90 * 24 * time.Hour).Seconds()),
