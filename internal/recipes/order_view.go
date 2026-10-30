@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"careme/internal/locations"
 
@@ -20,6 +21,9 @@ func (s *server) populateOrderView(r *http.Request, view *shoppingListPageView) 
 	var items []ai.ShoppingItem
 	for _, group := range view.Purchases {
 		for _, item := range group.Items {
+			if item.Buy == nil || strings.TrimSpace(item.ProductID) == "" {
+				continue
+			}
 			items = append(items, item.ShoppingItem)
 		}
 	}
@@ -35,6 +39,9 @@ func (s *server) populateOrderView(r *http.Request, view *shoppingListPageView) 
 	})
 	if err != nil {
 		return err
+	}
+	if order != nil && len(items) == 0 {
+		order.TransferURL = ""
 	}
 	view.Order = order
 	return nil

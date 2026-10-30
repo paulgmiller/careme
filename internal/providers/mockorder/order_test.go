@@ -43,7 +43,7 @@ func TestTransferPersistsAndReusesResult(t *testing.T) {
 	transfer, err := readTransfer(t.Context(), c, input.UserID, input.ListKey)
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferApplied, transfer.Status)
-	assert.Equal(t, []ordertypes.TransferItem{{Name: "Milk", AcceptedQuantity: 3}, {Name: "Bread", AcceptedQuantity: 1}, {Name: "Eggs", AcceptedQuantity: 1}}, transfer.Items)
+	assert.Equal(t, []ordertypes.TransferItem{{Name: "Milk", AcceptedQuantity: 3}, {Name: "Eggs", AcceptedQuantity: 1}}, transfer.Items)
 	view, err = OrderView(t.Context(), c, input)
 	require.NoError(t, err)
 	assert.Equal(t, transfer.CartURL, view.ReviewCartURL)

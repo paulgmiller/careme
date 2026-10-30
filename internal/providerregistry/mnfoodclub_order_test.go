@@ -49,7 +49,7 @@ func TestFoodClubOrderingForAllStorefronts(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			location, err := mnfoodclub.NewLocationBackend().GetLocationByID(t.Context(), id)
 			require.NoError(t, err)
-			input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: id, Location: *location, ZipCode: "00501", Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "variant-1005", Name: "Chicken"}}, ReturnURL: "/recipes?h=" + id}
+			input := ordertypes.OrderViewInput{UserID: "mock-clerk-user-id", ListKey: id, Location: *location, ZipCode: "00501", Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "variant-1005", Name: "Chicken", Buy: new(float64(1))}}, ReturnURL: "/recipes?h=" + id}
 			builder := factory.NewOrderViewBuilder(options.Cache)
 			view, err := builder.OrderView(t.Context(), input)
 			require.NoError(t, err)

@@ -29,7 +29,7 @@ func TestCartTransferFormPersistsResultAndRedirectsToList(t *testing.T) {
 	input := ordertypes.TransferRequest{
 		ReturnURL: "/recipes?h=list-hash#shopping-list-section",
 		Location:  locationtypes.Location{ID: "70500874", Chain: "QFC", Name: "My QFC", Address: "123 Store Street"},
-		Items:     []ai.ShoppingItem{{ProductID: "food", VariantID: "food-upc", Name: "Milk", Needed: "2 cups"}},
+		Items:     []ai.ShoppingItem{{ProductID: "food", VariantID: "food-upc", Name: "Milk", Needed: "2 cups", Buy: new(float64(1))}},
 	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)

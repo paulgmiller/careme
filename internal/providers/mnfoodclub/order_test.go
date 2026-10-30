@@ -35,7 +35,7 @@ func newOrderTest(t *testing.T, api http.HandlerFunc) (*orderHandler, *orderClie
 func orderInput() ordertypes.TransferRequest {
 	return ordertypes.TransferRequest{
 		Location: locationtypes.Location{ID: TCFarmLocationID, Chain: "TC Farm"}, ReturnURL: "/recipes?h=list",
-		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}},
+		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs", Buy: new(float64(1))}},
 	}
 }
 
@@ -335,4 +335,32 @@ func TestOrderOptionalZIPHint(t *testing.T) {
 			assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, posted).Code)
 		})
 	}
+}
+
+func TestOrderExcludesItemsWithoutBuy(t *testing.T) {
+	var calls int
+	h, _, _ := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var request handoffRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 3}, {ProductID: "202", Quantity: 1}}, request.Items)
+		_, _ = w.Write([]byte(appliedResult))
+	})
+	input := orderInput()
+	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "garlic", Name: "Garlic"})
+	assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, input).Code)
+	assert.Equal(t, 1, calls)
+}
+
+func TestOrderWithoutBuyDoesNotContactPartner(t *testing.T) {
+	h, _, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("items without buy must not contact the partner")
+	})
+	input := orderInput()
+	for i := range input.Items {
+		input.Items[i].Buy = nil
+	}
+	assert.Equal(t, http.StatusBadRequest, postTransfer(t, h, input).Code)
+	_, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
+	assert.ErrorIs(t, err, cache.ErrNotFound)
 }

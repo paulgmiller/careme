@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/campaigns"
@@ -34,6 +35,18 @@ import (
 )
 
 type fakeProduceScorer struct{}
+
+type cartTestShoppingMerger struct{}
+
+func (cartTestShoppingMerger) MergeShoppingQuantities(_ context.Context, ingredients []ai.Ingredient, _ []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+	// The mock recipes contain pantry ingredients only. Include a matched product
+	// explicitly so this end-to-end test exercises the native cart form too.
+	items := []ai.ShoppingItem{{ProductID: "test-groceries", Name: "Test groceries", Buy: new(float64(1))}}
+	for _, ingredient := range ingredients {
+		items = append(items, ai.ShoppingItem{Name: ingredient.Name, Needed: ingredient.Quantity})
+	}
+	return items, nil
+}
 
 func (fakeProduceScorer) ProduceScore(_ context.Context, loc locations.Location) *int {
 	hash := fnv.New32a()
@@ -307,7 +320,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","variant_id":"food-upc","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","variant_id":"wine-upc","name":"Red wine","needed":"1 bottle"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","variant_id":"food-upc","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","variant_id":"wine-upc","name":"Red wine","needed":"1 bottle","buy":1}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {

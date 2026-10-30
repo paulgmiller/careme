@@ -33,6 +33,13 @@ A native form cannot set a custom header. The Food Club adapter derives its
 upstream `Idempotency-Key` from the authenticated Careme user and form key, since
 Food Club scopes keys across the whole integration rather than by shopper.
 
+The shopping page sends only items with a `buy` quantity and a nonempty store
+product ID. Ingredients without purchase quantities remain visible together in
+the “Have at home” aisle and are excluded from the cart form. Items with purchase
+quantities retain their store aisle, or “To buy” when no aisle is available.
+These display groups are rebuilt on page load for existing saved snapshots too.
+A list containing only excluded ingredients has no Add to cart form.
+
 The authenticated shopper comes from the verified Careme session, never from
 submitted JSON. A shopper whose session has expired is redirected to sign in,
 then back to the shopping list to submit again. `return_url` must be an
@@ -114,7 +121,7 @@ Kroger rejects the entire form with HTTP 400 if any product ID is empty, before
 saving a transfer or contacting Kroger.
 
 Kroger sends the requested `buy` quantity for each product, rounding
-up to whole packages and defaulting to one when `buy` is absent. Successful writes record
+up to whole packages. Items with no `buy` are excluded. Successful writes record
 accepted package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
@@ -175,12 +182,15 @@ Careme IDs are never passed as Food Club customer IDs. Customer-ID and
 storefront-brand hints are currently omitted.
 
 Each product is sent once. Package counts come from `buy`, rounded up to whole
-packages; a missing count defaults to one. The shopping list already combines
+packages; items with no `buy` are excluded. The shopping list already combines
 product IDs and quantities, so the adapter forwards them directly. Recipe
 measurements such as “2 cups” are never converted to package
-counts. Every item must have a nonempty product ID. A request containing an
-empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
-contacting the partner. No items are silently omitted.
+counts. Every submitted item must have a nonempty product ID. A request
+containing an empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
+contacting the partner. The page separates ingredients without purchase
+quantities or product IDs before building the form. The adapter also excludes
+items with no `buy` from submitted requests and rejects a request with no
+purchase quantities before contacting the partner.
 The selected catalog variant is included when available in the finalized
 shopping snapshot. Older snapshots and items without a selected variant omit it,
 using the partner’s documented default variant selection.
@@ -215,8 +225,8 @@ for future identity hints.
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
 of registering real ordering providers. No Kroger credentials, cart-token key,
 or OAuth callback registration are needed. Generate and finalize a shopping
-list, then submit “Add to mock cart”. The provider accepts all displayed items
-using `buy` rounded up to whole packages, defaulting to one when absent. Invalid
+list, then submit “Add to mock cart”. The provider accepts items with `buy`
+rounded up to whole packages and excludes items with no `buy`. Invalid
 quantities are logged and use one package in every order provider. It saves a shared
 `Transfer` and redirects back to the shopping list. “Review cart”
 opens the local `/mock/order-transfers/<id>` endpoint, which displays the saved

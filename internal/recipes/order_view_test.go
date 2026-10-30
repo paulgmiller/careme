@@ -20,7 +20,7 @@ import (
 func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 	s := newTestServer(t)
 	view := shoppingListPageView{Hash: "list", Location: locations.Location{ID: "other-store"}, Purchases: []shoppingPurchaseGroup{
-		{Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Food", Needed: "1 lb", VariantID: "variant-42"}}},
+		{Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Food", Needed: "1 lb", Buy: new(float64(1)), VariantID: "variant-42"}}},
 		{Items: []shoppingPurchaseItem{{Name: "Wine", Needed: "1 bottle"}}},
 	}}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
@@ -28,7 +28,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
-		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
+		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb", Buy: new(float64(1))}}, input.Items)
 		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", TransferLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`}, nil
 	})
 	if view.User == nil {
