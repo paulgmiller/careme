@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *testing.T) {
+func TestWineCandidateCatalogPreservesRecommendationAndEnrichesShoppingItem(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	store := cache.NewInMemoryCache()
 	rio := IO(store)
@@ -35,8 +35,9 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	prepared := prepareShoppingItems(items, nil)
 	assert.Empty(t, prepared[0].VariantID, "legacy recommendations do not contain ordering metadata")
 	selected := []ai.InputIngredient{{ProductID: "wine", VariantID: "selected-upc", Description: "Catalog red", Size: "750mL", PriceRegular: new(float32(15)), PriceSale: new(float32(13))}}
-	require.NoError(t, rio.saveWineIngredients(t.Context(), hash, selected))
-	catalog, err := rio.wineIngredientsFromCache(t.Context(), hash)
+	key := wineStylesCacheKey([]string{"Red"}, "70500874", time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, rio.SaveIngredients(t.Context(), key, selected))
+	catalog, err := rio.IngredientsFromCache(t.Context(), key)
 	require.NoError(t, err)
 	assert.Equal(t, selected, catalog)
 	prepared = prepareShoppingItems(items, inputIngredientMap(catalog))
@@ -51,21 +52,21 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	body, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	assert.Equal(t, original, string(body), "writing a catalog snapshot does not change the saved pick")
-	require.NoError(t, store.Put(t.Context(), selectedWineIngredientsPrefix+hash, "{", cache.Unconditional()))
-	_, err = rio.wineIngredientsFromCache(t.Context(), hash)
-	require.ErrorContains(t, err, "decode selected wine ingredients")
+	require.NoError(t, store.Put(t.Context(), ingredientsCachePrefix+key, "{", cache.Unconditional()))
+	_, err = rio.IngredientsFromCache(t.Context(), key)
+	require.Error(t, err)
 }
 
-type failingWineCatalogSaver struct{ noopRecipeSaver }
+type failingWineCatalogCache struct{ ingredientio }
 
-func (failingWineCatalogSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
+func (failingWineCatalogCache) SaveIngredients(context.Context, string, []ai.InputIngredient) error {
 	return errors.New("catalog write failed")
 }
 
-func TestPickAWineRequiresCatalogSnapshot(t *testing.T) {
+func TestPickAWineRequiresCachedCandidateCatalog(t *testing.T) {
 	aiStub := &captureWineQuestionAIClient{selection: &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}}}}
-	staples := &cachedStaplesService{cache: IO(cache.NewInMemoryCache()), provider: &captureWineStaplesProvider{responses: map[string][]ai.InputIngredient{"Red": {{ProductID: "wine", VariantID: "upc", Description: "Red"}}}}}
-	g := newTestGenerator(t, aiStub, nil, staples, nil, failingWineCatalogSaver{})
+	staples := &cachedStaplesService{cache: failingWineCatalogCache{IO(cache.NewInMemoryCache())}, provider: &captureWineStaplesProvider{responses: map[string][]ai.InputIngredient{"Red": {{ProductID: "wine", VariantID: "upc", Description: "Red"}}}}}
+	g := newTestGenerator(t, aiStub, nil, staples, nil, noopRecipeSaver{})
 	got, err := g.PickAWine(t.Context(), "70500874", ai.Recipe{Title: "Dinner", WineStyles: []string{"Red"}}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
 	require.ErrorContains(t, err, "catalog write failed")
 	assert.Nil(t, got)

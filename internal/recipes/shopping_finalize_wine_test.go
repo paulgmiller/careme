@@ -50,7 +50,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
-			if err := producer.saveWineIngredients(ctx, recipe.ComputeHash(), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Selected red", Size: "750mL"}}); err != nil {
+			if err := producer.SaveIngredients(ctx, wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Selected red", Size: "750mL"}}); err != nil {
 				return nil, err
 			}
 			return &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Selected red", Quantity: "750mL"}, {ProductID: "backup", Name: "Backup"}}}, nil
@@ -164,7 +164,7 @@ func TestFinalizeMergesFoodAndRepeatedWineInOneCall(t *testing.T) {
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", VariantID: "food-upc", Description: "Food", Size: "1 lb"}}))
 	for _, recipe := range p.Saved {
 		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}, {ProductID: "backup", Name: "Backup"}}}))
-		require.NoError(t, s.saveWineIngredients(t.Context(), recipe.ComputeHash(), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
+		require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
 	}
 	calls := 0
 	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
@@ -208,11 +208,59 @@ func TestFinalizeKeepsCompletedWineWhenAnotherPickTimesOut(t *testing.T) {
 		require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", Description: "Food", VariantID: "food-upc", Size: "1 lb"}}))
 		recipeHash := p.Saved[1].ComputeHash()
 		require.NoError(t, s.saveWine(t.Context(), recipeHash, &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}}}))
-		require.NoError(t, s.saveWineIngredients(t.Context(), recipeHash, []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
+		require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(p.Saved[1].WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
 		require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
 		items := cachedShoppingItems(t, s, p.Hash())
 		require.Len(t, items, 2)
 		assert.Equal(t, "food", items[0].ProductID)
 		assert.Equal(t, "wine-upc", items[1].VariantID)
 	})
+}
+
+func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T) {
+	for _, scenario := range []string{"cached", "missing", "unreadable"} {
+		t.Run(scenario, func(t *testing.T) {
+			store := cache.NewInMemoryCache()
+			s := newTestServer(t, withTestCache(store))
+			p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
+			p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: []string{" White ", "RED", "red"}, Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Food", Quantity: "1 lb"}}}}
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", Description: "Food", VariantID: "food-upc", Size: "1 lb"}}))
+			recipe := p.Saved[0]
+			require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Picked red"}}}))
+			catalog := []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Catalog red", Size: "750mL"}}
+			// Other dates, stores, and style sets must not supply ordering metadata.
+			for _, key := range []string{
+				wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date.AddDate(0, 0, -1)),
+				wineStylesCacheKey(recipe.WineStyles, "other-store", p.Date),
+				wineStylesCacheKey([]string{"Red"}, p.Location.ID, p.Date),
+			} {
+				require.NoError(t, s.SaveIngredients(t.Context(), key, catalog))
+			}
+			key := wineStylesCacheKey([]string{"red", "white"}, p.Location.ID, p.Date)
+			switch scenario {
+			case "cached":
+				require.NoError(t, s.SaveIngredients(t.Context(), key, catalog))
+			case "unreadable":
+				require.NoError(t, store.Put(t.Context(), ingredientsCachePrefix+key, "{", cache.Unconditional()))
+			}
+			err := s.finalizeShoppingPurchases(t.Context(), p.Hash())
+			if scenario == "unreadable" {
+				require.ErrorContains(t, err, "load selected wine catalog")
+				_, err = s.cachedShoppingPurchases(t.Context(), p.Hash())
+				require.ErrorIs(t, err, cache.ErrNotFound)
+				return
+			}
+			require.NoError(t, err)
+			items := cachedShoppingItems(t, s, p.Hash())
+			require.Len(t, items, 2)
+			if scenario == "cached" {
+				assert.Equal(t, "wine-upc", items[1].VariantID)
+				assert.Equal(t, "Catalog red", items[1].Name)
+			} else {
+				assert.Empty(t, items[1].VariantID)
+				assert.Equal(t, "Picked red", items[1].Name)
+			}
+		})
+	}
 }

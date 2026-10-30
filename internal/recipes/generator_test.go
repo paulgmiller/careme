@@ -571,7 +571,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	assert.Equal(t, "$18.99", got.Wines[0].Price)
-	snapshots, err := rio.wineIngredientsFromCache(t.Context(), (&ai.Recipe{Title: "Roast Chicken", WineStyles: []string{style}}).ComputeHash())
+	snapshots, err := rio.IngredientsFromCache(t.Context(), wineStylesCacheKey([]string{style}, location, cacheDate))
 	require.NoError(t, err)
 	assert.Equal(t, cached, snapshots, "retain the entire candidate catalog, including unselected wines")
 	if aiStub.recipe.Title != "Roast Chicken" {
@@ -1547,12 +1547,4 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			assert.True(t, published.Slots[0].Reviewed)
 		})
 	}
-}
-
-func (noopRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
-	return nil
-}
-
-func (*captureRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
-	return nil
 }

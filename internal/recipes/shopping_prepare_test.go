@@ -54,7 +54,7 @@ func TestFinalizedShoppingInputsCombinesCatalogsBeforeQuantityMerge(t *testing.T
 	food := ai.InputIngredient{ProductID: "food", VariantID: "food-upc", Description: "Catalog food", Size: "1 lb"}
 	wine := ai.InputIngredient{ProductID: "wine", VariantID: "wine-upc", Description: "Catalog wine", Size: "750mL"}
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{food}))
-	require.NoError(t, s.saveWineIngredients(t.Context(), recipe.ComputeHash(), []ai.InputIngredient{wine}))
+	require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{wine}))
 	require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Picked wine", Quantity: "750mL"}}}))
 	ingredients, catalog, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.NoError(t, err)

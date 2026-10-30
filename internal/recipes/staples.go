@@ -295,7 +295,7 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	logger.InfoContext(ctx, "found wines", "count", len(wines))
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
-		logger.ErrorContext(ctx, "failed to cache wines", "error", err)
+		return nil, fmt.Errorf("cache wines for %s: %w", locationID, err)
 	}
 	return wines, nil
 }
