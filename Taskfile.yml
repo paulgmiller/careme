@@ -187,6 +187,7 @@ tasks:
     desc: Build the same image matrix as CI locally without pushing
     internal: true
     deps:
+      - docker-build-mnfoodclubstub
       - docker-build-careme
       - docker-build-wholefoods
       - docker-build-albertsons
@@ -293,3 +294,11 @@ tasks:
       - bash -c 'source tools/versions.sh; ./bin/golangci-lint version | grep -Fq "version ${GOLANGCI_LINT_VERSION#v} "'
     cmds:
       - bash tools/install-golangci-lint.sh
+
+  docker-build-mnfoodclubstub:
+    internal: true
+    cmds:
+      - task: docker-build
+        vars:
+          CMD_PATH: ./cmd/mnfoodclubstub
+          IMAGE: careme-mnfoodclubstub-local
