@@ -460,6 +460,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		if purchasesErr != nil || purchases == nil {
 			return
 		}
+		// fetching wine cataglog only makes sense if theres a purchase order?
 		wineCatalog, wineCatalogErr = s.wineCatalogForRecipes(ctx, p.Saved)
 	})
 	recipeWG.Wait()
@@ -474,7 +475,9 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		return
 	}
 
-	purchases, err := prepareShoppingPurchases(purchases, p.Saved, wines.Clone(), wineCatalog)
+	winepicks := wines.Clone()
+
+	purchases, err := prepareShoppingPurchases(purchases, winepicks, wineCatalog)
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping items", "error", err)
 		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
@@ -487,7 +490,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		params:               p,
 		purchases:            purchases,
 		list:                 *slist,
-		wineRecommendations:  wines.Clone(),
+		wineRecommendations:  winepicks,
 		recipeImages:         images.Clone(),
 		currentUser:          currentUser,
 		hash:                 hashParam,

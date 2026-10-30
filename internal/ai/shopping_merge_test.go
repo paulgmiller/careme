@@ -166,13 +166,3 @@ func shoppingMergeHTTPResponse(req *http.Request, output string) *http.Response 
 		"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}
 	}`, gpt56Luna, output))), Request: req}
 }
-
-func TestMatchingShoppingCatalog(t *testing.T) {
-	needs := []Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "1 tbsp"}, {ProductID: "missing", Name: "Missing", Quantity: "1"}}
-	catalog := []InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil"}, {Description: "Unknown product"}}
-	got := MatchingShoppingCatalog(needs, catalog)
-	assert.Equal(t, []InputIngredient{catalog[0]}, got)
-	assert.Len(t, catalog, 4)
-	assert.Len(t, needs, 4)
-	assert.Empty(t, MatchingShoppingCatalog(nil, catalog))
-}

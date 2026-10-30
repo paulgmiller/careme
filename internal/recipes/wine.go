@@ -11,7 +11,7 @@ import (
 	"careme/internal/parallelism"
 )
 
-const wineRecommendationsCachePrefix = "wine_recommendations/v2/"
+const wineRecommendationsCachePrefix = "wine_recommendations/"
 
 func recipeWineCacheKey(hash string) string {
 	return wineRecommendationsCachePrefix + hash

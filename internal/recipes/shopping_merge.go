@@ -43,7 +43,7 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 		return err
 	}
 
-	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, ai.MatchingShoppingCatalog(ingredients, catalog))
+	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, MatchingShoppingCatalog(ingredients, catalog))
 	if err != nil {
 		return err
 	}

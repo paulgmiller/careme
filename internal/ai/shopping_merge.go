@@ -38,23 +38,6 @@ type shoppingIngredientsResponse struct {
 	Items []ShoppingItem `json:"items"`
 }
 
-// MatchingShoppingCatalog keeps only products referenced by recipe ingredient IDs.
-func MatchingShoppingCatalog(ingredients []Ingredient, catalog []InputIngredient) []InputIngredient {
-	ids := make(map[string]bool, len(ingredients))
-	for _, ingredient := range ingredients {
-		if ingredient.ProductID != "" {
-			ids[ingredient.ProductID] = true
-		}
-	}
-	matched := make([]InputIngredient, 0)
-	for _, product := range catalog {
-		if ids[product.ProductID] {
-			matched = append(matched, product)
-		}
-	}
-	return matched
-}
-
 const shoppingPurchaseInstructions = `Merge the recipe ingredients using the supplied matching catalog.
 Combine entries with the same nonempty product id, and equivalent pantry foods without ids. Keep different product ids and incompatible forms distinct. Convert compatible units only when unambiguous; preserve distinct amounts when conversion is uncertain. Return each item's original id and first name; pantry items use an empty id.
 needed is the combined recipe amount with units, before rounding for purchases. Usage notes such as "divided" do not add quantities. Remove or update approximate count annotations when merging changes their amount.

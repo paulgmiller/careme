@@ -29,7 +29,7 @@ func TestPrepareShoppingPurchasesWithWine(t *testing.T) {
 		{name: "not finalized", recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := prepareShoppingPurchases(tc.purchases, []ai.Recipe{recipe}, tc.recommendations, nil)
+			got, err := prepareShoppingPurchases(tc.purchases, tc.recommendations, nil)
 			require.NoError(t, err)
 			if !tc.wantWine {
 				assert.Equal(t, tc.purchases, got)
@@ -110,4 +110,14 @@ func TestFinalizedShoppingInputsCombinesCatalogsBeforeQuantityMerge(t *testing.T
 func TestShoppingCatalogRejectsConflictingSavedVariants(t *testing.T) {
 	_, err := shoppingCatalogLookup([]ai.InputIngredient{{ProductID: "wine", VariantID: "first"}, {ProductID: "wine", VariantID: "second"}})
 	require.ErrorContains(t, err, "conflicting selected variants")
+}
+
+func TestMatchingShoppingCatalog(t *testing.T) {
+	needs := []ai.Ingredient{{ProductID: "onion", Name: "Onion", Quantity: "4 oz"}, {ProductID: "onion", Name: "Onions", Quantity: "4 oz"}, {Name: "Olive oil", Quantity: "1 tbsp"}, {ProductID: "missing", Name: "Missing", Quantity: "1"}}
+	catalog := []ai.InputIngredient{{ProductID: "onion", Description: "Onion", Size: "1 lb"}, {ProductID: "other-onion", Description: "Onion", Size: "2 lb"}, {ProductID: "oil", Description: "Olive oil"}, {Description: "Unknown product"}}
+	got := MatchingShoppingCatalog(needs, catalog)
+	assert.Equal(t, []ai.InputIngredient{catalog[0]}, got)
+	assert.Len(t, catalog, 4)
+	assert.Len(t, needs, 4)
+	assert.Empty(t, MatchingShoppingCatalog(nil, catalog))
 }

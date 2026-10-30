@@ -35,7 +35,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	picks := map[string]*ai.WineSelection{hash: recommendation}
 	catalog, err := rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.NoError(t, err)
-	purchases, err := prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, catalog)
+	purchases, err := prepareShoppingPurchases(food, picks, catalog)
 	require.NoError(t, err)
 	assert.Empty(t, purchases[1].Items[0].VariantID, "legacy recommendation identifiers are not used for ordering")
 	selected := []ai.InputIngredient{{ProductID: "wine", VariantID: "selected-upc", Description: "Catalog red", Size: "750mL", PriceRegular: new(float32(15)), PriceSale: new(float32(13))}}
@@ -43,7 +43,7 @@ func TestWineCatalogSidecarPreservesRecommendationAndEnrichesShoppingItem(t *tes
 	catalog, err = rio.wineCatalogForRecipes(t.Context(), []ai.Recipe{recipe})
 	require.NoError(t, err)
 	assert.Equal(t, selected, catalog)
-	purchases, err = prepareShoppingPurchases(food, []ai.Recipe{recipe}, picks, catalog)
+	purchases, err = prepareShoppingPurchases(food, picks, catalog)
 	require.NoError(t, err)
 	assert.Equal(t, "selected-upc", purchases[1].Items[0].VariantID)
 	assert.Equal(t, "Catalog red", purchases[1].Items[0].Name)
@@ -84,4 +84,14 @@ func TestPickAWineRequiresCatalogSnapshot(t *testing.T) {
 			assert.Nil(t, got)
 		})
 	}
+}
+
+func TestWineRecommendationReadsOriginalCachePath(t *testing.T) {
+	store := cache.NewInMemoryCache()
+	require.NoError(t, store.Put(t.Context(), "wine_recommendations/existing-recipe", `{"wines":[{"id":"wine","name":"Existing red","quantity":"1 bottle","price":"$12.99"}],"commentary":"Original pairing."}`, cache.Unconditional()))
+	selection, err := IO(store).wineFromCache(t.Context(), "existing-recipe")
+	require.NoError(t, err)
+	require.Len(t, selection.Wines, 1)
+	assert.Equal(t, "Existing red", selection.Wines[0].Name)
+	assert.Equal(t, "Original pairing.", selection.Commentary)
 }

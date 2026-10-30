@@ -70,7 +70,9 @@ request or availability recheck, and the product-to-UPC lookup/cache is removed.
 Store filtering still applies when fetching catalog prices and availability.
 
 Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
-pantry snapshots. Wine candidates and recommendations use version 2 cache keys.
+pantry snapshots. Wine candidates retain `wines/` keys and recommendations retain
+`wine_recommendations/`; selected catalog rows use the separate
+`wine_selection_ingredients/v1/` prefix.
 Existing finalized food snapshots remain immutable. Transfers containing any item
 without a selected UPC fail before writing the cart; recreate those lists from a
 refreshed catalog. There is no migration from product ID or product-level `upc`:
