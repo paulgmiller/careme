@@ -781,7 +781,8 @@ func TestShoppingPurchasesWithWine(t *testing.T) {
 		{name: "not finalized", recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := shoppingPurchasesWithWine(tc.purchases, []ai.Recipe{recipe}, tc.recommendations)
+			got, err := shoppingPurchasesWithWine(tc.purchases, []ai.Recipe{recipe}, tc.recommendations, nil)
+			require.NoError(t, err)
 			if !tc.wantWine {
 				assert.Equal(t, tc.purchases, got)
 				return

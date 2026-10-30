@@ -56,13 +56,16 @@ Size-based selection remains an alternative for
 when catalogs are fetched again; existing cached catalogs and finalized shopping
 snapshots retain their selected items.
 
-Food shopping snapshots persist the catalog VariantID. Wine selections are
-likewise enriched from the selected catalog row before saving, and wine shopping
-rows copy that identifier. Cart transfer submits these saved identifiers as UPCs
+Food shopping snapshots persist the catalog VariantID. Wine recommendations
+retain their existing ingredient-shaped JSON. Their selected InputIngredient
+rows are saved separately by recipe hash before generation returns. Shopping
+items join those rows to wine picks by product ID, using the same enrichment
+helper as food to attach VariantID, package size, and catalog name. Old wine
+recommendations without those catalog snapshots remain visible but have no
+ordering variant ID. Cart transfer submits these saved identifiers as UPCs
 with the calculated whole-package quantities. It performs no product-detail
 request or availability recheck, and the product-to-UPC lookup/cache is removed.
 Store filtering still applies when fetching catalog prices and availability.
-Availability checking during shopping-list merge remains a separate TODO.
 
 Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
 pantry snapshots. Wine candidates and recommendations use version 2 cache keys.

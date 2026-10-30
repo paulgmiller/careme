@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -73,10 +74,7 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 	for _, item := range items {
 		row := shoppingPurchaseItem{ShoppingItem: item}
 		if product, ok := products[item.ProductID]; ok {
-			row.VariantID = product.VariantID
-			row.Name = product.Description
-			row.Size = product.Size
-			row.Aisle = strings.TrimSpace(product.AisleNumber)
+			row = shoppingPurchaseFromCatalog(item, product)
 		}
 		sorted = append(sorted, row)
 	}
@@ -93,9 +91,9 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 }
 
 // Wine recommendations can arrive after finalization, so add them on each render.
-func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection) []shoppingPurchaseGroup {
+func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection, wineCatalog map[string][]ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
 	if purchases == nil {
-		return nil
+		return nil, nil
 	}
 	group := shoppingPurchaseGroup{Aisle: "Wine"}
 	for _, recipe := range recipes {
@@ -104,12 +102,33 @@ func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.R
 			continue
 		}
 		wine := selection.Wines[0] // Use the same first pick as the recipe card.
-		group.Items = append(group.Items, shoppingPurchaseItem{
-			ProductID: wine.ProductID, VariantID: wine.VariantID, Name: wine.Name, Needed: wine.Quantity,
-		})
+		row := shoppingPurchaseItem{ShoppingItem: ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}}
+		if catalog, exists := wineCatalog[recipe.ComputeHash()]; exists {
+			matched := false
+			for _, product := range catalog {
+				if product.ProductID == wine.ProductID {
+					row = shoppingPurchaseFromCatalog(row.ShoppingItem, product)
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return nil, fmt.Errorf("selected wine %q is missing from its saved catalog", wine.ProductID)
+			}
+		}
+		group.Items = append(group.Items, row)
 	}
 	if len(group.Items) == 0 {
-		return purchases
+		return purchases, nil
 	}
-	return append(purchases, group)
+	return append(purchases, group), nil
+}
+
+func shoppingPurchaseFromCatalog(item ai.ShoppingItem, product ai.InputIngredient) shoppingPurchaseItem {
+	row := shoppingPurchaseItem{ShoppingItem: item}
+	row.VariantID = product.VariantID
+	row.Name = product.Description
+	row.Size = product.Size
+	row.Aisle = strings.TrimSpace(product.AisleNumber)
+	return row
 }

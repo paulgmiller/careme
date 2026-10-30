@@ -549,7 +549,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 			Commentary: "Great with your dish.",
 		},
 	}
-	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, nil)
+	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, rio)
 
 	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
 		Title:      "Roast Chicken",
@@ -570,7 +570,9 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	assert.Equal(t, "wine", got.Wines[0].AisleNumber)
 	assert.Equal(t, "$18.99", got.Wines[0].Price)
-	assert.Equal(t, "wine-upc", got.Wines[0].VariantID)
+	snapshots, err := rio.wineIngredientsFromCache(t.Context(), (&ai.Recipe{Title: "Roast Chicken", WineStyles: []string{style}}).ComputeHash())
+	require.NoError(t, err)
+	assert.Equal(t, cached, snapshots)
 	if aiStub.recipe.Title != "Roast Chicken" {
 		t.Fatalf("expected recipe title %q, got %q", "Roast Chicken", aiStub.recipe.Title)
 	}
@@ -1544,4 +1546,12 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			assert.True(t, published.Slots[0].Reviewed)
 		})
 	}
+}
+
+func (noopRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
+}
+
+func (*captureRecipeSaver) saveWineIngredients(context.Context, string, []ai.InputIngredient) error {
+	return nil
 }

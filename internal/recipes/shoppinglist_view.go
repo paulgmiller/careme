@@ -95,6 +95,7 @@ type shoppingListViewInput struct {
 	params               *generatorParams
 	list                 ai.ShoppingList
 	wineRecommendations  map[string]*ai.WineSelection
+	wineCatalog          map[string][]ai.InputIngredient
 	recipeImages         map[string]bool
 	currentUser          *utypes.User
 	hash                 string
@@ -122,6 +123,11 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		}
 	}
 
+	purchases, err := shoppingPurchasesWithWine(input.purchases, input.params.Saved, input.wineRecommendations, input.wineCatalog)
+	if err != nil {
+		return shoppingListPageView{}, err
+	}
+
 	data := shoppingListPageView{
 		Page:                 templates.NewPage(ctx),
 		StatusMessage:        input.progress.StatusMessage,
@@ -136,7 +142,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Recipes:              recipeViews,
 		HasSavedRecipes:      hasSavedRecipes,
 		Finalized:            input.purchases != nil,
-		Purchases:            shoppingPurchasesWithWine(input.purchases, input.params.Saved, input.wineRecommendations),
+		Purchases:            purchases,
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,

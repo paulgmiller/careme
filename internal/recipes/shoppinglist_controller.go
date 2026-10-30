@@ -460,6 +460,16 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		return
 	}
 
+	var wineCatalog map[string][]ai.InputIngredient
+	if purchases != nil {
+		wineCatalog, err = s.wineCatalogForRecipes(ctx, p.Saved)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load selected wine catalog", "error", err)
+			http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
 	view, err := newShoppingListPageView(ctx, shoppingListViewInput{
@@ -467,6 +477,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		purchases:            purchases,
 		list:                 *slist,
 		wineRecommendations:  wines.Clone(),
+		wineCatalog:          wineCatalog,
 		recipeImages:         images.Clone(),
 		currentUser:          currentUser,
 		hash:                 hashParam,
