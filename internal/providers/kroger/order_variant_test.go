@@ -17,7 +17,7 @@ func TestSelectedCatalogItemUPCReachesCart(t *testing.T) {
 	client := &http.Client{Transport: cartRoundTrip(func(r *http.Request) (*http.Response, error) {
 		assert.Equal(t, "/v1/products", r.URL.Path)
 		assert.Equal(t, "70500874", r.URL.Query().Get("filter.locationId"))
-		return cartResponse(http.StatusOK, `{"data":[{"productId":"food","upc":"product-upc","description":"Milk","categories":["Dairy"],"items":[{"itemId":"out-of-stock","size":"1 pint","price":{"regular":1},"inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}},{"itemId":"selected-half-gallon","size":"0.5 gal","price":{"regular":3}},{"itemId":"other-gallon","size":"1 gal","price":{"regular":5}}]}]}`), nil
+		return cartResponse(http.StatusOK, `{"data":[{"productId":"food","upc":"product-upc","description":"Milk","categories":["Dairy"],"items":[{"itemId":"out-of-stock","size":"1 pint","price":{"regular":1},"inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}},{"itemId":"unknown-first","size":"2 gal","price":{"regular":7}},{"itemId":"selected-half-gallon","size":"0.5 gal","price":{"regular":3},"inventory":{"stockLevel":"HIGH"}},{"itemId":"other-gallon","size":"1 gal","price":{"regular":5},"inventory":{"stockLevel":"LOW"}}]}]}`), nil
 	})}
 	catalogClient, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(client))
 	require.NoError(t, err)

@@ -141,46 +141,49 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 		if slices.Contains(*product.Categories, "Frozen") && !frozen {
 			continue
 		}
+		// TODO(#1051): Revisit size-based selection as an alternative to inventory ranking.
+		var selected *products.ProductsProductItemModel
 		for _, item := range *product.Items {
 			if item.Price == nil {
 				continue
 			}
-
 			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
-				// TODO pass along low stock levels to AI to use in recipe planning
-				// slog.WarnContext(ctx, "OOS", "description", *product.Description)
 				continue
 			}
-
-			var aisle *string
-			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
-				aisle = (*product.AisleLocations)[0].Number
+			if selected == nil || itemStockRank(item) > itemStockRank(*selected) {
+				selected = &item
 			}
-
-			ingredients = append(ingredients, ingredient{
-				ProductId:    product.ProductId,
-				ItemId:       item.ItemId,
-				Brand:        product.Brand,
-				Description:  product.Description,
-				Size:         item.Size,
-				PriceRegular: item.Price.Regular,
-				PriceSale:    item.Price.Promo,
-				Categories:   product.Categories,
-				AisleNumber:  aisle,
-			})
-
-			//DO we care about these?
-			/*"taxonomies": [
-			{
-			"department": {},
-			"commodity": {},
-			"subCommodity": {}
-			}
-			],*/
-			//Taxonomy:  product.,
-			// CountryOrigin: product.CountryOrigin,
-			// Favorite: item.Favorite,
 		}
+		if selected == nil {
+			continue
+		}
+		var aisle *string
+		if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+			aisle = (*product.AisleLocations)[0].Number
+		}
+		ingredients = append(ingredients, ingredient{
+			ProductId:    product.ProductId,
+			ItemId:       selected.ItemId,
+			Brand:        product.Brand,
+			Description:  product.Description,
+			Size:         selected.Size,
+			PriceRegular: selected.Price.Regular,
+			PriceSale:    selected.Price.Promo,
+			Categories:   product.Categories,
+			AisleNumber:  aisle,
+		})
+
+		//DO we care about these?
+		/*"taxonomies": [
+		{
+		"department": {},
+		"commodity": {},
+		"subCommodity": {}
+		}
+		],*/
+		//Taxonomy:  product.,
+		// CountryOrigin: product.CountryOrigin,
+		// Favorite: item.Favorite,
 	}
 
 	// recursion is pretty dumb pagination
@@ -193,6 +196,21 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 	}
 
 	return ingredients, nil
+}
+
+// itemStockRank prefers HIGH, then LOW, then unknown stock. Equal ranks retain API order.
+func itemStockRank(item products.ProductsProductItemModel) int {
+	if item.Inventory == nil || item.Inventory.StockLevel == nil {
+		return 0
+	}
+	switch *item.Inventory.StockLevel {
+	case products.HIGH:
+		return 2
+	case products.LOW:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func inputIngredientFromKrogerIngredient(ingredient ingredient, _ int) ai.InputIngredient {

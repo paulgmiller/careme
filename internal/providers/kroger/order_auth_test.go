@@ -42,7 +42,3 @@ func TestOrderingTokenEncryptionAndUserBinding(t *testing.T) {
 	_, err = adapter.loadToken(t.Context(), "user-two")
 	require.Error(t, err)
 }
-
-func testCartClient(a *OrderHandler) *CartClient {
-	return a.client.(*CartClient)
-}

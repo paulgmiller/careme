@@ -43,11 +43,18 @@ shopping list after a transfer.
 
 ### Product and item identity
 
-Kroger catalog search retains each priced, in-stock item's `itemId` as
-`InputIngredient.VariantID`, together with that item's size and price.
-`ProductID` remains the recipe reference. Shared catalog deduplication keeps the
-first row per product ID; independently selecting multiple variants would require
-broader changes to recipe identity and merging.
+Kroger catalog search selects one priced item per product, preferring HIGH stock,
+then LOW, then unknown inventory. Temporarily out-of-stock items remain excluded;
+ties preserve API order. The selected item's `itemId` is retained as
+`InputIngredient.VariantID`, together with that item's size and prices.
+`ProductID` remains the recipe reference. Shared deduplication still collapses
+repeated product IDs across searches. Independently selecting multiple variants
+would require broader changes to recipe identity and merging.
+
+Size-based selection remains an alternative for
+[#1051](https://github.com/paulgmiller/careme/issues/1051). Inventory ranking applies
+when catalogs are fetched again; existing cached catalogs and finalized shopping
+snapshots retain their selected items.
 
 Food shopping snapshots persist the catalog VariantID. Wine selections are
 likewise enriched from the selected catalog row before saving, and wine shopping
