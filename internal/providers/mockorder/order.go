@@ -70,7 +70,7 @@ func OrderView(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInp
 	if !errors.Is(err, cache.ErrNotFound) {
 		return nil, fmt.Errorf("read mock transfer: %w", err)
 	}
-	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ZipCode: input.ZipCode, ReturnURL: input.ReturnURL})
 	if err != nil {
 		return nil, fmt.Errorf("encode mock transfer: %w", err)
 	}

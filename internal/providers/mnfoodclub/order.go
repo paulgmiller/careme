@@ -67,7 +67,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	}
 	transfer, err := loadOrderTransfer(ctx, c, input.UserID, input.ListKey)
 	if errors.Is(err, cache.ErrNotFound) {
-		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ZipCode: input.ZipCode, ReturnURL: input.ReturnURL})
 		if err != nil {
 			return nil, fmt.Errorf("encode MN Food Club transfer request: %w", err)
 		}
@@ -173,7 +173,7 @@ func validOrderForm(key string, input ordertypes.TransferRequest) bool {
 }
 
 func orderItems(input ordertypes.TransferRequest) handoffRequest {
-	request := handoffRequest{Items: make([]requestedItem, len(input.Items))}
+	request := handoffRequest{Items: make([]requestedItem, len(input.Items)), IdentityHints: identityHints{ZipCode: input.ZipCode}}
 	for i, item := range input.Items {
 		request.Items[i] = requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: item.PackageQuantity()}
 	}

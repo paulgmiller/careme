@@ -32,7 +32,7 @@ func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
 			if view.User == nil {
 				view.User = &utypes.User{ID: "viewer"}
 			}
-			require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil).Context(), &view))
+			require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?kroger_status="+url.QueryEscape(code), nil), &view))
 			var page bytes.Buffer
 			require.NoError(t, templates.ShoppingList.Execute(&page, view))
 			assert.NotContains(t, page.String(), `hx-get="/kroger/order-transfers/`)

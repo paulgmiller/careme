@@ -299,3 +299,40 @@ func TestOrderClientPreservesTransportWithoutReplayingFailures(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, int32(1), calls.Load())
 }
+
+func TestOrderOptionalZIPHint(t *testing.T) {
+	for _, zipCode := range []string{"", "00501", "55401-1234"} {
+		t.Run(zipCode, func(t *testing.T) {
+			h, client, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					IdentityHints map[string]any `json:"identity_hints"`
+				}
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+				if zipCode == "" {
+					assert.NotContains(t, request.IdentityHints, "zip_code")
+				} else {
+					assert.Equal(t, zipCode, request.IdentityHints["zip_code"])
+				}
+				assert.Equal(t, []any{"you@careme.cooking"}, request.IdentityHints["emails"])
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(appliedResult))
+			})
+			input := orderInput()
+			input.Location.ZipCode = "99999"
+			view, err := OrderViewForUser(t.Context(), c, client, ordertypes.OrderViewInput{
+				UserID: "mock-clerk-user-id", ListKey: "list", Location: input.Location,
+				ZipCode: zipCode, Items: input.Items, ReturnURL: input.ReturnURL,
+			})
+			require.NoError(t, err)
+			if zipCode == "" {
+				var body map[string]any
+				require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &body))
+				assert.NotContains(t, body, "zip_code")
+			}
+			var posted ordertypes.TransferRequest
+			require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &posted))
+			assert.Equal(t, zipCode, posted.ZipCode)
+			assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, posted).Code)
+		})
+	}
+}

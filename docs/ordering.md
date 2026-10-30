@@ -159,8 +159,11 @@ required except for HTTP localhost endpoints used in tests.
 
 The adapter sends JSON to `/v1/cart-transfers` with the partner bearer token and
 an integration-wide idempotency key derived from the Careme user ID and list key.
-Only the authenticated shopper’s account email is sent as an identity hint.
-Careme IDs are never passed as Food Club customer IDs. Customer-ID, ZIP, and
+The authenticated shopper’s account email and the ZIP saved in the
+`careme_zip_code` cookie from their location search are sent as identity hints.
+The shopping form carries this optional `zip_code` alongside `location`; it is
+separate from the store’s ZIP and omitted when no ZIP cookie is present.
+Careme IDs are never passed as Food Club customer IDs. Customer-ID and
 storefront-brand hints are currently omitted.
 
 Each product is sent once. Package counts come from `buy`, rounded up to whole

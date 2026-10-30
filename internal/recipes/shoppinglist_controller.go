@@ -477,7 +477,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
 	if err == nil && view.Finalized && view.ServerSignedIn {
-		err = s.populateOrderView(ctx, &view)
+		err = s.populateOrderView(r, &view)
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
