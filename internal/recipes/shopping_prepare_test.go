@@ -36,7 +36,7 @@ func TestShoppingViewReceivesPreparedPurchases(t *testing.T) {
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
 	recipe := ai.Recipe{Title: "Dinner"}
 	p.Saved = []ai.Recipe{recipe}
-	purchases := []shoppingPurchaseGroup{{Aisle: "Produce", Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Prepared food", VariantID: "selected-upc", Size: "1 lb"}}}}
+	purchases := []shoppingPurchaseGroup{{Aisle: "Produce", Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Prepared food", Buy: new(float64(1)), VariantID: "selected-upc", Size: "1 lb"}}}}
 	view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{
 		params: p, list: ai.ShoppingList{Recipes: p.Saved}, purchases: purchases,
 		wineRecommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{{ProductID: "wine", Name: "Wine", Quantity: "1 bottle"}}}},

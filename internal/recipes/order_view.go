@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"careme/internal/locations"
 
@@ -18,8 +19,13 @@ type orderViewBuilder interface {
 
 func (s *server) populateOrderView(r *http.Request, view *shoppingListPageView) error {
 	var items []ai.ShoppingItem
+	var manualItems []ai.ShoppingItem
 	for _, group := range view.Purchases {
 		for _, item := range group.Items {
+			if item.Buy == nil || strings.TrimSpace(item.ProductID) == "" {
+				manualItems = append(manualItems, item.ShoppingItem)
+				continue
+			}
 			items = append(items, item.ShoppingItem)
 		}
 	}
@@ -35,6 +41,12 @@ func (s *server) populateOrderView(r *http.Request, view *shoppingListPageView) 
 	})
 	if err != nil {
 		return err
+	}
+	if order != nil {
+		order.ManualShoppingItems = manualItems
+		if len(items) == 0 {
+			order.TransferURL = ""
+		}
 	}
 	view.Order = order
 	return nil

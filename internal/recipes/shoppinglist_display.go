@@ -55,6 +55,36 @@ type shoppingPurchaseGroup struct {
 	Items []shoppingPurchaseItem
 }
 
+// Regroup on display so saved snapshots also separate ingredients without purchase quantities.
+func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shoppingPurchaseGroup {
+	if groups == nil {
+		return nil
+	}
+	result := make([]shoppingPurchaseGroup, 0, len(groups)+1)
+	var withoutBuy []shoppingPurchaseItem
+	for _, group := range groups {
+		var toBuy []shoppingPurchaseItem
+		for _, item := range group.Items {
+			if item.Buy == nil {
+				withoutBuy = append(withoutBuy, item)
+			} else {
+				toBuy = append(toBuy, item)
+			}
+		}
+		if len(toBuy) > 0 {
+			heading := group.Aisle
+			if heading == "" || heading == "Other items" {
+				heading = "To buy"
+			}
+			result = append(result, shoppingPurchaseGroup{Aisle: heading, Items: toBuy})
+		}
+	}
+	if len(withoutBuy) > 0 {
+		result = append(result, shoppingPurchaseGroup{Aisle: "Check amounts", Items: withoutBuy})
+	}
+	return result
+}
+
 // shoppingPurchasesForDisplay only sorts and groups prepared shopping items.
 func shoppingPurchasesForDisplay(items []shoppingPurchaseItem) []shoppingPurchaseGroup {
 	sorted := append([]shoppingPurchaseItem(nil), items...)

@@ -33,6 +33,16 @@ A native form cannot set a custom header. The Food Club adapter derives its
 upstream `Idempotency-Key` from the authenticated Careme user and form key, since
 Food Club scopes keys across the whole integration rather than by shopper.
 
+The shopping page sends only items with a `buy` quantity and a nonempty store
+product ID. Ingredients without either remain on the shopping list and appear
+by name and amount under
+“Check these separately” beside the cart controls, including after a transfer.
+A list containing only ingredients without purchase quantities or product IDs
+shows that notice without an Add to cart form. Items with purchase quantities
+are grouped by aisle (or “To buy” when no aisle is available); ingredients
+without quantities appear together under “Check amounts”.
+These display groups are rebuilt on page load for existing saved snapshots too.
+
 The authenticated shopper comes from the verified Careme session, never from
 submitted JSON. A shopper whose session has expired is redirected to sign in,
 then back to the shopping list to submit again. `return_url` must be an
@@ -178,9 +188,13 @@ Each product is sent once. Package counts come from `buy`, rounded up to whole
 packages; a missing count defaults to one. The shopping list already combines
 product IDs and quantities, so the adapter forwards them directly. Recipe
 measurements such as “2 cups” are never converted to package
-counts. Every item must have a nonempty product ID. A request containing an
+counts. Every submitted item must have a nonempty product ID. A request
+containing an
 empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
-contacting the partner. No items are silently omitted.
+contacting the partner. The page separates ingredients without purchase
+quantities or product IDs before building
+the form and explicitly lists them for manual shopping; the handler never drops
+items from a submitted request.
 The selected catalog variant is included when available in the finalized
 shopping snapshot. Older snapshots and items without a selected variant omit it,
 using the partner’s documented default variant selection.

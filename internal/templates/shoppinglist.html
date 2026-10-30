@@ -395,4 +395,12 @@
   <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.TransferLabel}}</button>
 </form>
 {{end}}
+{{if .ManualShoppingItems}}
+<div class="text-sm text-ink-600">
+  <p>Check these separately — they have no purchase quantity or matching store product and won't be added to your cart:</p>
+  <ul class="list-disc pl-5">
+    {{range .ManualShoppingItems}}<li>{{.Name}}{{if .Needed}}: {{.Needed}}{{end}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
 {{end}}

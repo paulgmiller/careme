@@ -27,7 +27,7 @@ func TestKrogerTransferFormDoesNotLoadStatus(t *testing.T) {
 	p.Saved = []ai.Recipe{{Title: "Dinner", Ingredients: []ai.Ingredient{{Name: "Garlic", Quantity: "2 cloves"}}}}
 	for _, code := range []string{"denied", "<script>alert(1)</script>"} {
 		t.Run(code, func(t *testing.T) {
-			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
+			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: p, purchases: []shoppingPurchaseGroup{{Items: []shoppingPurchaseItem{{ProductID: "garlic", Name: "Garlic", Buy: new(float64(1))}}}}, list: ai.ShoppingList{Recipes: p.Saved}, currentUser: &utypes.User{Email: []string{"chef@example.test"}}, hash: p.Hash()})
 			require.NoError(t, err)
 			if view.User == nil {
 				view.User = &utypes.User{ID: "viewer"}
