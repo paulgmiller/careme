@@ -63,22 +63,12 @@ func (failingWineCatalogSaver) saveWineIngredients(context.Context, string, []ai
 }
 
 func TestPickAWineRequiresCatalogSnapshot(t *testing.T) {
-	for _, tc := range []struct {
-		name, id, want string
-		saver          recipeSaver
-	}{
-		{"unknown product", "missing", "not in the supplied catalog", noopRecipeSaver{}},
-		{"catalog save failure", "wine", "catalog write failed", failingWineCatalogSaver{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			aiStub := &captureWineQuestionAIClient{selection: &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: tc.id, Name: "Red"}}}}
-			staples := &cachedStaplesService{cache: IO(cache.NewInMemoryCache()), provider: &captureWineStaplesProvider{responses: map[string][]ai.InputIngredient{"Red": {{ProductID: "wine", VariantID: "upc", Description: "Red"}}}}}
-			g := newTestGenerator(t, aiStub, nil, staples, nil, tc.saver)
-			got, err := g.PickAWine(t.Context(), "70500874", ai.Recipe{Title: "Dinner", WineStyles: []string{"Red"}}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
-			require.ErrorContains(t, err, tc.want)
-			assert.Nil(t, got)
-		})
-	}
+	aiStub := &captureWineQuestionAIClient{selection: &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}}}}
+	staples := &cachedStaplesService{cache: IO(cache.NewInMemoryCache()), provider: &captureWineStaplesProvider{responses: map[string][]ai.InputIngredient{"Red": {{ProductID: "wine", VariantID: "upc", Description: "Red"}}}}}
+	g := newTestGenerator(t, aiStub, nil, staples, nil, failingWineCatalogSaver{})
+	got, err := g.PickAWine(t.Context(), "70500874", ai.Recipe{Title: "Dinner", WineStyles: []string{"Red"}}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
+	require.ErrorContains(t, err, "catalog write failed")
+	assert.Nil(t, got)
 }
 
 func TestWineRecommendationReadsOriginalCachePath(t *testing.T) {

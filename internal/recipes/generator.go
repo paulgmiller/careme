@@ -117,17 +117,10 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	if err != nil {
 		return nil, err
 	}
-	byID := inputIngredientMap(wines)
-	for _, pick := range selection.Wines {
-		_, ok := byID[strings.TrimSpace(pick.ProductID)]
-		if !ok {
-			return nil, fmt.Errorf("selected wine %q is not in the supplied catalog", pick.ProductID)
-		}
-	}
 	if err := g.saver.saveWineIngredients(ctx, recipe.ComputeHash(), wines); err != nil {
 		return nil, fmt.Errorf("save wine catalog: %w", err)
 	}
-	enrichIngredientsMetadata(selection.Wines, byID)
+	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
 	return selection, nil
 }
 

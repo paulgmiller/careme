@@ -85,7 +85,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 	})
 }
 
-func TestFinalizeWineWaitTimesOutAfterThirtySeconds(t *testing.T) {
+func TestFinalizeProceedsWithoutMissingWineAfterThirtySeconds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		s := newTestServer(t, withTestCache(cache.NewInMemoryCache()))
 		p := finalizedWineTestParams(t, s)
@@ -95,10 +95,11 @@ func TestFinalizeWineWaitTimesOutAfterThirtySeconds(t *testing.T) {
 		}}
 		started := time.Now()
 		err := s.finalizeShoppingPurchases(t.Context(), p.Hash())
-		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.NoError(t, err)
 		assert.Equal(t, 30*time.Second, time.Since(started))
-		_, err = s.cachedShoppingPurchases(t.Context(), p.Hash())
-		require.ErrorIs(t, err, cache.ErrNotFound)
+		items := cachedShoppingItems(t, s, p.Hash())
+		require.Len(t, items, 1)
+		assert.Equal(t, "food", items[0].ProductID)
 	})
 }
 
@@ -111,7 +112,7 @@ func (c failedWineSaveCache) Put(ctx context.Context, key, value string, opts ca
 	return c.ListCache.Put(ctx, key, value, opts)
 }
 
-func TestFinalizeEmptyWineIsCompleteAndFailuresAreRetryable(t *testing.T) {
+func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 	for _, scenario := range []string{"empty cached result", "generation failure", "save failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -137,20 +138,18 @@ func TestFinalizeEmptyWineIsCompleteAndFailuresAreRetryable(t *testing.T) {
 				} else {
 					producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
 				}
-				err := s.finalizeShoppingPurchases(t.Context(), p.Hash())
-				if scenario == "empty cached result" {
-					require.NoError(t, err)
-					assert.Zero(t, calls)
-					return
-				}
-				require.ErrorIs(t, err, context.DeadlineExceeded)
-				_, loadErr := s.cachedShoppingPurchases(t.Context(), p.Hash())
-				require.ErrorIs(t, loadErr, cache.ErrNotFound)
-				// Once a producer can save the result, retrying finalization succeeds.
-				producer.Cache = store
-				producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
+				started := time.Now()
 				require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
-				assert.Equal(t, 2, calls)
+				items := cachedShoppingItems(t, s, p.Hash())
+				require.Len(t, items, 1)
+				assert.Equal(t, "food", items[0].ProductID)
+				if scenario == "empty cached result" {
+					assert.Zero(t, calls)
+					assert.Zero(t, time.Since(started))
+				} else {
+					assert.Equal(t, 1, calls)
+					assert.Equal(t, 30*time.Second, time.Since(started))
+				}
 			})
 		})
 	}
@@ -184,4 +183,36 @@ func TestFinalizeMergesFoodAndRepeatedWineInOneCall(t *testing.T) {
 	require.Len(t, items, 2)
 	assert.Equal(t, "wine-upc", items[1].VariantID)
 	assert.Equal(t, 2, items[1].PackageQuantity())
+}
+
+func TestFinalizeWineWaitRespectsRequestDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newTestServer(t, withTestCache(cache.NewInMemoryCache()))
+		p := finalizedWineTestParams(t, s)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		started := time.Now()
+		require.ErrorIs(t, s.finalizeShoppingPurchases(ctx, p.Hash()), context.DeadlineExceeded)
+		assert.Equal(t, 5*time.Second, time.Since(started))
+		_, err := s.cachedShoppingPurchases(t.Context(), p.Hash())
+		require.ErrorIs(t, err, cache.ErrNotFound)
+	})
+}
+
+func TestFinalizeKeepsCompletedWineWhenAnotherPickTimesOut(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newTestServer(t, withTestCache(cache.NewInMemoryCache()))
+		p := finalizedWineTestParams(t, s)
+		p.Saved = append(p.Saved, ai.Recipe{Title: "Dinner with wine"})
+		require.NoError(t, s.SaveParams(t.Context(), p))
+		require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", Description: "Food", VariantID: "food-upc", Size: "1 lb"}}))
+		recipeHash := p.Saved[1].ComputeHash()
+		require.NoError(t, s.saveWine(t.Context(), recipeHash, &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}}}))
+		require.NoError(t, s.saveWineIngredients(t.Context(), recipeHash, []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
+		require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
+		items := cachedShoppingItems(t, s, p.Hash())
+		require.Len(t, items, 2)
+		assert.Equal(t, "food", items[0].ProductID)
+		assert.Equal(t, "wine-upc", items[1].VariantID)
+	})
 }

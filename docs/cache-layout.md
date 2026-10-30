@@ -259,13 +259,15 @@ only persisted VariantIDs, without guessing a mapping for old product IDs.
 Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. The full wine candidate catalog is stored separately
 at `wine_selection_ingredients/v1/<recipe hash>` before generation returns a
-successful selection. Unknown selected product IDs and snapshot-write failures
-return errors. Finalization polls the shared wine recommendation cache every
-500 ms for saved wine picks (including completed empty results), combines food
-and wine needs and catalog snapshots by product ID, and merges quantities once.
-Input preparation has a 30-second deadline; missing picks time out without
-starting generation. Errors leave no finalized shopping snapshot. Rendering
-reads saved shopping items and never appends late wine picks. Recipe Ingredient
+successful selection. Snapshot-write failures return errors. Finalization polls
+the shared wine recommendation cache every 500 ms for saved wine picks
+(including completed empty results), combines food and wine needs and catalog
+snapshots by product ID, and merges quantities once.
+Wine polling has a 30-second deadline; missing picks are logged as errors and
+treated as no wine for that recipe without starting generation. Food and completed
+wine picks still finalize. Request cancellation and cache errors leave no
+finalized shopping snapshot. Rendering reads saved shopping items and never
+appends late wine picks. Recipe Ingredient
 no longer carries VariantID. Older recommendations remain readable without
 catalog snapshots; wine picks without a matching catalog product display but
 have no ordering variant ID. Unreadable snapshots fail shopping-list preparation

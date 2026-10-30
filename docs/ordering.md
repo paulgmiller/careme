@@ -67,11 +67,12 @@ Existing finalized snapshots remain unchanged.
 Saving a recipe starts wine picking in the background. Finalization polls the
 shared wine recommendation cache every 500 ms, so picking can finish on another
 server. A saved WineSelection, including an empty wines array, means picking is
-complete. Finalization does not start another pick. Input preparation waits at
-most 30 seconds; missing results time out, including background picks that failed
-without saving a result. Cache read and decoding errors return immediately. These
-errors leave no shopping snapshot, so finalization can be retried after the wine
-result is saved. The AI quantity merge runs after input preparation.
+complete. Finalization does not start another pick. Wine polling waits at most
+30 seconds. Missing results are logged as errors and treated as no wine for that
+recipe, including background picks that failed without saving a result. Food
+and completed wine picks still finalize. Request cancellation, cache read errors,
+and decoding errors return errors without saving a shopping snapshot. The AI
+quantity merge runs after input preparation.
 
 Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. The full candidate InputIngredient catalog is stored

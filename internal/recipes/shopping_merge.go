@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -70,8 +71,10 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	if len(p.Saved) == 0 {
 		return nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	wineCtx, stopWaiting := context.WithTimeout(ctx, 30*time.Second)
+	defer stopWaiting()
 	var catalog []ai.InputIngredient
 	var catalogErr error
 	var catalogWG sync.WaitGroup
@@ -89,7 +92,12 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 		catalog     []ai.InputIngredient
 	}
 	wines, wineErr := parallelism.MapWithErrors(p.Saved, func(recipe ai.Recipe) (wineInput, error) {
-		selection, err := s.waitForWine(ctx, recipe.ComputeHash())
+		selection, err := s.waitForWine(wineCtx, recipe.ComputeHash())
+		// Wine is optional once its polling deadline expires; request cancellation is not.
+		if errors.Is(err, context.DeadlineExceeded) && wineCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			slog.ErrorContext(ctx, "timed out waiting for wine pick; finalizing without wine for recipe", "recipe_hash", recipe.ComputeHash(), "recipe_title", recipe.Title, "error", err)
+			return wineInput{}, nil
+		}
 		if err != nil {
 			cancel()
 			return wineInput{}, fmt.Errorf("finalize wine for recipe %q: %w", recipe.Title, err)
