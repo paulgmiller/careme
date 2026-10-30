@@ -70,10 +70,10 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token cartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
 	// Kroger adds the requested whole-package quantity for each product.
-	var items []CartItem
+	var items []cartItem
 	var accepted []ordertypes.TransferItem
 	for _, item := range input.Items {
 		if strings.TrimSpace(item.ProductID) == "" {
@@ -84,11 +84,11 @@ func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input o
 		}
 		quantity := item.PackageQuantity()
 		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
-		items = append(items, CartItem{UPC: item.VariantID, Quantity: quantity})
+		items = append(items, cartItem{UPC: item.VariantID, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
-	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
+	if err := a.client.add(ctx, token.AccessToken, items); err != nil {
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied

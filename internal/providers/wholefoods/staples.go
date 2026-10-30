@@ -20,7 +20,7 @@ import (
 
 var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
 
-type CategoryClient interface {
+type categoryClient interface {
 	Category(ctx context.Context, queryterm, store string) ([]product, error)
 }
 
@@ -31,13 +31,13 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 	return cachekey.NewHash(locationID, date, string(defaultStaplesSignature))
 }
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
-	client CategoryClient
+	client categoryClient
 }
 
-func NewStaplesProvider(client CategoryClient) StaplesProvider {
-	return StaplesProvider{client: client}
+func NewStaplesProvider(client categoryClient) staplesProvider {
+	return staplesProvider{client: client}
 }
 
 func NewIdentityProvider() identityProvider {
@@ -49,13 +49,13 @@ func (p identityProvider) IsID(locationID string) bool {
 	return ok
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
 	// should identity provider do this?
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
@@ -76,12 +76,12 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}

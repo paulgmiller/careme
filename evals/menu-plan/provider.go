@@ -35,6 +35,7 @@ type menuPlanner interface {
 	CreateMenuPlan(context.Context, *locations.Location, []ai.InputIngredient, []string, time.Time, []string, int) (*ai.MenuPlan, error)
 }
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(options, ctx)
 	if err != nil {
@@ -43,7 +44,7 @@ func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]a
 	return result, nil
 }
 
-type Settings struct {
+type settings struct {
 	Config struct {
 		Model      string `json:"model"`
 		JudgeModel string `json:"judge_model"`
@@ -61,7 +62,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	var settings Settings
+	var settings settings
 	encoded, err := json.Marshal(options)
 	if err != nil {
 		return nil, fmt.Errorf("encode provider options: %w", err)
@@ -87,7 +88,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	return result, nil
 }
 
-func resolveModel(settings Settings, productionModel string) string {
+func resolveModel(settings settings, productionModel string) string {
 	if model := strings.TrimSpace(settings.Config.Model); model != "" {
 		return model
 	}

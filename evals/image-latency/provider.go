@@ -27,6 +27,7 @@ type imageGenerator interface {
 
 type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {

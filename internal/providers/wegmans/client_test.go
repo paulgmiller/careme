@@ -17,7 +17,7 @@ func TestStoreSummaryBuildsRequestAndNormalizesResponse(t *testing.T) {
 	client := NewClientWithBaseURL("https://example.com", &http.Client{
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			capturedReq = r
-			body, err := json.Marshal(StoreResponse{
+			body, err := json.Marshal(storeResponse{
 				ID:                69,
 				StoreNumber:       69,
 				Name:              "Erie West",
@@ -87,7 +87,7 @@ func TestStoreSummaryReturnsNotFoundOn404(t *testing.T) {
 func TestNormalizeStoreRequiresName(t *testing.T) {
 	t.Parallel()
 
-	_, err := normalizeStore(StoreResponse{
+	_, err := normalizeStore(storeResponse{
 		ID:                69,
 		StoreNumber:       69,
 		StateAbbreviation: "PA",

@@ -9,19 +9,19 @@ import (
 	"careme/internal/ai"
 )
 
-type Client struct{ httpClient *http.Client }
+type client struct{ httpClient *http.Client }
 
-func NewClient(httpClient *http.Client) *Client { return &Client{httpClient: httpClient} }
+func NewClient(httpClient *http.Client) *client { return &client{httpClient: httpClient} }
 
-func (c *Client) Fetch(ctx context.Context, url string) ([]ai.InputIngredient, error) {
-	return c.fetch(ctx, url, Parse)
+func (c *client) Fetch(ctx context.Context, url string) ([]ai.InputIngredient, error) {
+	return c.fetch(ctx, url, parse)
 }
 
-func (c *Client) FetchHarvestBox(ctx context.Context, url, name string) ([]ai.InputIngredient, error) {
-	return c.fetch(ctx, url, func(r io.Reader) ([]ai.InputIngredient, error) { return ParseHarvestBox(r, url, name) })
+func (c *client) FetchHarvestBox(ctx context.Context, url, name string) ([]ai.InputIngredient, error) {
+	return c.fetch(ctx, url, func(r io.Reader) ([]ai.InputIngredient, error) { return parseHarvestBox(r, url, name) })
 }
 
-func (c *Client) fetch(ctx context.Context, url string, parse func(io.Reader) ([]ai.InputIngredient, error)) ([]ai.InputIngredient, error) {
+func (c *client) fetch(ctx context.Context, url string, parse func(io.Reader) ([]ai.InputIngredient, error)) ([]ai.InputIngredient, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request for %s: %w", url, err)

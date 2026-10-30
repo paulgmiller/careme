@@ -34,6 +34,7 @@ type recipeLoader interface {
 	SingleFromCache(context.Context, string) (*ai.Recipe, error)
 }
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(ctx)
 	if err != nil {

@@ -48,28 +48,28 @@ type authClient interface {
 	GetUserIDFromRequest(r *http.Request) (string, error)
 }
 
-type Handler struct {
+type handler struct {
 	uploader    *uploader
 	auth        authClient
 	extractor   IngredientExtractor
 	statusStore *analysisStatusStore
 	// exposed for tests
-	parsePhotos func(context.Context, *http.Request) ([]Photo, error)
+	parsePhotos func(context.Context, *http.Request) ([]photo, error)
 	wg          sync.WaitGroup
 }
 
-type Photo struct {
+type photo struct {
 	contentType string
 	content     []byte
 }
 
 // who knew data: was  valid url just like http:? see comment in ai/farmersmarket.go
-func (p Photo) dataURL() string {
+func (p photo) dataURL() string {
 	return "data:" + p.contentType + ";base64," + base64.StdEncoding.EncodeToString(p.content)
 }
 
-func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor) *Handler {
-	return &Handler{
+func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClient, extractor IngredientExtractor) *handler {
+	return &handler{
 		uploader:    uploader,
 		auth:        authClient,
 		extractor:   extractor,
@@ -78,17 +78,17 @@ func NewHandler(uploader *uploader, statusCache cache.Cache, authClient authClie
 	}
 }
 
-func (h *Handler) Register(mux routing.Registrar) {
+func (h *handler) Register(mux routing.Registrar) {
 	mux.HandleFunc("GET /farmersmarket", h.handleGet)
 	mux.HandleFunc("POST /farmersmarket", h.handlePost)
 	mux.HandleFunc("GET /farmersmarket/status/{jobID}", h.handleStatus)
 }
 
-func (h *Handler) Wait() {
+func (h *handler) Wait() {
 	h.wg.Wait()
 }
 
-func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	_, err := h.auth.GetUserIDFromRequest(r)
 	if err != nil {
 		if errors.Is(err, auth.ErrNoSession) {
@@ -117,7 +117,7 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if !httpx.IsHTMX(r) {
@@ -183,7 +183,7 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []Photo, coord geo.Coordinate) {
+func (h *handler) runAnalysisJob(ctx context.Context, status analysisStatus, name string, photos []photo, coord geo.Coordinate) {
 	update := func(next analysisStatus) {
 		if err := h.statusStore.save(ctx, next); err != nil {
 			slog.ErrorContext(ctx, "failed to save farmers market analysis status", "job_id", status.ID, "error", err)
@@ -239,7 +239,7 @@ func (h *Handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 	update(status)
 }
 
-func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (h *handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	_, err := h.auth.GetUserIDFromRequest(r)
 	if err != nil {
@@ -273,11 +273,11 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []Photo) ([]ai.InputIngredient, error) {
+func extractFarmersMarketIngredients(ctx context.Context, extractor IngredientExtractor, photos []photo) ([]ai.InputIngredient, error) {
 	return extractFarmersMarketIngredientsWithProgress(ctx, extractor, photos, nil)
 }
 
-func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor IngredientExtractor, photos []Photo, progress func(int, []ai.InputIngredient)) ([]ai.InputIngredient, error) {
+func extractFarmersMarketIngredientsWithProgress(ctx context.Context, extractor IngredientExtractor, photos []photo, progress func(int, []ai.InputIngredient)) ([]ai.InputIngredient, error) {
 	slog.InfoContext(ctx, "starting farmers market photo analysis", "photo_count", len(photos))
 	type result struct {
 		ingredients []ai.InputIngredient
@@ -332,7 +332,7 @@ func resolveMarketLocation(r *http.Request) (geo.Coordinate, error) {
 	return coord, nil
 }
 
-func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) {
+func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]photo, error) {
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
 		return nil, fmt.Errorf("add a few market photos")
 	}
@@ -344,7 +344,7 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 		return nil, fmt.Errorf("use %d photos or fewer", maxPhotoCount)
 	}
 
-	photos := make([]Photo, 0, len(files))
+	photos := make([]photo, 0, len(files))
 	for i, header := range files {
 		if header.Size > maxPhotoBytes {
 			return nil, fmt.Errorf("keep each photo under 10 MB")
@@ -369,7 +369,7 @@ func parseUploadedPhotos(ctx context.Context, r *http.Request) ([]Photo, error) 
 			return nil, fmt.Errorf("upload image files only")
 		}
 
-		photos = append(photos, Photo{contentType: contentType, content: data})
+		photos = append(photos, photo{contentType: contentType, content: data})
 		slog.InfoContext(ctx, "received farmers market photo", "photo_number", i+1, "photo_count", len(files), "filename", header.Filename, "size_bytes", len(data), "content_type", contentType)
 	}
 	return photos, nil

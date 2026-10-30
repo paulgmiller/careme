@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type SafewayProduct struct {
+type safewayProduct struct {
 	StoreName          string   `json:"Store Name"`
 	ZipCode            string   `json:"Zip-Code"`
 	ProductName        string   `json:"Product Name"`
@@ -22,7 +22,7 @@ type SafewayProduct struct {
 }
 
 // custom marshalling mostly to handle fact that prices get "N/A" sometimes
-func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
+func (p *safewayProduct) UnmarshalJSON(data []byte) error {
 	type rawSafewayProduct struct {
 		StoreName          string          `json:"Store Name"`
 		ZipCode            string          `json:"Zip-Code"`
@@ -42,7 +42,7 @@ func (p *SafewayProduct) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	*p = SafewayProduct{
+	*p = safewayProduct{
 		StoreName:          raw.StoreName,
 		ZipCode:            raw.ZipCode,
 		ProductName:        raw.ProductName,

@@ -91,7 +91,7 @@ func legacyHashToCurrent(hash string, seed string) (string, bool) {
 	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
-func ParseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
+func parseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {
 	loc := r.FormValue("location")
 	if loc == "" {
 		return nil, errors.New("must provide location id")

@@ -81,7 +81,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		feedback = *existing
 	})
 	loadWG.Go(func() {
-		existing, err := s.ThreadFromCache(ctx, hash)
+		existing, err := s.threadFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
@@ -91,7 +91,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		thread = existing
 	})
 	loadWG.Go(func() {
-		selection, err := s.WineFromCache(ctx, hash)
+		selection, err := s.wineFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -294,7 +294,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thread, err := s.ThreadFromCache(ctx, hash)
+	thread, err := s.threadFromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
 		http.Error(w, "failed to load recipe thread", http.StatusInternalServerError)
@@ -306,7 +306,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		ResponseID: answer.ResponseID,
 		CreatedAt:  time.Now(),
 	})
-	if err := s.SaveThread(ctx, hash, thread); err != nil {
+	if err := s.saveThread(ctx, hash, thread); err != nil {
 		http.Error(w, "failed to save question", http.StatusInternalServerError)
 		return
 	}
@@ -347,7 +347,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		recipe, recipeErr = s.SingleFromCache(ctx, hash)
 	})
 	loadWG.Go(func() {
-		thread, threadErr = s.ThreadFromCache(ctx, hash)
+		thread, threadErr = s.threadFromCache(ctx, hash)
 	})
 	loadWG.Go(func() {
 		c, err := s.critiques.Load(ctx, hash)

@@ -24,5 +24,5 @@ func (s identityProvider) IsID(locationID string) bool {
 }
 
 func isID(locationID string) bool {
-	return strings.HasPrefix(locationID, LocationIDPrefix) && strings.TrimPrefix(locationID, LocationIDPrefix) != ""
+	return strings.HasPrefix(locationID, locationIDPrefix) && strings.TrimPrefix(locationID, locationIDPrefix) != ""
 }

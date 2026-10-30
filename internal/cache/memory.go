@@ -9,24 +9,24 @@ import (
 	"sync"
 )
 
-// InMemoryCache stores cache entries in process memory.
-type InMemoryCache struct {
+// inMemoryCache stores cache entries in process memory.
+type inMemoryCache struct {
 	mu   sync.RWMutex
 	data map[string][]byte
 }
 
 var (
-	_ Cache     = (*InMemoryCache)(nil)
-	_ ListCache = (*InMemoryCache)(nil)
+	_ Cache     = (*inMemoryCache)(nil)
+	_ ListCache = (*inMemoryCache)(nil)
 )
 
-func NewInMemoryCache() *InMemoryCache {
-	return &InMemoryCache{
+func NewInMemoryCache() *inMemoryCache {
+	return &inMemoryCache{
 		data: make(map[string][]byte),
 	}
 }
 
-func (c *InMemoryCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
+func (c *inMemoryCache) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	c.mu.RLock()
 	value, ok := c.data[key]
 	c.mu.RUnlock()
@@ -36,18 +36,18 @@ func (c *InMemoryCache) Get(_ context.Context, key string) (io.ReadCloser, error
 	return io.NopCloser(bytes.NewReader(value)), nil
 }
 
-func (c *InMemoryCache) Exists(_ context.Context, key string) (bool, error) {
+func (c *inMemoryCache) Exists(_ context.Context, key string) (bool, error) {
 	c.mu.RLock()
 	_, ok := c.data[key]
 	c.mu.RUnlock()
 	return ok, nil
 }
 
-func (c *InMemoryCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+func (c *inMemoryCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
 	return c.PutReader(ctx, key, strings.NewReader(value), opts)
 }
 
-func (c *InMemoryCache) PutReader(_ context.Context, key string, reader io.Reader, opts PutOptions) error {
+func (c *inMemoryCache) PutReader(_ context.Context, key string, reader io.Reader, opts PutOptions) error {
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, reader); err != nil {
 		return err
@@ -66,7 +66,7 @@ func (c *InMemoryCache) PutReader(_ context.Context, key string, reader io.Reade
 	return nil
 }
 
-func (c *InMemoryCache) List(_ context.Context, prefix string, _ string) ([]string, error) {
+func (c *inMemoryCache) List(_ context.Context, prefix string, _ string) ([]string, error) {
 	c.mu.RLock()
 	keys := make([]string, 0)
 	for key := range c.data {

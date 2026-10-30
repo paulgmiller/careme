@@ -81,17 +81,17 @@ func newOrderHTTPClient() *http.Client {
 	}
 }
 
-// OrderViewBuilder binds provider-owned transfer reads to the application's cache.
-type OrderViewBuilder struct {
+// orderViewBuilder binds provider-owned transfer reads to the application's cache.
+type orderViewBuilder struct {
 	factory Factory
 	cache   cache.Cache
 }
 
-func (f Factory) NewOrderViewBuilder(c cache.Cache) *OrderViewBuilder {
-	return &OrderViewBuilder{factory: f, cache: c}
+func (f Factory) NewOrderViewBuilder(c cache.Cache) *orderViewBuilder {
+	return &orderViewBuilder{factory: f, cache: c}
 }
 
-func (b *OrderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if b.factory.config.Mocks.Enable {
 		return mockorder.OrderView(ctx, b.cache, input)
 	}

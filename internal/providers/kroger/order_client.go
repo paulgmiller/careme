@@ -4,8 +4,8 @@ import "context"
 
 // orderClient provides Kroger authorization and cart writes.
 type orderClient interface {
-	AuthorizationURL(state, banner string) (string, error)
-	Exchange(context.Context, string) (CartToken, error)
-	Refresh(context.Context, string) (CartToken, error)
-	Add(context.Context, string, []CartItem) error
+	authorizationURL(state, banner string) (string, error)
+	exchange(context.Context, string) (cartToken, error)
+	refresh(context.Context, string) (cartToken, error)
+	add(context.Context, string, []cartItem) error
 }

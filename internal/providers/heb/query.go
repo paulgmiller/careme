@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	DefaultBaseURL = "https://www.heb.com"
+	defaultBaseURL = "https://www.heb.com"
 
 	defaultQueryTimeout = 20 * time.Second
 )
 
-// QueryClient fetches HEB category products from the Next.js data endpoint.
-type QueryClient struct {
+// queryClient fetches HEB category products from the Next.js data endpoint.
+type queryClient struct {
 	baseURL    string
 	httpClient *http.Client
 
@@ -31,13 +31,13 @@ type QueryClient struct {
 	loadBuildID loadBuildID
 }
 
-type QueryClientConfig struct {
+type queryClientConfig struct {
 	BaseURL     string
 	LoadBuildID loadBuildID
 	HTTPClient  *http.Client
 }
 
-type CategoryOptions struct {
+type categoryOptions struct {
 	Reese84            string
 	StoreID            string
 	ParentID           string
@@ -47,23 +47,23 @@ type CategoryOptions struct {
 	SearchContextToken string
 }
 
-type CategoryPage struct {
-	Products           []Product `json:"products"`
+type categoryPage struct {
+	Products           []product `json:"products"`
 	Page               int       `json:"page"`
 	SearchContextToken string    `json:"searchContextToken,omitempty"`
 	Total              int       `json:"total,omitempty"`
 }
 
-type CategoryHTTPError struct {
+type categoryHTTPError struct {
 	StatusCode int
 	Body       string
 }
 
-func (e *CategoryHTTPError) Error() string {
+func (e *categoryHTTPError) Error() string {
 	return fmt.Sprintf("category request failed: status %d: %s", e.StatusCode, e.Body)
 }
 
-type Product struct {
+type product struct {
 	TypeName               string            `json:"__typename"`
 	ID                     string            `json:"id"`
 	StoreID                int               `json:"storeId"`
@@ -81,77 +81,77 @@ type Product struct {
 	ShowCouponFlag         bool              `json:"showCouponFlag"`
 	InAssortment           bool              `json:"inAssortment"`
 	IsEBTSnapProduct       bool              `json:"isEbtSnapProduct"`
-	ProductLocation        *ProductLocation  `json:"productLocation"`
+	ProductLocation        *productLocation  `json:"productLocation"`
 	PastPurchaseInfo       any               `json:"pastPurchaseInfo"`
 	PurchasePreferenceList any               `json:"purchasePreferenceList"`
-	Inventory              *Inventory        `json:"inventory"`
-	Brand                  *Brand            `json:"brand"`
-	ProductCategory        *ProductCategory  `json:"productCategory"`
-	ProductImageURLs       []ProductImageURL `json:"productImageUrls"`
-	SKUs                   []SKU             `json:"SKUs"`
+	Inventory              *inventory        `json:"inventory"`
+	Brand                  *brand            `json:"brand"`
+	ProductCategory        *productCategory  `json:"productCategory"`
+	ProductImageURLs       []productImageURL `json:"productImageUrls"`
+	SKUs                   []sku             `json:"SKUs"`
 	ListPrice              *float32          `json:"-"`
 	SalePrice              *float32          `json:"-"`
 	Size                   string            `json:"-"`
 }
 
-type ProductLocation struct {
+type productLocation struct {
 	Location string `json:"location"`
 	TypeName string `json:"__typename"`
 }
 
-type Inventory struct {
+type inventory struct {
 	InventoryState string `json:"inventoryState"`
 	TypeName       string `json:"__typename"`
 }
 
-type Brand struct {
+type brand struct {
 	Name       string `json:"name"`
 	IsOwnBrand bool   `json:"isOwnBrand"`
 	TypeName   string `json:"__typename"`
 }
 
-type ProductCategory struct {
+type productCategory struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	TypeName string `json:"__typename"`
 }
 
-type ProductImageURL struct {
+type productImageURL struct {
 	URL      string `json:"url"`
 	TypeName string `json:"__typename"`
 }
 
-type SKU struct {
+type sku struct {
 	ID                   string      `json:"id"`
-	ContextPrices        []ItemPrice `json:"contextPrices"`
+	ContextPrices        []itemPrice `json:"contextPrices"`
 	CustomerFriendlySize string      `json:"customerFriendlySize"`
 	TwelveDigitUPC       string      `json:"twelveDigitUPC"`
 	TypeName             string      `json:"__typename"`
 }
 
-type ItemPrice struct {
+type itemPrice struct {
 	Context       string        `json:"context"`
 	IsOnSale      bool          `json:"isOnSale"`
 	IsPriceCut    bool          `json:"isPriceCut"`
 	PriceType     string        `json:"priceType"`
-	ListPrice     *DisplayPrice `json:"listPrice"`
-	SalePrice     *DisplayPrice `json:"salePrice"`
-	UnitListPrice *DisplayPrice `json:"unitListPrice"`
-	UnitSalePrice *DisplayPrice `json:"unitSalePrice"`
+	ListPrice     *displayPrice `json:"listPrice"`
+	SalePrice     *displayPrice `json:"salePrice"`
+	UnitListPrice *displayPrice `json:"unitListPrice"`
+	UnitSalePrice *displayPrice `json:"unitSalePrice"`
 	TypeName      string        `json:"__typename"`
 }
 
-type DisplayPrice struct {
+type displayPrice struct {
 	Unit            string   `json:"unit"`
 	FormattedAmount string   `json:"formattedAmount"`
 	Amount          *float32 `json:"amount"`
 	TypeName        string   `json:"__typename"`
 }
 
-func NewQueryClient(cfg QueryClientConfig) *QueryClient {
+func newQueryClient(cfg queryClientConfig) *queryClient {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
-		baseURL = DefaultBaseURL
+		baseURL = defaultBaseURL
 	}
 
 	httpClient := cfg.HTTPClient
@@ -159,27 +159,27 @@ func NewQueryClient(cfg QueryClientConfig) *QueryClient {
 		httpClient = &http.Client{Timeout: defaultQueryTimeout}
 	}
 
-	return &QueryClient{
+	return &queryClient{
 		baseURL:     baseURL,
 		loadBuildID: cfg.LoadBuildID,
 		httpClient:  httpClient,
 	}
 }
 
-func (c *QueryClient) currentBuildID() string {
+func (c *queryClient) currentBuildID() string {
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 	return c.buildID
 }
 
-func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Product, error) {
+func (c *queryClient) Category(ctx context.Context, opts categoryOptions) ([]product, error) {
 	if err := opts.validate(); err != nil {
 		return nil, err
 	}
 
 	page := max(opts.Page, 1)
 
-	products := make([]Product, 0)
+	products := make([]product, 0)
 	searchContextToken := strings.TrimSpace(opts.SearchContextToken)
 	firstFetch := true
 	for {
@@ -226,11 +226,11 @@ func (c *QueryClient) Category(ctx context.Context, opts CategoryOptions) ([]Pro
 }
 
 func isCategoryNotFound(err error) bool {
-	var httpErr *CategoryHTTPError
+	var httpErr *categoryHTTPError
 	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
-func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*CategoryPage, error) {
+func (c *queryClient) categoryPage(ctx context.Context, opts categoryOptions) (*categoryPage, error) {
 	if opts.Page <= 0 {
 		return nil, errors.New("page must be positive")
 	}
@@ -261,14 +261,14 @@ func (c *QueryClient) categoryPage(ctx context.Context, opts CategoryOptions) (*
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, &CategoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		return nil, &categoryHTTPError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
 	// magic number limit reader
 	return decodeCategoryPagePayload(io.LimitReader(resp.Body, 8*1024*1024), opts.Page)
 }
 
-func (c *QueryClient) resolveBuildID(ctx context.Context) (string, error) {
+func (c *queryClient) resolveBuildID(ctx context.Context) (string, error) {
 	c.buildIDMu.Lock()
 	buildID := c.buildID
 	c.buildIDMu.Unlock()
@@ -278,7 +278,7 @@ func (c *QueryClient) resolveBuildID(ctx context.Context) (string, error) {
 	return c.refreshBuildID(ctx, "")
 }
 
-func (c *QueryClient) refreshBuildID(ctx context.Context, staleBuildID string) (string, error) {
+func (c *queryClient) refreshBuildID(ctx context.Context, staleBuildID string) (string, error) {
 	c.buildIDMu.Lock()
 	defer c.buildIDMu.Unlock()
 
@@ -299,7 +299,7 @@ func (c *QueryClient) refreshBuildID(ctx context.Context, staleBuildID string) (
 	return buildID, nil
 }
 
-func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (string, error) {
+func (c *queryClient) categoryDataURL(buildID string, opts categoryOptions) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/_next/data/" + url.PathEscape(buildID) + "/en/category/shop/" + url.PathEscape(opts.ParentID) + "/" + url.PathEscape(opts.ChildID) + ".json")
 	if err != nil {
 		return "", fmt.Errorf("parse category data URL: %w", err)
@@ -315,21 +315,21 @@ func (c *QueryClient) categoryDataURL(buildID string, opts CategoryOptions) (str
 	return endpoint.String(), nil
 }
 
-func (c *QueryClient) setCategoryHeaders(req *http.Request, opts CategoryOptions) {
+func (c *queryClient) setCategoryHeaders(req *http.Request, opts categoryOptions) {
 	c.setStoreCookies(req, opts)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("X-Nextjs-Data", "1")
 }
 
-func (c *QueryClient) setStoreCookies(req *http.Request, opts CategoryOptions) {
+func (c *queryClient) setStoreCookies(req *http.Request, opts categoryOptions) {
 	req.AddCookie(&http.Cookie{Name: "reese84", Value: strings.TrimSpace(opts.Reese84)})
 	req.AddCookie(&http.Cookie{Name: "SHOPPING_STORE_ID", Value: strings.TrimSpace(opts.StoreID)})
 	req.AddCookie(&http.Cookie{Name: "CURR_SESSION_STORE", Value: strings.TrimSpace(opts.StoreID)})
 	req.AddCookie(&http.Cookie{Name: "USER_CHOSEN_STORE", Value: "true"})
 }
 
-func (opts CategoryOptions) validate() error {
+func (opts categoryOptions) validate() error {
 	if strings.TrimSpace(opts.Reese84) == "" {
 		return errors.New("reese84 token is required")
 	}
@@ -348,13 +348,13 @@ func (opts CategoryOptions) validate() error {
 	return nil
 }
 
-func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
+func decodeCategoryPagePayload(r io.Reader, page int) (*categoryPage, error) {
 	var payload categoryResponse
 	if err := json.NewDecoder(r).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode category json response: %w", err)
 	}
 
-	var products []Product
+	var products []product
 	for _, component := range payload.PageProps.Layout.VisualComponents {
 		for _, product := range component.Items {
 			if strings.TrimSpace(product.ID) == "" {
@@ -365,7 +365,7 @@ func decodeCategoryPagePayload(r io.Reader, page int) (*CategoryPage, error) {
 		}
 	}
 
-	return &CategoryPage{
+	return &categoryPage{
 		Products:           products,
 		SearchContextToken: payload.PageProps.searchContextToken(),
 		Page:               page,
@@ -386,7 +386,7 @@ type categoryLayout struct {
 }
 
 type categoryProductCollection struct {
-	Items              []Product `json:"items"`
+	Items              []product `json:"items"`
 	SearchContextToken string    `json:"searchContextToken"`
 	Total              int       `json:"total"`
 }
@@ -410,7 +410,7 @@ func (p categoryPageProps) total() int {
 	return 0
 }
 
-func productPricing(product Product) (*float32, *float32, string) {
+func productPricing(product product) (*float32, *float32, string) {
 	for _, context := range []string{"CURBSIDE", "ONLINE", ""} {
 		for _, sku := range product.SKUs {
 			for _, price := range sku.ContextPrices {
@@ -428,7 +428,7 @@ func productPricing(product Product) (*float32, *float32, string) {
 	return nil, nil, ""
 }
 
-func displayPriceAmount(price *DisplayPrice) *float32 {
+func displayPriceAmount(price *displayPrice) *float32 {
 	if price == nil {
 		return nil
 	}

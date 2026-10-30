@@ -298,16 +298,16 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	return wines, nil
 }
 
-type StaplesWatchdog struct {
+type staplesWatchdog struct {
 	locations locationByID
 	staples   staplesFetcher
 }
 
-func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *StaplesWatchdog {
-	return &StaplesWatchdog{locations: locations, staples: staples}
+func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *staplesWatchdog {
+	return &staplesWatchdog{locations: locations, staples: staples}
 }
 
-func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
+func (w *staplesWatchdog) Watchdog(ctx context.Context) error {
 	_, err := parallelism.MapWithErrors(StaplesWatchdogLocationIDs(), func(locationID string) (int, error) {
 		store, err := w.locations.GetLocationByID(ctx, locationID)
 		if err != nil {

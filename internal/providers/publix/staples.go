@@ -22,18 +22,18 @@ import (
 )
 
 const (
-	CategoryVegetables = "837d6afb-a1d4-46a3-9015-b6db092ddb54"
-	CategoryFruit      = "21125cb8-4ba7-4038-a5c2-75899e205ce4"
-	CategoryBeef       = "163c7c04-5495-404e-81fc-34f71b241093"
-	CategoryVeal       = "206be70c-672c-4457-9e73-dc11d5412879"
-	CategoryChicken    = "6772da29-55bf-4051-83d5-104d73ae9a96"
-	CategoryLamb       = "e73c3cc5-be20-47f2-ae20-76dfa398ec06"
-	CategorySausage    = "20a53a52-81f3-4039-8758-0f703235a75b"
-	CategoryFish       = "eb84be44-d588-42b4-8e22-11016b4f5604"
-	CategoryScallops   = "c88b0e54-ef75-4408-9d3e-851f35c2b6d6"
-	CategoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
-	CategoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
-	CategoryWine       = "50eeb714-7cea-4a73-990a-43fa1a451bbd"
+	categoryVegetables = "837d6afb-a1d4-46a3-9015-b6db092ddb54"
+	categoryFruit      = "21125cb8-4ba7-4038-a5c2-75899e205ce4"
+	categoryBeef       = "163c7c04-5495-404e-81fc-34f71b241093"
+	categoryVeal       = "206be70c-672c-4457-9e73-dc11d5412879"
+	categoryChicken    = "6772da29-55bf-4051-83d5-104d73ae9a96"
+	categoryLamb       = "e73c3cc5-be20-47f2-ae20-76dfa398ec06"
+	categorySausage    = "20a53a52-81f3-4039-8758-0f703235a75b"
+	categoryFish       = "eb84be44-d588-42b4-8e22-11016b4f5604"
+	categoryScallops   = "c88b0e54-ef75-4408-9d3e-851f35c2b6d6"
+	categoryPasta      = "e9f01489-6ce4-4c64-b5f5-2fe1e55da3c9"
+	categoryRiceGrains = "b064da7d-7b01-426d-a122-450fba08f8a4"
+	categoryWine       = "50eeb714-7cea-4a73-990a-43fa1a451bbd"
 
 	defaultStapleTake = 48
 	bigStapleTake     = 100
@@ -43,16 +43,16 @@ const (
 	maxPage  = 100
 )
 
-var defaultStaplesSignature = lo.Must(json.Marshal(StapleCategories()))
+var defaultStaplesSignature = lo.Must(json.Marshal(stapleCategories()))
 
-type StapleCategory struct {
+type stapleCategory struct {
 	Name  string
 	ID    string
 	Limit int
 }
 
 type savingsClient interface {
-	StoreProductsSavings(ctx context.Context, opts StoreProductsSavingsOptions) (*StoreProductsSavingsResult, error)
+	StoreProductsSavings(ctx context.Context, opts storeProductsSavingsOptions) (*storeProductsSavingsResult, error)
 }
 
 type identityProvider struct{}
@@ -64,7 +64,7 @@ func (p identityProvider) HashForStore(locationID string, date time.Time) hash.H
 
 type loadAbck func(context.Context) (string, error)
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	client    savingsClient
 	abckCache loadAbck
@@ -74,27 +74,27 @@ func NewIdentityProvider() identityProvider {
 	return identityProvider{}
 }
 
-func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (StaplesProvider, error) {
+func NewStaplesProvider(cfg config.PublixConfig, httpClient *http.Client) (staplesProvider, error) {
 	abckCache, err := cache.EnsureCache(Container)
 	if err != nil {
-		return StaplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
+		return staplesProvider{}, fmt.Errorf("failed to create publix cache for abck token: %w", err)
 	}
 
-	return newStaplesProviderWithCache(NewSearchClient(httpClient), func(ctx context.Context) (string, error) {
+	return newStaplesProviderWithCache(newSearchClient(httpClient), func(ctx context.Context) (string, error) {
 		return cookieFromCache(ctx, abckCache)
 	}), nil
 }
 
 func cookieFromCache(ctx context.Context, c cache.Cache) (string, error) {
-	abck, err := LoadLatestAbck(ctx, c)
+	abck, err := loadLatestAbck(ctx, c)
 	if err != nil {
 		return "", fmt.Errorf("load cached publix abck token: %w", err)
 	}
 	return abck.Cookie, nil
 }
 
-func newStaplesProviderWithCache(client savingsClient, loadAbck loadAbck) StaplesProvider {
-	return StaplesProvider{
+func newStaplesProviderWithCache(client savingsClient, loadAbck loadAbck) staplesProvider {
+	return staplesProvider{
 		client:    client,
 		abckCache: loadAbck,
 	}
@@ -105,7 +105,7 @@ func (p identityProvider) IsID(locationID string) bool {
 	return ok
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	storeID, err := storeIDFromLocation(locationID)
 	if err != nil {
 		return nil, err
@@ -118,14 +118,14 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 		return nil, err
 	}
 
-	return parallelism.Flatten(StapleCategories(), func(category StapleCategory) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(stapleCategories(), func(category stapleCategory) ([]ai.InputIngredient, error) {
 		products, err := p.fetchCategoryProducts(ctx, storeID, abck, category)
 		if err != nil {
 			slog.WarnContext(ctx, "failed to fetch publix category", "category", category.Name, "location", locationID, "error", err)
 			return nil, err
 		}
 
-		ingredients := lo.Map(products, func(product StoreProduct, _ int) ai.InputIngredient {
+		ingredients := lo.Map(products, func(product storeProduct, _ int) ai.InputIngredient {
 			return productToIngredient(product, category)
 		})
 		priceLineCount, originalPriceLineCount := countProductPriceLines(products)
@@ -147,12 +147,12 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abck string, category StapleCategory) ([]StoreProduct, error) {
+func (p staplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abck string, category stapleCategory) ([]storeProduct, error) {
 	limit := category.Limit
-	products := make([]StoreProduct, 0, limit)
+	products := make([]storeProduct, 0, limit)
 	for skip := 0; len(products) < limit; {
 		take := min(limit-len(products), maxPage)
-		payload, err := p.client.StoreProductsSavings(ctx, StoreProductsSavingsOptions{
+		payload, err := p.client.StoreProductsSavings(ctx, storeProductsSavingsOptions{
 			StoreNumber: storeID,
 			CategoryID:  category.ID,
 			Abck:        abck,
@@ -175,7 +175,7 @@ func (p StaplesProvider) fetchCategoryProducts(ctx context.Context, storeID, abc
 	return products, nil
 }
 
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	storeID, err := storeIDFromLocation(locationID)
 	if err != nil {
 		return nil, err
@@ -188,17 +188,17 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []
 		return nil, err
 	}
 
-	category := StapleCategory{Name: "wine", ID: CategoryWine, Limit: wineTake}
+	category := stapleCategory{Name: "wine", ID: categoryWine, Limit: wineTake}
 	products, err := p.fetchCategoryProducts(ctx, storeID, abck, category)
 	if err != nil {
 		return nil, err
 	}
-	return lo.Map(products, func(product StoreProduct, _ int) ai.InputIngredient {
+	return lo.Map(products, func(product storeProduct, _ int) ai.InputIngredient {
 		return productToIngredient(product, category)
 	}), nil
 }
 
-func countProductPriceLines(products []StoreProduct) (int, int) {
+func countProductPriceLines(products []storeProduct) (int, int) {
 	var priceLineCount int
 	var originalPriceLineCount int
 	for _, product := range products {
@@ -212,19 +212,19 @@ func countProductPriceLines(products []StoreProduct) (int, int) {
 	return priceLineCount, originalPriceLineCount
 }
 
-func StapleCategories() []StapleCategory {
-	return []StapleCategory{
-		{Name: "vegetables", ID: CategoryVegetables, Limit: produceStapleTake},
-		{Name: "fruit", ID: CategoryFruit, Limit: produceStapleTake},
-		{Name: "beef", ID: CategoryBeef, Limit: bigStapleTake},
-		{Name: "veal", ID: CategoryVeal, Limit: defaultStapleTake},
-		{Name: "chicken", ID: CategoryChicken, Limit: bigStapleTake},
-		{Name: "lamb", ID: CategoryLamb, Limit: defaultStapleTake},
-		{Name: "sausage", ID: CategorySausage, Limit: defaultStapleTake},
-		{Name: "fish", ID: CategoryFish, Limit: bigStapleTake},
-		{Name: "scallops", ID: CategoryScallops, Limit: defaultStapleTake},
-		{Name: "pasta", ID: CategoryPasta, Limit: bigStapleTake},
-		{Name: "rice and grains", ID: CategoryRiceGrains, Limit: bigStapleTake},
+func stapleCategories() []stapleCategory {
+	return []stapleCategory{
+		{Name: "vegetables", ID: categoryVegetables, Limit: produceStapleTake},
+		{Name: "fruit", ID: categoryFruit, Limit: produceStapleTake},
+		{Name: "beef", ID: categoryBeef, Limit: bigStapleTake},
+		{Name: "veal", ID: categoryVeal, Limit: defaultStapleTake},
+		{Name: "chicken", ID: categoryChicken, Limit: bigStapleTake},
+		{Name: "lamb", ID: categoryLamb, Limit: defaultStapleTake},
+		{Name: "sausage", ID: categorySausage, Limit: defaultStapleTake},
+		{Name: "fish", ID: categoryFish, Limit: bigStapleTake},
+		{Name: "scallops", ID: categoryScallops, Limit: defaultStapleTake},
+		{Name: "pasta", ID: categoryPasta, Limit: bigStapleTake},
+		{Name: "rice and grains", ID: categoryRiceGrains, Limit: bigStapleTake},
 	}
 }
 
@@ -233,23 +233,23 @@ func storeIDFromLocation(locationID string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("invalid publix location id %q", locationID)
 	}
-	return strings.TrimPrefix(normalized, LocationIDPrefix), nil
+	return strings.TrimPrefix(normalized, locationIDPrefix), nil
 }
 
 func parseLocationID(locationID string) (string, bool) {
 	locationID = strings.TrimSpace(locationID)
-	if !strings.HasPrefix(locationID, LocationIDPrefix) {
+	if !strings.HasPrefix(locationID, locationIDPrefix) {
 		return "", false
 	}
 
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
 	if storeID == "" {
 		return "", false
 	}
-	return LocationIDPrefix + storeID, true
+	return locationIDPrefix + storeID, true
 }
 
-func productToIngredient(product StoreProduct, category StapleCategory) ai.InputIngredient {
+func productToIngredient(product storeProduct, category stapleCategory) ai.InputIngredient {
 	salePrice := priceFromLine(stringValue(product.PriceLine))
 	regularPrice := priceFromLine(stringValue(product.OriginalPriceLine))
 	return ai.NormalizeInputIngredient(ai.InputIngredient{

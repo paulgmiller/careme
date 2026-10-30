@@ -102,7 +102,7 @@ func orderFixture(t *testing.T, add func(*http.Request) (*http.Response, error))
 
 func saveShopper(t *testing.T, a *OrderHandler, expires time.Time) {
 	t.Helper()
-	require.NoError(t, a.saveToken(t.Context(), "mock-clerk-user-id", CartToken{AccessToken: "shopper", RefreshToken: "refresh", ExpiresAt: expires}))
+	require.NoError(t, a.saveToken(t.Context(), "mock-clerk-user-id", cartToken{AccessToken: "shopper", RefreshToken: "refresh", ExpiresAt: expires}))
 }
 
 func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
@@ -111,10 +111,10 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 		calls++
 		assert.Equal(t, "Bearer shopper", r.Header.Get("Authorization"))
 		var payload struct {
-			Items []CartItem `json:"items"`
+			Items []cartItem `json:"items"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
+		assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
@@ -156,10 +156,10 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 		{"FRYS", "frys", "https://www.frysfood.com/cart"},
 	} {
 		t.Run(scenario.chain, func(t *testing.T) {
-			var added []CartItem
+			var added []cartItem
 			a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
 				var payload struct {
-					Items []CartItem `json:"items"`
+					Items []cartItem `json:"items"`
 				}
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
 				added = payload.Items
@@ -188,7 +188,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			query := transferResponse(t, a, result)
 			assert.Equal(t, ordertypes.TransferApplied, query.Status)
 			assert.Equal(t, scenario.cart, query.CartURL)
-			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
+			assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
 			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
 		})
 	}

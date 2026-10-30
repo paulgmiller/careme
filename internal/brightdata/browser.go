@@ -20,11 +20,11 @@ import (
 )
 
 const (
-	DefaultBrowserWSEndpoint = "wss://brd.superproxy.io:9222"
+	defaultBrowserWSEndpoint = "wss://brd.superproxy.io:9222"
 	defaultBrowserWait       = 5 * time.Second
 )
 
-type BrowserClient struct {
+type browserClient struct {
 	wsEndpoint string
 	authHeader string
 }
@@ -74,18 +74,18 @@ type cdpClient struct {
 	readErr   chan error
 }
 
-func NewBrowserClient(cfg BrowserClientConfig) (*BrowserClient, error) {
+func NewBrowserClient(cfg BrowserClientConfig) (*browserClient, error) {
 	wsEndpoint, authHeader, err := browserWSEndpoint(cfg.WSEndpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &BrowserClient{
+	return &browserClient{
 		wsEndpoint: wsEndpoint,
 		authHeader: authHeader,
 	}, nil
 }
 
-func (c *BrowserClient) Cookies(ctx context.Context, targetURL string, opts BrowserOptions) ([]BrowserCookie, error) {
+func (c *browserClient) Cookies(ctx context.Context, targetURL string, opts BrowserOptions) ([]BrowserCookie, error) {
 	targetURL = strings.TrimSpace(targetURL)
 	if targetURL == "" {
 		return nil, errors.New("target URL is required")
@@ -148,7 +148,7 @@ func (c *BrowserClient) Cookies(ctx context.Context, targetURL string, opts Brow
 	return client.getCookies(ctx, sessionID, targetURL)
 }
 
-func (c *BrowserClient) HTML(ctx context.Context, targetURL string, opts BrowserOptions) (string, error) {
+func (c *browserClient) HTML(ctx context.Context, targetURL string, opts BrowserOptions) (string, error) {
 	targetURL = strings.TrimSpace(targetURL)
 	if targetURL == "" {
 		return "", errors.New("target URL is required")
@@ -218,7 +218,7 @@ func CookieNamed(cookies []BrowserCookie, name string) (BrowserCookie, bool) {
 func browserWSEndpoint(rawEndpoint string) (string, string, error) {
 	endpoint := strings.TrimSpace(rawEndpoint)
 	if endpoint == "" {
-		endpoint = DefaultBrowserWSEndpoint
+		endpoint = defaultBrowserWSEndpoint
 	}
 
 	parsed, err := url.Parse(endpoint)

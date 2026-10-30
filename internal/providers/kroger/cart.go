@@ -12,13 +12,13 @@ import (
 
 const krogerAPIOrigin = "https://api.kroger.com"
 
-type CartToken struct {
+type cartToken struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
-type CartItem struct {
+type cartItem struct {
 	UPC      string `json:"upc"`
 	Quantity int    `json:"quantity"`
 }
@@ -28,7 +28,7 @@ type CartClient struct {
 	HTTPClient                          *http.Client
 }
 
-func (c *CartClient) AuthorizationURL(state, banner string) (string, error) {
+func (c *CartClient) authorizationURL(state, banner string) (string, error) {
 	req, err := oauth.NewAuthorizationCodeRequest(krogerAPIOrigin, &oauth.AuthorizationCodeParams{
 		Scope: "cart.basic:write", ClientId: c.ClientID, RedirectUri: c.RedirectURI,
 		ResponseType: "code", State: &state, Banner: &banner,
@@ -39,32 +39,32 @@ func (c *CartClient) AuthorizationURL(state, banner string) (string, error) {
 	return req.URL.String(), nil
 }
 
-func (c *CartClient) tokenRequest(ctx context.Context, body oauth.AccessTokenFormdataRequestBody) (CartToken, error) {
+func (c *CartClient) tokenRequest(ctx context.Context, body oauth.AccessTokenFormdataRequestBody) (cartToken, error) {
 	token, err := requestToken(ctx, c.HTTPClient, c.ClientID, c.ClientSecret, body)
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
-	return CartToken{
+	return cartToken{
 		AccessToken: *token.AccessToken, RefreshToken: stringValue(token.RefreshToken),
 		ExpiresAt: time.Now().Add(time.Duration(*token.ExpiresIn) * time.Second),
 	}, nil
 }
 
-func (c *CartClient) Exchange(ctx context.Context, code string) (CartToken, error) {
+func (c *CartClient) exchange(ctx context.Context, code string) (cartToken, error) {
 	token, err := c.tokenRequest(ctx, oauth.AccessTokenFormdataRequestBody{GrantType: "authorization_code", Code: &code, RedirectUri: &c.RedirectURI})
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	if token.RefreshToken == "" {
-		return CartToken{}, fmt.Errorf("kroger did not provide a refresh token")
+		return cartToken{}, fmt.Errorf("kroger did not provide a refresh token")
 	}
 	return token, nil
 }
 
-func (c *CartClient) Refresh(ctx context.Context, refreshToken string) (CartToken, error) {
+func (c *CartClient) refresh(ctx context.Context, refreshToken string) (cartToken, error) {
 	result, err := c.tokenRequest(ctx, oauth.AccessTokenFormdataRequestBody{GrantType: "refresh_token", RefreshToken: &refreshToken})
 	if err != nil {
-		return CartToken{}, err
+		return cartToken{}, err
 	}
 	if result.RefreshToken == "" {
 		result.RefreshToken = refreshToken
@@ -72,7 +72,7 @@ func (c *CartClient) Refresh(ctx context.Context, refreshToken string) (CartToke
 	return result, nil
 }
 
-func (c *CartClient) Add(ctx context.Context, token string, items []CartItem) error {
+func (c *CartClient) add(ctx context.Context, token string, items []cartItem) error {
 	if len(items) == 0 {
 		return fmt.Errorf("cart has no items")
 	}

@@ -32,16 +32,16 @@ func TestSelectedCatalogItemUPCReachesCart(t *testing.T) {
 	a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
 		calls++
 		var payload struct {
-			Items []CartItem `json:"items"`
+			Items []cartItem `json:"items"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "selected-half-gallon", Quantity: 2}}, payload.Items)
+		assert.Equal(t, []cartItem{{UPC: "selected-half-gallon", Quantity: 2}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	input := mustOrderRequest(t)
 	// One gallon needed, using the selected half-gallon package.
 	input.Items = []ai.ShoppingItem{{ProductID: catalog[0].ProductID, VariantID: catalog[0].VariantID, Buy: new(float64(2))}}
-	result, err := a.order(t.Context(), "list", input, CartToken{AccessToken: "shopper"})
+	result, err := a.order(t.Context(), "list", input, cartToken{AccessToken: "shopper"})
 	require.NoError(t, err)
 	assert.Equal(t, ordertypes.TransferApplied, result.Status)
 	assert.Equal(t, 2, result.Items[0].AcceptedQuantity)
@@ -61,7 +61,7 @@ func TestKrogerOldSnapshotsRequireSelectedItemUPC(t *testing.T) {
 		})
 		input := mustOrderRequest(t)
 		input.Items = items
-		result, err := a.order(t.Context(), "old-list", input, CartToken{AccessToken: "shopper"})
+		result, err := a.order(t.Context(), "old-list", input, cartToken{AccessToken: "shopper"})
 		require.ErrorContains(t, err, "missing selected item UPC")
 		assert.ErrorContains(t, err, "rebuild the shopping list")
 		assert.Equal(t, ordertypes.TransferFailed, result.Status)

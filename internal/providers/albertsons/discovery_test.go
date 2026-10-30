@@ -62,7 +62,7 @@ func TestParseStorePageURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, got := ParseStorePageURL(tc.url, tc.chain)
+			_, got := parseStorePageURL(tc.url, tc.chain)
 			if got != tc.want {
 				t.Fatalf("ParseStorePageURL(%q) = %v, want %v", tc.url, got, tc.want)
 			}
@@ -100,7 +100,7 @@ func TestExtractStoreSummary(t *testing.T) {
 		`</head><body></body></html>`,
 	}, "")
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html), chainByBrand(t, "safeway"))
+	summary, err := extractStoreSummary(pageURL, []byte(html), chainByBrand(t, "safeway"))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestExtractStoreSummaryRequiresEmbeddedStoreID(t *testing.T) {
 	pageURL := "https://local.albertsons.com/ar/texarkana/3710-state-line-ave.html"
 	html := `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"name":"Albertsons","address":{"city":"Texarkana","line1":"3710 State Line Ave","postalCode":"71854","region":"AR"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`
 
-	_, err := ExtractStoreSummary(pageURL, []byte(html), chainByBrand(t, "albertsons"))
+	_, err := extractStoreSummary(pageURL, []byte(html), chainByBrand(t, "albertsons"))
 	if err == nil {
 		t.Fatal("expected missing store id error")
 	}
@@ -143,7 +143,7 @@ func TestExtractStoreSummaryFallsBackToMetaID(t *testing.T) {
 	pageURL := "https://local.albertsons.com/az/lake-havasu-city/1980-mcculloch-blvd.html"
 	html := `<!doctype html><html><head><script>window.Yext = (function(Yext){Yext.Profile = {"name":"Albertsons","meta":{"id":"3204"},"address":{"city":"Lake Havasu City","line1":"1980 Mcculloch Blvd","postalCode":"86403","region":"AZ"}}; return Yext;})(window.Yext || {});</script></head><body></body></html>`
 
-	summary, err := ExtractStoreSummary(pageURL, []byte(html), chainByBrand(t, "albertsons"))
+	summary, err := extractStoreSummary(pageURL, []byte(html), chainByBrand(t, "albertsons"))
 	if err != nil {
 		t.Fatalf("ExtractStoreSummary returned error: %v", err)
 	}

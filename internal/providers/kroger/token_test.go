@@ -47,22 +47,22 @@ func TestKrogerTokenGrants(t *testing.T) {
 			cart := &CartClient{ClientID: "client", ClientSecret: "secret", RedirectURI: "https://careme.test/callback?a=b&c=d", HTTPClient: client}
 			switch grant {
 			case "client_credentials":
-				manager := NewKrogerTokenManager("client", "secret", client)
-				token, err := manager.GetToken(t.Context())
+				manager := newKrogerTokenManager("client", "secret", client)
+				token, err := manager.getToken(t.Context())
 				require.NoError(t, err)
 				assert.Equal(t, "access", token)
-				token, err = manager.GetToken(t.Context())
+				token, err = manager.getToken(t.Context())
 				require.NoError(t, err)
 				assert.Equal(t, "access", token)
 				assert.WithinDuration(t, before.Add(time.Hour), manager.expiresAt, time.Second)
 			case "authorization_code":
-				token, err := cart.Exchange(t.Context(), "code+&=")
+				token, err := cart.exchange(t.Context(), "code+&=")
 				require.NoError(t, err)
 				assert.Equal(t, "access", token.AccessToken)
 				assert.Equal(t, "rotated", token.RefreshToken)
 				assert.WithinDuration(t, before.Add(time.Hour), token.ExpiresAt, time.Second)
 			case "refresh_token":
-				token, err := cart.Refresh(t.Context(), "old+&=")
+				token, err := cart.refresh(t.Context(), "old+&=")
 				require.NoError(t, err)
 				assert.Equal(t, "access", token.AccessToken)
 				assert.Equal(t, "rotated", token.RefreshToken)
@@ -92,12 +92,12 @@ func TestKrogerTokenFailures(t *testing.T) {
 			calls := 0
 			client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) { calls++; return cartResponse(tc.status, tc.body), nil })}
 			cart := &CartClient{HTTPClient: client}
-			_, err := cart.Exchange(t.Context(), "code")
+			_, err := cart.exchange(t.Context(), "code")
 			require.ErrorContains(t, err, tc.want)
 			assert.Equal(t, 1, calls)
 			if tc.name != "missing refresh" {
-				manager := NewKrogerTokenManager("client", "secret", client)
-				_, err = manager.GetToken(t.Context())
+				manager := newKrogerTokenManager("client", "secret", client)
+				_, err = manager.getToken(t.Context())
 				require.Error(t, err)
 				assert.Empty(t, manager.token)
 			}
@@ -110,7 +110,7 @@ func TestKrogerRefreshPreservesExistingToken(t *testing.T) {
 		return cartResponse(200, `{"access_token":"access","expires_in":3600}`), nil
 	})}
 	cart := &CartClient{HTTPClient: client}
-	token, err := cart.Refresh(t.Context(), "existing")
+	token, err := cart.refresh(t.Context(), "existing")
 	require.NoError(t, err)
 	assert.Equal(t, "existing", token.RefreshToken)
 }
@@ -125,11 +125,11 @@ func TestKrogerMutatingRequestsDoNotRetryTransportErrors(t *testing.T) {
 			var err error
 			switch operation {
 			case "exchange":
-				_, err = cart.Exchange(t.Context(), "code")
+				_, err = cart.exchange(t.Context(), "code")
 			case "refresh":
-				_, err = cart.Refresh(t.Context(), "refresh")
+				_, err = cart.refresh(t.Context(), "refresh")
 			case "add":
-				err = cart.Add(t.Context(), "access", []CartItem{{UPC: "123", Quantity: 1}})
+				err = cart.add(t.Context(), "access", []cartItem{{UPC: "123", Quantity: 1}})
 			}
 			require.ErrorIs(t, err, failure)
 			assert.Equal(t, 1, calls)
@@ -142,6 +142,6 @@ func TestKrogerTokenRequiresJSONResponse(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader("login page"))}, nil
 	})}
 	cart := &CartClient{HTTPClient: client}
-	_, err := cart.Exchange(t.Context(), "code")
+	_, err := cart.exchange(t.Context(), "code")
 	require.ErrorContains(t, err, "incomplete")
 }

@@ -23,7 +23,7 @@ func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 	t.Parallel()
 	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
 	const locationID = "heb_540"
-	raw, err := json.Marshal(StapleCategories())
+	raw, err := json.Marshal(stapleCategories())
 	require.NoError(t, err)
 	signature := string(raw)
 	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
@@ -32,11 +32,11 @@ func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
 
 type stubHEBQueryClient struct {
 	mu      sync.Mutex
-	results map[string][]Product
-	calls   []CategoryOptions
+	results map[string][]product
+	calls   []categoryOptions
 }
 
-func (s *stubHEBQueryClient) Category(_ context.Context, opts CategoryOptions) ([]Product, error) {
+func (s *stubHEBQueryClient) Category(_ context.Context, opts categoryOptions) ([]product, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -51,11 +51,11 @@ func (s *stubHEBQueryClient) callCount() int {
 	return len(s.calls)
 }
 
-func (s *stubHEBQueryClient) hasCall(want CategoryOptions) bool {
+func (s *stubHEBQueryClient) hasCall(want categoryOptions) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return slices.ContainsFunc(s.calls, func(got CategoryOptions) bool {
+	return slices.ContainsFunc(s.calls, func(got categoryOptions) bool {
 		return got.Reese84 == want.Reese84 &&
 			got.StoreID == want.StoreID &&
 			got.ParentID == want.ParentID &&
@@ -68,7 +68,7 @@ func TestStapleCategories_HaveLimits(t *testing.T) {
 	t.Parallel()
 
 	got := make(map[string]int)
-	for _, category := range StapleCategories() {
+	for _, category := range stapleCategories() {
 		got[category.Name] = category.Limit
 	}
 
@@ -95,15 +95,15 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	listPrice := float32(8.99)
 	salePrice := float32(6.99)
 	client := &stubHEBQueryClient{
-		results: map[string][]Product{
-			CategoryPorkParent + ":" + CategoryPorkChild: {
+		results: map[string][]product{
+			categoryPorkParent + ":" + categoryPorkChild: {
 				{
 					ID:                    "pork-1",
 					DisplayName:           "H-E-B Pork Shoulder Roast",
 					Size:                  "Avg. 2.0 lbs",
 					FullCategoryHierarchy: "Meat & seafood/Meat/Pork",
-					Brand:                 &Brand{Name: "H-E-B"},
-					ProductLocation:       &ProductLocation{Location: "Meat Market"},
+					Brand:                 &brand{Name: "H-E-B"},
+					ProductLocation:       &productLocation{Location: "Meat Market"},
 					ListPrice:             &listPrice,
 					SalePrice:             &salePrice,
 				},
@@ -118,14 +118,14 @@ func TestStaplesProvider_MapsProductsToIngredients(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchStaples returned error: %v", err)
 	}
-	if got, want := client.callCount(), len(StapleCategories()); got != want {
+	if got, want := client.callCount(), len(stapleCategories()); got != want {
 		t.Fatalf("unexpected call count: got %d want %d", got, want)
 	}
-	if !client.hasCall(CategoryOptions{
+	if !client.hasCall(categoryOptions{
 		Reese84:  "cached-reese84",
 		StoreID:  "92",
-		ParentID: CategoryPorkParent,
-		ChildID:  CategoryPorkChild,
+		ParentID: categoryPorkParent,
+		ChildID:  categoryPorkChild,
 		Limit:    bigStapleLimit,
 	}) {
 		t.Fatalf("missing pork category call")
@@ -167,7 +167,7 @@ func TestNewStaplesProvider_LoadsHEBCachedReese84(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureCache returned error: %v", err)
 	}
-	if err := SaveReese84Record(t.Context(), hebCache, Reese84Record{
+	if err := saveReese84Record(t.Context(), hebCache, reese84Record{
 		Cookie:    "cached-heb-reese84",
 		FetchedAt: time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC),
 		Provider:  "test",

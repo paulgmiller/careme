@@ -22,7 +22,7 @@ func cartResponse(status int, body string) *http.Response {
 }
 
 func TestCartClientConnectAndAdd(t *testing.T) {
-	var added []CartItem
+	var added []cartItem
 	client := &http.Client{Transport: cartRoundTrip(func(req *http.Request) (*http.Response, error) {
 		switch req.URL.Path {
 		case "/v1/connect/oauth2/token":
@@ -34,7 +34,7 @@ func TestCartClientConnectAndAdd(t *testing.T) {
 			assert.Equal(t, http.MethodPut, req.Method)
 			assert.Equal(t, "Bearer shopper-token", req.Header.Get("Authorization"))
 			var body struct {
-				Items []CartItem `json:"items"`
+				Items []cartItem `json:"items"`
 			}
 			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 			added = body.Items
@@ -45,17 +45,17 @@ func TestCartClientConnectAndAdd(t *testing.T) {
 		}
 	})}
 	cart := CartClient{ClientID: "id", ClientSecret: "secret", RedirectURI: "https://careme.test/kroger/callback", HTTPClient: client}
-	destination, err := cart.AuthorizationURL("nonce", "qfc")
+	destination, err := cart.authorizationURL("nonce", "qfc")
 	require.NoError(t, err)
 	parsed, err := url.Parse(destination)
 	require.NoError(t, err)
 	assert.Equal(t, "cart.basic:write", parsed.Query().Get("scope"))
 	assert.Equal(t, "nonce", parsed.Query().Get("state"))
 	assert.Equal(t, "qfc", parsed.Query().Get("banner"))
-	token, err := cart.Exchange(context.Background(), "code")
+	token, err := cart.exchange(context.Background(), "code")
 	require.NoError(t, err)
-	require.NoError(t, cart.Add(context.Background(), token.AccessToken, []CartItem{{UPC: "0001111060903", Quantity: 1}}))
-	assert.Equal(t, []CartItem{{UPC: "0001111060903", Quantity: 1}}, added)
+	require.NoError(t, cart.add(context.Background(), token.AccessToken, []cartItem{{UPC: "0001111060903", Quantity: 1}}))
+	assert.Equal(t, []cartItem{{UPC: "0001111060903", Quantity: 1}}, added)
 }
 
 func TestCartAddReportsRejectionWithoutRetry(t *testing.T) {
@@ -65,7 +65,7 @@ func TestCartAddReportsRejectionWithoutRetry(t *testing.T) {
 		return cartResponse(http.StatusServiceUnavailable, `{}`), nil
 	})}
 	cart := CartClient{HTTPClient: client}
-	err := cart.Add(t.Context(), "shopper-token", []CartItem{{UPC: "123", Quantity: 1}})
+	err := cart.add(t.Context(), "shopper-token", []cartItem{{UPC: "123", Quantity: 1}})
 	require.ErrorContains(t, err, "503")
 	assert.Equal(t, 1, calls)
 }
@@ -83,7 +83,7 @@ func TestCartAddResponses(t *testing.T) {
 				return cartResponse(status, ""), nil
 			})}
 			cart := &CartClient{HTTPClient: client}
-			err := cart.Add(t.Context(), "shopper", []CartItem{{UPC: "123", Quantity: 2}})
+			err := cart.add(t.Context(), "shopper", []cartItem{{UPC: "123", Quantity: 2}})
 			if status < 300 {
 				require.NoError(t, err)
 			} else {
@@ -97,5 +97,5 @@ func TestCartAddResponses(t *testing.T) {
 func TestCartAddEmptyDoesNotSend(t *testing.T) {
 	client := &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) { t.Fatal("empty cart must not be sent"); return nil, nil })}
 	cart := &CartClient{HTTPClient: client}
-	require.ErrorContains(t, cart.Add(t.Context(), "shopper", nil), "cart has no items")
+	require.ErrorContains(t, cart.add(t.Context(), "shopper", nil), "cart has no items")
 }

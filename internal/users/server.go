@@ -96,11 +96,11 @@ func (s *server) handlePartner(w http.ResponseWriter, r *http.Request) {
 	action := strings.TrimSpace(r.FormValue("action"))
 	switch action {
 	case "request":
-		err = s.storage.RequestPartner(currentUser, r.FormValue("email"))
+		err = s.storage.requestPartner(currentUser, r.FormValue("email"))
 	case "accept":
-		err = s.storage.AcceptPartner(currentUser)
+		err = s.storage.acceptPartner(currentUser)
 	case "unlink":
-		err = s.storage.UnlinkPartner(currentUser)
+		err = s.storage.unlinkPartner(currentUser)
 	default:
 		writePartnerResult(w, errors.New("invalid partner action"))
 		return
@@ -122,7 +122,7 @@ func writePartnerResult(w http.ResponseWriter, err error) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	message := "Unable to update partner. Try again, chef."
-	if errors.Is(err, ErrPartnerNotFound) {
+	if errors.Is(err, errPartnerNotFound) {
 		message = err.Error()
 	}
 	_, _ = fmt.Fprintf(w, `<span class="text-red-700" role="alert">%s</span>`, template.HTMLEscapeString(message))
@@ -185,7 +185,7 @@ func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) exists(uid string) (bool, error) {
 	_, err := s.storage.GetByID(uid)
-	if errors.Is(err, ErrNotFound) {
+	if errors.Is(err, errNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -489,7 +489,7 @@ func (s *server) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	currentUser, err := s.storage.GetByID(userID)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, errNotFound) {
 			http.Error(w, "invalid unsubscribe link", http.StatusBadRequest)
 			return
 		}
