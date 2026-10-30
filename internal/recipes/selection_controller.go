@@ -248,21 +248,22 @@ func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recip
 }
 
 func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
-	exists, err := s.Cache.Exists(ctx, recipeWineCacheKey(recipeHash))
+	exists, err := s.wineExists(ctx, recipeHash)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to check saved wine pick", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
 		return
 	}
 	if exists {
 		return
 	}
+	slog.InfoContext(ctx, "generating wine picks on save", "hash", recipeHash)
 	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to pick saved recipe wine", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
 		return
 	}
 	if err := s.saveWine(ctx, recipeHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save wine pick", "hash", recipeHash, "error", err)
+		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
 	}
 }
 
