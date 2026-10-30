@@ -56,18 +56,29 @@ Size-based selection remains an alternative for
 when catalogs are fetched again; existing cached catalogs and finalized shopping
 snapshots retain their selected items.
 
-Food shopping snapshots persist the catalog VariantID. Wine recommendations
-retain their existing ingredient-shaped JSON. Their selected InputIngredient
-rows are saved separately by recipe hash before generation returns. Shopping
-preparation combines catalog rows into a product-ID lookup before food quantity
-merging, then attaches VariantID, package size, aisle, and catalog name to the
-resulting shopping items. Late wine picks use the same preparation helper with
-their saved catalog rows. View builders receive prepared purchases and perform
-no catalog lookups or metadata enrichment. Old wine recommendations remain
-visible; picks without a matching catalog product have no ordering variant ID. Cart transfer submits these saved identifiers as UPCs
-with the calculated whole-package quantities. It performs no product-detail
-request or availability recheck, and the product-to-UPC lookup/cache is removed.
-Store filtering still applies when fetching catalog prices and availability.
+Finalization loads food ingredients and each saved recipe's first wine pick,
+combines both catalogs into one product-ID lookup, and merges their quantities
+once. Each wine pick contributes one bottle per recipe; repeated wines are merged
+like repeated food ingredients. Catalog metadata (VariantID, size, aisle, and name)
+is attached before the complete shopping snapshot is saved. Page rendering reads
+that snapshot without loading wine catalogs, enriching items, or appending wine.
+Existing finalized snapshots remain unchanged.
+
+Saving a recipe starts wine picking in the background. Finalization polls the
+shared wine recommendation cache every 500 ms, so picking can finish on another
+server. A saved WineSelection, including an empty wines array, means picking is
+complete. Finalization does not start another pick. Input preparation waits at
+most 30 seconds; missing results time out, including background picks that failed
+without saving a result. Cache read and decoding errors return immediately. These
+errors leave no shopping snapshot, so finalization can be retried after the wine
+result is saved. The AI quantity merge runs after input preparation.
+
+Wine recommendations retain their existing ingredient-shaped JSON and
+`wine_recommendations/` keys. Selected InputIngredient rows are stored separately
+at `wine_selection_ingredients/v1/<recipe hash>`. Older picks remain displayable;
+without a matching catalog product they have no ordering variant ID. Cart transfer
+uses only persisted shopping-item identifiers and performs no product-detail
+lookup or availability recheck.
 
 Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
 pantry snapshots. Wine candidates retain `wines/` keys and recommendations retain

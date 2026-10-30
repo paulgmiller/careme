@@ -11,40 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrepareShoppingPurchasesWithWine(t *testing.T) {
-	recipe := ai.Recipe{Title: "Dinner"}
-	otherRecipe := ai.Recipe{Title: "Unsaved dinner"}
-	wine := ai.Ingredient{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}
-	food := []shoppingPurchaseGroup{{Aisle: "Other items", Items: []shoppingPurchaseItem{{Name: "Pork", Needed: "24 oz"}}}}
-	for _, tc := range []struct {
-		name            string
-		purchases       []shoppingPurchaseGroup
-		recommendations map[string]*ai.WineSelection
-		wantWine        bool
-	}{
-		{name: "late pick", purchases: food, recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine, {Name: "Backup wine"}}}}, wantWine: true},
-		{name: "missing pick", purchases: food},
-		{name: "empty pick", purchases: food, recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {}}},
-		{name: "unsaved recipe", purchases: food, recommendations: map[string]*ai.WineSelection{otherRecipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
-		{name: "not finalized", recommendations: map[string]*ai.WineSelection{recipe.ComputeHash(): {Wines: []ai.Ingredient{wine}}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := prepareShoppingPurchases(tc.purchases, tc.recommendations, nil)
-			require.NoError(t, err)
-			if !tc.wantWine {
-				assert.Equal(t, tc.purchases, got)
-				return
-			}
-			require.Len(t, got, 2)
-			assert.Equal(t, food[0], got[0])
-			assert.Equal(t, "Wine", got[1].Aisle)
-			require.Len(t, got[1].Items, 1)
-			assert.Equal(t, ai.ShoppingItem{ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity}, got[1].Items[0].ShoppingItem)
-			assert.Equal(t, food, tc.purchases, "rendering must preserve the cached food groups")
-		})
-	}
-}
-
 func TestPrepareShoppingItemsUsesFoodAndWineCatalog(t *testing.T) {
 	products := inputIngredientMap([]ai.InputIngredient{
 		{ProductID: "food", VariantID: "food-upc", Description: "Catalog food", Size: "1 lb", AisleNumber: " 2 "},
@@ -89,20 +55,21 @@ func TestFinalizedShoppingInputsCombinesCatalogsBeforeQuantityMerge(t *testing.T
 	wine := ai.InputIngredient{ProductID: "wine", VariantID: "wine-upc", Description: "Catalog wine", Size: "750mL"}
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{food}))
 	require.NoError(t, s.saveWineIngredients(t.Context(), recipe.ComputeHash(), []ai.InputIngredient{wine}))
+	require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Picked wine", Quantity: "750mL"}}}))
 	ingredients, catalog, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.NoError(t, err)
 	assert.Equal(t, []ai.InputIngredient{food, wine}, catalog)
-	assert.Equal(t, recipe.Ingredients, ingredients, "wine quantities remain outside the food merger")
+	assert.Equal(t, append(recipe.Ingredients, ai.Ingredient{ProductID: "wine", Name: "Picked wine", Quantity: "1 bottle"}), ingredients)
 	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, got []ai.Ingredient, matched []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		assert.Equal(t, ingredients, got)
-		assert.Equal(t, []ai.InputIngredient{food}, matched)
-		return []ai.ShoppingItem{{ProductID: "food", Name: "AI food", Needed: "2 lb", Buy: new(float64(2))}}, nil
+		assert.Equal(t, []ai.InputIngredient{food, wine}, matched)
+		return []ai.ShoppingItem{{ProductID: "food", Name: "AI food", Needed: "2 lb", Buy: new(float64(2))}, {ProductID: "wine", Name: "Picked wine", Needed: "1 bottle", Buy: new(float64(1))}}, nil
 	})
 	require.NoError(t, s.mergeAndCacheShoppingList(t.Context(), p.Hash(), ingredients, catalog))
 	purchases, err := s.cachedShoppingPurchases(t.Context(), p.Hash())
 	require.NoError(t, err)
 	require.Len(t, purchases, 1)
-	require.Len(t, purchases[0].Items, 1)
+	require.Len(t, purchases[0].Items, 2)
 	assert.Equal(t, "Catalog food", purchases[0].Items[0].Name)
 	assert.Equal(t, "food-upc", purchases[0].Items[0].VariantID)
 }

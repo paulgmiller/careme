@@ -167,10 +167,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, newHash)
-	if err == nil {
-		err = s.mergeAndCacheShoppingList(ctx, newHash, ingredients, catalog)
-	}
+	err = s.finalizeShoppingPurchases(ctx, newHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to merge finalized shopping list", "hash", newHash, "error", err)
 		http.Error(w, "Could not build your shopping list. Try again, chef", http.StatusInternalServerError)
@@ -453,15 +450,8 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 	}
 	var purchases []shoppingPurchaseGroup
 	var purchasesErr error
-	var wineCatalog []ai.InputIngredient
-	var wineCatalogErr error
 	recipeWG.Go(func() {
 		purchases, purchasesErr = s.cachedShoppingPurchases(ctx, hashParam)
-		if purchasesErr != nil || purchases == nil {
-			return
-		}
-		// fetching wine cataglog only makes sense if theres a purchase order?
-		wineCatalog, wineCatalogErr = s.wineCatalogForRecipes(ctx, p.Saved)
 	})
 	recipeWG.Wait()
 	if purchasesErr != nil && !errors.Is(purchasesErr, cache.ErrNotFound) {
@@ -469,20 +459,7 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
 		return
 	}
-	if wineCatalogErr != nil {
-		slog.ErrorContext(ctx, "failed to load selected wine catalog", "error", wineCatalogErr)
-		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
-		return
-	}
-
 	winepicks := wines.Clone()
-
-	purchases, err := prepareShoppingPurchases(purchases, winepicks, wineCatalog)
-	if err != nil {
-		slog.ErrorContext(ctx, "prepare shopping items", "error", err)
-		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
-		return
-	}
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))

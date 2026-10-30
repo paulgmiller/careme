@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/parallelism"
 )
 
 const wineRecommendationsCachePrefix = "wine_recommendations/"
@@ -28,10 +28,6 @@ func (rio recipeio) wineFromCache(ctx context.Context, hash string) (*ai.WineSel
 	var selection ai.WineSelection
 	err = json.NewDecoder(wineReader).Decode(&selection)
 	return &selection, err
-}
-
-func (rio recipeio) wineExists(ctx context.Context, hash string) (bool, error) {
-	return rio.Cache.Exists(ctx, recipeWineCacheKey(hash))
 }
 
 func (rio recipeio) saveWine(ctx context.Context, hash string, selection *ai.WineSelection) error {
@@ -68,18 +64,26 @@ func (rio recipeio) wineIngredientsFromCache(ctx context.Context, hash string) (
 	return ingredients, nil
 }
 
-// wineCatalogForRecipes loads the snapshots used for shopping-item enrichment.
-// Missing snapshots are allowed for legacy picks; unmatched products remain display-only.
-func (rio recipeio) wineCatalogForRecipes(ctx context.Context, recipes []ai.Recipe) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(recipes, func(recipe ai.Recipe) ([]ai.InputIngredient, error) {
-		hash := recipe.ComputeHash()
-		ingredients, err := rio.wineIngredientsFromCache(ctx, hash)
-		if errors.Is(err, cache.ErrNotFound) {
-			return nil, nil
+// waitForWine polls shared storage, so a pick may finish on any server.
+// A saved selection with no wines is complete; only a missing record is retried.
+func (rio recipeio) waitForWine(ctx context.Context, hash string) (*ai.WineSelection, error) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("wait for wine pick %q: %w", hash, err)
 		}
-		if err != nil {
-			return nil, fmt.Errorf("load selected wine catalog for recipe %q: %w", hash, err)
+		selection, err := rio.wineFromCache(ctx, hash)
+		if err == nil {
+			return selection, nil
 		}
-		return ingredients, nil
-	})
+		if !errors.Is(err, cache.ErrNotFound) {
+			return nil, fmt.Errorf("load wine pick %q: %w", hash, err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("wait for wine pick %q: %w", hash, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }

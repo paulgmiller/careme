@@ -78,7 +78,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
 | `recipes/steps/` in the `recipe-images` backend | Generated instruction sketch bytes keyed by `<recipe_hash>/<one-based_step_number>` | `internal/recipes/step_image_controller.go` after a signed-in step image request | Recipe page and public step image endpoint |
 | `wine_recommendations/` | JSON ingredient-shaped wine picks and commentary keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
-| `wine_selection_ingredients/v1/` | Selected wine InputIngredient snapshots keyed by recipe hash; UPC, size, and prices stay together | Wine generation before returning the picks | Finalized shopping-list rendering |
+| `wine_selection_ingredients/v1/` | Selected wine InputIngredient snapshots keyed by recipe hash; UPC, size, and prices stay together | Wine generation before returning the picks | Shopping-list finalization |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
@@ -260,10 +260,16 @@ Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. Selected wine catalog rows are stored separately
 at `wine_selection_ingredients/v1/<recipe hash>` before generation returns a
 successful selection. Unknown selected product IDs and snapshot-write failures
-return errors. Shopping items join the saved picks to these snapshots by product
-ID using the same enrichment helper as food. Recipe Ingredient no longer carries
+return errors. Finalization polls the shared wine recommendation cache every 500 ms for saved
+wine picks (including completed empty results),
+combines food and wine needs and catalog snapshots by product ID, and merges
+quantities once. Input preparation has a 30-second deadline; missing picks time
+out without starting generation. Errors leave no
+finalized shopping snapshot. Rendering reads saved shopping items and never
+appends late wine picks. Recipe Ingredient no longer carries
 VariantID. Older recommendations remain readable without catalog snapshots; wine picks
 without a matching catalog product display but have no ordering variant ID.
 Unreadable snapshots fail shopping-list preparation rather than silently dropping
-metadata. Snapshot reads run concurrently and return a flat catalog for the
-shared product-ID lookup.
+metadata. Food and per-recipe wine preparation run concurrently. Each wine pick and its
+catalog are loaded during finalization, not during page rendering. Existing
+finalized snapshots remain immutable; late picks do not change them.

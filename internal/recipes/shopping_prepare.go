@@ -13,32 +13,6 @@ type shoppingPurchaseItem struct {
 	Aisle string
 }
 
-// prepareShoppingPurchases adds late wine picks to the immutable food snapshot.
-func prepareShoppingPurchases(purchases []shoppingPurchaseGroup, recommendations map[string]*ai.WineSelection, wineCatalog []ai.InputIngredient) ([]shoppingPurchaseGroup, error) {
-	products, err := shoppingCatalogLookup(wineCatalog)
-	if err != nil {
-		return nil, err
-	}
-	var wineItems []ai.ShoppingItem
-	for _, selection := range recommendations {
-		if len(selection.Wines) == 0 {
-			continue
-		}
-		wine := selection.Wines[0] // Use the same first pick as the recipe card.
-		wineItems = append(wineItems, ai.ShoppingItem{
-			ProductID: wine.ProductID,
-			Name:      wine.Name,
-			Needed:    wine.Quantity,
-		})
-	}
-	winepurchases := prepareShoppingItems(wineItems, products)
-
-	if len(wineItems) == 0 {
-		return purchases, nil
-	}
-	return append(purchases, shoppingPurchaseGroup{Aisle: "Wine", Items: winepurchases}), nil
-}
-
 // prepareShoppingItems attaches server-owned metadata after quantity merging.
 func prepareShoppingItems(items []ai.ShoppingItem, products map[string]ai.InputIngredient) []shoppingPurchaseItem {
 	prepared := make([]shoppingPurchaseItem, 0, len(items))
@@ -51,6 +25,7 @@ func prepareShoppingItems(items []ai.ShoppingItem, products map[string]ai.InputI
 			row.Size = product.Size
 			row.Aisle = strings.TrimSpace(product.AisleNumber)
 		}
+		prepared = append(prepared, row)
 	}
 	return prepared
 }

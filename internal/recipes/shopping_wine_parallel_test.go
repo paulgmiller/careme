@@ -3,8 +3,6 @@ package recipes
 import (
 	"context"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -18,15 +16,26 @@ import (
 
 type blockedWineReadCache struct {
 	cache.ListCache
-	started chan string
-	release chan struct{}
+	foodKey         string
+	started         chan string
+	release         chan struct{}
+	catalogs        chan string
+	releaseCatalogs chan struct{}
 }
 
 func (c *blockedWineReadCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	if strings.HasPrefix(key, wineRecommendationsCachePrefix) || strings.HasPrefix(key, selectedWineIngredientsPrefix) {
+	var release chan struct{}
+	if key == c.foodKey || strings.HasPrefix(key, wineRecommendationsCachePrefix) {
 		c.started <- key
+		release = c.release
+	}
+	if strings.HasPrefix(key, selectedWineIngredientsPrefix) {
+		c.catalogs <- key
+		release = c.releaseCatalogs
+	}
+	if release != nil {
 		select {
-		case <-c.release:
+		case <-release:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -34,66 +43,52 @@ func (c *blockedWineReadCache) Get(ctx context.Context, key string) (io.ReadClos
 	return c.ListCache.Get(ctx, key)
 }
 
-func TestShoppingWineAndCatalogReadsOverlapAcrossRecipes(t *testing.T) {
-	store := &blockedWineReadCache{ListCache: cache.NewInMemoryCache(), started: make(chan string, 4), release: make(chan struct{})}
+func TestFinalizeFoodAndWineReadsOverlapAcrossRecipes(t *testing.T) {
+	store := &blockedWineReadCache{ListCache: cache.NewInMemoryCache(), started: make(chan string, 3), release: make(chan struct{}), catalogs: make(chan string, 2), releaseCatalogs: make(chan struct{})}
 	s := newTestServer(t, withTestCache(store))
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
 	p.Saved = []ai.Recipe{{Title: "First dinner"}, {Title: "Second dinner"}}
-	require.NoError(t, store.Put(t.Context(), shoppingQuantityCachePrefix+p.Hash(), `[]`, cache.Unconditional()))
+	require.NoError(t, s.SaveParams(t.Context(), p))
+	store.foodKey = ingredientsCachePrefix + p.LocationHash()
 	for _, recipe := range p.Saved {
-		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red wine", Quantity: "1 bottle"}}}))
+		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red wine"}}}))
 		require.NoError(t, s.saveWineIngredients(t.Context(), recipe.ComputeHash(), []ai.InputIngredient{{ProductID: "wine", VariantID: "upc", Description: "Red wine", Size: "750mL"}}))
 	}
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
-	done := make(chan struct{})
+	type result struct {
+		ingredients []ai.Ingredient
+		err         error
+	}
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		s.renderShoppingList(rr, req, p, &ai.ShoppingList{Recipes: p.Saved}, nil, shoppingProgress{})
+		ingredients, _, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
+		done <- result{ingredients, err}
 	}()
-	// Both recommendations and both catalogs must start before any can finish.
-	keys := make(map[string]bool)
 	timeout := time.NewTimer(5 * time.Second)
 	defer timeout.Stop()
-	for range 4 {
+	for range 3 {
 		select {
-		case key := <-store.started:
-			keys[key] = true
+		case <-store.started:
 		case <-timeout.C:
 			close(store.release)
+			close(store.releaseCatalogs)
 			<-done
-			t.Fatal("wine and catalog reads did not overlap")
+			t.Fatal("food and wine reads did not overlap")
 		}
 	}
 	close(store.release)
-	<-done
-	assert.Len(t, keys, 4)
-	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	assert.Contains(t, rr.Body.String(), "Red wine")
-}
-
-func TestShoppingWineCatalogReadFailure(t *testing.T) {
-	for _, finalized := range []bool{true, false} {
-		name := "unfinalized"
-		if finalized {
-			name = "finalized"
+	for range 2 {
+		select {
+		case <-store.catalogs:
+		case <-timeout.C:
+			close(store.releaseCatalogs)
+			<-done
+			t.Fatal("wine catalog reads did not overlap")
 		}
-		t.Run(name, func(t *testing.T) {
-			store := cache.NewInMemoryCache()
-			s := newTestServer(t, withTestCache(store))
-			p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
-			p.Saved = []ai.Recipe{{Title: "Dinner"}}
-			if finalized {
-				require.NoError(t, store.Put(t.Context(), shoppingQuantityCachePrefix+p.Hash(), `[]`, cache.Unconditional()))
-			}
-			require.NoError(t, store.Put(t.Context(), selectedWineIngredientsPrefix+p.Saved[0].ComputeHash(), `{`, cache.Unconditional()))
-			rr := httptest.NewRecorder()
-			s.renderShoppingList(rr, httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil), p, &ai.ShoppingList{Recipes: p.Saved}, nil, shoppingProgress{})
-			if finalized {
-				assert.Equal(t, http.StatusInternalServerError, rr.Code)
-			} else {
-				assert.Equal(t, http.StatusOK, rr.Code)
-			}
-		})
 	}
+	close(store.releaseCatalogs)
+	got := <-done
+	require.NoError(t, got.err)
+	require.Len(t, got.ingredients, 2)
+	assert.Equal(t, "1 bottle", got.ingredients[0].Quantity)
+	assert.Equal(t, "1 bottle", got.ingredients[1].Quantity)
 }

@@ -2897,6 +2897,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", ResponseID: "resp-saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed", ResponseID: "resp-dismissed"}
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
+	require.NoError(t, s.saveWine(t.Context(), savedRecipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{}}))
 	shoppingList := &ai.ShoppingList{
 		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},

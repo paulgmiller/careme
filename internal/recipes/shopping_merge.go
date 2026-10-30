@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
 )
 
 const shoppingQuantityCachePrefix = "shopping_quantities/v7/"
@@ -67,19 +70,58 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	if len(p.Saved) == 0 {
 		return nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var catalog []ai.InputIngredient
+	var catalogErr error
+	var catalogWG sync.WaitGroup
+	catalogWG.Go(func() {
+		catalog, catalogErr = s.IngredientsFromCache(ctx, p.LocationHash())
+		if errors.Is(catalogErr, cache.ErrNotFound) {
+			catalogErr = nil
+		}
+		if catalogErr != nil {
+			cancel()
+		}
+	})
+	type wineInput struct {
+		ingredients []ai.Ingredient
+		catalog     []ai.InputIngredient
+	}
+	wines, wineErr := parallelism.MapWithErrors(p.Saved, func(recipe ai.Recipe) (wineInput, error) {
+		selection, err := s.waitForWine(ctx, recipe.ComputeHash())
+		if err != nil {
+			cancel()
+			return wineInput{}, fmt.Errorf("finalize wine for recipe %q: %w", recipe.Title, err)
+		}
+		if len(selection.Wines) == 0 {
+			return wineInput{}, nil
+		}
+		selectedCatalog, err := s.wineIngredientsFromCache(ctx, recipe.ComputeHash())
+		// Older picks remain displayable even if their ordering metadata was never stored.
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			cancel()
+			return wineInput{}, fmt.Errorf("load selected wine catalog: %w", err)
+		}
+		wine := selection.Wines[0]
+		wine.Quantity = "1 bottle"
+		return wineInput{ingredients: []ai.Ingredient{wine}, catalog: selectedCatalog}, nil
+	})
+	catalogWG.Wait()
+	if catalogErr != nil {
+		return nil, nil, fmt.Errorf("load shopping catalog: %w", catalogErr)
+	}
+	if wineErr != nil {
+		return nil, nil, wineErr
+	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
 		ingredients = append(ingredients, recipe.Ingredients...)
 	}
-	catalog, err := s.IngredientsFromCache(ctx, p.LocationHash())
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return nil, nil, fmt.Errorf("load shopping catalog: %w", err)
+	for _, wine := range wines {
+		ingredients = append(ingredients, wine.ingredients...)
+		catalog = append(catalog, wine.catalog...)
 	}
-	wineCatalog, err := s.wineCatalogForRecipes(ctx, p.Saved)
-	if err != nil {
-		return nil, nil, err
-	}
-	catalog = append(catalog, wineCatalog...)
 	return ingredients, catalog, nil
 }
 
@@ -95,4 +137,19 @@ func (s *server) cachedShoppingPurchases(ctx context.Context, hash string) ([]sh
 		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 	}
 	return purchases, nil
+}
+
+func (s *server) finalizeShoppingPurchases(ctx context.Context, hash string) error {
+	exists, err := s.Cache.Exists(ctx, shoppingQuantityCachePrefix+hash)
+	if err != nil {
+		return fmt.Errorf("check finalized shopping list: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, hash)
+	if err != nil {
+		return err
+	}
+	return s.mergeAndCacheShoppingList(ctx, hash, ingredients, catalog)
 }
