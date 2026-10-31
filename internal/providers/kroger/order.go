@@ -3,7 +3,6 @@ package kroger
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -71,36 +70,34 @@ func (a *OrderHandler) saveJSON(ctx context.Context, key string, value any, opti
 	return a.cache.Put(ctx, key, string(body), options)
 }
 
-func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token CartToken) (ordertypes.Transfer, error) {
+func (a *OrderHandler) order(ctx context.Context, idempotencyKey string, input ordertypes.TransferRequest, token cartToken) (ordertypes.Transfer, error) {
 	transfer := ordertypes.Transfer{TransferID: idempotencyKey, Status: ordertypes.TransferFailed, CartURL: cartURL(input.Location.Chain)}
 	// Kroger adds the requested whole-package quantity for each product.
-	var items []CartItem
+	var items []cartItem
 	var accepted []ordertypes.TransferItem
-	// TODO: Save UPCs with catalog ingredients or resolve them in parallel.
 	for _, item := range input.Items {
 		quantity := item.PackageQuantity()
-		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
-		upc, err := a.client.ProductUPC(ctx, item.ProductID, input.Location.ID)
-		if errors.Is(err, ErrProductUnavailable) {
-			result.RejectedQuantity = quantity
-			result.RejectionReason = "product_unavailable"
-			transfer.Items = append(transfer.Items, result)
+		if quantity == 0 {
 			continue
 		}
-		if err != nil {
-			return transfer, fmt.Errorf("resolve Kroger order product: %w", err)
+		if strings.TrimSpace(item.ProductID) == "" {
+			return transfer, fmt.Errorf("kroger order item %q: missing product ID", item.Name)
 		}
-		items = append(items, CartItem{UPC: upc, Quantity: quantity})
+		if strings.TrimSpace(item.VariantID) == "" {
+			return transfer, fmt.Errorf("kroger order product %q: missing selected item UPC; rebuild the shopping list with a refreshed catalog", item.ProductID)
+		}
+		result := ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name}
+		items = append(items, cartItem{UPC: item.VariantID, Quantity: quantity})
 		result.AcceptedQuantity = quantity
 		accepted = append(accepted, result)
 	}
 	if len(items) == 0 {
-		return transfer, nil
+		return transfer, fmt.Errorf("kroger order has no purchase quantities")
 	}
-	if err := a.client.Add(ctx, token.AccessToken, items); err != nil {
+	if err := a.client.add(ctx, token.AccessToken, items); err != nil {
 		return transfer, fmt.Errorf("add Kroger cart products: %w", err)
 	}
 	transfer.Status = ordertypes.TransferApplied
-	transfer.Items = append(accepted, transfer.Items...)
+	transfer.Items = accepted
 	return transfer, nil
 }

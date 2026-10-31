@@ -56,7 +56,7 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 }
 
 func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	grader := newCachingGrader(backend, cacheStore)
 
@@ -76,7 +76,7 @@ func TestCachingGraderBatchesMissingIngredientsInChunksOf30(t *testing.T) {
 }
 
 func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	grader := newCachingGrader(backend, cacheStore)
 
@@ -104,7 +104,7 @@ func TestCachingGraderSkipsIngredientsThatAlreadyHaveGrades(t *testing.T) {
 }
 
 func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	grader := newCachingGrader(backend, cacheStore)
 
@@ -129,7 +129,7 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 		},
 	}
 	key := cacheKey(testIngredientGradeCacheVersion + "/" + ingredientHash(current))
-	require.NoError(t, cacheStore.Save(t.Context(), key, &cached))
+	require.NoError(t, cacheStore.save(t.Context(), key, &cached))
 
 	results, err := grader.GradeIngredients(t.Context(), []ai.InputIngredient{current})
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestCachingGraderOverlaysCachedGradeOnCurrentIngredientMetadata(t *testing.
 }
 
 func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	grader := newCachingGrader(backend, cacheStore)
 
@@ -166,7 +166,7 @@ func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) 
 	require.NotNil(t, results[0].Grade)
 	assert.Equal(t, 10, results[0].Grade.Score)
 
-	cached, err := cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(current)))
+	cached, err := cacheStore.load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(current)))
 	require.NoError(t, err)
 	assert.Equal(t, "fresh-herbs", cached.AisleNumber)
 	assert.Equal(t, []string{"Produce"}, cached.Categories)
@@ -174,7 +174,7 @@ func TestCachingGraderOverlaysNewGradeOnCurrentIngredientMetadata(t *testing.T) 
 }
 
 func TestCachingGraderPassesThroughButDoesNotCacheUngradedIngredients(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{leaveLastUngraded: true}
 	grader := newCachingGrader(backend, cacheStore)
 	inputs := []ai.InputIngredient{
@@ -190,14 +190,14 @@ func TestCachingGraderPassesThroughButDoesNotCacheUngradedIngredients(t *testing
 	require.NotNil(t, results[0].Grade)
 	assert.Equal(t, "ingredient-01", results[1].ProductID)
 	assert.Nil(t, results[1].Grade)
-	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[0])))
+	_, err = cacheStore.load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[0])))
 	require.NoError(t, err)
-	_, err = cacheStore.Load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[1])))
+	_, err = cacheStore.load(t.Context(), cacheKey(testIngredientGradeCacheVersion+"/"+ingredientHash(inputs[1])))
 	assert.ErrorIs(t, err, cache.ErrNotFound)
 }
 
 func TestCachingGraderRetriesOmittedIngredientsOnNextCall(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{omitLastOnce: true}
 	grader := newCachingGrader(backend, cacheStore)
 	inputs := []ai.InputIngredient{
@@ -218,7 +218,7 @@ func TestCachingGraderRetriesOmittedIngredientsOnNextCall(t *testing.T) {
 }
 
 func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
-	cacheStore := NewStore(cache.NewInMemoryCache())
+	cacheStore := newStore(cache.NewInMemoryCache())
 	backend := &stubGradeBackend{}
 	manager := newCachingGrader(&multiGrader{backend}, cacheStore)
 
@@ -285,7 +285,7 @@ func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
 		assert.Equal(t, answer, graded[0].Grade.Reason)
 	}
 	assert.Equal(t, 1, calls)
-	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(ai.NewDecisionGrader(cfg.AI.APIKey, client).CacheVersion()+"/"+ingredientHash(ingredient)))
+	cached, err := newStore(cacheBackend).load(t.Context(), cacheKey(ai.NewDecisionGrader(cfg.AI.APIKey, client).CacheVersion()+"/"+ingredientHash(ingredient)))
 	require.NoError(t, err)
 	assert.Equal(t, 9, cached.Grade.Score)
 	assert.Equal(t, answer, cached.Grade.Reason)

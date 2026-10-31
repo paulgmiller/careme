@@ -19,13 +19,13 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-type LocationBackend struct {
+type locationBackend struct {
 	zipLookup centroidByZip
 	spatial   []locationtypes.Location
 	hydrator  *hydrator.LazyHydrator
 }
 
-func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*locationBackend, error) {
 	if !cfg.HEB.IsEnabled() {
 		return nil, locationtypes.DisabledBackendError("HEB")
 	}
@@ -42,7 +42,7 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
+func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*locationBackend, error) {
 	if c == nil {
 		return nil, fmt.Errorf("cache is required")
 	}
@@ -57,24 +57,24 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		spatial = append(spatial, entry.ToLocation())
 	}
 
-	return &LocationBackend{
+	return &locationBackend{
 		zipLookup: zipLookup,
 		spatial:   spatial,
 		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
-func (b *LocationBackend) IsID(locationID string) bool {
-	return IsID(locationID)
+func (b *locationBackend) IsID(locationID string) bool {
+	return isID(locationID)
 }
 
-func (*LocationBackend) HasInventory(locationID string) bool {
-	return IsID(locationID)
+func (*locationBackend) HasInventory(locationID string) bool {
+	return isID(locationID)
 }
 
-func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
-	if !IsID(locationID) {
+	if !isID(locationID) {
 		return nil, fmt.Errorf("heb location id %q is invalid", locationID)
 	}
 
@@ -86,7 +86,7 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &copy, nil
 }
 
-func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	candidates := nearby.FilterAndSortByCoordinates(coordinates, b.spatial, nearby.MaxLocationDistanceMiles)
 	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }

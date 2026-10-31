@@ -139,6 +139,8 @@ type pantryProvider interface {
 }
 
 // we drop extra categories here.
+// TODO(#1051): Revisit deduplication by ProductID: keeping the first row also
+// discards other variants. Selection may need to account for inventory or size.
 func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
 	seen := map[string]bool{}
 	var deduped []ai.InputIngredient
@@ -293,21 +295,21 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	logger.InfoContext(ctx, "found wines", "count", len(wines))
 
 	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
-		logger.ErrorContext(ctx, "failed to cache wines", "error", err)
+		return nil, fmt.Errorf("cache wines for %s: %w", locationID, err)
 	}
 	return wines, nil
 }
 
-type StaplesWatchdog struct {
+type staplesWatchdog struct {
 	locations locationByID
 	staples   staplesFetcher
 }
 
-func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *StaplesWatchdog {
-	return &StaplesWatchdog{locations: locations, staples: staples}
+func NewStaplesWatchdog(locations locationByID, staples staplesFetcher) *staplesWatchdog {
+	return &staplesWatchdog{locations: locations, staples: staples}
 }
 
-func (w *StaplesWatchdog) Watchdog(ctx context.Context) error {
+func (w *staplesWatchdog) Watchdog(ctx context.Context) error {
 	_, err := parallelism.MapWithErrors(StaplesWatchdogLocationIDs(), func(locationID string) (int, error) {
 		store, err := w.locations.GetLocationByID(ctx, locationID)
 		if err != nil {

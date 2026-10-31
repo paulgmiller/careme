@@ -15,19 +15,19 @@ import (
 
 const (
 	Container              = "heb"
-	StoreCachePrefix       = "heb/stores/"
-	StoreURLMapCacheKey    = "heb/store_url_map.json"
-	LocationIDPrefix       = "heb_"
+	storeCachePrefix       = "heb/stores/"
+	storeURLMapCacheKey    = "heb/store_url_map.json"
+	locationIDPrefix       = "heb_"
 	DefaultStoreSitemapURL = "https://www.heb.com/sitemap/storeSitemap.xml"
 	LocationIndexCacheKey  = "heb/store_locations.json"
 )
 
 func SaveStoreURLMap(ctx context.Context, c cache.Cache, urlMap map[string]string) error {
-	return sitemapfetch.SaveURLMap(ctx, c, StoreURLMapCacheKey, urlMap)
+	return sitemapfetch.SaveURLMap(ctx, c, storeURLMapCacheKey, urlMap)
 }
 
 func LoadStoreURLMap(ctx context.Context, c cache.Cache) (map[string]string, error) {
-	return sitemapfetch.LoadURLMap(ctx, c, StoreURLMapCacheKey)
+	return sitemapfetch.LoadURLMap(ctx, c, storeURLMapCacheKey)
 }
 
 func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary) error {
@@ -40,14 +40,14 @@ func CacheStoreSummary(ctx context.Context, c cache.Cache, summary *StoreSummary
 		return fmt.Errorf("marshal store summary: %w", err)
 	}
 
-	if err := c.Put(ctx, StoreCachePrefix+summary.ID, string(raw), cache.Unconditional()); err != nil {
+	if err := c.Put(ctx, storeCachePrefix+summary.ID, string(raw), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write store summary cache: %w", err)
 	}
 	return nil
 }
 
 func RebuildLocationIndex(ctx context.Context, c cache.ListCache, zipLookup storeindex.ZipCentroidLookup) error {
-	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, StoreCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
+	_, err := storeindex.RebuildFromStoreSummaries(ctx, c, storeCachePrefix, LocationIndexCacheKey, func(summary StoreSummary) storeindex.Entry {
 		lat, lon := storeindex.Coordinates(summary.Lat, summary.Lon, summary.ZipCode, zipLookup)
 		return storeindex.Entry{
 			ID:  summary.ID,
@@ -63,7 +63,7 @@ type loader struct {
 }
 
 func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
-	reader, err := l.cache.Get(ctx, StoreCachePrefix+locationID)
+	reader, err := l.cache.Get(ctx, storeCachePrefix+locationID)
 	if err != nil {
 		return locationtypes.Location{}, err
 	}

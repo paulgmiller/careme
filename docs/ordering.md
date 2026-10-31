@@ -33,6 +33,13 @@ A native form cannot set a custom header. The Food Club adapter derives its
 upstream `Idempotency-Key` from the authenticated Careme user and form key, since
 Food Club scopes keys across the whole integration rather than by shopper.
 
+The shopping page sends only items with a `buy` quantity and a nonempty store
+product ID. Ingredients without purchase quantities remain visible together in
+the “Have at home” aisle and are excluded from the cart form. Items with purchase
+quantities retain their store aisle, or “To buy” when no aisle is available.
+These display groups are rebuilt on page load for existing saved snapshots too.
+A list containing only excluded ingredients has no Add to cart form.
+
 The authenticated shopper comes from the verified Careme session, never from
 submitted JSON. A shopper whose session has expired is redirected to sign in,
 then back to the shopping list to submit again. `return_url` must be an
@@ -40,6 +47,61 @@ application-local path; it is used for sign-in return and for returning to the
 shopping list after a transfer.
 
 ## Kroger navigation
+
+### Product and item identity
+
+Kroger catalog search selects one priced item per product, preferring HIGH stock,
+then LOW, then unknown inventory. Temporarily out-of-stock items remain excluded;
+ties preserve API order. The selected item's `itemId` is retained as
+`InputIngredient.VariantID`, together with that item's size and prices.
+`ProductID` remains the recipe reference. Shared deduplication still collapses
+repeated product IDs across searches. Independently selecting multiple variants
+would require broader changes to recipe identity and merging.
+
+Size-based selection remains an alternative for
+[#1051](https://github.com/paulgmiller/careme/issues/1051). Inventory ranking applies
+when catalogs are fetched again; existing cached catalogs and finalized shopping
+snapshots retain their selected items.
+
+Finalization loads food ingredients and each saved recipe's first wine pick,
+combines both catalogs into one product-ID lookup, and merges their quantities
+once. Each wine pick contributes one bottle per recipe; repeated wines are merged
+like repeated food ingredients. Catalog metadata (VariantID, size, aisle, and name)
+is attached before the complete shopping snapshot is saved. Page rendering reads
+that snapshot without loading wine catalogs, enriching items, or appending wine.
+Existing finalized snapshots remain unchanged.
+
+Saving a recipe starts wine picking in the background. Finalization polls the
+shared wine recommendation cache every 500 ms, so picking can finish on another
+server. A saved WineSelection, including an empty wines array, means picking is
+complete. Finalization does not start another pick. Wine polling waits at most
+30 seconds. Missing results are logged as errors and treated as no wine for that
+recipe, including background picks that failed without saving a result. Food
+and completed wine picks still finalize. Request cancellation, cache read errors,
+and decoding errors return errors without saving a shopping snapshot. The AI
+quantity merge runs after input preparation.
+
+Wine recommendations retain their existing ingredient-shaped JSON and
+`wine_recommendations/` keys. The full candidate InputIngredient catalog is stored
+separately at `wine_selection_ingredients/v1/<recipe hash>`. Older picks remain displayable;
+without a matching catalog product they have no ordering variant ID. Cart transfer
+uses only persisted shopping-item identifiers and performs no product-detail
+lookup or availability recheck.
+
+Kroger's catalog identity now includes `item-upc-v1/` to refresh old staples and
+pantry snapshots. Wine candidates retain `wines/` keys and recommendations retain
+`wine_recommendations/`; selected catalog rows use the separate
+`wine_selection_ingredients/v1/` prefix.
+Existing finalized food snapshots remain immutable. Transfers containing any item
+without a selected UPC fail before writing the cart; recreate those lists from a
+refreshed catalog. There is no migration from product ID or product-level `upc`:
+multiple item UPCs make the original choice impossible to reconstruct safely.
+
+See the checked-in `products.productModel` and `products.productItemModel` schemas
+in `internal/providers/kroger/products/openapi.json` and
+[Kroger's response documentation](https://www.postman.com/kroger/the-kroger-co-s-public-workspace/documentation/nryx3kn/kroger-partner-apis?entity=request-4826685-c459db82-57d0-49d8-9bcd-1f6550558606).
+
+### Transfer flow
 
 1. The POST checks the shopper’s encrypted per-user token and refreshes it when needed.
 2. If a Kroger connection is needed, it immediately returns a 303 redirect to
@@ -59,8 +121,8 @@ Kroger rejects the entire form with HTTP 400 if any product ID is empty, before
 saving a transfer or contacting Kroger.
 
 Kroger sends the requested `buy` quantity for each product, rounding
-up to whole packages and defaulting to one when `buy` is absent. Successful writes record
-accepted or rejected package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
+up to whole packages. Items with no `buy` are excluded. Successful writes record
+accepted package quantities for each displayed item; the shopper reviews amounts and checkout in Kroger's cart.
 A cart transfer never checks out or places an order.
 
 ## Failures and duplicate protection
@@ -68,8 +130,8 @@ A cart transfer never checks out or places an order.
 OAuth denial, a missing code, or token exchange/storage errors return ordinary
 HTTP errors on the provider route. They do not create an order transfer.
 
-After authentication succeeds, the handler creates a pending transfer. Product
-lookup errors, no matched products, and cart write errors are saved as failed.
+After authentication succeeds, the handler creates a pending transfer. Missing
+selected item UPCs and cart write errors are saved as failed.
 Both successful and failed transfers redirect to the request’s shopping-list URL.
 The shopping list replaces the form with “Add to cart failed.” for a failed
 transfer. There is no retry control, and repeated posts or OAuth callbacks reuse
@@ -112,17 +174,23 @@ required except for HTTP localhost endpoints used in tests.
 
 The adapter sends JSON to `/v1/cart-transfers` with the partner bearer token and
 an integration-wide idempotency key derived from the Careme user ID and list key.
-Only the authenticated shopper’s account email is sent as an identity hint.
-Careme IDs are never passed as Food Club customer IDs. Customer-ID, ZIP, and
+The authenticated shopper’s account email and the ZIP saved in the
+`careme_zip_code` cookie from their location search are sent as identity hints.
+The shopping form carries this optional `zip_code` alongside `location`; it is
+separate from the store’s ZIP and omitted when no ZIP cookie is present.
+Careme IDs are never passed as Food Club customer IDs. Customer-ID and
 storefront-brand hints are currently omitted.
 
 Each product is sent once. Package counts come from `buy`, rounded up to whole
-packages; a missing count defaults to one. The shopping list already combines
+packages; items with no `buy` are excluded. The shopping list already combines
 product IDs and quantities, so the adapter forwards them directly. Recipe
 measurements such as “2 cups” are never converted to package
-counts. Every item must have a nonempty product ID. A request containing an
-empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
-contacting the partner. No items are silently omitted.
+counts. Every submitted item must have a nonempty product ID. A request
+containing an empty or whitespace-only ID fails with HTTP 400 before saving a transfer or
+contacting the partner. The page separates ingredients without purchase
+quantities or product IDs before building the form. The adapter also excludes
+items with no `buy` from submitted requests and rejects a request with no
+purchase quantities before contacting the partner.
 The selected catalog variant is included when available in the finalized
 shopping snapshot. Older snapshots and items without a selected variant omit it,
 using the partner’s documented default variant selection.
@@ -200,8 +268,8 @@ shared transfers are persisted under `instacart_order_transfers/`.
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
 of registering real ordering providers. No Kroger credentials, cart-token key,
 or OAuth callback registration are needed. Generate and finalize a shopping
-list, then submit “Add to mock cart”. The provider accepts all displayed items
-using `buy` rounded up to whole packages, defaulting to one when absent. Invalid
+list, then submit “Add to mock cart”. The provider accepts items with `buy`
+rounded up to whole packages and excludes items with no `buy`. Invalid
 quantities are logged and use one package in every order provider. It saves a shared
 `Transfer` and redirects back to the shopping list. “Review cart”
 opens the local `/mock/order-transfers/<id>` endpoint, which displays the saved

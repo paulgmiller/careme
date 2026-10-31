@@ -32,7 +32,7 @@ type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	return cachekey.NewHash(locationID, date, defaultStaplesSignature)
+	return cachekey.NewHash(locationID, date, "item-upc-v1/"+defaultStaplesSignature)
 }
 
 func NewIdentityProvider() identityProvider {
@@ -52,20 +52,20 @@ func (p identityProvider) IsID(locationID string) bool {
 }
 
 // internal?
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	client *products.ClientWithResponses
 }
 
-func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*StaplesProvider, error) {
-	client, err := NewProductsClientFromConfig(cfg, httpClient)
+func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*staplesProvider, error) {
+	client, err := newProductsClientFromConfig(cfg, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	return &StaplesProvider{client: client}, nil
+	return &staplesProvider{client: client}, nil
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, category.Frozen, 0)
 		if err != nil {
@@ -78,13 +78,13 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 // FetchPantry returns the separate pantry catalog used for meal-plan retrieval.
-func (p StaplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(pantryFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, false, 0)
 		if err != nil {
 			return nil, err
 		}
-		return lo.Map(ingredients, func(ingredient Ingredient, index int) ai.InputIngredient {
+		return lo.Map(ingredients, func(ingredient ingredient, index int) ai.InputIngredient {
 			input := inputIngredientFromKrogerIngredient(ingredient, index)
 			if !slices.Contains(input.Categories, category.Term) {
 				// dubious becsuse we don't do this for staples but if do embeddign based rag later its
@@ -101,7 +101,7 @@ func PantryCategories() []string {
 	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
 }
 
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, style, []string{"*"}, false, 0)
 		if err != nil {
@@ -113,7 +113,7 @@ func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, styl
 
 var availableInStore = products.Ais
 
-func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool, skip int) ([]Ingredient, error) {
+func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool, skip int) ([]ingredient, error) {
 	limit := 50
 
 	productResults, err := client.ProductGetWithResponse(ctx, &products.ProductGetParams{
@@ -130,7 +130,7 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 		return nil, err
 	}
 
-	var ingredients []Ingredient
+	var ingredients []ingredient
 
 	for _, product := range *productResults.JSON200.Data {
 		wildcard := len(brands) > 0 && brands[0] == "*"
@@ -141,45 +141,49 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 		if slices.Contains(*product.Categories, "Frozen") && !frozen {
 			continue
 		}
+		// TODO(#1051): Revisit size-based selection as an alternative to inventory ranking.
+		var selected *products.ProductsProductItemModel
 		for _, item := range *product.Items {
 			if item.Price == nil {
 				continue
 			}
-
 			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
-				// TODO pass along low stock levels to AI to use in recipe planning
-				// slog.WarnContext(ctx, "OOS", "description", *product.Description)
 				continue
 			}
-
-			var aisle *string
-			if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
-				aisle = (*product.AisleLocations)[0].Number
+			if selected == nil || itemStockRank(item) > itemStockRank(*selected) {
+				selected = &item
 			}
-
-			ingredients = append(ingredients, Ingredient{
-				ProductId:    product.ProductId,
-				Brand:        product.Brand,
-				Description:  product.Description,
-				Size:         item.Size,
-				PriceRegular: item.Price.Regular,
-				PriceSale:    item.Price.Promo,
-				Categories:   product.Categories,
-				AisleNumber:  aisle,
-			})
-
-			//DO we care about these?
-			/*"taxonomies": [
-			{
-			"department": {},
-			"commodity": {},
-			"subCommodity": {}
-			}
-			],*/
-			//Taxonomy:  product.,
-			// CountryOrigin: product.CountryOrigin,
-			// Favorite: item.Favorite,
 		}
+		if selected == nil {
+			continue
+		}
+		var aisle *string
+		if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+			aisle = (*product.AisleLocations)[0].Number
+		}
+		ingredients = append(ingredients, ingredient{
+			ProductId:    product.ProductId,
+			ItemId:       selected.ItemId,
+			Brand:        product.Brand,
+			Description:  product.Description,
+			Size:         selected.Size,
+			PriceRegular: selected.Price.Regular,
+			PriceSale:    selected.Price.Promo,
+			Categories:   product.Categories,
+			AisleNumber:  aisle,
+		})
+
+		//DO we care about these?
+		/*"taxonomies": [
+		{
+		"department": {},
+		"commodity": {},
+		"subCommodity": {}
+		}
+		],*/
+		//Taxonomy:  product.,
+		// CountryOrigin: product.CountryOrigin,
+		// Favorite: item.Favorite,
 	}
 
 	// recursion is pretty dumb pagination
@@ -194,9 +198,25 @@ func searchIngredients(ctx context.Context, client *products.ClientWithResponses
 	return ingredients, nil
 }
 
-func inputIngredientFromKrogerIngredient(ingredient Ingredient, _ int) ai.InputIngredient {
+// itemStockRank prefers HIGH, then LOW, then unknown stock. Equal ranks retain API order.
+func itemStockRank(item products.ProductsProductItemModel) int {
+	if item.Inventory == nil || item.Inventory.StockLevel == nil {
+		return 0
+	}
+	switch *item.Inventory.StockLevel {
+	case products.HIGH:
+		return 2
+	case products.LOW:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func inputIngredientFromKrogerIngredient(ingredient ingredient, _ int) ai.InputIngredient {
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    strings.TrimSpace(toStr(ingredient.ProductId)),
+		VariantID:    strings.TrimSpace(toStr(ingredient.ItemId)),
 		AisleNumber:  strings.TrimSpace(toStr(ingredient.AisleNumber)),
 		Brand:        strings.TrimSpace(toStr(ingredient.Brand)),
 		Description:  strings.TrimSpace(toStr(ingredient.Description)),
@@ -223,7 +243,7 @@ func clonePrice(price *float32) *float32 {
 }
 
 func defaultStaples() []staplesFilter {
-	return append(ProduceFilters(), []staplesFilter{
+	return append(produceFilters(), []staplesFilter{
 		{
 			Term:   "beef",
 			Brands: []string{"Simple Truth", "Kroger"},
@@ -268,7 +288,7 @@ func pantryFilters() []staplesFilter {
 	}
 }
 
-func ProduceFilters() []staplesFilter {
+func produceFilters() []staplesFilter {
 	return []staplesFilter{
 		{
 			Term:   "fresh vegatable",

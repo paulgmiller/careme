@@ -21,7 +21,7 @@ const (
 	defaultVersion  = "v24"
 )
 
-type Config struct {
+type config struct {
 	DeveloperToken  string
 	ClientID        string
 	ClientSecret    string
@@ -33,8 +33,8 @@ type Config struct {
 	HTTPClient      *http.Client
 }
 
-func ConfigFromEnv(loginCustomerID string) Config {
-	cfg := Config{
+func ConfigFromEnv(loginCustomerID string) config {
+	cfg := config{
 		DeveloperToken:  os.Getenv("GOOGLE_ADS_DEVELOPER_TOKEN"),
 		ClientID:        os.Getenv("GOOGLE_ADS_CLIENT_ID"),
 		ClientSecret:    os.Getenv("GOOGLE_ADS_CLIENT_SECRET"),
@@ -47,7 +47,7 @@ func ConfigFromEnv(loginCustomerID string) Config {
 	return cfg
 }
 
-func (c Config) validate() error {
+func (c config) validate() error {
 	var missing []string
 	if strings.TrimSpace(c.DeveloperToken) == "" {
 		missing = append(missing, "GOOGLE_ADS_DEVELOPER_TOKEN")
@@ -68,7 +68,7 @@ func (c Config) validate() error {
 }
 
 type Client struct {
-	cfg       Config
+	cfg       config
 	http      *http.Client
 	baseURL   string
 	oauthURL  string
@@ -78,7 +78,7 @@ type Client struct {
 	mu        sync.Mutex
 }
 
-func NewClient(cfg Config) (*Client, error) {
+func NewClient(cfg config) (*Client, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (c *Client) CreateProximityCriteria(ctx context.Context, customerID, campai
 	return resourceNames, nil
 }
 
-func (c *Client) RemoveCampaignCriteria(ctx context.Context, customerID string, resourceNames []string) error {
+func (c *Client) removeCampaignCriteria(ctx context.Context, customerID string, resourceNames []string) error {
 	if len(resourceNames) == 0 {
 		return nil
 	}
@@ -224,17 +224,6 @@ func (c *Client) CreateAdGroups(ctx context.Context, customerID, campaignID stri
 		return nil, err
 	}
 	return mutationResourceNames(response), nil
-}
-
-func (c *Client) RemoveAdGroups(ctx context.Context, customerID string, resourceNames []string) error {
-	if len(resourceNames) == 0 {
-		return nil
-	}
-	operations := make([]adGroupOperation, 0, len(resourceNames))
-	for _, resourceName := range resourceNames {
-		operations = append(operations, adGroupOperation{Remove: resourceName})
-	}
-	return c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/customers/%s/adGroups:mutate", customerID), mutateAdGroupsRequest{Operations: operations}, nil)
 }
 
 func (c *Client) CreateAdGroupProximityCriteria(ctx context.Context, customerID string, targets []Target, adGroups []string) ([]string, error) {

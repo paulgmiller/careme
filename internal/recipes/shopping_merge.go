@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sync"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
 )
 
 const shoppingQuantityCachePrefix = "shopping_quantities/v7/"
@@ -28,7 +32,6 @@ func (SimpleShoppingQuantityMerger) MergeShoppingQuantities(_ context.Context, i
 }
 
 func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ingredients []ai.Ingredient, catalog []ai.InputIngredient) error {
-	catalog = ai.MatchingShoppingCatalog(ingredients, catalog)
 	// Keep the first successful merge as the finalized list's snapshot.
 	key := shoppingQuantityCachePrefix + hash
 	exists, err := s.Cache.Exists(ctx, key)
@@ -39,11 +42,16 @@ func (s *server) mergeAndCacheShoppingList(ctx context.Context, hash string, ing
 		return nil
 	}
 
-	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, catalog)
+	products, err := shoppingCatalogLookup(catalog)
 	if err != nil {
 		return err
 	}
-	purchases := shoppingPurchasesForDisplay(merged, catalog)
+
+	merged, err := s.shoppingMerger.MergeShoppingQuantities(ctx, ingredients, MatchingShoppingCatalog(ingredients, catalog))
+	if err != nil {
+		return err
+	}
+	purchases := shoppingPurchasesForDisplay(prepareShoppingItems(merged, products))
 	body, err := json.Marshal(purchases)
 	if err != nil {
 		return err
@@ -63,13 +71,64 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 	if len(p.Saved) == 0 {
 		return nil, nil, fmt.Errorf("shopping list is not finalized")
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	wineCtx, stopWaiting := context.WithTimeout(ctx, 30*time.Second)
+	defer stopWaiting()
+	var catalog []ai.InputIngredient
+	var catalogErr error
+	var catalogWG sync.WaitGroup
+	catalogWG.Go(func() {
+		catalog, catalogErr = s.IngredientsFromCache(ctx, p.LocationHash())
+		if errors.Is(catalogErr, cache.ErrNotFound) {
+			catalogErr = nil
+		}
+		if catalogErr != nil {
+			cancel()
+		}
+	})
+	type wineInput struct {
+		ingredients []ai.Ingredient
+		catalog     []ai.InputIngredient
+	}
+	wines, wineErr := parallelism.MapWithErrors(p.Saved, func(recipe ai.Recipe) (wineInput, error) {
+		selection, err := s.waitForWine(wineCtx, recipe.ComputeHash())
+		// Wine is optional once its polling deadline expires; request cancellation is not.
+		if errors.Is(err, context.DeadlineExceeded) && wineCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			slog.ErrorContext(ctx, "timed out waiting for wine pick; finalizing without wine for recipe", "recipe_hash", recipe.ComputeHash(), "recipe_title", recipe.Title, "error", err)
+			return wineInput{}, nil
+		}
+		if err != nil {
+			cancel()
+			return wineInput{}, fmt.Errorf("finalize wine for recipe %q: %w", recipe.Title, err)
+		}
+		if len(selection.Wines) == 0 {
+			return wineInput{}, nil
+		}
+		selectedCatalog, err := s.IngredientsFromCache(ctx, wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date))
+		// Older picks remain displayable even if their candidate catalog is missing.
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			cancel()
+			return wineInput{}, fmt.Errorf("load selected wine catalog: %w", err)
+		}
+		wine := selection.Wines[0]
+		wine.Quantity = "1 bottle"
+		return wineInput{ingredients: []ai.Ingredient{wine}, catalog: selectedCatalog}, nil
+	})
+	catalogWG.Wait()
+	if catalogErr != nil {
+		return nil, nil, fmt.Errorf("load shopping catalog: %w", catalogErr)
+	}
+	if wineErr != nil {
+		return nil, nil, wineErr
+	}
 	ingredients := make([]ai.Ingredient, 0)
 	for _, recipe := range p.Saved {
 		ingredients = append(ingredients, recipe.Ingredients...)
 	}
-	catalog, err := s.IngredientsFromCache(ctx, p.LocationHash())
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return nil, nil, fmt.Errorf("load shopping catalog: %w", err)
+	for _, wine := range wines {
+		ingredients = append(ingredients, wine.ingredients...)
+		catalog = append(catalog, wine.catalog...)
 	}
 	return ingredients, catalog, nil
 }
@@ -86,4 +145,19 @@ func (s *server) cachedShoppingPurchases(ctx context.Context, hash string) ([]sh
 		return nil, fmt.Errorf("decode merged shopping quantities: %w", err)
 	}
 	return purchases, nil
+}
+
+func (s *server) finalizeShoppingPurchases(ctx context.Context, hash string) error {
+	exists, err := s.Cache.Exists(ctx, shoppingQuantityCachePrefix+hash)
+	if err != nil {
+		return fmt.Errorf("check finalized shopping list: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	ingredients, catalog, err := s.finalizedShoppingInputs(ctx, hash)
+	if err != nil {
+		return err
+	}
+	return s.mergeAndCacheShoppingList(ctx, hash, ingredients, catalog)
 }

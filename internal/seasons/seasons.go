@@ -37,8 +37,8 @@ type Style struct {
 
 const EnvSeason = "CAREME_SEASON"
 
-// ParseSeason returns a valid season from a query/env-style value.
-func ParseSeason(value string) (Season, bool) {
+// parseSeason returns a valid season from a query/env-style value.
+func parseSeason(value string) (Season, bool) {
 	switch Season(strings.ToLower(strings.TrimSpace(value))) {
 	case Fall:
 		return Fall, true
@@ -53,8 +53,8 @@ func ParseSeason(value string) (Season, bool) {
 	}
 }
 
-// GetSeason determines the season based on the month
-func GetSeason(t time.Time) Season {
+// getSeason determines the season based on the month
+func getSeason(t time.Time) Season {
 	month := t.Month()
 
 	// Fall: September, October, November
@@ -76,8 +76,8 @@ func GetSeason(t time.Time) Season {
 	return Summer
 }
 
-// GetColorScheme returns the appropriate color scheme for the given season
-func GetColorScheme(season Season) ColorScheme {
+// getColorScheme returns the appropriate color scheme for the given season
+func getColorScheme(season Season) ColorScheme {
 	switch season {
 	case Fall:
 		// Orange colors - leaf falling orange
@@ -137,21 +137,21 @@ func GetColorScheme(season Season) ColorScheme {
 		}
 	default:
 		// Default to fall colors
-		return GetColorScheme(Fall)
+		return getColorScheme(Fall)
 	}
 }
 
 // GetCurrentSeason returns the current season based on the current time
 func GetCurrentSeason() Season {
-	if season, ok := ParseSeason(os.Getenv(EnvSeason)); ok {
+	if season, ok := parseSeason(os.Getenv(EnvSeason)); ok {
 		return season
 	}
-	return GetSeason(time.Now())
+	return getSeason(time.Now())
 }
 
 // GetCurrentColorScheme returns the color scheme for the current season
 func GetCurrentColorScheme() ColorScheme {
-	return GetColorScheme(GetCurrentSeason())
+	return getColorScheme(GetCurrentSeason())
 }
 
 // GetCurrentStyle returns the current style configuration

@@ -137,6 +137,23 @@ Secrets remain separate; the check reads manifests without accessing credentials
 or Kubernetes. It also runs in `k8s-lint`, which gates publishing and deployment
 in CI. It checks secret references, not the keys or values stored in the cluster.
 
+## Export checks and statement diffs
+
+`./task.sh lint` includes `./task.sh unexport`, which rejects types, functions,
+constants, and variables that can be private to their package. Struct fields
+retain their visibility. Run `./task.sh unexport-fix`, review the diff,
+and run `./task.sh verify-go` to apply the cleanup. The check uses a pinned version of
+[unloved](https://github.com/paulgmiller/unloved) through `tools/tool.mod`.
+Its README documents dynamic entry point exceptions and build configuration
+limits. The tool is maintained and tested in its own repository.
+
+`./task.sh statement-diff` reports Go statement debt changes from `origin/master`
+to the working tree. The `statement-diff` job in Build and Publish reports
+`$BASE_SHA...HEAD`, using the PR base SHA, the previous branch HEAD for pushes,
+or `HEAD^` for manual runs. It uses `paulgmiller/go-statement@latest` and writes
+the report to the job summary. Publishing depends on this job. No debt threshold
+is configured yet; add `--max-debt <limit>` to its diff command to enforce one.
+
 ## Mail placement tests
 
 Send today's real recipe email through the production sender to test Gmail placement:
@@ -261,6 +278,10 @@ the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 For a test-site cart handoff walkthrough and standalone mock API, see
 [MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
 available at `/mnfoodclub-demo/` only when `ENABLE_MOCKS` is enabled.
+
+For the standalone API service wired into `caremetest`, see the
+[Food Club test stub](docs/mnfoodclub-stub.md).
+
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.
 Missing credentials fail client construction when the staples backends are

@@ -34,7 +34,7 @@ type errorReader struct{ err error }
 
 func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 
-func testClient(t *testing.T, transport roundTripFunc) *Client {
+func testClient(t *testing.T, transport roundTripFunc) *client {
 	t.Helper()
 	client, err := NewClient(config.MNFoodClubConfig{APIPath: "https://api.bigcommerce.com/stores/test/v3/", AccessToken: "test-token"}, &http.Client{Transport: transport})
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func jsonPage(t *testing.T, data any, page, pages int) *http.Response {
 }
 
 func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
-	for _, category := range []int{AllCategories, 178} {
+	for _, category := range []int{allCategories, 178} {
 		t.Run(fmt.Sprint(category), func(t *testing.T) {
 			var calls []string
 			var bodies []*trackedBody
@@ -73,7 +73,7 @@ func TestFetchPaginatesCatalogAndMetadata(t *testing.T) {
 					assert.Equal(t, "variants", req.URL.Query().Get("include"))
 					assert.Equal(t, "id", req.URL.Query().Get("sort"))
 					assert.Equal(t, "asc", req.URL.Query().Get("direction"))
-					if category == AllCategories {
+					if category == allCategories {
 						assert.Empty(t, req.URL.Query().Get("categories:in"))
 					} else {
 						assert.Equal(t, "178", req.URL.Query().Get("categories:in"))
@@ -139,7 +139,7 @@ func TestCatalogConfiguration(t *testing.T) {
 			return nil, nil
 		})})
 		require.NoError(t, err)
-		got, err := client.Fetch(t.Context(), AllCategories)
+		got, err := client.Fetch(t.Context(), allCategories)
 		require.Error(t, err)
 		assert.Nil(t, got)
 		assert.NotContains(t, err.Error(), "password")
@@ -191,7 +191,7 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 				body = &trackedBody{Reader: test.body}
 				return &http.Response{StatusCode: test.status, Body: body}, nil
 			})
-			got, err := client.Fetch(t.Context(), AllCategories)
+			got, err := client.Fetch(t.Context(), allCategories)
 			require.ErrorContains(t, err, test.want)
 			assert.Contains(t, err.Error(), "products page 2")
 			assert.NotContains(t, err.Error(), "private error body")
@@ -215,7 +215,7 @@ func TestFetchFailuresReturnNoPartialCatalog(t *testing.T) {
 				}
 				return jsonPage(t, []catalogProduct{}, 1, 1), nil
 			})
-			got, err := client.Fetch(t.Context(), AllCategories)
+			got, err := client.Fetch(t.Context(), allCategories)
 			require.ErrorContains(t, err, resource+" page 1")
 			assert.Nil(t, got)
 		})
@@ -295,7 +295,7 @@ func TestRateLimitCancellationDuringBackoff(t *testing.T) {
 		calls++
 		return &http.Response{StatusCode: 429, Header: http.Header{"X-Rate-Limit-Time-Reset-Ms": []string{"60000"}}, Body: body}, nil
 	})
-	got, err := client.Fetch(ctx, AllCategories)
+	got, err := client.Fetch(ctx, allCategories)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Nil(t, got)
 	assert.Equal(t, 1, calls)
@@ -314,7 +314,7 @@ func TestFetchCancellation(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 429, Header: http.Header{"X-Rate-Limit-Time-Reset-Ms": []string{"60000"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
 			})
-			got, err := client.Fetch(ctx, AllCategories)
+			got, err := client.Fetch(ctx, allCategories)
 			require.ErrorIs(t, err, context.Canceled)
 			assert.Nil(t, got)
 		})

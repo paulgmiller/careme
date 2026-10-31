@@ -179,7 +179,7 @@ func AdminUserDetailPage(storage *Storage) http.Handler {
 		}
 		user, err := storage.GetByID(id)
 		if err != nil {
-			if errors.Is(err, ErrNotFound) {
+			if errors.Is(err, errNotFound) {
 				http.NotFound(w, r)
 				return
 			}

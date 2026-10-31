@@ -25,7 +25,7 @@ type home struct {
 	authClient auth.AuthClient
 }
 
-func (h home) Register(routes routing.Registrar) {
+func (h home) register(routes routing.Registrar) {
 	routes.Handle("/{$}", h)
 	routes.Handle("/index.html", h)
 	routes.Handle("/index.htm", h)

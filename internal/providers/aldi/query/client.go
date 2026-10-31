@@ -36,7 +36,7 @@ const (
 	itemBatchSize  = 30
 )
 
-type Client struct {
+type client struct {
 	baseURL        string
 	httpClient     *http.Client
 	pageViewIDFunc func() string
@@ -80,7 +80,7 @@ type persistedQuery struct {
 	SHA256Hash string `json:"sha256Hash"`
 }
 
-func NewClient(cfg ClientConfig) *Client {
+func NewClient(cfg ClientConfig) *client {
 	baseURL := strings.TrimSpace(cfg.BaseURL)
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -91,7 +91,7 @@ func NewClient(cfg ClientConfig) *Client {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	return &Client{
+	return &client{
 		baseURL:        strings.TrimRight(baseURL, "/"),
 		httpClient:     httpClient,
 		pageViewIDFunc: uuid.NewString,
@@ -99,7 +99,7 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug string, opts SearchOptions) ([]Item, error) {
+func (c *client) Products(ctx context.Context, storeID, postalCode, categorySlug string, opts SearchOptions) ([]Item, error) {
 	if err := validateCollectionProductsArgs(storeID, postalCode, categorySlug, opts); err != nil {
 		return nil, err
 	}
@@ -122,8 +122,8 @@ func (c *Client) Products(ctx context.Context, storeID, postalCode, categorySlug
 	}
 
 	limit := resolvedFirst(opts.First)
-	items := payload.Data.Items()
-	itemIDs := payload.Data.ItemIDs()
+	items := payload.Data.items()
+	itemIDs := payload.Data.itemIDs()
 	if len(itemIDs) <= len(items) {
 		return items, nil
 	}
@@ -146,7 +146,7 @@ func validateCollectionProductsArgs(storeID, postalCode, categorySlug string, op
 	return nil
 }
 
-func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, limit int, initCookies []*http.Cookie) ([]Item, error) {
+func (c *client) hydrateItems(ctx context.Context, storeID, postalCode, pageView string, itemIDs []string, limit int, initCookies []*http.Cookie) ([]Item, error) {
 	items := make([]Item, 0, len(itemIDs))
 	for _, batch := range lo.Chunk(itemIDs, itemBatchSize) {
 		payload, err := c.items(ctx, storeID, postalCode, pageView, batch, initCookies)
@@ -158,7 +158,7 @@ func (c *Client) hydrateItems(ctx context.Context, storeID, postalCode, pageView
 	return items, nil
 }
 
-func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions, initCookies []*http.Cookie) (*CollectionProductsPayload, error) {
+func (c *client) collectionProducts(ctx context.Context, storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions, initCookies []*http.Cookie) (*collectionProductsPayload, error) {
 	endpoint, err := c.collectionProductsURL(storeID, postalCode, categorySlug, pageViewID, opts)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 		return nil, fmt.Errorf("collection products request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var payload CollectionProductsPayload
+	var payload collectionProductsPayload
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode collection products response: %w", err)
 	}
@@ -211,7 +211,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 		"aldi graphql decoded",
 		"operation", collectionProductsOperationName,
 		"items", len(payload.Data.CollectionProducts.Items),
-		"item_ids", len(payload.Data.ItemIDs()),
+		"item_ids", len(payload.Data.itemIDs()),
 		"featured_products", len(payload.Data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts),
 		"header", payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString,
 		"search_id", payload.Data.CollectionProductsBasedSearchResults.SearchID,
@@ -223,7 +223,7 @@ func (c *Client) collectionProducts(ctx context.Context, storeID, postalCode, ca
 	return &payload, nil
 }
 
-func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, initCookies []*http.Cookie) (*ItemsPayload, error) {
+func (c *client) items(ctx context.Context, storeID, postalCode, pageViewID string, ids []string, initCookies []*http.Cookie) (*itemsPayload, error) {
 	if len(ids) == 0 {
 		return nil, errors.New("item ids are required")
 	}
@@ -275,7 +275,7 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 		return nil, fmt.Errorf("items request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var payload ItemsPayload
+	var payload itemsPayload
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode items response: %w", err)
 	}
@@ -286,7 +286,7 @@ func (c *Client) items(ctx context.Context, storeID, postalCode, pageViewID stri
 	return &payload, nil
 }
 
-func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
+func (c *client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
 	endpoint := c.baseURL + "/idp/v1/init"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader([]byte("{}")))
 	if err != nil {
@@ -314,7 +314,7 @@ func (c *Client) initCookies(ctx context.Context) ([]*http.Cookie, error) {
 	return cookies, nil
 }
 
-func (c *Client) collectionProductsURL(storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions) (string, error) {
+func (c *client) collectionProductsURL(storeID, postalCode, categorySlug, pageViewID string, opts SearchOptions) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/graphql")
 	if err != nil {
 		return "", fmt.Errorf("parse collection products URL: %w", err)
@@ -354,7 +354,7 @@ func (c *Client) collectionProductsURL(storeID, postalCode, categorySlug, pageVi
 	return endpoint.String(), nil
 }
 
-func (c *Client) itemsURL(storeID, postalCode string, ids []string) (string, error) {
+func (c *client) itemsURL(storeID, postalCode string, ids []string) (string, error) {
 	endpoint, err := url.Parse(c.baseURL + "/graphql")
 	if err != nil {
 		return "", fmt.Errorf("parse items URL: %w", err)
@@ -397,7 +397,7 @@ func resolvedFirst(value int) int {
 	return value
 }
 
-func (c *Client) zoneIDForStore(storeID string) string {
+func (c *client) zoneIDForStore(storeID string) string {
 	storeID = strings.TrimSpace(storeID)
 	c.zoneMu.Lock()
 	defer c.zoneMu.Unlock()
@@ -444,7 +444,7 @@ func cookieNames(cookies []*http.Cookie) string {
 	return strings.Join(names, ",")
 }
 
-func graphQLErrorsString(errs []GraphQLError) string {
+func graphQLErrorsString(errs []graphQLError) string {
 	parts := make([]string, 0, len(errs))
 	for _, err := range errs {
 		message := strings.TrimSpace(err.Message)

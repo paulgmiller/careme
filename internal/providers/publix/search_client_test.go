@@ -72,10 +72,10 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	client := NewSearchClientWithBaseURL(server.URL, server.Client())
-	got, err := client.StoreProductsSavings(context.Background(), StoreProductsSavingsOptions{
+	client := newSearchClientWithBaseURL(server.URL, server.Client())
+	got, err := client.StoreProductsSavings(context.Background(), storeProductsSavingsOptions{
 		StoreNumber: "1847",
-		CategoryID:  CategoryBeef,
+		CategoryID:  categoryBeef,
 		Abck:        "token-value; bm_sv=bm-token",
 		Take:        48,
 		Skip:        7,
@@ -89,14 +89,14 @@ func TestStoreProductsSavingsBuildsRequestAndDecodesProducts(t *testing.T) {
 	}
 	if !strings.Contains(requestedQuery, "keyword=") ||
 		!strings.Contains(requestedQuery, "storeNumber=1847") ||
-		!strings.Contains(requestedQuery, "cat="+CategoryBeef) ||
+		!strings.Contains(requestedQuery, "cat="+categoryBeef) ||
 		!strings.Contains(requestedQuery, "source="+storeProductsSavingsSource) {
 		t.Fatalf("unexpected request query: %q", requestedQuery)
 	}
 	if requestBody.Variables.Take != 48 ||
 		requestBody.Variables.Skip != 7 ||
 		requestBody.Variables.Keyword != "" ||
-		requestBody.Variables.CategoryID != CategoryBeef ||
+		requestBody.Variables.CategoryID != categoryBeef ||
 		requestBody.Variables.SortOrder != storeProductsSavingsSort ||
 		requestBody.Variables.Source != storeProductsSavingsSource {
 		t.Fatalf("unexpected graphql variables: %+v", requestBody.Variables)

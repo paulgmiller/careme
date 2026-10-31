@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newOrderTest(t *testing.T, api http.HandlerFunc) (*OrderHandler, *OrderClient, cache.Cache) {
+func newOrderTest(t *testing.T, api http.HandlerFunc) (*orderHandler, *orderClient, cache.Cache) {
 	t.Helper()
 	server := httptest.NewServer(api)
 	t.Cleanup(server.Close)
@@ -35,11 +35,11 @@ func newOrderTest(t *testing.T, api http.HandlerFunc) (*OrderHandler, *OrderClie
 func orderInput() ordertypes.TransferRequest {
 	return ordertypes.TransferRequest{
 		Location: locationtypes.Location{ID: TCFarmLocationID, Chain: "TC Farm"}, ReturnURL: "/recipes?h=list",
-		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs"}},
+		Items: []ai.ShoppingItem{{ProductID: "101", VariantID: "1005", Name: "Chicken", Buy: new(float64(3))}, {ProductID: "202", Name: "Eggs", Buy: new(float64(1))}},
 	}
 }
 
-func postTransfer(t *testing.T, h *OrderHandler, input ordertypes.TransferRequest) *httptest.ResponseRecorder {
+func postTransfer(t *testing.T, h *orderHandler, input ordertypes.TransferRequest) *httptest.ResponseRecorder {
 	t.Helper()
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
@@ -298,4 +298,69 @@ func TestOrderClientPreservesTransportWithoutReplayingFailures(t *testing.T) {
 	_, err = client.create(t.Context(), "original-key", handoffRequest{Items: []requestedItem{{ProductID: "101", Quantity: 1}}})
 	require.Error(t, err)
 	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestOrderOptionalZIPHint(t *testing.T) {
+	for _, zipCode := range []string{"", "00501", "55401-1234"} {
+		t.Run(zipCode, func(t *testing.T) {
+			h, client, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					IdentityHints map[string]any `json:"identity_hints"`
+				}
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+				if zipCode == "" {
+					assert.NotContains(t, request.IdentityHints, "zip_code")
+				} else {
+					assert.Equal(t, zipCode, request.IdentityHints["zip_code"])
+				}
+				assert.Equal(t, []any{"you@careme.cooking"}, request.IdentityHints["emails"])
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(appliedResult))
+			})
+			input := orderInput()
+			input.Location.ZipCode = "99999"
+			view, err := OrderViewForUser(t.Context(), c, client, ordertypes.OrderViewInput{
+				UserID: "mock-clerk-user-id", ListKey: "list", Location: input.Location,
+				ZipCode: zipCode, Items: input.Items, ReturnURL: input.ReturnURL,
+			})
+			require.NoError(t, err)
+			if zipCode == "" {
+				var body map[string]any
+				require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &body))
+				assert.NotContains(t, body, "zip_code")
+			}
+			var posted ordertypes.TransferRequest
+			require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &posted))
+			assert.Equal(t, zipCode, posted.ZipCode)
+			assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, posted).Code)
+		})
+	}
+}
+
+func TestOrderExcludesItemsWithoutBuy(t *testing.T) {
+	var calls int
+	h, _, _ := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var request handoffRequest
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 3}, {ProductID: "202", Quantity: 1}}, request.Items)
+		_, _ = w.Write([]byte(appliedResult))
+	})
+	input := orderInput()
+	input.Items = append(input.Items, ai.ShoppingItem{ProductID: "garlic", Name: "Garlic"})
+	assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, input).Code)
+	assert.Equal(t, 1, calls)
+}
+
+func TestOrderWithoutBuyDoesNotContactPartner(t *testing.T) {
+	h, _, c := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("items without buy must not contact the partner")
+	})
+	input := orderInput()
+	for i := range input.Items {
+		input.Items[i].Buy = nil
+	}
+	assert.Equal(t, http.StatusBadRequest, postTransfer(t, h, input).Code)
+	_, err := loadOrderTransfer(t.Context(), c, "mock-clerk-user-id", "list")
+	assert.ErrorIs(t, err, cache.ErrNotFound)
 }

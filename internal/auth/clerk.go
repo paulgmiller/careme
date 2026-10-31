@@ -60,8 +60,8 @@ type clerkClient struct {
 
 var _ AuthClient = (*clerkClient)(nil)
 
-// NewClient creates a new Clerk client wrapper
-func NewClient(cfg *config.Config) (*clerkClient, error) {
+// newClient creates a new Clerk client wrapper
+func newClient(cfg *config.Config) (*clerkClient, error) {
 	if cfg.Clerk.SecretKey == "" {
 		return nil, fmt.Errorf("clerk secret key is required")
 	}

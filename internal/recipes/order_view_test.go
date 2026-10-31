@@ -3,6 +3,7 @@ package recipes
 import (
 	"bytes"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -19,7 +20,7 @@ import (
 func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 	s := newTestServer(t)
 	view := shoppingListPageView{Hash: "list", Location: locations.Location{ID: "other-store"}, Purchases: []shoppingPurchaseGroup{
-		{Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Food", Needed: "1 lb", VariantID: "variant-42"}}},
+		{Items: []shoppingPurchaseItem{{ProductID: "food", Name: "Food", Needed: "1 lb", Buy: new(float64(1)), VariantID: "variant-42"}}},
 		{Items: []shoppingPurchaseItem{{Name: "Wine", Needed: "1 bottle"}}},
 	}}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
@@ -27,13 +28,13 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
 		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
-		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb"}, {Name: "Wine", Needed: "1 bottle"}}, input.Items)
+		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb", Buy: new(float64(1))}}, input.Items)
 		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", TransferLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`}, nil
 	})
 	if view.User == nil {
 		view.User = &utypes.User{ID: "viewer"}
 	}
-	require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?destination_status=ready", nil).Context(), &view))
+	require.NoError(t, s.populateOrderView(httptest.NewRequest("GET", "/recipes?destination_status=ready", nil), &view))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", view))
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
@@ -50,7 +51,7 @@ func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 		s.orderView = orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, failure })
 		view := shoppingListPageView{}
 		view.User = &utypes.User{ID: "viewer"}
-		err := s.populateOrderView(httptest.NewRequest("GET", "/recipes", nil).Context(), &view)
+		err := s.populateOrderView(httptest.NewRequest("GET", "/recipes", nil), &view)
 		if failure != nil {
 			require.ErrorIs(t, err, failure)
 		} else {
@@ -88,6 +89,26 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 				assert.Contains(t, controls.String(), "Build Shopping List")
 			}
 			assert.Contains(t, controls.String(), `aria-label="Share shopping list"`)
+		})
+	}
+}
+
+func TestPopulateOrderViewSearchZIP(t *testing.T) {
+	for _, zipCode := range []string{"", "00501", "55401-1234"} {
+		t.Run(zipCode, func(t *testing.T) {
+			s := newTestServer(t)
+			s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+				assert.Equal(t, zipCode, input.ZipCode)
+				assert.Equal(t, "99999", input.Location.ZipCode)
+				return nil, nil
+			})
+			view := shoppingListPageView{Location: locations.Location{ZipCode: "99999"}}
+			view.User = &utypes.User{ID: "viewer"}
+			request := httptest.NewRequest(http.MethodGet, "/recipes", nil)
+			if zipCode != "" {
+				request.AddCookie(&http.Cookie{Name: locations.ZipCodeCookieName, Value: zipCode})
+			}
+			require.NoError(t, s.populateOrderView(request, &view))
 		})
 	}
 }

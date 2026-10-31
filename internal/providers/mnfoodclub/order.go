@@ -20,17 +20,17 @@ import (
 
 const orderTransferURL = "/mnfoodclub/order-transfers"
 
-type OrderHandler struct {
+type orderHandler struct {
 	cache  cache.Cache
 	auth   auth.AuthClient
-	client *OrderClient
+	client *orderClient
 }
 
-func NewOrderHandler(c cache.Cache, authClient auth.AuthClient, client *OrderClient) *OrderHandler {
-	return &OrderHandler{cache: c, auth: authClient, client: client}
+func NewOrderHandler(c cache.Cache, authClient auth.AuthClient, client *orderClient) *orderHandler {
+	return &orderHandler{cache: c, auth: authClient, client: client}
 }
 
-func (h *OrderHandler) Register(routes routing.Registrar) {
+func (h *orderHandler) Register(routes routing.Registrar) {
 	routes.Handle("POST "+orderTransferURL, http.NewCrossOriginProtection().Handler(http.HandlerFunc(h.handleOrder)))
 }
 
@@ -61,13 +61,13 @@ func saveOrderTransfer(ctx context.Context, c cache.Cache, userID, key string, t
 }
 
 // OrderViewForUser resolves a pending login on the server; the browser never polls.
-func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+func OrderViewForUser(ctx context.Context, c cache.Cache, client *orderClient, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if input.UserID == "" {
 		return nil, fmt.Errorf("MN Food Club order view requires an authenticated user ID")
 	}
 	transfer, err := loadOrderTransfer(ctx, c, input.UserID, input.ListKey)
 	if errors.Is(err, cache.ErrNotFound) {
-		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+		body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ZipCode: input.ZipCode, ReturnURL: input.ReturnURL})
 		if err != nil {
 			return nil, fmt.Errorf("encode MN Food Club transfer request: %w", err)
 		}
@@ -98,7 +98,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, client *OrderClient, i
 	}
 }
 
-func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
+func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
@@ -130,6 +130,10 @@ func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request := orderItems(input)
+	if len(request.Items) == 0 {
+		http.Error(w, "MN Food Club transfer has no purchase quantities.", http.StatusBadRequest)
+		return
+	}
 	email, err := h.auth.GetUserEmail(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "Unable to load your email for MN Food Club.", http.StatusInternalServerError)
@@ -173,9 +177,11 @@ func validOrderForm(key string, input ordertypes.TransferRequest) bool {
 }
 
 func orderItems(input ordertypes.TransferRequest) handoffRequest {
-	request := handoffRequest{Items: make([]requestedItem, len(input.Items))}
-	for i, item := range input.Items {
-		request.Items[i] = requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: item.PackageQuantity()}
+	request := handoffRequest{IdentityHints: identityHints{ZipCode: input.ZipCode}}
+	for _, item := range input.Items {
+		if quantity := item.PackageQuantity(); quantity > 0 {
+			request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})
+		}
 	}
 	return request
 }

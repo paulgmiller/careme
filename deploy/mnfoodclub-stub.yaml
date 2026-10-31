@@ -1,0 +1,72 @@
+# Applied only by deploy.sh's caremetest branch. No production deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mnfoodclub-stub
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mnfoodclub-stub
+  template:
+    metadata:
+      labels:
+        app: mnfoodclub-stub
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # Distroless nonroot
+        runAsGroup: 65532 # Distroless nonroot
+      containers:
+        - name: stub
+          image: ghcr.io/paulgmiller/careme-mnfoodclubstub:${IMAGE_TAG}
+          args: ["-public-url", "https://test.careme.cooking/mnfoodclub-stub"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /mnfoodclub-stub/ready
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /mnfoodclub-stub/ready
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mnfoodclub-stub
+spec:
+  selector:
+    app: mnfoodclub-stub
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mnfoodclub-stub
+spec:
+  rules:
+    - host: test.careme.cooking
+      http:
+        paths:
+          - path: /mnfoodclub-stub
+            pathType: Prefix
+            backend:
+              service:
+                name: mnfoodclub-stub
+                port:
+                  number: 80

@@ -37,8 +37,8 @@ type recipeStore interface {
 	SaveShoppingList(context.Context, *ai.ShoppingList, string) error
 }
 
-// Service runs advertised recipe generation independently of the web server.
-type Service struct {
+// service runs advertised recipe generation independently of the web server.
+type service struct {
 	locations      advertisedLocationStore
 	generator      recipeGenerator
 	store          recipeStore
@@ -53,7 +53,7 @@ type providerFactory interface {
 	NewStaplesBackends() ([]recipes.StaplesBackend, error)
 }
 
-func NewService(cfg *config.Config, providers providerFactory) (*Service, error) {
+func NewService(cfg *config.Config, providers providerFactory) (*service, error) {
 	c, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("create campaign cache: %w", err)
@@ -88,14 +88,14 @@ func NewService(cfg *config.Config, providers providerFactory) (*Service, error)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}
-	return &Service{
+	return &service{
 		locations: locationStore, generator: generator, store: store,
 		statuses: statuses, images: recipes.NewImageStore(imageCache), imageGenerator: client, wait: critiquer.Wait,
 	}, nil
 }
 
 // RunOnce waits for required recipes and images, returning failures to the cronjob.
-func (s *Service) RunOnce(ctx context.Context, now time.Time) error {
+func (s *service) RunOnce(ctx context.Context, now time.Time) error {
 	defer s.wait()
 	ctx = logsetup.WithSessionID(ctx, "campaign_ads")
 	ctx = logsetup.WithUserID(ctx, "campaign_ads")
@@ -109,7 +109,7 @@ func (s *Service) RunOnce(ctx context.Context, now time.Time) error {
 	return errors.Join(errs...)
 }
 
-func (s *Service) generateLocation(ctx context.Context, c campaign, now time.Time) error {
+func (s *service) generateLocation(ctx context.Context, c campaign, now time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	locationID := c.Location.ID
@@ -127,7 +127,7 @@ func (s *Service) generateLocation(ctx context.Context, c campaign, now time.Tim
 	return nil
 }
 
-func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) error {
+func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) error {
 	hash := p.Hash()
 	list, err := s.store.FromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
@@ -155,7 +155,7 @@ func (s *Service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	return nil
 }
 
-func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
+func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
 	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
 		return fmt.Errorf("save campaign params: %w", err)
 	}
@@ -178,7 +178,7 @@ func (s *Service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 	return nil
 }
 
-func (s *Service) prepareImage(ctx context.Context, list *ai.ShoppingList) error {
+func (s *service) prepareImage(ctx context.Context, list *ai.ShoppingList) error {
 	errs := lop.Map(list.Recipes, func(recipe ai.Recipe, _ int) error {
 		// magic number for timeout
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)

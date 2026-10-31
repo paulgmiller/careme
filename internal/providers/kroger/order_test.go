@@ -21,7 +21,7 @@ import (
 )
 
 func orderForm() url.Values {
-	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","name":"Red wine","needed":"1 bottle"},{"id":"missing","name":"Eggs"}]}`}}
+	return url.Values{"idempotency_key": {"list-hash"}, "transfer_request": {`{"location":{"id":"70500874","name":"QFC","chain":"QFC"},"return_url":"/recipes?h=list-hash#shopping-list-section","items":[{"id":"food","variant_id":"food-upc","name":"Milk","needed":"2 cups","buy":2},{"id":"wine","variant_id":"wine-upc","name":"Red wine","needed":"1 bottle","buy":1}]}`}}
 }
 
 func setOrderField(t *testing.T, form url.Values, field string, value any) {
@@ -91,24 +91,18 @@ func orderFixture(t *testing.T, add func(*http.Request) (*http.Response, error))
 			return cartResponse(http.StatusOK, `{"access_token":"shopper","refresh_token":"refresh","expires_in":3600}`), nil
 		case "/v1/cart/add":
 			return add(r)
-		case "/v1/products/missing":
-			return cartResponse(http.StatusNotFound, `{}`), nil
-		case "/v1/products/wine":
-			return cartResponse(http.StatusOK, `{"data":{"items":[{"itemId":"wine-upc"}]}}`), nil
 		default:
-			assert.Equal(t, "70500874", r.URL.Query().Get("filter.locationId"))
-			return cartResponse(http.StatusOK, `{"data":{"items":[{"itemId":"food-upc"}]}}`), nil
+			t.Fatalf("unexpected Kroger request: %s", r.URL)
+			return nil, nil
 		}
 	})}
-	manager := NewKrogerTokenManager("client", "secret", client)
-	manager.token, manager.expiresAt = "catalog", time.Now().Add(time.Hour)
-	a := newTestOrderHandler(t, &CartClient{ClientID: "client", RedirectURI: "https://careme.test/kroger/callback", HTTPClient: client, CatalogToken: manager})
+	a := newTestOrderHandler(t, &CartClient{ClientID: "client", RedirectURI: "https://careme.test/kroger/callback", HTTPClient: client})
 	return a
 }
 
 func saveShopper(t *testing.T, a *OrderHandler, expires time.Time) {
 	t.Helper()
-	require.NoError(t, a.saveToken(t.Context(), "mock-clerk-user-id", CartToken{AccessToken: "shopper", RefreshToken: "refresh", ExpiresAt: expires}))
+	require.NoError(t, a.saveToken(t.Context(), "mock-clerk-user-id", cartToken{AccessToken: "shopper", RefreshToken: "refresh", ExpiresAt: expires}))
 }
 
 func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
@@ -117,10 +111,10 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 		calls++
 		assert.Equal(t, "Bearer shopper", r.Header.Get("Authorization"))
 		var payload struct {
-			Items []CartItem `json:"items"`
+			Items []cartItem `json:"items"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
+		assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, payload.Items)
 		return cartResponse(http.StatusNoContent, ""), nil
 	})
 	saveShopper(t, a, time.Now().Add(time.Hour))
@@ -134,7 +128,6 @@ func TestKrogerOrderPostsFoodAndWineAndPreventsDuplicates(t *testing.T) {
 	assert.Equal(t, []ordertypes.TransferItem{
 		{ProductID: "food", Name: "Milk", AcceptedQuantity: 2},
 		{ProductID: "wine", Name: "Red wine", AcceptedQuantity: 1},
-		{ProductID: "missing", Name: "Eggs", RejectedQuantity: 1, RejectionReason: "product_unavailable"},
 	}, query.Items)
 	assert.Equal(t, "https://www.qfc.com/cart", query.CartURL)
 	assert.Equal(t, "no-store", result.Header().Get("Cache-Control"))
@@ -163,10 +156,10 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 		{"FRYS", "frys", "https://www.frysfood.com/cart"},
 	} {
 		t.Run(scenario.chain, func(t *testing.T) {
-			var added []CartItem
+			var added []cartItem
 			a := orderFixture(t, func(r *http.Request) (*http.Response, error) {
 				var payload struct {
-					Items []CartItem `json:"items"`
+					Items []cartItem `json:"items"`
 				}
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
 				added = payload.Items
@@ -195,7 +188,7 @@ func TestKrogerOrderOAuthResumesPostedItems(t *testing.T) {
 			query := transferResponse(t, a, result)
 			assert.Equal(t, ordertypes.TransferApplied, query.Status)
 			assert.Equal(t, scenario.cart, query.CartURL)
-			assert.Equal(t, []CartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
+			assert.Equal(t, []cartItem{{UPC: "food-upc", Quantity: 2}, {UPC: "wine-upc", Quantity: 1}}, added)
 			assert.Equal(t, -1, result.Result().Cookies()[0].MaxAge)
 		})
 	}
@@ -381,7 +374,7 @@ func (orderNoSession) GetUserIDFromRequest(*http.Request) (string, error) {
 }
 
 func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
-	for _, scenario := range []string{"refresh", "no matches", "lookup failure", "token failure", "reservation failure", "request save failure"} {
+	for _, scenario := range []string{"refresh", "no matches", "cart failure", "token failure", "reservation failure", "request save failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			a := orderFixture(t, func(*http.Request) (*http.Response, error) { return cartResponse(http.StatusNoContent, ""), nil })
 			form := orderForm()
@@ -393,7 +386,7 @@ func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
 				saveShopper(t, a, time.Now().Add(time.Hour))
 				setOrderField(t, form, "items", json.RawMessage(`[{"id":"missing","name":"Eggs"}]`))
 				expected = "failed"
-			case "lookup failure":
+			case "cart failure":
 				saveShopper(t, a, time.Now().Add(time.Hour))
 				a.client.HTTPClient = &http.Client{Transport: cartRoundTrip(func(*http.Request) (*http.Response, error) {
 					return cartResponse(http.StatusServiceUnavailable, ""), nil
