@@ -17,6 +17,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65532 # Distroless nonroot
+        runAsGroup: 65532 # Distroless nonroot
       containers:
         - name: stub
           image: ghcr.io/paulgmiller/careme-mnfoodclubstub:${IMAGE_TAG}
@@ -35,10 +37,10 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 32Mi
+              memory: 64Mi
             limits:
               cpu: 100m
-              memory: 64Mi
+              memory: 256Mi
 ---
 apiVersion: v1
 kind: Service
