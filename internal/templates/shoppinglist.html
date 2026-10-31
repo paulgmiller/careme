@@ -64,7 +64,7 @@
   {{if .HasSavedRecipes}}
   <span id="shopping-finalize-status" class="htmx-indicator inline-flex items-center gap-2 text-sm text-ink-600" role="status">
     <span class="h-4 w-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true"></span>
-    Building shopping list…
+    <span class="sr-only">Building shopping list</span>
   </span>
   <p id="shopping-finalize-error" hidden role="alert" class="text-sm text-action-red-700">
     Could not build your shopping list. Try again, chef.
