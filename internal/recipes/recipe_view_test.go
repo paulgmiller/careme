@@ -215,6 +215,8 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	assert.NotContains(t, html, `Save feedback`)
 	assert.NotContains(t, html, `feedback-retry`)
 	assert.Contains(t, html, `event.detail.shouldSwap=false`)
+	assert.Contains(t, html, `<span class="animate-pulse" aria-hidden="true">•••</span>`)
+	assert.Contains(t, html, `<span class="sr-only">Saving</span>`)
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
