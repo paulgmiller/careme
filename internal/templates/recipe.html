@@ -165,6 +165,7 @@
                         hx-post="/recipe/{{.RecipeHash}}/feedback"
                         hx-vals='{"cooked":"true"}'
                         hx-swap="none"
+                        hx-sync="#feedback-panel:queue last"
                         hx-disabled-elt="#cooked-feedback-button"
                         onclick="document.getElementById('feedback-panel').classList.remove('hidden'); document.getElementById('feedback-status').textContent='';"
                         class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:text-brand-400">
@@ -186,10 +187,12 @@
               <form method="POST"
                     action="/recipe/{{.RecipeHash}}/feedback"
                     hx-post="/recipe/{{.RecipeHash}}/feedback"
+                    hx-trigger="submit, input delay:1s from:#feedback"
+                    hx-sync="#feedback-panel:queue last"
                     hx-target="#feedback-status"
                     hx-swap="innerHTML"
-                    hx-on::before-request="document.getElementById('feedback-submit').textContent='Saving...';"
-                    hx-on::after-request="document.getElementById('feedback-submit').textContent='Save feedback';"
+                    hx-on::before-request="document.getElementById('feedback-status').textContent='Saving...';"
+                    hx-on::after-request="if (!event.detail.successful) document.getElementById('feedback-status').textContent='Could not save. Try again, chef.';"
                     class="space-y-3">
                 <input type="hidden" name="cooked" value="true" />
                 <div class="space-y-1">

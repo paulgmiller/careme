@@ -209,6 +209,9 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should contain text feedback control")
 	}
+	assert.Contains(t, html, `hx-trigger="submit, input delay:1s from:#feedback"`)
+	assert.Contains(t, html, `hx-sync="#feedback-panel:queue last"`)
+	assert.Contains(t, html, `Could not save. Try again, chef.`)
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
