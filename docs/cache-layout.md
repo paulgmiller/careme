@@ -66,6 +66,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `mnfoodclub_order_transfers/` | Shared transfer results keyed by Careme user and form idempotency key; transfer_id is the partner ID | MN Food Club order POST and server-side status refresh | Provider form route and order view builder |
+| `instacart_order_transfers/` | Shared JSON `Transfer` keyed by Careme user ID and finalized-list idempotency key | Instacart order handler | Instacart order handler and cache-bound order view |
 | `kroger_order_transfers/` | Shared `orders/types.Transfer` results keyed by authenticated user and transfer ID | Kroger transfer POST and OAuth callback | Provider browser POST and OAuth callback |
 | `kroger_oauth_continuations/` | Posted request, user ID, idempotency key, and issued timestamp keyed by user and random OAuth state | Kroger authorization start | OAuth callback; accepted for ten minutes |
 | `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, selected variant IDs, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
@@ -275,5 +276,23 @@ catalog snapshots; wine picks without a matching catalog product display but
 have no ordering variant ID. Unreadable snapshots fail shopping-list preparation
 rather than silently dropping metadata. Food and per-recipe wine preparation
 run concurrently. Each wine pick and its catalog are loaded during finalization,
-not during page rendering. Existing finalized snapshots remain immutable; late
-picks do not change them.
+not during page rendering. Existing finalized snapshots remain immutable; latepicks do not change them.
+
+
+### Instacart transfers
+
+- `instacart_order_transfers/<user ID>/<idempotency key>` stores only the shared
+  `Transfer`: finalized-list `transfer_id`, typed status, and generated shopping
+  page URL as `cart_url`. Product acceptance is not confirmed by link creation,
+  so no per-item acceptance quantities are stored.
+- Creation conditionally reserves a `pending` transfer before the API call, then
+  saves `applied` or `failed`. Repeated posts reuse the record; they do not compare
+  request fingerprints or generate another shopping page. Confirmation-save
+  failures leave the reservation intact.
+- The view reads the authenticated user's transfer and renders the existing form,
+  cart link, or failure state. It never calls Instacart. Records have no automatic
+  expiry; generated Instacart links expire after 30 days and are retained as history.
+- The earlier `instacart_shopping_links/` payload-hash cache is no longer used.
+  Existing entries may remain on disk; there is no migration to fabricate shared
+  transfer outcomes from those prototype records.
+
