@@ -209,6 +209,14 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should contain text feedback control")
 	}
+	assert.Contains(t, html, `hx-trigger="submit, input delay:1s from:#feedback"`)
+	assert.Contains(t, html, `hx-sync="#feedback-panel:queue last"`)
+	assert.Contains(t, html, `Could not save. Try again, chef.`)
+	assert.NotContains(t, html, `Save feedback`)
+	assert.NotContains(t, html, `feedback-retry`)
+	assert.Contains(t, html, `event.detail.shouldSwap=false`)
+	assert.Contains(t, html, `<span class="animate-pulse" aria-hidden="true">•••</span>`)
+	assert.Contains(t, html, `<span class="sr-only">Saving</span>`)
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
