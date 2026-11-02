@@ -332,6 +332,8 @@ func TestLoadOnlyProvidersRequiresKrogerUnlessMocked(t *testing.T) {
 }
 
 func TestLoadInstacart(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
 	t.Setenv("INSTACART_API_KEY", "test-key")
 	t.Setenv("INSTACART_BASE_URL", "https://connect.dev.instacart.tools")
 	cfg, err := Load()

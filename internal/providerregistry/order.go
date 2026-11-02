@@ -11,7 +11,6 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
-	"careme/internal/httpretry"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
@@ -19,7 +18,6 @@ import (
 	"careme/internal/providers/mockorder"
 	"careme/internal/routing"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -85,22 +83,11 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 
 // Ordering clients are instrumented once and do not automatically retry or follow API redirects.
 func newOrderHTTPClient() *http.Client {
-	httpClient := &http.Client{
+	return &http.Client{
 		Timeout:       15 * time.Second,
 		Transport:     otelhttp.NewTransport(http.DefaultTransport),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	retry := retryablehttp.NewClient()
-	retry.HTTPClient = httpClient
-	// Cart writes and link creation have no common replay guarantee.
-	retry.RetryMax = 0
-	retry.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	retry.Logger = nil
-	retry.RequestLogHook = httpretry.LogRetry("ordering")
-	client := retry.StandardClient()
-	client.Timeout = httpClient.Timeout
-	client.CheckRedirect = httpClient.CheckRedirect
-	return client
 }
 
 // orderViewBuilder binds provider-owned transfer reads to the application's cache.
