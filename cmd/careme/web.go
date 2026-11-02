@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/ai"
 	"careme/internal/appredirect"
@@ -152,8 +151,6 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-
-	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/{$}", admin.Page())
