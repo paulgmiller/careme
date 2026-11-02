@@ -390,23 +390,6 @@ func TestRequestStoreReturnsWriteErrors(t *testing.T) {
 	}
 }
 
-func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
-	fc := cachepkg.NewInMemoryCache()
-	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{newFakeLocationClient()}, fc)
-
-	mustPutJSONInCache(t, fc, storeRequestPrefix+"publix_123", locationRequest{StoreID: "publix_123"})
-	mustPutJSONInCache(t, fc, storeRequestPrefix+"walmart_456", locationRequest{StoreID: "walmart_456"})
-
-	got, err := storage.RequestedStoreIDs(context.Background())
-	if err != nil {
-		t.Fatalf("RequestedStoreIDs returned error: %v", err)
-	}
-
-	if got, want := strings.Join(got, ","), "publix_123,walmart_456"; got != want {
-		t.Fatalf("RequestedStoreIDs = %q, want %q", got, want)
-	}
-}
-
 func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 	for _, tt := range []struct {
 		name       string

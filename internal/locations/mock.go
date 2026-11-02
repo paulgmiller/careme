@@ -64,7 +64,3 @@ func (mock) HasInventory(locationID string) bool {
 func (mock) RequestStore(ctx context.Context, locationID string) error {
 	return nil
 }
-
-func (mock) RequestedStoreIDs(ctx context.Context) ([]string, error) {
-	return nil, nil
-}
