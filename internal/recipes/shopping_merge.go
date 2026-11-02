@@ -92,7 +92,7 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 		catalog     []ai.InputIngredient
 	}
 	wines, wineErr := parallelism.MapWithErrors(p.Saved, func(recipe ai.Recipe) (wineInput, error) {
-		selection, err := s.waitForWine(wineCtx, recipe.ComputeHash())
+		selection, err := s.waitForWine(wineCtx, recipe)
 		// Wine is optional once its polling deadline expires; request cancellation is not.
 		if errors.Is(err, context.DeadlineExceeded) && wineCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 			slog.ErrorContext(ctx, "timed out waiting for wine pick; finalizing without wine for recipe", "recipe_hash", recipe.ComputeHash(), "recipe_title", recipe.Title, "error", err)
