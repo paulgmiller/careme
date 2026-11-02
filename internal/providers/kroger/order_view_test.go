@@ -28,7 +28,7 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 	order, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, ListKey: "list"})
 	require.NoError(t, err)
 	var page bytes.Buffer
-	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", map[string]any{"Order": order, "HasSavedRecipes": true}))
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", order))
 	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 	assert.NotContains(t, page.String(), `hx-get=`)
 	assert.NotContains(t, page.String(), `hx-post=`)
