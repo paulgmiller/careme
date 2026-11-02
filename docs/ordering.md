@@ -244,7 +244,8 @@ forms. The cache-bound view reads the saved result and supplies the existing
 form, review link, or failure label. View rendering never calls Instacart.
 
 The API request creates a shopping-list page with every displayed item, including
-pantry ingredients and selected wines. Names drive matching; source product and
+pantry ingredients and selected wines. The full Careme return URL is sent both
+in `instructions` and as `partner_linkback_url`. Names drive matching; source product and
 variant IDs and source-store package counts are not Instacart identifiers or
 measurements. Positive numeric recipe amounts with supported units become
 `line_item_measurements`. Other amounts remain display text, and every original
@@ -266,7 +267,7 @@ records without a generated URL render no cart action. Creation POSTs are never
 automatically replayed or redirected, and the instrumented application HTTP client
 is injected at construction, as with other ordering clients.
 
-Generated links expire after 30 days. Transfer records remain saved history and
+Generated links expire after 7 days. Transfer records remain saved history and
 are not refreshed or recreated on page load. A different finalized list has its
 own handoff. Legacy `instacart_shopping_links/` records are no longer read; only
 shared transfers are persisted under `instacart_order_transfers/`.

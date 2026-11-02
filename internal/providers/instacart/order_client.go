@@ -10,33 +10,31 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"careme/internal/config"
-	"careme/internal/httpretry"
 	ordertypes "careme/internal/orders/types"
-
-	"github.com/hashicorp/go-retryablehttp"
 )
 
 const (
-	ProductionURL  = "https://connect.instacart.com"
-	DevelopmentURL = "https://connect.dev.instacart.tools"
+	productionURL  = "https://connect.instacart.com"
+	developmentURL = "https://connect.dev.instacart.tools"
 )
 
-// OrderClient creates shoppable lists using the server-side Instacart API key.
-type OrderClient struct {
+// orderClient creates shoppable lists using the server-side Instacart API key.
+type orderClient struct {
 	apiKey     string
 	baseURL    string
 	origin     string
 	httpClient *http.Client
 }
 
-func NewOrderClient(cfg config.InstacartConfig, origin string, httpClient *http.Client) (*OrderClient, error) {
+func NewOrderClient(cfg config.InstacartConfig, origin string, httpClient *http.Client) (*orderClient, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	if baseURL == "" {
-		baseURL = ProductionURL
+		baseURL = productionURL
 	}
-	if baseURL != ProductionURL && baseURL != DevelopmentURL {
+	if baseURL != productionURL && baseURL != developmentURL {
 		return nil, fmt.Errorf("instacart base URL must be the production or development endpoint")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
@@ -46,21 +44,18 @@ func NewOrderClient(cfg config.InstacartConfig, origin string, httpClient *http.
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return nil, fmt.Errorf("instacart requires a valid public origin")
 	}
-	retry := retryablehttp.NewClient()
-	retry.HTTPClient = httpClient
-	// Link creation has no documented idempotency key. Never replay POSTs.
-	retry.RetryMax = 0
-	retry.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	retry.Logger = nil
-	retry.RequestLogHook = httpretry.LogRetry("instacart")
-	client := retry.StandardClient()
-	client.Timeout = httpClient.Timeout
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &OrderClient{apiKey: cfg.APIKey, baseURL: baseURL, origin: strings.TrimRight(origin, "/"), httpClient: client}, nil
+	return &orderClient{apiKey: cfg.APIKey, baseURL: baseURL, origin: strings.TrimRight(origin, "/"), httpClient: httpClient}, nil
 }
 
-func (c *OrderClient) create(ctx context.Context, input ordertypes.TransferRequest) (string, error) {
-	payload := shoppingList{Title: "Careme shopping list", LinkType: "shopping_list", ExpiresIn: 30, LandingPage: landingPage{LinkbackURL: c.origin + input.ReturnURL}}
+func (c *orderClient) create(ctx context.Context, input ordertypes.TransferRequest) (string, error) {
+	returnURL := c.origin + input.ReturnURL
+	payload := shoppingList{
+		Title:        fmt.Sprintf("Careme shopping list — %s — %s", input.Location.Name, time.Now().Format(time.DateOnly)),
+		LinkType:     "shopping_list",
+		ExpiresIn:    7,
+		Instructions: []string{returnURL},
+		LandingPage:  landingPage{LinkbackURL: returnURL},
+	}
 	for _, item := range input.Items {
 		display := item.Name
 		if item.Needed != "" {
@@ -87,18 +82,22 @@ type lineItem struct {
 }
 
 type shoppingList struct {
-	Title       string      `json:"title"`
-	LinkType    string      `json:"link_type"`
-	ExpiresIn   int         `json:"expires_in"`
-	Items       []lineItem  `json:"line_items"`
-	LandingPage landingPage `json:"landing_page_configuration"`
+	Title        string      `json:"title"`
+	LinkType     string      `json:"link_type"`
+	ExpiresIn    int         `json:"expires_in"`
+	Instructions []string    `json:"instructions"`
+	Items        []lineItem  `json:"line_items"`
+	LandingPage  landingPage `json:"landing_page_configuration"`
 }
 
 type landingPage struct {
 	LinkbackURL string `json:"partner_linkback_url"`
+	// TODO: Revisit enable_pantry_items when supported for shopping_list links; currently recipe-only.
 }
 
-func (c *OrderClient) createLink(ctx context.Context, body []byte) (string, error) {
+// createLink uses Instacart’s Create shopping list page API.
+// https://docs.instacart.com/developer_platform_api/api/products/create_shopping_list_page
+func (c *orderClient) createLink(ctx context.Context, body []byte) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/idp/v1/products/products_link", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("create Instacart request: %w", err)

@@ -291,7 +291,7 @@ not during page rendering. Existing finalized snapshots remain immutable; latepi
   failures leave the reservation intact.
 - The view reads the authenticated user's transfer and renders the existing form,
   cart link, or failure state. It never calls Instacart. Records have no automatic
-  expiry; generated Instacart links expire after 30 days and are retained as history.
+  expiry; generated Instacart links expire after 7 days and are retained as history.
 - The earlier `instacart_shopping_links/` payload-hash cache is no longer used.
   Existing entries may remain on disk; there is no migration to fabricate shared
   transfer outcomes from those prototype records.

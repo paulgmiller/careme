@@ -45,7 +45,7 @@ func TestCreateLink(t *testing.T) {
 			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 				calls++
 				assert.Equal(t, "POST", r.Method)
-				assert.Equal(t, ProductionURL+"/idp/v1/products/products_link", r.URL.String())
+				assert.Equal(t, productionURL+"/idp/v1/products/products_link", r.URL.String())
 				assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
@@ -77,10 +77,10 @@ func TestNewOrderClientConfiguration(t *testing.T) {
 		valid     bool
 	}{
 		{"key", "", true},
-		{"key", ProductionURL, true},
-		{"key", DevelopmentURL + "/", true},
-		{"", ProductionURL, false},
-		{"  ", ProductionURL, false},
+		{"key", productionURL, true},
+		{"key", developmentURL + "/", true},
+		{"", productionURL, false},
+		{"  ", productionURL, false},
 		{"key", "https://evil.test", false},
 	} {
 		_, err := NewOrderClient(config.InstacartConfig{APIKey: tt.key, BaseURL: tt.base}, "https://careme.test", http.DefaultClient)

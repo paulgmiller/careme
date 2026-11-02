@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/auth"
@@ -28,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testHandler(t *testing.T, store cache.Cache, transport http.RoundTripper) *OrderHandler {
+func testHandler(t *testing.T, store cache.Cache, transport http.RoundTripper) *orderHandler {
 	t.Helper()
 	client, err := NewOrderClient(config.InstacartConfig{APIKey: "key"}, "https://careme.test", &http.Client{Transport: transport})
 	require.NoError(t, err)
@@ -50,7 +51,7 @@ func orderForm(t *testing.T, input ordertypes.TransferRequest, key string) url.V
 	return url.Values{"transfer_request": {string(body)}, "idempotency_key": {key}}
 }
 
-func submit(handler *OrderHandler, form url.Values) *httptest.ResponseRecorder {
+func submit(handler *orderHandler, form url.Values) *httptest.ResponseRecorder {
 	routes := http.NewServeMux()
 	handler.Register(routes)
 	r := httptest.NewRequest(http.MethodPost, "https://careme.test"+orderTransferURL, strings.NewReader(form.Encode()))
@@ -61,6 +62,7 @@ func submit(handler *OrderHandler, form url.Values) *httptest.ResponseRecorder {
 }
 
 func TestOrderPayloadAndSavedTransfer(t *testing.T) {
+	started := time.Now()
 	calls := 0
 	store := cache.NewInMemoryCache()
 	handler := testHandler(t, store, transportFunc(func(r *http.Request) (*http.Response, error) {
@@ -69,11 +71,17 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, string(body), "source-product")
 		assert.NotContains(t, string(body), "source-variant")
+		assert.NotContains(t, string(body), `"product_ids"`)
+		assert.NotContains(t, string(body), `"enable_pantry_items"`)
 		var payload shoppingList
 		require.NoError(t, json.Unmarshal(body, &payload))
-		assert.Equal(t, "Careme shopping list", payload.Title)
+		assert.Contains(t, []string{
+			"Careme shopping list — Any store — " + started.Format(time.DateOnly),
+			"Careme shopping list — Any store — " + time.Now().Format(time.DateOnly),
+		}, payload.Title)
 		assert.Equal(t, "shopping_list", payload.LinkType)
-		assert.Equal(t, 30, payload.ExpiresIn)
+		assert.Equal(t, 7, payload.ExpiresIn)
+		assert.Equal(t, []string{"https://careme.test/recipes?h=list-hash#shopping-list-section"}, payload.Instructions)
 		assert.Equal(t, "https://careme.test/recipes?h=list-hash#shopping-list-section", payload.LandingPage.LinkbackURL)
 		require.Len(t, payload.Items, 3)
 		assert.Equal(t, lineItem{Name: `Chicken & "herbs"`, DisplayText: `Chicken & "herbs" — 2 lbs`, Measurements: []measurement{{Quantity: 2, Unit: "pound"}}}, payload.Items[0])

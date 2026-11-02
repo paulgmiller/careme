@@ -19,17 +19,17 @@ import (
 
 const orderTransferURL = "/instacart/order-transfers"
 
-type OrderHandler struct {
+type orderHandler struct {
 	cache  cache.Cache
 	auth   auth.AuthClient
-	client *OrderClient
+	client *orderClient
 }
 
-func NewOrderHandler(c cache.Cache, authClient auth.AuthClient, client *OrderClient) *OrderHandler {
-	return &OrderHandler{cache: c, auth: authClient, client: client}
+func NewOrderHandler(c cache.Cache, authClient auth.AuthClient, client *orderClient) *orderHandler {
+	return &orderHandler{cache: c, auth: authClient, client: client}
 }
 
-func (h *OrderHandler) Register(routes routing.Registrar) {
+func (h *orderHandler) Register(routes routing.Registrar) {
 	routes.Handle("POST "+orderTransferURL, http.NewCrossOriginProtection().Handler(http.HandlerFunc(h.handleOrder)))
 }
 
@@ -85,7 +85,7 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 	}
 }
 
-func (h *OrderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
+func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	if err := r.ParseForm(); err != nil {
