@@ -20,7 +20,7 @@ spec:
         runAsGroup: 65532 # Distroless nonroot
       containers:
         - name: stub
-          image: ghcr.io/paulgmiller/careme-mnfoodclubstub:${IMAGE_TAG}
+          image: docker.io/paulgmiller/mnfoodclubstub:${IMAGE_TAG}
           args: ["-public-url", "https://test.careme.cooking/mnfoodclub-stub"]
           envFrom:
             - secretRef:

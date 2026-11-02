@@ -176,7 +176,3 @@ echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w
 echo "Waiting for rollout of deployment/ingredient-review"
 kubectl rollout status deployment/ingredient-review -n "${namespace}" -w
-
-if [[ "${namespace}" == "caremetest" ]]; then
-  bash deploy/mnfoodclub-stub.sh "${ref}"
-fi

@@ -92,7 +92,7 @@ func TestRequiredSecrets(t *testing.T) {
 						secrets = fullSecrets
 					case "careme-ingredientreview":
 						secrets = providerSecrets
-					case "careme-mnfoodclubstub":
+					case "mnfoodclubstub":
 						secrets = []string{"roachkey"}
 					default:
 						continue
@@ -111,7 +111,7 @@ func TestRequiredSecrets(t *testing.T) {
 			}
 		})
 	}
-	assert.Positive(t, checked["careme-mnfoodclubstub"], "no Food Club stub workloads checked")
+	assert.Positive(t, checked["mnfoodclubstub"], "no Food Club stub workloads checked")
 	assert.Positive(t, checked["careme"], "no full-config workloads checked")
 	assert.Positive(t, checked["careme-ingredientreview"], "no provider-config workloads checked")
 }

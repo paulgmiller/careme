@@ -46,8 +46,9 @@ prefix; all service routes, including `/ready`, are mounted beneath it.
 
 ## Deployment
 
-The image pipeline builds `careme-mnfoodclubstub` using the shared Dockerfile.
-Deploy a published image with:
+Build and publish `docker.io/paulgmiller/mnfoodclubstub:<commit>` using the shared
+Dockerfile with `CMD_PATH=./cmd/mnfoodclubstub`. Deploy that published commit
+explicitly with:
 
 ```sh
 bash deploy/mnfoodclub-stub.sh <ref>
@@ -67,9 +68,10 @@ and Service live in the new namespace. `GET /ready` verifies database access;
 The database-backed store starts empty on this move; old memory-only orders are
 not imported. Careme links to those old IDs consequently return 404.
 
-`deploy/deploy.sh <ref> caremetest` invokes the standalone stub deployment script
-and continues to configure Careme's `MNFOODCLUB_ORDER_API_URL` and
-`MNFOODCLUB_ORDER_ACCESS_TOKEN`. The production deployment excludes the stub.
+Careme's deploy script never applies the stub manifests or rolls out the stub.
+Caremetest continues to configure `MNFOODCLUB_ORDER_API_URL` and
+`MNFOODCLUB_ORDER_ACCESS_TOKEN` to connect to the independently deployed service.
+Run the standalone stub script explicitly whenever the stub should be upgraded.
 
 ## Verify persistence
 
