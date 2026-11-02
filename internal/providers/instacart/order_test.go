@@ -40,7 +40,7 @@ func orderInput() ordertypes.TransferRequest {
 	buy := 7.0
 	return ordertypes.TransferRequest{
 		Items:    []ai.ShoppingItem{{ProductID: "source-product", VariantID: "source-variant", Name: `Chicken & "herbs"`, Needed: "2 lbs", Buy: &buy}, {Name: "Olive oil", Needed: "4½ tbsp"}, {Name: "Wine", Needed: "1 bottle"}},
-		Location: locationtypes.Location{ID: "any-store", Name: "Any store"}, ReturnURL: "/recipes?h=list-hash#shopping-list-section",
+		Location: locationtypes.Location{ID: "any-store", Name: "Any store"}, ReturnURL: "/recipes?h=list-hash#shopping-finalize-controls",
 	}
 }
 
@@ -81,8 +81,8 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 		}, payload.Title)
 		assert.Equal(t, "shopping_list", payload.LinkType)
 		assert.Equal(t, 7, payload.ExpiresIn)
-		assert.Equal(t, []string{"https://careme.test/recipes?h=list-hash#shopping-list-section"}, payload.Instructions)
-		assert.Equal(t, "https://careme.test/recipes?h=list-hash#shopping-list-section", payload.LandingPage.LinkbackURL)
+		assert.Equal(t, []string{"https://careme.test/recipes?h=list-hash#shopping-finalize-controls"}, payload.Instructions)
+		assert.Equal(t, "https://careme.test/recipes?h=list-hash#shopping-finalize-controls", payload.LandingPage.LinkbackURL)
 		require.Len(t, payload.Items, 3)
 		assert.Equal(t, lineItem{Name: `Chicken & "herbs"`, DisplayText: `Chicken & "herbs" — 2 lbs`, Measurements: []measurement{{Quantity: 2, Unit: "pound"}}}, payload.Items[0])
 		assert.Equal(t, []measurement{{Quantity: 4.5, Unit: "tablespoon"}}, payload.Items[1].Measurements)
@@ -259,6 +259,8 @@ func TestOrderViewUsesSharedFormAndSavedStates(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
 	assert.Contains(t, page.String(), `hx-boost="false"`)
+	assert.Contains(t, page.String(), `>Shop with Instacart</button>`)
+	assert.NotContains(t, page.String(), "opens a new tab")
 	assert.Contains(t, page.String(), `name="transfer_request"`)
 	assert.Contains(t, page.String(), `name="idempotency_key"`)
 	assert.NotContains(t, page.String(), `name="items"`)

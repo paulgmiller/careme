@@ -77,7 +77,7 @@ func TestFoodClubOrderingForAllStorefronts(t *testing.T) {
 			require.NoError(t, err)
 			body.Reset()
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shopping_order_form", view))
-			assert.Contains(t, body.String(), "Review cart (opens a new tab)")
+			assert.Contains(t, body.String(), "Review cart")
 			assert.NotContains(t, body.String(), "<form")
 		})
 	}

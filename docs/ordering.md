@@ -28,10 +28,11 @@ Upstream states stay inside the adapter.
 
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
 copy. The template uses a native form with `hx-boost="false"`, `target="_blank"`,
-and `rel="noopener noreferrer"`. Cart submission and any login redirects open
-in a new tab, preserving the finalized shopping-list page. Button copy announces
-the new tab. HTMX refreshes only the cart/build controls with a GET when the
-window regains focus, the document becomes visible, or Back/Forward restores a
+and `rel="noopener noreferrer"`. Cart submission and any login redirects request
+a new tab to preserve the finalized shopping-list page. Button copy describes the
+action without promising a new tab. Return URLs target `#shopping-finalize-controls`
+to land at the cart controls. HTMX refreshes only the cart/build controls with a GET
+when the window regains focus, the document becomes visible, or Back/Forward restores a
 cached page. The GET reads the saved transfer without submitting products again;
 recipe cards and unsent form input stay in place. Overlapping refreshes are dropped.
 Finalized lists without ordering controls show “Shopping list ready.” instead of
@@ -310,7 +311,7 @@ partner API, not a production recipe ordering destination.
 
 The server asks the configured provider for this signed-in viewer's saved
 transfer using the finalized list key. Kroger reads one saved transfer record.
-Completed and pending writes replace the form with “Review cart (opens a new tab)”. Failed transfers
+Completed and pending writes replace the form with “Review cart”. Failed transfers
 show “Add to cart failed.” without a form. Missing transfers keep Add to cart.
 Read or decoding errors fail the page request. There is no browser status fetch.
 The saved handoff remains after checkout or cart edits; this is transfer history,
