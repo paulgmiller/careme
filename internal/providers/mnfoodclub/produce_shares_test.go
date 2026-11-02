@@ -10,11 +10,11 @@ import (
 
 func TestProduceShareIngredients(t *testing.T) {
 	ingredients := produceShareIngredients()
-	require.Len(t, ingredients, 33)
+	require.Len(t, ingredients, 36)
 	byShare := map[string][]string{}
 	ids := map[string]bool{}
 	for _, ingredient := range ingredients {
-		require.Len(t, ingredient.Categories, 2) // No substitutions listed for October 19–24.
+		require.Len(t, ingredient.Categories, 2) // No substitutions listed for November 2–7.
 		share := ingredient.Categories[1]
 		assert.Equal(t, "Produce", ingredient.Categories[0])
 		assert.Empty(t, ingredient.AisleNumber)
@@ -31,12 +31,12 @@ func TestProduceShareIngredients(t *testing.T) {
 		assert.NotEmpty(t, ingredient.Grade.Reason)
 	}
 	assert.Equal(t, map[string][]string{
-		"Seasonal":       {"Koginut Squash", "Broccolini", "Carrots", "Daikon Radish", "Kennebec Potatoes", "Red Keeper Onions", "Poblano Peppers"},
-		"Small Seasonal": {"Stripetti or Spaghetti Squash", "Poblano Peppers", "Carrots", "Cilantro", "Red Keeper Onions", "Pie Apples (2nds)"},
-		"Low Carb":       {"Mini Peppers", "Broccolini", "Zucchini", "Kale", "Red Cabbage"},
-		"Staple":         {"Jalapeño Peppers", "Red Potatoes", "Kohlrabi", "Green Cabbage", "Yellow Onions", "Cucumbers"},
-		"Fruit":          {"Mandarins", "Asian Pear", "Mango", "Cranberries", "Cantaloupe"},
-		"Small Fruit":    {"Mandarins", "Asian Pear", "Mango", "Cantaloupe"},
+		"Seasonal":       {"Acorn Squash", "Red Bell Peppers", "Green Napa Cabbage", "Brussels Sprouts", "Fennel", "Purple Turnips", "Yellow Candy Onions"},
+		"Small Seasonal": {"Acorn Squash", "Green Bell Peppers", "Green Napa Cabbage", "Shallots", "Purple Turnips", "Yellow Candy Onions"},
+		"Low Carb":       {"Roma Tomatoes", "Yellow Keeper Onions", "Poblano Peppers", "Garlic", "Red Greentop Radish", "Cilantro", "Eggplant", "Collard Greens"},
+		"Staple":         {"Parsnips", "Leeks", "Carrots", "Celery", "Chiogga Beets"},
+		"Fruit":          {"Navel Oranges", "Green Grapes", "Grapefruit", "Avocado", "Key Limes", "Kiwi"},
+		"Small Fruit":    {"Navel Oranges", "Green Grapes", "Grapefruit", "Avocado"},
 	}, byShare)
 
 	// A caller's edits must not affect another fetch's grades or categories.

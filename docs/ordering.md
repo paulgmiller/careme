@@ -27,7 +27,15 @@ Upstream states stay inside the adapter.
   request’s return URL; OAuth callbacks use their saved continuation’s return URL.
 
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
-copy. The template uses a native form with `hx-boost="false"`. There is no HTMX
+copy. The template uses a native form with `hx-boost="false"`, `target="_blank"`,
+and `rel="noopener noreferrer"`. Cart submission and any login redirects open
+in a new tab, preserving the finalized shopping-list page. Button copy announces
+the new tab. HTMX refreshes only the cart/build controls with a GET when the
+window regains focus, the document becomes visible, or Back/Forward restores a
+cached page. The GET reads the saved transfer without submitting products again;
+recipe cards and unsent form input stay in place. Overlapping refreshes are dropped.
+Finalized lists without ordering controls show “Shopping list ready.” instead of
+offering Build again. There is no HTMX
 transfer request, status URL, polling, JSON response, or connect-account control.
 A native form cannot set a custom header. The Food Club adapter derives its
 upstream `Idempotency-Key` from the authenticated Careme user and form key, since

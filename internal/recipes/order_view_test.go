@@ -2,10 +2,12 @@ package recipes
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	ordertypes "careme/internal/orders/types"
 
@@ -85,6 +87,9 @@ func TestShoppingListCartReplacesBuildAction(t *testing.T) {
 				var purchases bytes.Buffer
 				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&purchases, "shopping_purchase_section", view))
 				assert.NotContains(t, purchases.String(), `action="/destination/order"`, "cart action belongs above the shopping list")
+			} else if scenario.finalized {
+				assert.Contains(t, controls.String(), "Shopping list ready.")
+				assert.NotContains(t, controls.String(), "Build Shopping List")
 			} else {
 				assert.Contains(t, controls.String(), "Build Shopping List")
 			}
@@ -111,4 +116,94 @@ func TestPopulateOrderViewSearchZIP(t *testing.T) {
 			require.NoError(t, s.populateOrderView(request, &view))
 		})
 	}
+}
+
+func TestSelectionChangeRequiresRebuildingFinalizedList(t *testing.T) {
+	_ = newTestServer(t)
+	var controls bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls_response", newShoppingFinalizeView("list")))
+	assert.Contains(t, controls.String(), "Build Shopping List")
+	assert.NotContains(t, controls.String(), "Shopping list ready.")
+}
+
+func TestShoppingControlsRefreshOnReturn(t *testing.T) {
+	_ = newTestServer(t)
+	for _, name := range []string{"shopping_finalize_controls", "shopping_finalize_controls_response"} {
+		t.Run(name, func(t *testing.T) {
+			var controls bytes.Buffer
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, name, newShoppingFinalizeView("saved-list")))
+			for _, attribute := range []string{
+				`hx-get="/recipes?h=saved-list"`,
+				`focus from:window`,
+				`visibilitychange[document.visibilityState === 'visible'] from:document`,
+				`pageshow[event.persisted] from:window`,
+				`hx-select="#shopping-finalize-controls"`,
+				`hx-swap="outerHTML"`,
+				`hx-sync="this:drop"`,
+			} {
+				assert.Contains(t, controls.String(), attribute)
+			}
+		})
+	}
+}
+
+func TestCartHandoffOpensNewTab(t *testing.T) {
+	_ = newTestServer(t)
+	var form bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&form, "shopping_order_form", ordertypes.OrderView{TransferURL: "/mnfoodclub/order-transfers", TransferLabel: "Add to MN Food Club cart"}))
+	assert.Contains(t, form.String(), `target="_blank"`)
+	assert.Contains(t, form.String(), `rel="noopener noreferrer"`)
+	assert.Contains(t, form.String(), "Add to MN Food Club cart (opens a new tab)")
+	assert.Contains(t, form.String(), `hx-boost="false"`)
+}
+
+func TestFinalizedCartStateAfterLoginReturn(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "mnfoodclub_delivery", Chain: "MN Food Club"}, time.Now())
+	recipe := ai.Recipe{Title: "Dinner", Ingredients: []ai.Ingredient{{ProductID: "101", Name: "Chicken", Quantity: "1 lb"}}}
+	original := prepareShoppingFinalize(t, s, p, recipe)
+	p.Saved = []ai.Recipe{recipe}
+	merges := 0
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		merges++
+		return []ai.ShoppingItem{{ProductID: "101", Name: "Chicken", Buy: new(float64(1))}}, nil
+	})
+	finalized := finalizeShoppingRequest(s, original)
+	require.Equal(t, http.StatusOK, finalized.Code, finalized.Body.String())
+	target := finalized.Header().Get("HX-Redirect")
+	require.Contains(t, target, p.Hash())
+	for _, cartURL := range []string{"https://partner.example/handoff/pending", "https://partner.example/cart"} {
+		t.Run(cartURL, func(t *testing.T) {
+			s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+				assert.Equal(t, p.Hash(), input.ListKey)
+				assert.Equal(t, "mock-clerk-user-id", input.UserID)
+				assert.Len(t, input.Items, 1)
+				return &ordertypes.OrderView{ReviewCartURL: cartURL}, nil
+			})
+			w := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, target, nil)
+			request.Header.Set("HX-Request", "true")
+			s.handleRecipes(w, request)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), cartURL)
+			assert.Contains(t, w.Body.String(), "Review cart (opens a new tab)")
+			assert.NotContains(t, w.Body.String(), "Build Shopping List")
+		})
+	}
+	s.orderView = orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil })
+	w := httptest.NewRecorder()
+	s.handleRecipes(w, httptest.NewRequest(http.MethodGet, target, nil))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "Shopping list ready.")
+	assert.NotContains(t, w.Body.String(), "Build Shopping List")
+	assert.Equal(t, 1, merges, "return GETs must reuse the finalized purchases")
+}
+
+func TestFinalizedListWithoutSelectionDoesNotAskToBuild(t *testing.T) {
+	_ = newTestServer(t)
+	var controls bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls", shoppingListPageView{Finalized: true}))
+	assert.Contains(t, controls.String(), "Shopping list ready.")
+	assert.NotContains(t, controls.String(), "Build Shopping List")
+	assert.NotContains(t, controls.String(), "Add at least one recipe")
 }

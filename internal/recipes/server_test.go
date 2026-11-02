@@ -3047,6 +3047,8 @@ func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Saved") {
 		t.Fatalf("expected success message, got body: %s", rr.Body.String())
 	}
+	assert.Contains(t, rr.Body.String(), `<span aria-hidden="true">✓</span>`)
+	assert.Contains(t, rr.Body.String(), `<span class="sr-only">Saved</span>`)
 
 	feedback, err := s.FeedbackFromCache(t.Context(), "hash")
 	if err != nil {

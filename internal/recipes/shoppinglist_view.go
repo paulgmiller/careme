@@ -225,6 +225,7 @@ type shoppingFinalizeView struct {
 	Order           *ordertypes.OrderView
 	Hash            string
 	HasSavedRecipes bool
+	Finalized       bool
 }
 
 func newShoppingFinalizeView(hash string) shoppingFinalizeView {
