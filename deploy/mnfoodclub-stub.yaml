@@ -1,12 +1,11 @@
-# Applied only by deploy.sh's caremetest branch. No production deployment.
+# Standalone test service in its own namespace. Public URL remains on caremetest.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mnfoodclub-stub
+  namespace: mnfoodclub-stub
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: mnfoodclub-stub
@@ -23,6 +22,9 @@ spec:
         - name: stub
           image: ghcr.io/paulgmiller/careme-mnfoodclubstub:${IMAGE_TAG}
           args: ["-public-url", "https://test.careme.cooking/mnfoodclub-stub"]
+          envFrom:
+            - secretRef:
+                name: roachkey
           ports:
             - name: http
               containerPort: 8080
@@ -32,7 +34,7 @@ spec:
               port: http
           livenessProbe:
             httpGet:
-              path: /mnfoodclub-stub/ready
+              path: /mnfoodclub-stub/live
               port: http
           resources:
             requests:
@@ -46,6 +48,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mnfoodclub-stub
+  namespace: mnfoodclub-stub
 spec:
   selector:
     app: mnfoodclub-stub
@@ -58,6 +61,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mnfoodclub-stub
+  namespace: mnfoodclub-stub
 spec:
   rules:
     - host: test.careme.cooking

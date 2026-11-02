@@ -1,17 +1,19 @@
-// Package mnfoodclubstub implements a disposable partner API for caremetest.
+// Package mnfoodclubstub implements the persistent partner test API for caremetest.
 package mnfoodclubstub
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
-	"sync"
 	"time"
 
 	ordertypes "careme/internal/orders/types"
@@ -25,7 +27,7 @@ type item struct {
 	Quantity  *int   `json:"quantity,omitempty"`
 }
 type hints struct {
-	Emails          []string `json:"emails,omitempty"`
+	Emails          []string `json:"emails"`
 	UserID          string   `json:"user_id,omitempty"`
 	StorefrontBrand string   `json:"storefront_brand,omitempty"`
 	ZipCode         string   `json:"zip_code,omitempty"`
@@ -45,19 +47,17 @@ type record struct {
 	Response response
 }
 type server struct {
-	mu        sync.Mutex
-	records   []*record
-	byID      map[string]*record
-	byKey     map[string]*record
+	store     transferStore
 	publicURL string
 }
 
 // New mounts the API and its single public HTML page under publicURL's path.
-func New(publicURL string) http.Handler {
-	s := &server{publicURL: strings.TrimRight(publicURL, "/"), byID: make(map[string]*record), byKey: make(map[string]*record)}
+func New(publicURL string, store transferStore) http.Handler {
+	s := &server{publicURL: strings.TrimRight(publicURL, "/"), store: store}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.page)
-	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("GET /ready", s.ready)
+	mux.HandleFunc("GET /live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("POST /v1/cart-transfers", s.create)
 	mux.HandleFunc("GET /v1/cart-transfers/{id}", s.get)
 	base, _ := url.Parse(s.publicURL)
@@ -123,16 +123,6 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 			item.Quantity = new(1)
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if old := s.byKey[key]; old != nil {
-		if !reflect.DeepEqual(old.Request, input) {
-			failure(w, 409, "idempotency_conflict")
-			return
-		}
-		writeResponse(w, old.Response)
-		return
-	}
 	idBytes := make([]byte, 16)
 	if _, err := rand.Read(idBytes); err != nil {
 		failure(w, 500, "internal_error")
@@ -143,11 +133,17 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 	for _, item := range input.Items {
 		response.Items = append(response.Items, ordertypes.TransferItem{ProductID: item.ProductID, AcceptedQuantity: *item.Quantity})
 	}
-	rec := &record{Created: time.Now().UTC(), Key: key, Request: input, Response: response}
-	s.records = append(s.records, rec)
-	s.byID[id] = rec
-	s.byKey[key] = rec
-	writeResponse(w, response)
+	rec, err := s.store.create(r.Context(), record{Created: time.Now().UTC(), Key: key, Request: input, Response: response})
+	if err != nil {
+		slog.ErrorContext(r.Context(), "save stub transfer", "error", err)
+		failure(w, 500, "storage_error")
+		return
+	}
+	if !reflect.DeepEqual(rec.Request, input) {
+		failure(w, 409, "idempotency_conflict")
+		return
+	}
+	writeResponse(w, rec.Response)
 }
 
 func writeResponse(w http.ResponseWriter, result response) {
@@ -159,25 +155,42 @@ func (s *server) get(w http.ResponseWriter, r *http.Request) {
 	if !authorized(w, r) {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	rec := s.byID[r.PathValue("id")]
-	if rec == nil {
+	rec, err := s.store.get(r.Context(), r.PathValue("id"))
+	if errors.Is(err, errNotFound) {
 		failure(w, 404, "transfer_not_found")
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(r.Context(), "read stub transfer", "error", err)
+		failure(w, 500, "storage_error")
 		return
 	}
 	writeResponse(w, rec.Response)
 }
 
-var page = template.Must(template.New("orders").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Food Club test orders</title></head><body><h1>Food Club test orders</h1><p>Test stub. All quantities are accepted. State is lost on restart. Reload to see new orders.</p>{{range .}}<section id="{{.Response.TransferID}}"><h2>{{.Response.TransferID}}</h2><p>{{.Created}} — {{.Response.Status}}</p><p>Key: {{.Key}}</p><p>Identity hints: {{.Request.IdentityHints}}</p><table><thead><tr><th>Product</th><th>Variant</th><th>Accepted packages</th></tr></thead><tbody>{{range .Request.Items}}<tr><td>{{.ProductID}}</td><td>{{.VariantID}}</td><td>{{.Quantity}}</td></tr>{{end}}</tbody></table></section>{{else}}<p>No orders yet.</p>{{end}}</body></html>`))
+var page = template.Must(template.New("orders").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Food Club test orders</title></head><body><h1>Food Club test orders</h1><p>Test stub. All quantities are accepted. Orders are saved in CockroachDB. Reload to see new orders.</p>{{range .}}<section id="{{.Response.TransferID}}"><h2>{{.Response.TransferID}}</h2><p>{{.Created}} — {{.Response.Status}}</p><p>Key: {{.Key}}</p><p>Identity hints: {{.Request.IdentityHints}}</p><table><thead><tr><th>Product</th><th>Variant</th><th>Accepted packages</th></tr></thead><tbody>{{range .Request.Items}}<tr><td>{{.ProductID}}</td><td>{{.VariantID}}</td><td>{{.Quantity}}</td></tr>{{end}}</tbody></table></section>{{else}}<p>No orders yet.</p>{{end}}</body></html>`))
 
 func (s *server) page(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	records := make([]*record, len(s.records))
-	for i, rec := range s.records {
-		records[len(records)-1-i] = rec
+	records, err := s.store.list(r.Context())
+	if err != nil {
+		slog.ErrorContext(r.Context(), "list stub transfers", "error", err)
+		http.Error(w, "Unable to load test orders.", 500)
+		return
 	}
-	s.mu.Unlock()
+	var body bytes.Buffer
+	if err := page.Execute(&body, records); err != nil {
+		slog.ErrorContext(r.Context(), "render stub transfers", "error", err)
+		http.Error(w, "Unable to render test orders.", 500)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = page.Execute(w, records)
+	_, _ = body.WriteTo(w)
+}
+
+func (s *server) ready(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.ping(r.Context()); err != nil {
+		http.Error(w, "Database unavailable.", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
