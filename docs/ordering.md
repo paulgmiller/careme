@@ -231,9 +231,13 @@ for future identity hints.
 ## Instacart shopping lists
 
 Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers`. The provider
-registry currently offers Instacart only for Whole Foods (`wholefoods_*`) IDs. Mock
-mode still uses only the mock provider. `INSTACART_BASE_URL` defaults to
-`https://connect.instacart.com`; development keys use `https://connect.dev.instacart.tools`.
+registry currently offers Instacart only for IDs recognized by the Albertsons
+provider, including Albertsons, Safeway, and Haggen. Whole Foods is excluded. Mock
+mode still uses only the mock provider. Localhost and loopback `PUBLIC_ORIGIN`
+hosts always select `https://connect.dev.instacart.tools`, overriding an explicit
+production endpoint; use a development key locally. For other origins,
+`INSTACART_BASE_URL` defaults to `https://connect.instacart.com` and can explicitly
+select the development endpoint.
 
 Instacart follows the same native form, sign-in return, conditional reservation,
 and saved `Transfer` flow as Kroger and MN Food Club. The key is the finalized

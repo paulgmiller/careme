@@ -12,11 +12,11 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpretry"
+	"careme/internal/providers/albertsons"
 	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
-	"careme/internal/providers/wholefoods"
 	"careme/internal/routing"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -127,7 +127,7 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	if wholefoods.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
+	if albertsons.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
 		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil

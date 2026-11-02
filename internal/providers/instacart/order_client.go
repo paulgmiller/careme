@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -43,6 +44,11 @@ func NewOrderClient(cfg config.InstacartConfig, origin string, httpClient *http.
 	u, err := url.Parse(origin)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return nil, fmt.Errorf("instacart requires a valid public origin")
+	}
+	// Local Careme origins always use Instacart development, including when
+	// an existing environment setting explicitly selects production.
+	if strings.EqualFold(u.Hostname(), "localhost") || net.ParseIP(u.Hostname()).IsLoopback() {
+		baseURL = developmentURL
 	}
 	return &orderClient{apiKey: cfg.APIKey, baseURL: baseURL, origin: strings.TrimRight(origin, "/"), httpClient: httpClient}, nil
 }
@@ -126,17 +132,39 @@ func (c *orderClient) createLink(ctx context.Context, body []byte) (string, erro
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("decode Instacart link: %w", err)
 	}
-	if !validLink(result.URL) {
-		return "", fmt.Errorf("instacart returned an invalid shopping link")
+	if err := validateLink(result.URL, c.baseURL); err != nil {
+		// Query strings and userinfo can contain credentials or handoff tokens.
+		reason := strings.ReplaceAll(err.Error(), c.apiKey, "[redacted]")
+		return "", fmt.Errorf("instacart returned an invalid shopping link (API %s): %s", c.baseURL, reason)
 	}
 	return result.URL, nil
 }
 
-func validLink(raw string) bool {
+func validateLink(raw, baseURL string) error {
+	if raw == "" {
+		return fmt.Errorf("products_link_url is missing or empty")
+	}
+	if strings.ContainsAny(raw, "\\\r\n") {
+		return fmt.Errorf("products_link_url contains a backslash or line break")
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return false
+		// url.Parse errors include the input URL; do not propagate them into logs.
+		return fmt.Errorf("products_link_url is malformed")
 	}
 	host := strings.ToLower(u.Hostname())
-	return u.Scheme == "https" && u.User == nil && u.Port() == "" && (host == "instacart.com" || strings.HasSuffix(host, ".instacart.com")) && !strings.ContainsAny(raw, "\\\r\n")
+	if u.Scheme != "https" {
+		return fmt.Errorf("products_link_url must use HTTPS (scheme %q, host %q)", u.Scheme, host)
+	}
+	if u.User != nil {
+		return fmt.Errorf("products_link_url contains credentials (host %q)", host)
+	}
+	if u.Port() != "" {
+		return fmt.Errorf("products_link_url contains explicit port %q (host %q)", u.Port(), host)
+	}
+	developmentHost := baseURL == developmentURL && host == "customers.dev.instacart.tools"
+	if host != "instacart.com" && !strings.HasSuffix(host, ".instacart.com") && !developmentHost {
+		return fmt.Errorf("products_link_url has unapproved host %q", host)
+	}
+	return nil
 }
