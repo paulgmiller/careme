@@ -274,7 +274,9 @@ For a test-site cart handoff walkthrough and standalone mock API, see
 available at `/mnfoodclub-demo/` only when `ENABLE_MOCKS` is enabled.
 
 For the standalone API service wired into `caremetest`, see the
-[Food Club test stub](docs/mnfoodclub-stub.md).
+[Food Club test stub](docs/mnfoodclub-stub.md). The standalone stub runs in
+namespace `mnfoodclub-stub` and persists transfers in the CockroachDB database
+provided by that namespace's `roachkey` secret (`DATABASE_URL`).
 
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.

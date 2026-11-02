@@ -1,9 +1,12 @@
 package mnfoodclubstub
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,7 +16,8 @@ import (
 )
 
 func TestAPI(t *testing.T) {
-	h := New("https://test.careme.cooking/mnfoodclub-stub")
+	store := newMemoryStore()
+	h := New("https://test.careme.cooking/mnfoodclub-stub", store)
 	call := func(method, path, key, body, token string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/mnfoodclub-stub"+path, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+token)
@@ -52,6 +56,81 @@ func TestAPI(t *testing.T) {
 	assert.NotContains(t, page.Body.String(), "<script>")
 	assert.Contains(t, page.Body.String(), "chef@example.com")
 	fresh := httptest.NewRecorder()
-	New("https://test.careme.cooking/mnfoodclub-stub").ServeHTTP(fresh, httptest.NewRequest(http.MethodGet, "/mnfoodclub-stub/", nil))
-	assert.Contains(t, fresh.Body.String(), "No orders yet")
+	New("https://test.careme.cooking/mnfoodclub-stub", store).ServeHTTP(fresh, httptest.NewRequest(http.MethodGet, "/mnfoodclub-stub/", nil))
+	assert.Contains(t, fresh.Body.String(), result.TransferID)
+}
+
+// Only HTTP unit tests use an in-memory store. The deployed stub requires SQL.
+type memoryStore struct {
+	mu      sync.Mutex
+	records []record
+	err     error
+}
+
+func newMemoryStore() *memoryStore { return &memoryStore{} }
+func (s *memoryStore) create(_ context.Context, candidate record) (record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return record{}, s.err
+	}
+	for _, rec := range s.records {
+		if rec.Key == candidate.Key {
+			return rec, nil
+		}
+	}
+	s.records = append(s.records, candidate)
+	return candidate, nil
+}
+
+func (s *memoryStore) get(_ context.Context, id string) (record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return record{}, s.err
+	}
+	for _, rec := range s.records {
+		if rec.Response.TransferID == id {
+			return rec, nil
+		}
+	}
+	return record{}, errNotFound
+}
+
+func (s *memoryStore) list(context.Context) ([]record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return nil, s.err
+	}
+	records := slices.Clone(s.records)
+	slices.Reverse(records)
+	return records, nil
+}
+func (s *memoryStore) ping(context.Context) error { return s.err }
+
+func TestStorageFailures(t *testing.T) {
+	store := newMemoryStore()
+	store.err = errors.New("database unavailable")
+	h := New("https://test.careme.cooking/mnfoodclub-stub", store)
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+	}{
+		{"GET", "/ready", "", 503},
+		{"GET", "/live", "", 200},
+		{"GET", "/", "", 500},
+		{"GET", "/v1/cart-transfers/id", "", 500},
+		{"POST", "/v1/cart-transfers", `{"items":[{"product_id":"101"}]}`, 500},
+	} {
+		t.Run(tc.path+tc.method, func(t *testing.T) {
+			r := httptest.NewRequest(tc.method, "/mnfoodclub-stub"+tc.path, strings.NewReader(tc.body))
+			r.Header.Set("Authorization", "Bearer "+testToken)
+			r.Header.Set("Idempotency-Key", "key")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			assert.Equal(t, tc.status, w.Code)
+			assert.NotContains(t, w.Body.String(), store.err.Error())
+		})
+	}
 }

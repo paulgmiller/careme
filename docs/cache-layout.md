@@ -277,3 +277,11 @@ rather than silently dropping metadata. Food and per-recipe wine preparation
 run concurrently. Each wine pick and its catalog are loaded during finalization,
 not during page rendering. Existing finalized snapshots remain immutable; late
 picks do not change them.
+
+### Food Club test stub persistence
+
+The standalone Food Club test stub stores its own records in CockroachDB, using
+`DATABASE_URL` from `roachkey` in namespace `mnfoodclub-stub`. Its
+`mnfoodclub_stub_transfers` table contains the transfer ID, unique idempotency
+key, creation time, normalized request JSON, and response JSON. These records
+survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.

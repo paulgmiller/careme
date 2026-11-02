@@ -52,7 +52,7 @@ publix_abck_schedule="15 */6 * * *"
 wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
-  manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}" "deploy/mnfoodclub-stub.yaml")
+  manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
   order_stub_env_yaml='
             - name: MNFOODCLUB_ORDER_API_URL
               value: "https://test.careme.cooking/mnfoodclub-stub"
@@ -176,7 +176,3 @@ echo "Waiting for rollout of deployment/careme"
 kubectl rollout status deployment/careme -n "${namespace}" -w
 echo "Waiting for rollout of deployment/ingredient-review"
 kubectl rollout status deployment/ingredient-review -n "${namespace}" -w
-
-if [[ "${namespace}" == "caremetest" ]]; then
-  kubectl rollout status deployment/mnfoodclub-stub -n caremetest -w
-fi

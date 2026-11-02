@@ -14,7 +14,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
-	"careme/internal/mnfoodclubstub"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/templates"
@@ -26,7 +25,23 @@ import (
 )
 
 func TestFoodClubCartExcludesItemsWithoutBuy(t *testing.T) {
-	api := httptest.NewServer(mnfoodclubstub.New("https://test.careme.cooking/mnfoodclub-stub"))
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/mnfoodclub-stub/v1/cart-transfers", r.URL.Path)
+		assert.Equal(t, "Bearer caremetest-mnfoodclub-stub", r.Header.Get("Authorization"))
+		var request struct {
+			Items []struct {
+				ProductID string `json:"product_id"`
+				VariantID string `json:"variant_id"`
+				Quantity  int    `json:"quantity"`
+			} `json:"items"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		require.Len(t, request.Items, 1)
+		assert.Equal(t, "101", request.Items[0].ProductID)
+		assert.Equal(t, "1005", request.Items[0].VariantID)
+		assert.Equal(t, 2, request.Items[0].Quantity)
+		_, _ = w.Write([]byte(`{"transfer_id":"stub-1","status":"applied","cart_url":"https://test.careme.cooking/mnfoodclub-stub/#stub-1","user_id":"stub-customer","items":[{"product_id":"101","accepted_quantity":2,"rejected_quantity":0}]}`))
+	}))
 	t.Cleanup(api.Close)
 	client, err := mnfoodclub.NewOrderClient(config.MNFoodClubConfig{OrderAPIURL: api.URL + "/mnfoodclub-stub", OrderAccessToken: "caremetest-mnfoodclub-stub"}, api.Client())
 	require.NoError(t, err)
