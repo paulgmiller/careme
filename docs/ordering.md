@@ -28,10 +28,11 @@ Upstream states stay inside the adapter.
 
 `OrderView` supplies the POST URL, serialized request, idempotency key, and button
 copy. The template uses a native form with `hx-boost="false"`, `target="_blank"`,
-and `rel="noopener noreferrer"`. Cart submission and any login redirects open
-in a new tab, preserving the finalized shopping-list page. Button copy announces
-the new tab. HTMX refreshes only the cart/build controls with a GET when the
-window regains focus, the document becomes visible, or Back/Forward restores a
+and `rel="noopener noreferrer"`. Cart submission and any login redirects request
+a new tab to preserve the finalized shopping-list page. Button copy describes the
+action without promising a new tab. Return URLs target `#shopping-finalize-controls`
+to land at the cart controls. HTMX refreshes only the cart/build controls with a GET
+when the window regains focus, the document becomes visible, or Back/Forward restores a
 cached page. The GET reads the saved transfer without submitting products again;
 recipe cards and unsent form input stay in place. Overlapping refreshes are dropped.
 Finalized lists without ordering controls show “Shopping list ready.” instead of
@@ -228,6 +229,54 @@ the handoff again. No request wrapper or customer-ID mapping is persisted. The p
 embeds the shared `Transfer` plus `user_id`; TODO: save that customer-ID mapping
 for future identity hints.
 
+## Instacart shopping lists
+
+Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers`. The provider
+registry currently offers Instacart only for IDs recognized by the Albertsons
+provider, including Albertsons, Safeway, and Haggen. Whole Foods is excluded. Mock
+mode still uses only the mock provider. Localhost and loopback `PUBLIC_ORIGIN`
+hosts always select `https://connect.dev.instacart.tools`, overriding an explicit
+production endpoint; use a development key locally. For other origins,
+`INSTACART_BASE_URL` defaults to `https://connect.instacart.com` and can explicitly
+select the development endpoint.
+
+Instacart follows the same native form, sign-in return, conditional reservation,
+and saved `Transfer` flow as Kroger and MN Food Club. The key is the finalized
+list hash, scoped to the authenticated Careme user. Reposts reuse the saved
+outcome without comparing the submitted payload. There are no query-string
+statuses, browser polling, extra recipe-handler interfaces, or multiple ordering
+forms. The cache-bound view reads the saved result and supplies the existing
+form, review link, or failure label. View rendering never calls Instacart.
+
+The API request creates a shopping-list page with every displayed item, including
+pantry ingredients and selected wines. The full Careme return URL is sent both
+in `instructions` and as `partner_linkback_url`. Names drive matching; source product and
+variant IDs and source-store package counts are not Instacart identifiers or
+measurements. Positive numeric recipe amounts with supported units become
+`line_item_measurements`. Other amounts remain display text, and every original
+amount is retained for review. No ingredient is omitted for an unknown unit.
+Unlike catalog-based providers, Instacart requires nonempty item names and allows
+items without product IDs.
+
+An API success saves an `applied` handoff with the generated URL as `cart_url`.
+This confirms creation of the shopping page, not acceptance of any cart products;
+no accepted or rejected cart quantities are invented. The POST returns to the
+current request's local shopping-list URL, where the shared review control opens
+Instacart. The shopper selects a supported retailer, reviews matches and quantities,
+and adds products to their cart on Instacart. Careme does not select the source
+retailer or place an order.
+
+API errors and invalid URLs save `failed`; repeated posts do not retry. A failed
+confirmation save leaves `pending`, blocking another API submission. Pending
+records without a generated URL render no cart action. Creation POSTs are never
+automatically replayed or redirected, and the instrumented application HTTP client
+is injected at construction, as with other ordering clients.
+
+Generated links expire after 7 days. Transfer records remain saved history and
+are not refreshed or recreated on page load. A different finalized list has its
+own handoff. Legacy `instacart_shopping_links/` records are no longer read; only
+shared transfers are persisted under `instacart_order_transfers/`.
+
 ## Local development and E2E tests
 
 With `ENABLE_MOCKS=1`, the mock order provider handles every location ID instead
@@ -262,7 +311,7 @@ partner API, not a production recipe ordering destination.
 
 The server asks the configured provider for this signed-in viewer's saved
 transfer using the finalized list key. Kroger reads one saved transfer record.
-Completed and pending writes replace the form with “Review cart (opens a new tab)”. Failed transfers
+Completed and pending writes replace the form with “Review cart”. Failed transfers
 show “Add to cart failed.” without a form. Missing transfers keep Add to cart.
 Read or decoding errors fail the page request. There is no browser status fetch.
 The saved handoff remains after checkout or cart edits; this is transfer history,

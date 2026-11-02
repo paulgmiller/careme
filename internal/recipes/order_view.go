@@ -35,7 +35,7 @@ func (s *server) populateOrderView(r *http.Request, view *shoppingListPageView) 
 		UserID:   view.User.ID,
 		ZipCode:  zipCode,
 		Location: view.Location, Items: items, ListKey: view.Hash,
-		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-list-section",
+		ReturnURL: "/recipes?h=" + url.QueryEscape(view.Hash) + "#shopping-finalize-controls",
 	})
 	if err != nil {
 		return err
