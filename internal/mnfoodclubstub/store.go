@@ -15,6 +15,7 @@ var errNotFound = errors.New("transfer not found")
 type transferStore interface {
 	create(context.Context, record) (record, error)
 	get(context.Context, string) (record, error)
+	apply(context.Context, string, response) (record, error)
 	list(context.Context) ([]record, error)
 	ping(context.Context) error
 }
@@ -45,11 +46,18 @@ func OpenStore(ctx context.Context, databaseURL string) (*sqlStore, error) {
  idempotency_key TEXT NOT NULL UNIQUE,
  created_at TIMESTAMPTZ NOT NULL,
  request JSONB NOT NULL,
- response JSONB NOT NULL
+ response JSONB NOT NULL,
+ post_response JSONB
  )`)
 	if err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("create transfer table: %w", err)
+	}
+	// Older applied transfers used the same response for both POST and GET.
+	// Keeping the new column nullable allows the old binary to finish requests during rollout.
+	if _, err := pool.Exec(ctx, `ALTER TABLE mnfoodclub_stub_transfers ADD COLUMN IF NOT EXISTS post_response JSONB`); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("add original POST response column: %w", err)
 	}
 	return store, nil
 }
@@ -69,19 +77,23 @@ func (s *sqlStore) create(ctx context.Context, candidate record) (record, error)
 	if err != nil {
 		return record{}, fmt.Errorf("encode transfer response: %w", err)
 	}
+	postJSON, err := json.Marshal(candidate.PostResponse)
+	if err != nil {
+		return record{}, fmt.Errorf("encode original POST response: %w", err)
+	}
 	row := s.pool.QueryRow(ctx, `INSERT INTO mnfoodclub_stub_transfers
- (id, idempotency_key, created_at, request, response) VALUES ($1,$2,$3,$4,$5)
+ (id, idempotency_key, created_at, request, response,post_response) VALUES ($1,$2,$3,$4,$5,$6)
  ON CONFLICT (idempotency_key) DO UPDATE SET idempotency_key = excluded.idempotency_key
- RETURNING created_at, idempotency_key, request, response`, candidate.Response.TransferID, candidate.Key, candidate.Created, requestJSON, responseJSON)
+ RETURNING created_at, idempotency_key, request, response,COALESCE(post_response,response)`, candidate.Response.TransferID, candidate.Key, candidate.Created, requestJSON, responseJSON, postJSON)
 	return scanRecord(row)
 }
 
 func (s *sqlStore) get(ctx context.Context, id string) (record, error) {
-	return scanRecord(s.pool.QueryRow(ctx, `SELECT created_at, idempotency_key, request, response FROM mnfoodclub_stub_transfers WHERE id = $1`, id))
+	return scanRecord(s.pool.QueryRow(ctx, `SELECT created_at, idempotency_key, request, response,COALESCE(post_response,response) FROM mnfoodclub_stub_transfers WHERE id = $1`, id))
 }
 
 func (s *sqlStore) list(ctx context.Context) ([]record, error) {
-	rows, err := s.pool.Query(ctx, `SELECT created_at, idempotency_key, request, response FROM mnfoodclub_stub_transfers ORDER BY created_at DESC, id DESC`)
+	rows, err := s.pool.Query(ctx, `SELECT created_at, idempotency_key, request, response,COALESCE(post_response,response) FROM mnfoodclub_stub_transfers ORDER BY created_at DESC, id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list transfers: %w", err)
 	}
@@ -102,8 +114,8 @@ func (s *sqlStore) list(ctx context.Context) ([]record, error) {
 
 func scanRecord(row pgx.Row) (record, error) {
 	var rec record
-	var requestJSON, responseJSON []byte
-	err := row.Scan(&rec.Created, &rec.Key, &requestJSON, &responseJSON)
+	var requestJSON, responseJSON, postJSON []byte
+	err := row.Scan(&rec.Created, &rec.Key, &requestJSON, &responseJSON, &postJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return record{}, errNotFound
 	}
@@ -116,5 +128,19 @@ func scanRecord(row pgx.Row) (record, error) {
 	if err := json.Unmarshal(responseJSON, &rec.Response); err != nil {
 		return record{}, fmt.Errorf("decode saved response: %w", err)
 	}
+	if err := json.Unmarshal(postJSON, &rec.PostResponse); err != nil {
+		return record{}, fmt.Errorf("decode original POST response: %w", err)
+	}
 	return rec, nil
+}
+
+// Only the first browser handoff can apply a pending transfer. Replays retain its owner and quantities.
+func (s *sqlStore) apply(ctx context.Context, id string, result response) (record, error) {
+	body, err := json.Marshal(result)
+	if err != nil {
+		return record{}, fmt.Errorf("encode applied transfer: %w", err)
+	}
+	return scanRecord(s.pool.QueryRow(ctx, `UPDATE mnfoodclub_stub_transfers
+ SET response = CASE WHEN response->>'status' = 'pending_login' THEN $2::JSONB ELSE response END
+ WHERE id = $1 RETURNING created_at,idempotency_key,request,response,COALESCE(post_response,response)`, id, body))
 }
