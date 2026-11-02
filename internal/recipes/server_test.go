@@ -1147,8 +1147,8 @@ func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (st
 	return "", nil
 }
 
-func (n noSessionAuth) GetUserIDFromRequest(r *http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (n noSessionAuth) GetUserIDFromRequest(r *http.Request) (string, bool) {
+	return "", false
 }
 
 func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {

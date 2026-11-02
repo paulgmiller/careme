@@ -44,7 +44,7 @@ func AccountRequiredPath(reason AccountRequiredReason, returnTo string) string {
 
 type AuthClient interface {
 	GetUserEmail(ctx context.Context, clerkUserID string) (string, error)
-	GetUserIDFromRequest(r *http.Request) (string, error)
+	GetUserIDFromRequest(r *http.Request) (string, bool)
 	WithAuthHTTP(handler http.Handler) http.Handler
 	Register(mux routing.Registrar)
 }
@@ -103,12 +103,13 @@ func (c *clerkClient) GetUserEmail(ctx context.Context, clerkUserID string) (str
 	return primaryEmail, nil
 }
 
-func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, error) {
+// GetUserIDFromRequest returns the user ID and whether the request has a session.
+func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, bool) {
 	sessionClaims, ok := clerk.SessionClaimsFromContext(r.Context())
 	if !ok || sessionClaims == nil {
-		return "", ErrNoSession
+		return "", false
 	}
-	return sessionClaims.Subject, nil
+	return sessionClaims.Subject, true
 }
 
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware

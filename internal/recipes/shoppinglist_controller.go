@@ -132,13 +132,9 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userid, err := s.clerk.GetUserIDFromRequest(r)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r, http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+	userid, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
+		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
 
@@ -575,13 +571,8 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := s.clerk.GetUserIDFromRequest(r)
-	if err != nil {
-		if !errors.Is(err, auth.ErrNoSession) {
-			slog.ErrorContext(ctx, "failed to identify account for recipe generation retry", "error", err)
-			http.Error(w, "unable to load account", http.StatusInternalServerError)
-			return
-		}
+	userID, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
 		userID = guestUser.ID
 	}
 

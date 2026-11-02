@@ -225,6 +225,16 @@ func TestFindOrCreateFromClerkCreatesUser(t *testing.T) {
 	}
 }
 
+func TestFromRequestWithoutSession(t *testing.T) {
+	t.Parallel()
+
+	storage := NewStorage(cache.NewInMemoryCache())
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	user, err := storage.FromRequest(t.Context(), r, noSessionAuth{})
+	require.ErrorIs(t, err, auth.ErrNoSession)
+	require.Nil(t, user)
+}
+
 func TestFromRequestCreatesUserWithMockAuth(t *testing.T) {
 	fc := cache.NewFileCache(t.TempDir())
 	storage := NewStorage(fc)

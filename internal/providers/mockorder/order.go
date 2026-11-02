@@ -95,8 +95,8 @@ func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid mock transfer", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Error(w, "Sign in to transfer your cart", http.StatusUnauthorized)
 		return
 	}
@@ -133,8 +133,8 @@ func (h *handler) cart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid mock transfer ID", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Error(w, "Sign in to review your cart", http.StatusUnauthorized)
 		return
 	}

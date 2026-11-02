@@ -157,13 +157,9 @@ func (s *server) handleOfflineRecipeCache(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) handleExists(w http.ResponseWriter, r *http.Request) {
-	clerkUserID, err := s.clerk.GetUserIDFromRequest(r)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			http.Error(w, "no valid session found", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+	clerkUserID, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
+		http.Error(w, "no valid session found", http.StatusUnauthorized)
 		return
 	}
 	exists, err := s.exists(clerkUserID)

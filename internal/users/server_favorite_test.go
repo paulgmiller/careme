@@ -20,8 +20,8 @@ func (n noSessionAuth) GetUserEmail(_ context.Context, _ string) (string, error)
 	return "", auth.ErrNoSession
 }
 
-func (n noSessionAuth) GetUserIDFromRequest(_ *http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (n noSessionAuth) GetUserIDFromRequest(_ *http.Request) (string, bool) {
+	return "", false
 }
 
 func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {

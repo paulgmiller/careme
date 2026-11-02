@@ -7,16 +7,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"careme/internal/auth"
 	"careme/internal/config"
 	"careme/internal/routing"
 )
 
 type stubAuthClient struct {
-	userID    string
-	userIDErr error
-	email     string
-	emailErr  error
+	userID   string
+	email    string
+	emailErr error
 }
 
 func (s stubAuthClient) GetUserEmail(_ context.Context, _ string) (string, error) {
@@ -26,11 +24,8 @@ func (s stubAuthClient) GetUserEmail(_ context.Context, _ string) (string, error
 	return s.email, nil
 }
 
-func (s stubAuthClient) GetUserIDFromRequest(_ *http.Request) (string, error) {
-	if s.userIDErr != nil {
-		return "", s.userIDErr
-	}
-	return s.userID, nil
+func (s stubAuthClient) GetUserIDFromRequest(_ *http.Request) (string, bool) {
+	return s.userID, s.userID != ""
 }
 
 func (s stubAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {
@@ -46,7 +41,7 @@ func TestMiddlewareWrapRejectsNoSession(t *testing.T) {
 		Admin: config.AdminConfig{
 			Emails: []string{"admin@example.com"},
 		},
-	}, stubAuthClient{userIDErr: auth.ErrNoSession})
+	}, stubAuthClient{})
 
 	req := httptest.NewRequest(http.MethodGet, "/logs", nil)
 	rr := httptest.NewRecorder()
