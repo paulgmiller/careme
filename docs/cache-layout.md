@@ -283,5 +283,8 @@ picks do not change them.
 The standalone Food Club test stub stores its own records in CockroachDB, using
 `DATABASE_URL` from `roachkey` in namespace `mnfoodclub-stub`. Its
 `mnfoodclub_stub_transfers` table contains the transfer ID, unique idempotency
-key, creation time, normalized request JSON, and response JSON. These records
+key, creation time, normalized request JSON, current response JSON, and the
+original POST response in `post_response`. Browser login atomically resolves
+pending transfers without changing the idempotent POST result. Older applied
+rows with no `post_response` use their original `response`. These records
 survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.

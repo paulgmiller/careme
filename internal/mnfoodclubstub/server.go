@@ -21,6 +21,8 @@ import (
 
 const testToken = "caremetest-mnfoodclub-stub"
 
+const pendingLogin ordertypes.TransferStatus = "pending_login"
+
 type item struct {
 	ProductID string `json:"product_id"`
 	VariantID string `json:"variant_id,omitempty"`
@@ -38,29 +40,34 @@ type request struct {
 }
 type response struct {
 	ordertypes.Transfer
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id,omitempty"`
 }
 type record struct {
-	Created  time.Time
-	Key      string
-	Request  request
-	Response response
+	Created      time.Time
+	Key          string
+	Request      request
+	Response     response
+	PostResponse response
 }
 type server struct {
-	store     transferStore
-	publicURL string
+	store        transferStore
+	publicURL    string
+	cookiePath   string
+	secureCookie bool
 }
 
-// New mounts the API and its single public HTML page under publicURL's path.
+// New mounts the API, stub login, and test orders page under publicURL's path.
 func New(publicURL string, store transferStore) http.Handler {
-	s := &server{publicURL: strings.TrimRight(publicURL, "/"), store: store}
+	base, _ := url.Parse(strings.TrimRight(publicURL, "/"))
+	s := &server{publicURL: strings.TrimRight(publicURL, "/"), store: store, cookiePath: strings.TrimRight(base.Path, "/") + "/", secureCookie: base.Scheme == "https"}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.page)
 	mux.HandleFunc("GET /ready", s.ready)
 	mux.HandleFunc("GET /live", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("POST /v1/cart-transfers", s.create)
 	mux.HandleFunc("GET /v1/cart-transfers/{id}", s.get)
-	base, _ := url.Parse(s.publicURL)
+	mux.HandleFunc("GET /handoff/{id}", s.handoff)
+	mux.Handle("POST /handoff/{id}", http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.login)))
 	handler := http.StripPrefix(base.Path, mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -129,11 +136,12 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := hex.EncodeToString(idBytes)
-	response := response{Transfer: ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: s.publicURL + "/#" + id}, UserID: "stub-customer"}
-	for _, item := range input.Items {
-		response.Items = append(response.Items, ordertypes.TransferItem{ProductID: item.ProductID, AcceptedQuantity: *item.Quantity})
+	result := response{Transfer: ordertypes.Transfer{TransferID: id, Status: pendingLogin, CartURL: s.publicURL + "/handoff/" + id}}
+	if name := loginName(r); name != "" {
+		result = s.appliedResponse(id, name, input)
 	}
-	rec, err := s.store.create(r.Context(), record{Created: time.Now().UTC(), Key: key, Request: input, Response: response})
+
+	rec, err := s.store.create(r.Context(), record{Created: time.Now().UTC(), Key: key, Request: input, Response: result, PostResponse: result})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "save stub transfer", "error", err)
 		failure(w, 500, "storage_error")
@@ -143,7 +151,7 @@ func (s *server) create(w http.ResponseWriter, r *http.Request) {
 		failure(w, 409, "idempotency_conflict")
 		return
 	}
-	writeResponse(w, rec.Response)
+	writeResponse(w, rec.PostResponse)
 }
 
 func writeResponse(w http.ResponseWriter, result response) {
@@ -168,7 +176,7 @@ func (s *server) get(w http.ResponseWriter, r *http.Request) {
 	writeResponse(w, rec.Response)
 }
 
-var page = template.Must(template.New("orders").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Food Club test orders</title></head><body><h1>Food Club test orders</h1><p>Test stub. All quantities are accepted. Orders are saved in CockroachDB. Reload to see new orders.</p>{{range .}}<section id="{{.Response.TransferID}}"><h2>{{.Response.TransferID}}</h2><p>{{.Created}} — {{.Response.Status}}</p><p>Key: {{.Key}}</p><p>Identity hints: {{.Request.IdentityHints}}</p><table><thead><tr><th>Product</th><th>Variant</th><th>Accepted packages</th></tr></thead><tbody>{{range .Request.Items}}<tr><td>{{.ProductID}}</td><td>{{.VariantID}}</td><td>{{.Quantity}}</td></tr>{{end}}</tbody></table></section>{{else}}<p>No orders yet.</p>{{end}}</body></html>`))
+var page = template.Must(template.New("orders").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Food Club test orders</title></head><body><h1>Food Club test orders</h1><p>Test stub. Log in with a name to apply a transfer. All quantities are accepted after login. Orders are saved in CockroachDB. Reload to see new orders.</p>{{if .Name}}<p>Signed in as {{.Name}}.</p>{{end}}{{range .Records}}<section id="{{.Response.TransferID}}"><h2>{{.Response.TransferID}}</h2><p>{{.Created}} — {{.Response.Status}}</p><p>Key: {{.Key}}</p>{{if .Response.UserID}}<p>Customer: {{.Response.UserID}}</p>{{else}}<p><a href="{{.Response.CartURL}}">Log in to add these items</a></p>{{end}}<p>Identity hints: {{.Request.IdentityHints}}</p><table><thead><tr><th>Product</th><th>Variant</th><th>Requested packages</th></tr></thead><tbody>{{range .Request.Items}}<tr><td>{{.ProductID}}</td><td>{{.VariantID}}</td><td>{{.Quantity}}</td></tr>{{end}}</tbody></table></section>{{else}}<p>No orders yet.</p>{{end}}</body></html>`))
 
 func (s *server) page(w http.ResponseWriter, r *http.Request) {
 	records, err := s.store.list(r.Context())
@@ -178,7 +186,10 @@ func (s *server) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body bytes.Buffer
-	if err := page.Execute(&body, records); err != nil {
+	if err := page.Execute(&body, struct {
+		Name    string
+		Records []record
+	}{Name: loginName(r), Records: records}); err != nil {
 		slog.ErrorContext(r.Context(), "render stub transfers", "error", err)
 		http.Error(w, "Unable to render test orders.", 500)
 		return

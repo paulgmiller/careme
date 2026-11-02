@@ -2,6 +2,7 @@ package mnfoodclubstub
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -22,6 +23,7 @@ func TestAPI(t *testing.T) {
 		r := httptest.NewRequest(method, "/mnfoodclub-stub"+path, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer "+token)
 		r.Header.Set("Idempotency-Key", key)
+		r.AddCookie(testNameCookie("Existing Chef"))
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		return w
@@ -62,9 +64,10 @@ func TestAPI(t *testing.T) {
 
 // Only HTTP unit tests use an in-memory store. The deployed stub requires SQL.
 type memoryStore struct {
-	mu      sync.Mutex
-	records []record
-	err     error
+	mu       sync.Mutex
+	records  []record
+	err      error
+	applyErr error
 }
 
 func newMemoryStore() *memoryStore { return &memoryStore{} }
@@ -133,4 +136,28 @@ func TestStorageFailures(t *testing.T) {
 			assert.NotContains(t, w.Body.String(), store.err.Error())
 		})
 	}
+}
+
+func testNameCookie(name string) *http.Cookie {
+	return &http.Cookie{Name: loginCookieName, Value: base64.RawURLEncoding.EncodeToString([]byte(name))}
+}
+
+func (s *memoryStore) apply(_ context.Context, id string, result response) (record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return record{}, s.err
+	}
+	if s.applyErr != nil {
+		return record{}, s.applyErr
+	}
+	for i, rec := range s.records {
+		if rec.Response.TransferID == id {
+			if rec.Response.Status == pendingLogin {
+				s.records[i].Response = result
+			}
+			return s.records[i], nil
+		}
+	}
+	return record{}, errNotFound
 }

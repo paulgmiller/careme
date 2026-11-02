@@ -1,22 +1,25 @@
 # Food Club test stub
 
 The standalone `cmd/mnfoodclubstub` service implements the proposed Food Club
-ordering API for `caremetest`. It always returns `applied`, accepts every requested
-package, and returns the fixed customer ID `stub-customer`. It does not simulate
-login, stock, or product lookup.
+ordering API for `caremetest`. Transfers without a stub login cookie return
+`pending_login`. The browser handoff asks for a test name, stores it in a cookie,
+and applies the transfer. Applied transfers accept every requested package and
+return that name as `user_id`. Stock and product lookup are not simulated.
 
 The public page at <https://test.careme.cooking/mnfoodclub-stub/> lists all orders,
 newest first, including product IDs, variants, quantities, and identity hints.
 Use test identities: this page is intentionally public. Reload to see new orders.
-Each returned `cart_url` links to that order on this page.
+For pending transfers, `cart_url` opens `/handoff/<transfer_id>`; applied cart
+URLs link to the order on this page.
 
 The API requires `Authorization: Bearer caremetest-mnfoodclub-stub`. This is a
 non-secret test token, not a real Food Club credential.
 
 - `POST /v1/cart-transfers` takes the documented JSON body and `Idempotency-Key`
   header. Omitted quantities default to one. Repeating the same key and request
-  returns the original result; changing the request with the same key returns 409.
-- `GET /v1/cart-transfers/{transfer_id}` returns the saved result, or 404.
+  returns the original POST result, even after login; changing the request with
+  the same key returns 409.
+- `GET /v1/cart-transfers/{transfer_id}` returns the current saved status and result, or 404. This endpoint never applies a transfer.
 - Invalid requests, nonpositive quantities, and duplicate product IDs return 400.
 
 Records, normalized requests, responses, and idempotency keys are stored in the
@@ -25,6 +28,30 @@ one saved result even for simultaneous requests or requests handled by different
 pods. Restarts preserve transfer IDs, cart links, quantities, and identity hints.
 The service creates its table at startup and requires `DATABASE_URL`; it never
 falls back to memory. There is no reset endpoint.
+
+## Stub login
+
+Careme calls the API server-to-server, so those requests do not contain the
+shopper's browser cookies. The API returns a pending handoff without accepted
+item results or a `user_id`. Identity hints alone never log the shopper in.
+
+Opening the handoff asks for any test name. Submitting it sets the
+`mnfoodclub_stub_name` cookie and atomically changes that transfer to `applied`.
+An existing cookie applies a subsequent pending handoff immediately. The name
+is base64url-encoded in the cookie so Unicode names work; the cookie is scoped
+to the stub path, HttpOnly, SameSite=Lax, and Secure on HTTPS. This is a test
+identity, not real authentication. Use test names only.
+
+The applied result is saved in CockroachDB, so status GETs from Careme see it
+without browser cookies. Reopening or resubmitting a handoff does not add items
+again or change the original applied user. Reload the Careme shopping list to
+refresh a pending result into its applied cart link. Replaying the original
+idempotent POST still returns its initial response, as required by the contract.
+Clear this stub cookie in your browser to exercise the name form again.
+
+Existing applied transfers remain applied after this update. Startup adds a
+nullable `post_response` column without interrupting the previous binary; old
+applied records use their existing response as their original POST response.
 
 ## Run locally
 
@@ -82,6 +109,9 @@ isolated temporary schema, set `MNFOODCLUB_STUB_TEST_DATABASE_URL` and run:
 go test ./internal/mnfoodclubstub -run TestSQLStorePersistence -count=1
 ```
 
-The test closes and reopens the connection pool, verifies repeat and conflicting
-keys, concurrent requests, saved identity hints and quantities, and readiness
-failure when the database is unavailable. It drops only its generated test schema.
+The SQL tests also cover pending login across connection-pool restarts,
+simultaneous handoff submissions, and migration of older applied records. Run
+all of them with `-run TestSQL`. HTTP tests exercise the real Careme adapter's
+redirect, browser cookie login, and cookie-free status refresh. The persistence
+test verifies repeat and conflicting keys, concurrent requests, saved identity
+hints and quantities, and readiness failure when the database is unavailable. It drops only its generated test schema.
