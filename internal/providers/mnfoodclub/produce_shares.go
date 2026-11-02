@@ -7,7 +7,7 @@ import (
 )
 
 // produceShareIngredients is the static inventory transcribed from the supplied
-// October 19–24 share list (page 1 of the weekly feature PDF; later pages include
+// November 2–7 share list (page 1 of the weekly feature PDF; later pages include
 // older weeks). Share membership is part of each description and product ID.
 func produceShareIngredients() []ai.InputIngredient {
 	shares := []struct {
@@ -18,39 +18,40 @@ func produceShareIngredients() []ai.InputIngredient {
 		{
 			name: "Seasonal",
 			items: []string{
-				"Koginut Squash", "Broccolini", "Carrots", "Daikon Radish",
-				"Kennebec Potatoes", "Red Keeper Onions", "Poblano Peppers",
+				"Acorn Squash", "Red Bell Peppers", "Green Napa Cabbage", "Brussels Sprouts",
+				"Fennel", "Purple Turnips", "Yellow Candy Onions",
 			},
 		},
 		{
 			name: "Small Seasonal",
 			items: []string{
-				"Stripetti or Spaghetti Squash", "Poblano Peppers", "Carrots", "Cilantro",
-				"Red Keeper Onions", "Pie Apples (2nds)",
+				"Acorn Squash", "Green Bell Peppers", "Green Napa Cabbage", "Shallots",
+				"Purple Turnips", "Yellow Candy Onions",
 			},
 		},
 		{
 			name: "Low Carb",
 			items: []string{
-				"Mini Peppers", "Broccolini", "Zucchini", "Kale", "Red Cabbage",
+				"Roma Tomatoes", "Yellow Keeper Onions", "Poblano Peppers", "Garlic",
+				"Red Greentop Radish", "Cilantro", "Eggplant", "Collard Greens",
 			},
 		},
 		{
 			name: "Staple",
 			items: []string{
-				"Jalapeño Peppers", "Red Potatoes", "Kohlrabi", "Green Cabbage", "Yellow Onions", "Cucumbers",
+				"Parsnips", "Leeks", "Carrots", "Celery", "Chiogga Beets",
 			},
 		},
 		{
 			name: "Fruit",
 			items: []string{
-				"Mandarins", "Asian Pear", "Mango", "Cranberries", "Cantaloupe",
+				"Navel Oranges", "Green Grapes", "Grapefruit", "Avocado", "Key Limes", "Kiwi",
 			},
 		},
 		{
 			name: "Small Fruit",
 			items: []string{
-				"Mandarins", "Asian Pear", "Mango", "Cantaloupe",
+				"Navel Oranges", "Green Grapes", "Grapefruit", "Avocado",
 			},
 		},
 	}
