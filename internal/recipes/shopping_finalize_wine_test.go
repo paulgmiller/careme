@@ -3,6 +3,7 @@ package recipes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -101,6 +102,25 @@ func TestFinalizeProceedsWithoutMissingWineAfterThirtySeconds(t *testing.T) {
 		require.Len(t, items, 1)
 		assert.Equal(t, "food", items[0].ProductID)
 	})
+}
+
+func TestFinalizeDoesNotWaitForRecipesWithoutWineStyles(t *testing.T) {
+	for _, styles := range [][]string{nil, {}, {"", " \t "}} {
+		t.Run(fmt.Sprintf("styles=%q", styles), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				s := newTestServer(t, withTestCache(cache.NewInMemoryCache()))
+				p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+				p.Saved = []ai.Recipe{{Title: "Dinner", WineStyles: styles, Ingredients: []ai.Ingredient{{ProductID: "food", Name: "Food", Quantity: "1 lb"}}}}
+				require.NoError(t, s.SaveParams(t.Context(), p))
+				started := time.Now()
+				require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
+				assert.Zero(t, time.Since(started))
+				items := cachedShoppingItems(t, s, p.Hash())
+				require.Len(t, items, 1)
+				assert.Equal(t, "food", items[0].ProductID)
+			})
+		})
+	}
 }
 
 type failedWineSaveCache struct{ cache.ListCache }

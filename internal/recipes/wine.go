@@ -47,7 +47,9 @@ func (rio recipeio) saveWine(ctx context.Context, hash string, selection *ai.Win
 
 // waitForWine polls shared storage, so a pick may finish on any server.
 // A saved selection with no wines is complete; only a missing record is retried.
-func (rio recipeio) waitForWine(ctx context.Context, hash string) (*ai.WineSelection, error) {
+// Recipes without wine styles need no pick when there is no saved selection.
+func (rio recipeio) waitForWine(ctx context.Context, recipe ai.Recipe) (*ai.WineSelection, error) {
+	hash := recipe.ComputeHash()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -60,6 +62,9 @@ func (rio recipeio) waitForWine(ctx context.Context, hash string) (*ai.WineSelec
 		}
 		if !errors.Is(err, cache.ErrNotFound) {
 			return nil, fmt.Errorf("load wine pick %q: %w", hash, err)
+		}
+		if len(normalizedWineStyles(recipe.WineStyles)) == 0 {
+			return &ai.WineSelection{}, nil
 		}
 		select {
 		case <-ctx.Done():
