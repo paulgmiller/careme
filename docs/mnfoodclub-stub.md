@@ -47,7 +47,9 @@ prefix; all service routes, including `/ready`, are mounted beneath it.
 ## Deployment
 
 The image pipeline builds `careme-mnfoodclubstub` using the shared Dockerfile.
-Deploy a published image with:
+Pull requests build images without publishing. A manual “Build and Publish”
+workflow run for a branch publishes its immutable commit tag using GitHub Actions'
+registry credentials, without updating `latest`. Deploy a published image with:
 
 ```sh
 bash deploy/mnfoodclub-stub.sh <ref>
