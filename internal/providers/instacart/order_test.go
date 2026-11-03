@@ -93,7 +93,7 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 	for range 2 {
 		w := submit(handler, orderForm(t, input, "list-hash"))
 		assert.Equal(t, 303, w.Code)
-		assert.Equal(t, input.ReturnURL, w.Header().Get("Location"))
+		assert.Equal(t, "https://www.instacart.com/store/shopping_lists/1", w.Header().Get("Location"))
 		assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	}
 	transfer, err := loadOrderTransfer(t.Context(), store, "mock-clerk-user-id", "list-hash")
@@ -167,12 +167,16 @@ func TestOrderFailures(t *testing.T) {
 			w := submit(handler, orderForm(t, orderInput(), "list-hash"))
 			assert.Equal(t, tt.code, w.Code)
 			assert.Equal(t, tt.calls, calls)
+			if tt.code == http.StatusSeeOther {
+				assert.Equal(t, orderInput().ReturnURL, w.Header().Get("Location"))
+			}
 			if tt.saved != "" {
 				record, err := loadOrderTransfer(t.Context(), tt.store, "mock-clerk-user-id", "list-hash")
 				require.NoError(t, err)
 				assert.Equal(t, tt.saved, record.Status)
 				w = submit(handler, orderForm(t, orderInput(), "list-hash"))
 				assert.Equal(t, 303, w.Code)
+				assert.Equal(t, orderInput().ReturnURL, w.Header().Get("Location"))
 				assert.Equal(t, tt.calls, calls, "saved failures and pending records must not resubmit")
 			}
 		})
@@ -252,14 +256,17 @@ func TestOrderViewUsesSharedFormAndSavedStates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, orderTransferURL, view.TransferURL)
 	assert.Equal(t, "list", view.IdempotencyKey)
-	assert.Equal(t, "Shop with Instacart", view.TransferLabel)
+	assert.True(t, view.Instacart)
+	assert.Equal(t, "Shop on Instacart", view.TransferLabel)
 	var posted ordertypes.TransferRequest
 	require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &posted))
 	assert.Equal(t, orderInput(), posted)
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
 	assert.Contains(t, page.String(), `hx-boost="false"`)
-	assert.Contains(t, page.String(), `>Shop with Instacart</button>`)
+	assert.Contains(t, page.String(), `class="instacart-cta"`)
+	assert.Contains(t, page.String(), `>Shop on Instacart</span>`)
+	assert.Contains(t, page.String(), `instacart-logo.svg" width="22" height="22" alt="" aria-hidden="true"`)
 	assert.NotContains(t, page.String(), "opens a new tab")
 	assert.Contains(t, page.String(), `name="transfer_request"`)
 	assert.Contains(t, page.String(), `name="idempotency_key"`)
@@ -276,15 +283,21 @@ func TestOrderViewUsesSharedFormAndSavedStates(t *testing.T) {
 		view, err = OrderViewForUser(t.Context(), store, input)
 		require.NoError(t, err)
 		assert.Equal(t, tt.failed, view.TransferFailed)
+		assert.True(t, view.Instacart)
 		assert.Equal(t, tt.link, view.ReviewCartURL)
 		assert.Empty(t, view.TransferURL)
 		page.Reset()
 		require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
 		if tt.failed {
 			assert.Contains(t, page.String(), "Add to cart failed.")
+			assert.NotContains(t, page.String(), `class="instacart-cta"`)
 		}
 		if tt.link != "" {
 			assert.Contains(t, page.String(), `href="https://www.instacart.com/list"`)
+			assert.Contains(t, page.String(), `class="instacart-cta"`)
+			assert.Contains(t, page.String(), `>Shop on Instacart</span>`)
+			assert.Contains(t, page.String(), `instacart-logo.svg`)
+			assert.NotContains(t, page.String(), `>Review cart</a>`)
 		}
 		assert.NotContains(t, page.String(), "<form")
 	}

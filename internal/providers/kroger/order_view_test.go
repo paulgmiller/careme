@@ -30,6 +30,9 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", order))
 	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
+	assert.Contains(t, page.String(), `>Add to QFC cart</button>`)
+	assert.NotContains(t, page.String(), "instacart-cta")
+	assert.NotContains(t, page.String(), "instacart-logo.svg")
 	assert.NotContains(t, page.String(), `hx-get=`)
 	assert.NotContains(t, page.String(), `hx-post=`)
 	assert.NotContains(t, page.String(), `hx-trigger=`)
@@ -180,6 +183,8 @@ func TestOrderViewReviewCartReplacesForm(t *testing.T) {
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", ordertypes.OrderView{ReviewCartURL: "https://www.qfc.com/cart"}))
 	assert.Contains(t, page.String(), ">Review cart</a>")
+	assert.NotContains(t, page.String(), "instacart-cta")
+	assert.NotContains(t, page.String(), "instacart-logo.svg")
 	assert.NotContains(t, page.String(), "opens a new tab")
 	assert.Contains(t, page.String(), `target="_blank" rel="noopener noreferrer"`)
 	assert.NotContains(t, page.String(), "<form")

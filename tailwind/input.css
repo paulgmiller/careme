@@ -2,6 +2,39 @@
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
 
+/* Instacart's approved dark CTA theme. Keep the logo's original colors. */
+.instacart-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 29.5px;
+  background-color: #003d29;
+  color: #faf1e5;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.instacart-cta img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.instacart-cta:focus-visible {
+  outline: 2px solid #003d29;
+  outline-offset: 3px;
+}
+
 /* Display face used by the font-display utility on page and recipe headings. */
 @font-face {
   font-family: "Fraunces";

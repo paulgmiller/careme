@@ -70,16 +70,16 @@ func OrderViewForUser(ctx context.Context, c cache.Cache, input ordertypes.Order
 		if err != nil {
 			return nil, fmt.Errorf("encode Instacart transfer request: %w", err)
 		}
-		return &ordertypes.OrderView{TransferURL: orderTransferURL, TransferLabel: "Shop with Instacart", IdempotencyKey: input.ListKey, TransferRequestJSON: string(body)}, nil
+		return &ordertypes.OrderView{Instacart: true, TransferURL: orderTransferURL, TransferLabel: "Shop on Instacart", IdempotencyKey: input.ListKey, TransferRequestJSON: string(body)}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read Instacart transfer: %w", err)
 	}
 	switch transfer.Status {
 	case ordertypes.TransferFailed:
-		return &ordertypes.OrderView{TransferFailed: true}, nil
+		return &ordertypes.OrderView{Instacart: true, TransferFailed: true}, nil
 	case ordertypes.TransferApplied, ordertypes.TransferPending:
-		return &ordertypes.OrderView{ReviewCartURL: transfer.CartURL}, nil
+		return &ordertypes.OrderView{Instacart: true, ReviewCartURL: transfer.CartURL}, nil
 	default:
 		return nil, fmt.Errorf("unknown Instacart saved transfer status %q", transfer.Status)
 	}
@@ -107,9 +107,13 @@ func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/sign-in?return_to_b64="+base64.RawURLEncoding.EncodeToString([]byte(input.ReturnURL)), http.StatusSeeOther)
 		return
 	}
-	_, err := loadOrderTransfer(r.Context(), h.cache, userID, key)
+	saved, err := loadOrderTransfer(r.Context(), h.cache, userID, key)
 	if err == nil {
-		http.Redirect(w, r, input.ReturnURL, http.StatusSeeOther)
+		destination := input.ReturnURL
+		if saved.Status == ordertypes.TransferApplied {
+			destination = saved.CartURL
+		}
+		http.Redirect(w, r, destination, http.StatusSeeOther)
 		return
 	}
 	if !errors.Is(err, cache.ErrNotFound) {
@@ -131,6 +135,10 @@ func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := saveOrderTransfer(r.Context(), h.cache, userID, key, transfer, cache.Unconditional()); err != nil {
 		http.Error(w, "Unable to save Instacart transfer.", http.StatusInternalServerError)
+		return
+	}
+	if transfer.Status == ordertypes.TransferApplied {
+		http.Redirect(w, r, transfer.CartURL, http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, input.ReturnURL, http.StatusSeeOther)
