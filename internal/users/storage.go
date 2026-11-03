@@ -115,9 +115,9 @@ type emailFetcher interface {
 }
 
 func (s *Storage) FromRequest(ctx context.Context, r *http.Request, authClient auth.AuthClient) (*utypes.User, error) {
-	clerkUserID, err := authClient.GetUserIDFromRequest(r)
-	if err != nil {
-		return nil, err
+	clerkUserID, ok := authClient.GetUserIDFromRequest(r)
+	if !ok {
+		return nil, auth.ErrNoSession
 	}
 	return s.findOrCreateFromClerk(ctx, clerkUserID, authClient)
 }

@@ -11,6 +11,8 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
@@ -43,6 +45,13 @@ func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) 
 			return err
 		}
 		mnfoodclub.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
+	}
+	if f.config.Instacart.APIKey != "" {
+		client, err := instacart.NewOrderClient(f.config.Instacart, f.config.ResolvedPublicOrigin(), newOrderHTTPClient())
+		if err != nil {
+			return err
+		}
+		instacart.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
 	}
 	return nil
 }
@@ -104,6 +113,9 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 			return nil, err
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
+	}
+	if albertsons.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
+		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil
 }

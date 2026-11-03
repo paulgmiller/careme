@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -33,11 +32,8 @@ func New(cfg *config.Config, authClient auth.AuthClient) *middleware {
 
 func (m *middleware) Enforce(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID, err := m.auth.GetUserIDFromRequest(r)
-		if err != nil {
-			if !errors.Is(err, auth.ErrNoSession) {
-				slog.WarnContext(r.Context(), "admin auth failed", "error", err)
-			}
+		userID, ok := m.auth.GetUserIDFromRequest(r)
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}

@@ -36,8 +36,8 @@ func (g *stepImageGenerator) GenerateStepImage(_ context.Context, _ ai.Recipe, s
 
 type noStepImageSession struct{ auth.AuthClient }
 
-func (noStepImageSession) GetUserIDFromRequest(*http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (noStepImageSession) GetUserIDFromRequest(*http.Request) (string, bool) {
+	return "", false
 }
 
 func stepImageRequest(method, hash, step string) *http.Request {

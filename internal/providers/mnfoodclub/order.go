@@ -115,8 +115,8 @@ func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid MN Food Club transfer.", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Redirect(w, r, "/sign-in?return_to_b64="+base64.RawURLEncoding.EncodeToString([]byte(input.ReturnURL)), http.StatusSeeOther)
 		return
 	}

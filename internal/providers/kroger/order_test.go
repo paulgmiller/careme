@@ -369,8 +369,8 @@ func TestKrogerOrderValidation(t *testing.T) {
 
 type orderNoSession struct{ auth.AuthClient }
 
-func (orderNoSession) GetUserIDFromRequest(*http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (orderNoSession) GetUserIDFromRequest(*http.Request) (string, bool) {
+	return "", false
 }
 
 func TestKrogerOrderRefreshAndPreparationFailures(t *testing.T) {
