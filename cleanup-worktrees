@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Preview or remove old, clean careme worktrees whose commits are on origin."""
+
+import argparse
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+
+def git(repo, *args):
+    return subprocess.check_output(
+        ["git", "-C", str(repo), *args], stderr=subprocess.PIPE
+    ).decode(errors="surrogateescape").strip()
+
+
+def worktrees(repo):
+    records = git(repo, "worktree", "list", "--porcelain", "-z")
+    for record in records.split("\0\0"):
+        fields = {}
+        for field in record.split("\0"):
+            key, _, value = field.partition(" ")
+            fields[key] = value
+        if "worktree" in fields:
+            yield fields
+
+
+def latest_activity(path):
+    # Include ignored files and directories, but never follow directory symlinks.
+    latest = path.lstat().st_mtime
+
+    def fail(error):
+        raise error
+
+    for root, directories, files in os.walk(path, onerror=fail):
+        for name in directories + files:
+            latest = max(latest, (Path(root) / name).lstat().st_mtime)
+    # Switching/resetting an old branch is recent activity, even with old files.
+    private = Path(git(path, "rev-parse", "--absolute-git-dir"))
+    for name in ("HEAD", "logs/HEAD"):
+        entry = private / name
+        if entry.exists():
+            latest = max(latest, entry.stat().st_mtime)
+    latest = max(latest, int(git(path, "show", "-s", "--format=%ct", "HEAD")))
+    return latest
+
+
+def skip_reason(repo, entry, root, cutoff):
+    path = Path(entry["worktree"])
+    primary = Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+    cwd = Path.cwd().resolve()
+    if path == primary or path == repo or path == cwd or path in cwd.parents:
+        return "main or current checkout"
+    if path.parent != root or not path.name.startswith("careme_"):
+        return "outside cleanup scope"
+    if "locked" in entry or "prunable" in entry or not path.is_dir() or path.is_symlink():
+        return "locked, missing, or symlinked"
+    if "branch" not in entry:
+        return "detached HEAD"
+    if git(path, "status", "--porcelain", "--untracked-files=all", "--ignored"):
+        return "modified, untracked, or ignored files"
+    if latest_activity(path) >= cutoff:
+        return "activity within the age limit"
+    refs = git(repo, "for-each-ref", "--format=%(refname)",
+               "--contains=" + entry["HEAD"], "refs/remotes/origin/").splitlines()
+    if not any(ref != "refs/remotes/origin/HEAD" for ref in refs):
+        return "commits not reachable from an origin branch"
+    return None
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply", action="store_true", help="remove eligible worktrees")
+    parser.add_argument("--days", type=int, default=7, help="minimum inactive days (default: 7)")
+    parser.add_argument("--root", type=Path, default=Path.home(), help="parent of careme_* directories (default: home)")
+    args = parser.parse_args(argv)
+    if args.days < 1:
+        parser.error("--days must be at least 1")
+    repo = Path(git(Path(__file__).resolve().parent, "rev-parse", "--show-toplevel"))
+    # Explicit refspec also handles repositories configured to fetch just master.
+    # Failure aborts cleanup; stale remote-tracking refs are never sufficient.
+    git(repo, "fetch", "--prune", "origin", "+refs/heads/*:refs/remotes/origin/*")
+    cutoff = time.time() - args.days * 86400
+    count = 0
+    for entry in worktrees(repo):
+        path = entry["worktree"]
+        reason = skip_reason(repo, entry, args.root.resolve(), cutoff)
+        if reason:
+            print(f"KEEP {path}: {reason}")
+            continue
+        if args.apply:
+            # Recheck before removal; never use --force or delete local branches.
+            reason = skip_reason(repo, entry, args.root.resolve(), cutoff)
+            if reason or git(Path(path), "rev-parse", "HEAD") != entry["HEAD"]:
+                raise RuntimeError(f"worktree changed during cleanup: {path}")
+            git(repo, "worktree", "remove", "--", path)
+        print(f"{'REMOVED' if args.apply else 'WOULD REMOVE'} {path}")
+        count += 1
+    print(f"{count} worktree(s) {'removed' if args.apply else 'eligible; use --apply to remove'}. Local branches retained.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        if isinstance(error, subprocess.CalledProcessError):
+            error = error.stderr.decode(errors="replace").strip()
+        print(f"error: {error}", file=sys.stderr)
+        sys.exit(1)

@@ -102,13 +102,9 @@ func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Instacart transfer.", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if errors.Is(err, auth.ErrNoSession) {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Redirect(w, r, "/sign-in?return_to_b64="+base64.RawURLEncoding.EncodeToString([]byte(input.ReturnURL)), http.StatusSeeOther)
-		return
-	}
-	if err != nil {
-		http.Error(w, "Unable to load account.", http.StatusInternalServerError)
 		return
 	}
 	saved, err := loadOrderTransfer(r.Context(), h.cache, userID, key)

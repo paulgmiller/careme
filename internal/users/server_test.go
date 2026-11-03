@@ -29,8 +29,8 @@ func (t testAuthClient) GetUserEmail(_ context.Context, _ string) (string, error
 	return "user@example.com", nil
 }
 
-func (t testAuthClient) GetUserIDFromRequest(_ *http.Request) (string, error) {
-	return "user-1", nil
+func (t testAuthClient) GetUserIDFromRequest(_ *http.Request) (string, bool) {
+	return "user-1", true
 }
 
 func (t testAuthClient) WithAuthHTTP(handler http.Handler) http.Handler {

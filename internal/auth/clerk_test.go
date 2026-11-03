@@ -11,8 +11,43 @@ import (
 	"careme/internal/config"
 	"careme/internal/templates"
 
+	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetUserIDFromRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name       string
+		withClaims bool
+		claims     *clerk.SessionClaims
+		wantID     string
+		wantOK     bool
+	}{
+		{name: "no claims"},
+		{name: "nil claims", withClaims: true},
+		{
+			name:       "signed in",
+			withClaims: true,
+			claims:     &clerk.SessionClaims{RegisteredClaims: clerk.RegisteredClaims{Subject: "user_123"}},
+			wantID:     "user_123",
+			wantOK:     true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.withClaims {
+				r = r.WithContext(clerk.ContextWithSessionClaims(r.Context(), tt.claims))
+			}
+			client := &clerkClient{}
+			id, ok := client.GetUserIDFromRequest(r)
+			require.Equal(t, tt.wantID, id)
+			require.Equal(t, tt.wantOK, ok)
+		})
+	}
+}
 
 func TestSignInURLUsesConfiguredPublicOrigin(t *testing.T) {
 	client := &clerkClient{

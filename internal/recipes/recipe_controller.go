@@ -256,8 +256,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	if errors.Is(err, auth.ErrNoSession) {
+	_, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
@@ -485,7 +485,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+	if _, ok := s.clerk.GetUserIDFromRequest(r); !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"careme/internal/ai"
-	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/httpx"
 	"careme/internal/locations/geo"
@@ -45,7 +44,7 @@ type IngredientExtractor interface {
 }
 
 type authClient interface {
-	GetUserIDFromRequest(r *http.Request) (string, error)
+	GetUserIDFromRequest(r *http.Request) (string, bool)
 }
 
 type handler struct {
@@ -89,14 +88,9 @@ func (h *handler) Wait() {
 }
 
 func (h *handler) handleGet(w http.ResponseWriter, r *http.Request) {
-	_, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r)
-			return
-		}
-		slog.ErrorContext(r.Context(), "failed to load user for farmers market page", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+	_, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
+		redirectToSignIn(w, r)
 		return
 	}
 
@@ -125,14 +119,9 @@ func (h *handler) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for farmers market upload", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
+		redirectToSignIn(w, r)
 		return
 	}
 
@@ -241,14 +230,9 @@ func (h *handler) runAnalysisJob(ctx context.Context, status analysisStatus, nam
 
 func (h *handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
-		if errors.Is(err, auth.ErrNoSession) {
-			redirectToSignIn(w, r)
-			return
-		}
-		slog.ErrorContext(ctx, "failed to load user for farmers market analysis status", "error", err)
-		http.Error(w, "unable to load account", http.StatusInternalServerError)
+	_, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
+		redirectToSignIn(w, r)
 		return
 	}
 

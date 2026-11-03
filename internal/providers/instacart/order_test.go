@@ -113,11 +113,13 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 
 type requestAuth struct {
 	auth.AuthClient
-	userID string
-	err    error
+	userID   string
+	notfound bool
 }
 
-func (a requestAuth) GetUserIDFromRequest(_ *http.Request) (string, error) { return a.userID, a.err }
+func (a requestAuth) GetUserIDFromRequest(_ *http.Request) (string, bool) {
+	return a.userID, !a.notfound
+}
 
 type failingCache struct {
 	cache.Cache
@@ -220,7 +222,7 @@ func TestInvalidOrders(t *testing.T) {
 
 func TestSignInAndCrossOrigin(t *testing.T) {
 	handler := testHandler(t, cache.NewInMemoryCache(), transportFunc(func(_ *http.Request) (*http.Response, error) { t.Fatal("blocked request reached API"); return nil, nil }))
-	handler.auth = requestAuth{AuthClient: auth.DefaultMock(), err: auth.ErrNoSession}
+	handler.auth = requestAuth{AuthClient: auth.DefaultMock(), notfound: true}
 	w := submit(handler, orderForm(t, orderInput(), "list-hash"))
 	require.Equal(t, 303, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
@@ -229,8 +231,6 @@ func TestSignInAndCrossOrigin(t *testing.T) {
 	decoded, err := base64.RawURLEncoding.DecodeString(u.Query().Get("return_to_b64"))
 	require.NoError(t, err)
 	assert.Equal(t, orderInput().ReturnURL, string(decoded))
-	handler.auth = requestAuth{AuthClient: auth.DefaultMock(), err: errors.New("account lookup failed")}
-	assert.Equal(t, 500, submit(handler, orderForm(t, orderInput(), "list-hash")).Code)
 	handler.auth = auth.DefaultMock()
 	routes := http.NewServeMux()
 	handler.Register(routes)
