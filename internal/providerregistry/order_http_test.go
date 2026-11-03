@@ -47,9 +47,14 @@ func TestOrderHTTPClientDoesNotFollowAPIRedirects(t *testing.T) {
 		http.Redirect(w, r, "/other", http.StatusFound)
 	}))
 	defer server.Close()
-	response, err := newOrderHTTPClient().Get(server.URL)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusFound, response.StatusCode)
-	require.NoError(t, response.Body.Close())
-	assert.Equal(t, int32(1), calls.Load())
+	client := newOrderHTTPClient()
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		req, err := http.NewRequestWithContext(t.Context(), method, server.URL, strings.NewReader(`{}`))
+		require.NoError(t, err)
+		response, err := client.Do(req)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusFound, response.StatusCode)
+		require.NoError(t, response.Body.Close())
+	}
+	assert.Equal(t, int32(2), calls.Load(), "ordering GETs and POSTs must not follow API redirects")
 }

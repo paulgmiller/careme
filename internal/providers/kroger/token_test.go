@@ -47,7 +47,7 @@ func TestKrogerTokenGrants(t *testing.T) {
 			cart := &CartClient{ClientID: "client", ClientSecret: "secret", RedirectURI: "https://careme.test/callback?a=b&c=d", HTTPClient: client}
 			switch grant {
 			case "client_credentials":
-				manager := NewKrogerTokenManager("client", "secret", client)
+				manager := newKrogerTokenManager("client", "secret", client)
 				token, err := manager.getToken(t.Context())
 				require.NoError(t, err)
 				assert.Equal(t, "access", token)
@@ -96,7 +96,7 @@ func TestKrogerTokenFailures(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 			assert.Equal(t, 1, calls)
 			if tc.name != "missing refresh" {
-				manager := NewKrogerTokenManager("client", "secret", client)
+				manager := newKrogerTokenManager("client", "secret", client)
 				_, err = manager.getToken(t.Context())
 				require.Error(t, err)
 				assert.Empty(t, manager.token)

@@ -27,14 +27,14 @@ const orderingTokenPrefix = "kroger_cart_tokens/"
 
 type OrderOptions struct {
 	Cache    cache.Cache
-	Client   orderClient
+	Client   *CartClient
 	TokenKey []byte
 	Origin   string
 	Auth     auth.AuthClient
 }
 
 type OrderHandler struct {
-	client   orderClient
+	client   *CartClient
 	cache    cache.Cache
 	tokenKey []byte
 	origin   string
@@ -221,18 +221,13 @@ func (a *OrderHandler) handleCallback(w http.ResponseWriter, r *http.Request) {
 	a.createTransfer(w, r, userID, continuation.IdempotencyKey, continuation.Request)
 }
 
-// get user or redirect/error if we can't
+// cartUser returns the session user or redirects to sign in.
 func (a *OrderHandler) cartUser(w http.ResponseWriter, r *http.Request, returnURL string) (string, bool) {
-	userID, err := a.auth.GetUserIDFromRequest(r)
-	if err == nil {
+	userID, ok := a.auth.GetUserIDFromRequest(r)
+	if ok {
 		return userID, true
 	}
-	// will this ever actually happen?
-	if errors.Is(err, auth.ErrNoSession) {
-		http.Redirect(w, r, "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(returnURL))), http.StatusSeeOther)
-	} else {
-		http.Error(w, "Unable to load account", http.StatusInternalServerError)
-	}
+	http.Redirect(w, r, "/sign-in?return_to_b64="+url.QueryEscape(base64.RawURLEncoding.EncodeToString([]byte(returnURL))), http.StatusSeeOther)
 	return "", false
 }
 

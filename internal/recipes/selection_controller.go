@@ -260,7 +260,9 @@ func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, location
 	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
-		return
+		// Wine is optional. Publish a completed empty result so finalization on
+		// any server stops waiting for this failed attempt.
+		selection = &ai.WineSelection{Wines: []ai.Ingredient{}}
 	}
 	if err := s.saveWine(ctx, recipeHash, selection); err != nil {
 		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)

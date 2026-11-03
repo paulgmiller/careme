@@ -28,7 +28,7 @@ func TestKrogerOrderTransferTemplate(t *testing.T) {
 	order, err := OrderView(ordertypes.OrderViewInput{Location: locationtypes.Location{ID: "70500874", Chain: "QFC"}, ListKey: "list"})
 	require.NoError(t, err)
 	var page bytes.Buffer
-	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_finalize_controls", map[string]any{"Order": order, "HasSavedRecipes": true}))
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", order))
 	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 	assert.NotContains(t, page.String(), `hx-get=`)
 	assert.NotContains(t, page.String(), `hx-post=`)
@@ -179,7 +179,8 @@ func TestOrderViewReviewCartReplacesForm(t *testing.T) {
 	require.NoError(t, templates.Init(&config.Config{}))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", ordertypes.OrderView{ReviewCartURL: "https://www.qfc.com/cart"}))
-	assert.Contains(t, page.String(), "Review cart (opens a new tab)")
+	assert.Contains(t, page.String(), ">Review cart</a>")
+	assert.NotContains(t, page.String(), "opens a new tab")
 	assert.Contains(t, page.String(), `target="_blank" rel="noopener noreferrer"`)
 	assert.NotContains(t, page.String(), "<form")
 	assert.NotContains(t, page.String(), "hx-get")

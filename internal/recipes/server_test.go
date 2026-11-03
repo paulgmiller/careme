@@ -1147,8 +1147,8 @@ func (n noSessionAuth) GetUserEmail(ctx context.Context, clerkUserID string) (st
 	return "", nil
 }
 
-func (n noSessionAuth) GetUserIDFromRequest(r *http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (n noSessionAuth) GetUserIDFromRequest(r *http.Request) (string, bool) {
+	return "", false
 }
 
 func (n noSessionAuth) WithAuthHTTP(handler http.Handler) http.Handler {
@@ -2897,6 +2897,7 @@ func TestHandleFinalize_UsesServerSideSelection(t *testing.T) {
 	savedRecipe := ai.Recipe{Title: "Saved Recipe", Description: "Saved", ResponseID: "resp-saved"}
 	dismissedRecipe := ai.Recipe{Title: "Dismissed Recipe", Description: "Dismissed", ResponseID: "resp-dismissed"}
 	saveRecipesForOrigin(t, s, originHash, savedRecipe, dismissedRecipe)
+	require.NoError(t, s.saveWine(t.Context(), savedRecipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{}}))
 	shoppingList := &ai.ShoppingList{
 		Recipes: []ai.Recipe{savedRecipe, dismissedRecipe},
 		Plan:    &ai.MenuPlan{ResponseID: "resp-menu-original"},
@@ -3046,6 +3047,8 @@ func TestHandleFeedback_CookedButtonSavesCookedState(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Saved") {
 		t.Fatalf("expected success message, got body: %s", rr.Body.String())
 	}
+	assert.Contains(t, rr.Body.String(), `<span aria-hidden="true">✓</span>`)
+	assert.Contains(t, rr.Body.String(), `<span class="sr-only">Saved</span>`)
 
 	feedback, err := s.FeedbackFromCache(t.Context(), "hash")
 	if err != nil {

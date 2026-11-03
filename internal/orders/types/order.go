@@ -10,6 +10,7 @@ type OrderViewInput struct {
 	ListKey  string // shoppinglist hash
 	UserID   string // combines with above to look up
 	Location locationtypes.Location
+	ZipCode  string // shopper ZIP saved from their location search
 	Items    []ai.ShoppingItem
 
 	ReturnURL string
@@ -32,6 +33,7 @@ type OrderView struct {
 type TransferRequest struct {
 	Items     []ai.ShoppingItem      `json:"items"`
 	Location  locationtypes.Location `json:"location"`
+	ZipCode   string                 `json:"zip_code,omitempty"`
 	ReturnURL string                 `json:"return_url"`
 }
 

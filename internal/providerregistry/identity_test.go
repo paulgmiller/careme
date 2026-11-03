@@ -10,6 +10,7 @@ import (
 	_ "careme/internal/providerregistry"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/smithbrothersfarms"
 	"careme/internal/recipes"
@@ -24,6 +25,7 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 		id       string
 		provider cachekey.StoreHasher
 	}{
+		{"70500874", kroger.NewIdentityProvider()},
 		{"safeway_1142", albertsons.NewIdentityProvider()},
 		{"aldi_F100", aldi.NewIdentityProvider()},
 		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},
@@ -46,9 +48,9 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 func TestForStorePreservesExistingHashes(t *testing.T) {
 	// Captured from generatorParams.LocationHash before extraction.
 	hashes := map[string]string{
-		"70500874": "y91ErIgebKw", "safeway_1142": "tCtsYBvO05c", "heb_540": "CMClGf16aHw",
+		"safeway_1142": "tCtsYBvO05c", "heb_540": "CMClGf16aHw",
 		"aldi_F100": "2XFP-Eq4418", "publix_1847": "1ZjBLr7Mego", "farmersmarket_1": "g7OOZpxYEww",
-		"wholefoods_10216": "3NnJs9GPTj4", "walmart_1": "WiU9sDZCk_E", "loc-123": "wrxx3dmHzBA",
+		"wholefoods_10216": "3NnJs9GPTj4", "walmart_1": "WiU9sDZCk_E",
 	}
 	for id, want := range hashes {
 		t.Run(id, func(t *testing.T) {
@@ -65,4 +67,10 @@ func TestForStorePreservesExistingHashes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKrogerCatalogIdentityRefreshesSnapshotsWithoutItemUPCs(t *testing.T) {
+	date := time.Date(2025, 9, 17, 0, 0, 0, 0, time.UTC)
+	assert.NotEqual(t, "y91ErIgebKw", cachekey.ForStore("70500874", date))
+	assert.NotEqual(t, "wrxx3dmHzBA", cachekey.ForStore("loc-123", date))
 }

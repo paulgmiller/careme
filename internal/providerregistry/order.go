@@ -11,6 +11,8 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/providers/albertsons"
+	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
@@ -44,6 +46,13 @@ func (f Factory) RegisterOrders(routes routing.Registrar, options OrderOptions) 
 		}
 		mnfoodclub.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
 	}
+	if f.config.Instacart.APIKey != "" {
+		client, err := instacart.NewOrderClient(f.config.Instacart, f.config.ResolvedPublicOrigin(), newOrderHTTPClient())
+		if err != nil {
+			return err
+		}
+		instacart.NewOrderHandler(options.Cache, options.Auth, client).Register(routes)
+	}
 	return nil
 }
 
@@ -59,12 +68,11 @@ func (f Factory) newKrogerOrder(options OrderOptions) (*kroger.OrderHandler, err
 	httpClient := newOrderHTTPClient()
 	client := &kroger.CartClient{
 		ClientID: cfg.Kroger.ClientID, ClientSecret: cfg.Kroger.ClientSecret,
-		RedirectURI:  cfg.ResolvedPublicOrigin() + "/kroger/callback",
-		HTTPClient:   httpClient,
-		CatalogToken: kroger.NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient),
+		RedirectURI: cfg.ResolvedPublicOrigin() + "/kroger/callback",
+		HTTPClient:  httpClient,
 	}
 	handler, err := kroger.NewOrderHandler(kroger.OrderOptions{
-		Cache: options.Cache, Client: kroger.NewCachedOrderClient(client, options.Cache), TokenKey: key,
+		Cache: options.Cache, Client: client, TokenKey: key,
 		Origin: cfg.ResolvedPublicOrigin(), Auth: options.Auth,
 	})
 	if err != nil {
@@ -105,6 +113,9 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 			return nil, err
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
+	}
+	if albertsons.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
+		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil
 }

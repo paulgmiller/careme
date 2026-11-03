@@ -70,7 +70,7 @@ func OrderView(ctx context.Context, c cache.Cache, input ordertypes.OrderViewInp
 	if !errors.Is(err, cache.ErrNotFound) {
 		return nil, fmt.Errorf("read mock transfer: %w", err)
 	}
-	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ReturnURL: input.ReturnURL})
+	body, err := json.Marshal(ordertypes.TransferRequest{Items: input.Items, Location: input.Location, ZipCode: input.ZipCode, ReturnURL: input.ReturnURL})
 	if err != nil {
 		return nil, fmt.Errorf("encode mock transfer: %w", err)
 	}
@@ -95,16 +95,19 @@ func (h *handler) transfer(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid mock transfer", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Error(w, "Sign in to transfer your cart", http.StatusUnauthorized)
 		return
 	}
 	if _, err := readTransfer(r.Context(), h.cache, userID, id); errors.Is(err, cache.ErrNotFound) {
-		// The mock accepts every shopping item without external product matching.
+		// The mock accepts purchase quantities without external product matching.
 		transfer := ordertypes.Transfer{TransferID: id, Status: ordertypes.TransferApplied, CartURL: transferURL + "/" + url.PathEscape(id)}
 		for _, item := range input.Items {
 			quantity := item.PackageQuantity()
+			if quantity == 0 {
+				continue
+			}
 			transfer.Items = append(transfer.Items, ordertypes.TransferItem{ProductID: item.ProductID, Name: item.Name, AcceptedQuantity: quantity})
 		}
 		body, err := json.Marshal(transfer)
@@ -130,8 +133,8 @@ func (h *handler) cart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid mock transfer ID", http.StatusBadRequest)
 		return
 	}
-	userID, err := h.auth.GetUserIDFromRequest(r)
-	if err != nil {
+	userID, ok := h.auth.GetUserIDFromRequest(r)
+	if !ok {
 		http.Error(w, "Sign in to review your cart", http.StatusUnauthorized)
 		return
 	}

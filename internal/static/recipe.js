@@ -24,6 +24,7 @@ function initializeStarRating() {
       const stars = Number(button.dataset.star || 0);
       input.value = stars > 0 ? String(stars) : "";
       renderStars(stars);
+      input.form.requestSubmit();
     });
   });
 }

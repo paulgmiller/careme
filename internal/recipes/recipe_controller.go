@@ -256,8 +256,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	if errors.Is(err, auth.ErrNoSession) {
+	_, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
@@ -485,7 +485,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+	if _, ok := s.clerk.GetUserIDFromRequest(r); !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
@@ -546,7 +546,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.SetHTMLContentType(w)
-	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
+	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span><span class="sr-only">Saved</span></span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write feedback response", "hash", hash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)

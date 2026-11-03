@@ -5,8 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"careme/internal/ai"
 )
 
 func shoppingAisleHeading(aisle string) string {
@@ -52,34 +50,44 @@ func compareShoppingAisles(a, b string) int {
 	return cmp.Compare(a, b)
 }
 
-type shoppingPurchaseItem struct {
-	ai.ShoppingItem
-	Size  string
-	Aisle string
-}
-
 type shoppingPurchaseGroup struct {
 	Aisle string
 	Items []shoppingPurchaseItem
 }
 
-// The model already merged these items; only attach catalog details and group them.
-func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngredient) []shoppingPurchaseGroup {
-	products := make(map[string]ai.InputIngredient, len(catalog))
-	for _, product := range catalog {
-		products[product.ProductID] = product
+// Regroup on display so saved snapshots also separate ingredients without purchase quantities.
+func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shoppingPurchaseGroup {
+	if groups == nil {
+		return nil
 	}
-	sorted := make([]shoppingPurchaseItem, 0, len(items))
-	for _, item := range items {
-		row := shoppingPurchaseItem{ShoppingItem: item}
-		if product, ok := products[item.ProductID]; ok {
-			row.VariantID = product.VariantID
-			row.Name = product.Description
-			row.Size = product.Size
-			row.Aisle = strings.TrimSpace(product.AisleNumber)
+	result := make([]shoppingPurchaseGroup, 0, len(groups)+1)
+	var withoutBuy []shoppingPurchaseItem
+	for _, group := range groups {
+		var toBuy []shoppingPurchaseItem
+		for _, item := range group.Items {
+			if item.Buy == nil {
+				withoutBuy = append(withoutBuy, item)
+			} else {
+				toBuy = append(toBuy, item)
+			}
 		}
-		sorted = append(sorted, row)
+		if len(toBuy) > 0 {
+			heading := group.Aisle
+			if heading == "" || heading == "Other items" {
+				heading = "To buy"
+			}
+			result = append(result, shoppingPurchaseGroup{Aisle: heading, Items: toBuy})
+		}
 	}
+	if len(withoutBuy) > 0 {
+		result = append(result, shoppingPurchaseGroup{Aisle: "Have at home", Items: withoutBuy})
+	}
+	return result
+}
+
+// shoppingPurchasesForDisplay only sorts and groups prepared shopping items.
+func shoppingPurchasesForDisplay(items []shoppingPurchaseItem) []shoppingPurchaseGroup {
+	sorted := append([]shoppingPurchaseItem(nil), items...)
 	slices.SortStableFunc(sorted, func(a, b shoppingPurchaseItem) int { return compareShoppingAisles(a.Aisle, b.Aisle) })
 	groups := make([]shoppingPurchaseGroup, 0)
 	for _, item := range sorted {
@@ -90,26 +98,4 @@ func shoppingPurchasesForDisplay(items []ai.ShoppingItem, catalog []ai.InputIngr
 		groups[len(groups)-1].Items = append(groups[len(groups)-1].Items, item)
 	}
 	return groups
-}
-
-// Wine recommendations can arrive after finalization, so add them on each render.
-func shoppingPurchasesWithWine(purchases []shoppingPurchaseGroup, recipes []ai.Recipe, recommendations map[string]*ai.WineSelection) []shoppingPurchaseGroup {
-	if purchases == nil {
-		return nil
-	}
-	group := shoppingPurchaseGroup{Aisle: "Wine"}
-	for _, recipe := range recipes {
-		selection := recommendations[recipe.ComputeHash()]
-		if selection == nil || len(selection.Wines) == 0 {
-			continue
-		}
-		wine := selection.Wines[0] // Use the same first pick as the recipe card.
-		group.Items = append(group.Items, shoppingPurchaseItem{
-			ProductID: wine.ProductID, Name: wine.Name, Needed: wine.Quantity,
-		})
-	}
-	if len(group.Items) == 0 {
-		return purchases
-	}
-	return append(purchases, group)
 }
