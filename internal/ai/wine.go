@@ -22,7 +22,7 @@ const winePrompt = `
 Act as a sommelier for the recipe provided below
 Select 1 to 2 wines from the provided TSV that best match the dish
 Return JSON with wines (ingredient array) and concise commentary explaining why those specific bottles work.
-Only choose wines present in the TSV. For each wine set id to the exact ProductId and include name and optionally quantity when useful.
+Only choose wines present in the TSV. For each wine set id to the exact ProductId and include name and quantity (use "1 bottle").
 Be creative not always the same safe picks. Consider the specific ingredients, cooking method, and flavor profile of the dish when making your selection.
 Also for fancier/more expensive dishes consider more expensive wines.
 `
@@ -32,6 +32,9 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	if err != nil {
 		return nil, fmt.Errorf("failed to build wine selection prompt: %w", err)
 	}
+	text := scheme(c.wineSchema)
+	text.Format.OfJSONSchema.Name = "wine_selection"
+	text.Format.OfJSONSchema.Strict = openai.Bool(true)
 	params := responses.ResponseNewParams{
 		Model:        c.wineModel,
 		Reasoning:    noReasoning(),
@@ -39,7 +42,7 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
-		Text: scheme(c.wineSchema),
+		Text: text,
 	}
 	resp, err := c.oai.Responses.New(ctx, params)
 	if err != nil {
@@ -47,9 +50,22 @@ func (c *client) PickWine(ctx context.Context, recipe Recipe, wines []InputIngre
 	}
 	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryWine, "model", c.wineModel, responseUsageLogAttr(c.wineModel, resp.Usage, string(resp.ServiceTier)))
 
+	if resp.Status != responses.ResponseStatusCompleted {
+		return nil, fmt.Errorf("wine selection response %q has status %q (incomplete reason: %q)", resp.ID, resp.Status, resp.IncompleteDetails.Reason)
+	}
+	for _, item := range resp.Output {
+		if item.Type != "message" {
+			continue
+		}
+		for _, content := range item.Content {
+			if content.Type == "refusal" {
+				return nil, fmt.Errorf("wine selection response %q was refused", resp.ID)
+			}
+		}
+	}
 	var selection WineSelection
 	if err := json.Unmarshal([]byte(resp.OutputText()), &selection); err != nil {
-		return nil, fmt.Errorf("failed to parse wine selection: %w", err)
+		return nil, fmt.Errorf("failed to parse wine selection response %q: %w", resp.ID, err)
 	}
 	return &selection, nil
 }

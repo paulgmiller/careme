@@ -266,6 +266,12 @@ cache-write failures return errors before generation returns a successful select
 the shared wine recommendation cache every 500 ms for saved wine picks
 (including completed empty results), combines food and wine needs and catalog
 snapshots by product ID, and merges quantities once.
+Failed wine generation (including response parsing errors) is logged and saved as
+a completed empty selection, so finalization on any server proceeds without wine
+immediately. Saving the recipe again reuses that completed result. If the empty
+selection cannot be cached, the write error is logged and the missing-pick
+deadline still applies. Recipes without wine styles also skip waiting when no
+selection is cached.
 Wine polling has a 30-second deadline; missing picks are logged as errors and
 treated as no wine for that recipe without starting generation. Food and completed
 wine picks still finalize. Request cancellation and cache errors leave no
