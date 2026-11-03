@@ -78,7 +78,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 		items := cachedShoppingItems(t, s, p.Hash())
 		require.Len(t, items, 2)
 		assert.Equal(t, "wine-upc", items[1].VariantID)
-		assert.Equal(t, "1 bottle", items[1].Needed)
+		assert.Equal(t, "750mL", items[1].Needed)
 		// Even if wine recommendations later change, page preparation never alters this snapshot.
 		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "other", Name: "Other wine"}}}))
 		require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
@@ -221,7 +221,7 @@ func TestFinalizeMergesFoodAndRepeatedWineInOneCall(t *testing.T) {
 	// The finalized hash changed with the saved recipes; retain its food catalog.
 	require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", VariantID: "food-upc", Description: "Food", Size: "1 lb"}}))
 	for _, recipe := range p.Saved {
-		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}, {ProductID: "backup", Name: "Backup"}}}))
+		require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red", Quantity: "1 bottle"}, {ProductID: "backup", Name: "Backup"}}}))
 		require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Red", Size: "750mL"}}))
 	}
 	calls := 0

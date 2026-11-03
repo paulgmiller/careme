@@ -89,6 +89,6 @@ func TestFinalizeFoodAndWineReadsOverlapAcrossRecipes(t *testing.T) {
 	got := <-done
 	require.NoError(t, got.err)
 	require.Len(t, got.ingredients, 2)
-	assert.Equal(t, "1 bottle", got.ingredients[0].Quantity)
-	assert.Equal(t, "1 bottle", got.ingredients[1].Quantity)
+	assert.Empty(t, got.ingredients[0].Quantity)
+	assert.Empty(t, got.ingredients[1].Quantity)
 }
