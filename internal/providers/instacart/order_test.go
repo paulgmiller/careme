@@ -90,15 +90,17 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 		return response(200, `{"products_link_url":"https://www.instacart.com/store/shopping_lists/1"}`), nil
 	}))
 	input := orderInput()
+	input.Location.ID = "safeway_1444"
+	wantURL := "https://www.instacart.com/store/shopping_lists/1?retailer_key=safeway"
 	for range 2 {
 		w := submit(handler, orderForm(t, input, "list-hash"))
 		assert.Equal(t, 303, w.Code)
-		assert.Equal(t, "https://www.instacart.com/store/shopping_lists/1", w.Header().Get("Location"))
+		assert.Equal(t, wantURL, w.Header().Get("Location"))
 		assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	}
 	transfer, err := loadOrderTransfer(t.Context(), store, "mock-clerk-user-id", "list-hash")
 	require.NoError(t, err)
-	assert.Equal(t, ordertypes.Transfer{TransferID: "list-hash", Status: ordertypes.TransferApplied, CartURL: "https://www.instacart.com/store/shopping_lists/1"}, transfer)
+	assert.Equal(t, ordertypes.Transfer{TransferID: "list-hash", Status: ordertypes.TransferApplied, CartURL: wantURL}, transfer)
 	assert.Empty(t, transfer.Items, "creating a shopping page does not confirm cart acceptance")
 	// The finalized key identifies the intended handoff; do not compare changed payloads.
 	input.Items[0].Needed = "4 lbs"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -20,6 +21,40 @@ func (f transportFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 
 func response(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
+}
+
+func TestCreatePreferredRetailerLink(t *testing.T) {
+	for _, tt := range []struct{ name, location, link, want string }{
+		{"plain link", "safeway_1444", "https://www.instacart.com/store/shopping_lists/123", "safeway"},
+		{"affiliate link", "aldi_F219", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
+		{"replace retailer", "publix_1083", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
+		{"H-E-B", "heb_22", "https://www.instacart.com/store/shopping_lists/123", "heb"},
+		{"no chain prefix", "any-store", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+				var payload map[string]any
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+				assert.NotContains(t, payload, "retailer_key")
+				body, err := json.Marshal(map[string]string{"products_link_url": tt.link})
+				require.NoError(t, err)
+				return response(http.StatusOK, string(body)), nil
+			})})
+			require.NoError(t, err)
+			input := orderInput()
+			input.Location.ID = tt.location
+			link, err := client.create(t.Context(), input)
+			require.NoError(t, err)
+			got, err := url.Parse(link)
+			require.NoError(t, err)
+			original, err := url.Parse(tt.link)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Query().Get("retailer_key"))
+			assert.Equal(t, original.Query().Get("aff_id"), got.Query().Get("aff_id"))
+			assert.Equal(t, original.Query().Get("offer_id"), got.Query().Get("offer_id"))
+			assert.Equal(t, original.Fragment, got.Fragment)
+		})
+	}
 }
 
 func TestCreateLink(t *testing.T) {
