@@ -386,8 +386,8 @@ type partnershipAuthClient struct {
 	userID string
 }
 
-func (c partnershipAuthClient) GetUserIDFromRequest(*http.Request) (string, error) {
-	return c.userID, nil
+func (c partnershipAuthClient) GetUserIDFromRequest(*http.Request) (string, bool) {
+	return c.userID, true
 }
 
 func seedPartnerUser(t *testing.T, storage *Storage, cacheStore cache.Cache, id, email string) *utypes.User {

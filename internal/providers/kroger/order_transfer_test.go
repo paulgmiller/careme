@@ -55,7 +55,7 @@ type transferUser struct {
 	id string
 }
 
-func (a transferUser) GetUserIDFromRequest(*http.Request) (string, error) { return a.id, nil }
+func (a transferUser) GetUserIDFromRequest(*http.Request) (string, bool) { return a.id, true }
 
 func TestCartTransferPendingLoginRedirectsDirectlyToOAuth(t *testing.T) {
 	a := orderFixture(t, func(*http.Request) (*http.Response, error) { t.Fatal("GET must not write cart"); return nil, nil })

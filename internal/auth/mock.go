@@ -37,8 +37,8 @@ func (c *mockClient) GetUserEmail(ctx context.Context, clerkUserID string) (stri
 	return c.email, nil
 }
 
-func (c *mockClient) GetUserIDFromRequest(r *http.Request) (string, error) {
-	return "mock-clerk-user-id", nil
+func (c *mockClient) GetUserIDFromRequest(r *http.Request) (string, bool) {
+	return "mock-clerk-user-id", true
 }
 
 func (c *mockClient) WithAuthHTTP(handler http.Handler) http.Handler {

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/templates"
 )
@@ -38,13 +37,9 @@ func (s *server) handleStepImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGenerateStepImage(w http.ResponseWriter, r *http.Request) {
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	if errors.Is(err, auth.ErrNoSession) {
+	_, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
 		http.Error(w, "sign in to generate an illustration", http.StatusUnauthorized)
-		return
-	}
-	if err != nil {
-		http.Error(w, "unable to verify account", http.StatusInternalServerError)
 		return
 	}
 	hash, step := s.recipeStepFromRequest(r)

@@ -225,7 +225,7 @@ type orderUser struct {
 	id string
 }
 
-func (u orderUser) GetUserIDFromRequest(*http.Request) (string, error) { return u.id, nil }
+func (u orderUser) GetUserIDFromRequest(*http.Request) (string, bool) { return u.id, true }
 
 func TestOrderIdempotencyIsScopedToCaremeUser(t *testing.T) {
 	keys := make(chan string, 2)

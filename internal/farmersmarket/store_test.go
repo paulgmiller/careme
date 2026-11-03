@@ -36,16 +36,16 @@ type fakeExtractor struct {
 
 type noSessionAuth struct{}
 
-func (noSessionAuth) GetUserIDFromRequest(*http.Request) (string, error) {
-	return "", auth.ErrNoSession
+func (noSessionAuth) GetUserIDFromRequest(*http.Request) (string, bool) {
+	return "", false
 }
 
 type fixedAuth struct {
 	userID string
 }
 
-func (f fixedAuth) GetUserIDFromRequest(*http.Request) (string, error) {
-	return f.userID, nil
+func (f fixedAuth) GetUserIDFromRequest(*http.Request) (string, bool) {
+	return f.userID, true
 }
 
 func (f *fakeExtractor) ExtractFarmersMarketIngredients(ctx context.Context, imageDataURL string) ([]ai.InputIngredient, error) {
