@@ -104,6 +104,37 @@ func TestFinalizeProceedsWithoutMissingWineAfterThirtySeconds(t *testing.T) {
 	})
 }
 
+func TestFinalizeStopsWaitingWhenWineFailsOnAnotherServer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := cache.NewInMemoryCache()
+		s := newTestServer(t, withTestCache(store))
+		producer := newTestServer(t, withTestCache(store))
+		p := finalizedWineTestParams(t, s)
+		recipe := p.Saved[0]
+		release := make(chan struct{})
+		producer.generator = wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
+			<-release
+			return nil, errors.New("failed to parse wine selection: invalid character 'T' looking for beginning of value")
+		}}
+		go producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
+		finalized := make(chan error, 1)
+		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
+		synctest.Wait()
+		select {
+		case err := <-finalized:
+			t.Fatalf("finalization returned before the wine attempt completed: %v", err)
+		default:
+		}
+		started := time.Now()
+		close(release)
+		require.NoError(t, <-finalized)
+		assert.LessOrEqual(t, time.Since(started), 500*time.Millisecond)
+		items := cachedShoppingItems(t, s, p.Hash())
+		require.Len(t, items, 1)
+		assert.Equal(t, "food", items[0].ProductID)
+	})
+}
+
 func TestFinalizeDoesNotWaitForRecipesWithoutWineStyles(t *testing.T) {
 	for _, styles := range [][]string{nil, {}, {"", " \t "}} {
 		t.Run(fmt.Sprintf("styles=%q", styles), func(t *testing.T) {
@@ -133,7 +164,7 @@ func (c failedWineSaveCache) Put(ctx context.Context, key, value string, opts ca
 }
 
 func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
-	for _, scenario := range []string{"empty cached result", "generation failure", "save failure"} {
+	for _, scenario := range []string{"empty cached result", "generation failure", "parse failure", "save failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				store := cache.NewInMemoryCache()
@@ -150,6 +181,9 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 					calls++
 					if scenario == "generation failure" && calls == 1 {
 						return nil, errors.New("wine generation failed")
+					}
+					if scenario == "parse failure" {
+						return nil, errors.New("failed to parse wine selection: invalid character 'T' looking for beginning of value")
 					}
 					return &ai.WineSelection{Wines: []ai.Ingredient{}}, nil
 				}}
@@ -168,7 +202,11 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 					assert.Zero(t, time.Since(started))
 				} else {
 					assert.Equal(t, 1, calls)
-					assert.Equal(t, 30*time.Second, time.Since(started))
+					if scenario == "save failure" {
+						assert.Equal(t, 30*time.Second, time.Since(started))
+					} else {
+						assert.Zero(t, time.Since(started))
+					}
 				}
 			})
 		})
