@@ -73,7 +73,7 @@ func TestKrogerOrderFormContainsMergedFoodAndSelectedWine(t *testing.T) {
 	assert.NotContains(t, values, "chain")
 	assert.NotContains(t, values, "list_key")
 	assert.Equal(t, p.Hash(), values["idempotency_key"])
-	assert.Contains(t, posted.ReturnURL, "#shopping-list-section")
+	assert.Contains(t, posted.ReturnURL, "#shopping-finalize-controls")
 	assert.Contains(t, page.String(), `action="/kroger/order-transfers"`)
 	assert.Contains(t, page.String(), `target="_blank"`)
 	assert.NotContains(t, page.String(), "other")

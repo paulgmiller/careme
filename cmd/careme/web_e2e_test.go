@@ -122,7 +122,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		"transfer_request": {stdhtml.UnescapeString(extractHiddenValue(t, finalizedBody, "transfer_request"))},
 	}
 	transferredBody := mustPostFormBody(t, client, srv.URL+"/mock/order-transfers", form)
-	if !strings.Contains(transferredBody, "Review cart (opens a new tab)") || strings.Contains(transferredBody, `name="transfer_request"`) {
+	if !strings.Contains(transferredBody, "Review cart") || strings.Contains(transferredBody, `name="transfer_request"`) {
 		t.Fatalf("expected saved cart link to replace transfer form: %s", transferredBody)
 	}
 	var input ordertypes.TransferRequest

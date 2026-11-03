@@ -29,7 +29,7 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 		assert.Equal(t, "viewer", input.UserID)
 		assert.Equal(t, view.Location, input.Location)
 		assert.Equal(t, "list", input.ListKey)
-		assert.Equal(t, "/recipes?h=list#shopping-list-section", input.ReturnURL)
+		assert.Equal(t, "/recipes?h=list#shopping-finalize-controls", input.ReturnURL)
 		assert.Equal(t, []ai.ShoppingItem{{ProductID: "food", VariantID: "variant-42", Name: "Food", Needed: "1 lb", Buy: new(float64(1))}}, input.Items)
 		return &ordertypes.OrderView{IdempotencyKey: "list", TransferURL: "/destination/order", TransferLabel: "Send groceries", TransferRequestJSON: `{"items":[{"name":"Food & Wine"}],"location":{"id":"other-store"},"return_url":"/recipes?h=list"}`}, nil
 	})
@@ -153,7 +153,8 @@ func TestCartHandoffOpensNewTab(t *testing.T) {
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&form, "shopping_order_form", ordertypes.OrderView{TransferURL: "/mnfoodclub/order-transfers", TransferLabel: "Add to MN Food Club cart"}))
 	assert.Contains(t, form.String(), `target="_blank"`)
 	assert.Contains(t, form.String(), `rel="noopener noreferrer"`)
-	assert.Contains(t, form.String(), "Add to MN Food Club cart (opens a new tab)")
+	assert.Contains(t, form.String(), ">Add to MN Food Club cart</button>")
+	assert.NotContains(t, form.String(), "opens a new tab")
 	assert.Contains(t, form.String(), `hx-boost="false"`)
 }
 
@@ -186,7 +187,7 @@ func TestFinalizedCartStateAfterLoginReturn(t *testing.T) {
 			s.handleRecipes(w, request)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 			assert.Contains(t, w.Body.String(), cartURL)
-			assert.Contains(t, w.Body.String(), "Review cart (opens a new tab)")
+			assert.Contains(t, w.Body.String(), "Review cart")
 			assert.NotContains(t, w.Body.String(), "Build Shopping List")
 		})
 	}
