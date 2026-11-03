@@ -12,10 +12,13 @@ import (
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/providers/albertsons"
+	"careme/internal/providers/aldi"
+	"careme/internal/providers/heb"
 	"careme/internal/providers/instacart"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/mockorder"
+	"careme/internal/providers/publix"
 	"careme/internal/routing"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -114,7 +117,10 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	if albertsons.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Instacart.APIKey != "" {
+	if b.factory.config.Instacart.APIKey != "" && (albertsons.NewIdentityProvider().IsID(input.Location.ID) ||
+		aldi.NewIdentityProvider().IsID(input.Location.ID) ||
+		heb.NewIdentityProvider().IsID(input.Location.ID) ||
+		publix.NewIdentityProvider().IsID(input.Location.ID)) {
 		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil

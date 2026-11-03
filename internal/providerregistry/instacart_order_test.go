@@ -1,6 +1,8 @@
 package providerregistry
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	locationtypes "careme/internal/locations/types"
 	ordertypes "careme/internal/orders/types"
 	"careme/internal/routing"
+	"careme/internal/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,12 +58,19 @@ func TestInstacartOrderRegistration(t *testing.T) {
 	}
 }
 
-func TestInstacartOrderViewOnlyMatchesAlbertsonsChains(t *testing.T) {
+func TestInstacartOrderViewMatchesSupportedChains(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
 	for _, tt := range []struct {
 		name, location, want string
 		cfg                  config.Config
 	}{
 		{name: "Safeway disabled", location: "safeway_1444"},
+		{name: "H-E-B disabled", location: "heb_22"},
+		{name: "ALDI disabled", location: "aldi_F219"},
+		{name: "Publix disabled", location: "publix_1083"},
+		{name: "H-E-B enabled", location: "heb_22", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "ALDI enabled", location: "aldi_F219", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "Publix enabled", location: "publix_1083", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
 		{name: "Safeway enabled", location: "safeway_1444", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
 		{name: "Albertsons enabled", location: "albertsons_3204", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
 		{name: "Haggen enabled", location: "haggen_1", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
@@ -86,6 +96,14 @@ func TestInstacartOrderViewOnlyMatchesAlbertsonsChains(t *testing.T) {
 			require.NotNil(t, view)
 			assert.Equal(t, tt.want, view.TransferURL)
 			if tt.want == "/instacart/order-transfers" {
+				assert.True(t, view.Instacart)
+				var posted ordertypes.TransferRequest
+				require.NoError(t, json.Unmarshal([]byte(view.TransferRequestJSON), &posted))
+				assert.Equal(t, input.Location, posted.Location)
+				var page bytes.Buffer
+				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+				assert.Contains(t, page.String(), `action="/instacart/order-transfers"`)
+				assert.Contains(t, page.String(), `>Shop on Instacart</span>`)
 				require.NoError(t, options.Cache.Put(t.Context(), "instacart_order_transfers/viewer/list", `{"transfer_id":"list","status":"applied","cart_url":"https://www.instacart.com/list"}`, cache.Unconditional()))
 				view, err = builder.OrderView(t.Context(), input)
 				require.NoError(t, err)
