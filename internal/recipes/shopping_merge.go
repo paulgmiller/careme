@@ -112,7 +112,6 @@ func (s *server) finalizedShoppingInputs(ctx context.Context, hash string) ([]ai
 			return wineInput{}, fmt.Errorf("load selected wine catalog: %w", err)
 		}
 		wine := selection.Wines[0]
-		wine.Quantity = "1 bottle"
 		return wineInput{ingredients: []ai.Ingredient{wine}, catalog: selectedCatalog}, nil
 	})
 	catalogWG.Wait()
