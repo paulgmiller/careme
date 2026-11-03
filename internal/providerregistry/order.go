@@ -117,10 +117,11 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	if b.factory.config.Instacart.APIKey != "" && (albertsons.NewIdentityProvider().IsID(input.Location.ID) ||
+	instcartSupport := albertsons.NewIdentityProvider().IsID(input.Location.ID) ||
 		aldi.NewIdentityProvider().IsID(input.Location.ID) ||
 		heb.NewIdentityProvider().IsID(input.Location.ID) ||
-		publix.NewIdentityProvider().IsID(input.Location.ID)) {
+		publix.NewIdentityProvider().IsID(input.Location.ID)
+	if b.factory.config.Instacart.APIKey != "" && instcartSupport {
 		return instacart.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil
