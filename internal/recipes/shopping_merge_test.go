@@ -173,6 +173,41 @@ func TestFinalizedShoppingInputsIgnorePantryAndUseSavedStoreAndDate(t *testing.T
 	}
 }
 
+func TestFinalizePreservesSelectedWineQuantity(t *testing.T) {
+	for _, quantity := range []string{"2 bottles", "750 ml", ""} {
+		t.Run(quantity, func(t *testing.T) {
+			s := newTestServer(t)
+			p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC))
+			recipe := ai.Recipe{Title: "Dinner", WineStyles: []string{"red"}, Ingredients: []ai.Ingredient{{ProductID: "pork", Name: "Pork", Quantity: "24 oz"}}}
+			p.Saved = []ai.Recipe{recipe}
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			wine := ai.Ingredient{ProductID: "wine", Name: "Selected red wine", Quantity: quantity}
+			require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{wine, {ProductID: "other-wine", Name: "Other wine", Quantity: "3 bottles"}}}))
+			staples := []ai.InputIngredient{{ProductID: "pork", Description: "Pork", Size: "32 oz"}}
+			require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), staples))
+			price := float32(15)
+			wineCatalog := []ai.InputIngredient{{ProductID: "wine", Description: "Selected red wine", Size: "750 ml", VariantID: "wine-variant", PriceRegular: &price, AisleNumber: "Wine"}}
+			require.NoError(t, s.SaveIngredients(t.Context(), wineStylesCacheKey(recipe.WineStyles, p.Location.ID, p.Date), wineCatalog))
+			calls := 0
+			s.shoppingMerger = shoppingMergerFunc(func(ctx context.Context, needs []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+				calls++
+				assert.Equal(t, append(recipe.Ingredients, wine), needs)
+				assert.Equal(t, append(staples, wineCatalog...), catalog)
+				return (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, needs, catalog)
+			})
+			require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
+			assert.Equal(t, 1, calls)
+			items := cachedShoppingItems(t, s, p.Hash())
+			require.Len(t, items, 2)
+			quantities := make(map[string]string)
+			for _, item := range items {
+				quantities[item.ProductID] = item.Needed
+			}
+			assert.Equal(t, map[string]string{"pork": "24 oz", wine.ProductID: quantity}, quantities)
+		})
+	}
+}
+
 func TestShoppingCatalogCorruptionStopsMerge(t *testing.T) {
 	s := newTestServer(t)
 	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())

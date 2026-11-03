@@ -59,7 +59,7 @@ func TestFinalizedShoppingInputsCombinesCatalogsBeforeQuantityMerge(t *testing.T
 	ingredients, catalog, err := s.finalizedShoppingInputs(t.Context(), p.Hash())
 	require.NoError(t, err)
 	assert.Equal(t, []ai.InputIngredient{food, wine}, catalog)
-	assert.Equal(t, append(recipe.Ingredients, ai.Ingredient{ProductID: "wine", Name: "Picked wine", Quantity: "1 bottle"}), ingredients)
+	assert.Equal(t, append(recipe.Ingredients, ai.Ingredient{ProductID: "wine", Name: "Picked wine", Quantity: "750mL"}), ingredients)
 	s.shoppingMerger = shoppingMergerFunc(func(_ context.Context, got []ai.Ingredient, matched []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 		assert.Equal(t, ingredients, got)
 		assert.Equal(t, []ai.InputIngredient{food, wine}, matched)
