@@ -248,6 +248,10 @@ statuses, browser polling, extra recipe-handler interfaces, or multiple ordering
 forms. The cache-bound view reads the saved result and supplies the existing
 form, review link, or failure label. View rendering never calls Instacart.
 
+Both the creation button and saved link use “Shop on Instacart” with the official
+full-color carrot and approved dark CTA styling. Other providers retain their
+existing controls.
+
 The API request creates a shopping-list page with every displayed item, including
 pantry ingredients and selected wines. The full Careme return URL is sent both
 in `instructions` and as `partner_linkback_url`. Names drive matching; source product and
@@ -260,9 +264,10 @@ items without product IDs.
 
 An API success saves an `applied` handoff with the generated URL as `cart_url`.
 This confirms creation of the shopping page, not acceptance of any cart products;
-no accepted or rejected cart quantities are invented. The POST returns to the
-current request's local shopping-list URL, where the shared review control opens
-Instacart. The shopper selects a supported retailer, reviews matches and quantities,
+no accepted or rejected cart quantities are invented. Successful POSTs redirect
+directly to the saved Instacart shopping page, including repeat submissions.
+Failed or pending handoffs return to the current request's local shopping-list URL.
+The shopper selects a supported retailer, reviews matches and quantities,
 and adds products to their cart on Instacart. Careme does not select the source
 retailer or place an order.
 

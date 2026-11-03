@@ -34,6 +34,12 @@ var recipeJS []byte
 //go:embed farmersmarket.js
 var farmersMarketJS []byte
 
+// Official full-color carrot from Instacart's developer logo pack.
+// https://docs.instacart.com/developer_platform_api/guide/concepts/design/logos
+//
+//go:embed instacart-logo.svg
+var instacartLogo []byte
+
 //go:embed fonts/*.woff2
 var fontFiles embed.FS
 
@@ -66,7 +72,7 @@ var AssetPath = calculateAssetPath()
 func calculateAssetPath() string {
 	hasher := fnv.New64()
 
-	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS} {
+	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS, instacartLogo} {
 		_, _ = hasher.Write(asset)
 	}
 	return fmt.Sprintf("/static/%x/", hasher.Sum(nil))
@@ -91,6 +97,7 @@ const jsContentType = "application/javascript; charset=utf-8"
 // Register serves static assets and wires template asset paths.
 func Register(mux routing.Registrar) {
 	mux.HandleFunc(AssetPath+"tailwind.css", static("text/css; charset=utf-8", tailwindCSS))
+	mux.HandleFunc(AssetPath+"instacart-logo.svg", static("image/svg+xml", instacartLogo))
 
 	// Intentionally versioned so that we can cache aggressively.
 	mux.HandleFunc("/static/htmx@2.0.8.js", static(jsContentType, htmx208JS))

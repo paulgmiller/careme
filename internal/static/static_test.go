@@ -102,6 +102,25 @@ func TestRegisterServesFontFiles(t *testing.T) {
 	}
 }
 
+func TestRegisterServesInstacartLogo(t *testing.T) {
+	mux := http.NewServeMux()
+	Register(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, AssetPath+"instacart-logo.svg", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logo response status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Fatalf("logo content type = %q", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != immutable {
+		t.Fatalf("logo cache control = %q", got)
+	}
+	if rec.Body.String() != string(instacartLogo) {
+		t.Fatal("logo response must preserve the official SVG")
+	}
+}
+
 func TestRegisterServesUserClerkBillingJS(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)

@@ -18,6 +18,8 @@ type OrderViewInput struct {
 
 // OrderView describes an HTTP handoff using shared form fields and destination-owned copy.
 type OrderView struct {
+	// Instacart applies the required brand treatment to shopping-list handoffs.
+	Instacart      bool
 	TransferFailed bool
 	ReviewCartURL  string
 	// IdempotencyKey identifies one intended addition and is submitted as a hidden form field.
