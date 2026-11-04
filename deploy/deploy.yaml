@@ -70,6 +70,7 @@ spec:
               value: "${PUBLIC_ORIGIN}"
             #${STORE_DISABLE_ENV_YAML}
             #${ORDER_STUB_ENV_YAML}
+            #${INSTACART_ENV_YAML}
 
           volumeMounts:
             - name: recipes

@@ -36,7 +36,7 @@ The application is configured via environment variables:
 ### Optional 
 - `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
 - `INSTACART_API_KEY` - server-side Instacart Developer Platform key enabling shopping-list handoff for Albertsons family store IDs (including Safeway and Haggen).
-- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com` for nonlocal origins. A localhost or loopback `PUBLIC_ORIGIN` always selects `https://connect.dev.instacart.tools`, even if this setting specifies production. Use a development key locally.
+- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com` for nonlocal origins. `deploy/deploy.sh` explicitly selects `https://connect.dev.instacart.tools` for `caremetest` staging. A localhost or loopback `PUBLIC_ORIGIN` always selects the development endpoint, even if this setting specifies production. Use a development key locally and in staging.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
