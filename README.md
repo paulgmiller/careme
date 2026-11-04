@@ -353,11 +353,16 @@ existing ingredients command. Recipe generation context is unchanged.
 Local Yokels Market uses the public Local Food Marketplace storefront at
 <https://localyokels.localfoodmarketplace.com/Products>. The provider scrapes the
 current catalog request parameters from that page, then reads the public JSON
-catalog used by its JavaScript. It selects All Meats (1230), All Vegetables
-(1232), All Dairy & Eggs (1222), All Fruit (1225), and the Pasta subcategory
-(1289), including featured products, and keeps the first available purchase unit
-per product with its producer, size, and regular/sale price. Unavailable products
-and sold-out units are excluded. Catalog errors fail the complete fetch.
+catalog used by its JavaScript. It retains the full catalog, including featured
+products, for ingredient grading and caching, with the first available purchase
+unit per product and its producer, size, and regular/sale price. Unavailable
+products and sold-out units are excluded. Catalog errors fail the complete fetch.
+The former meat, vegetable, dairy/egg, fruit, and pasta selection IDs remain as
+commented-out constants in the provider for possible filtering later.
+
+Wine lookup uses the same full-catalog fetch and selects the full Beer, Wine, and
+Cider category (1220). It returns all beer, wine, and cider candidates for
+recipe pairing regardless of requested styles. Staples remain unfiltered.
 
 The Seattle storefront is available as `localyokels_market` at 8416 5th Ave NE;
 nearby searches use that fixed store location in Seattle, WA 98115 with the normal

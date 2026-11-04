@@ -318,10 +318,12 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
 
 - Local Yokels uses the exact store ID `localyokels_market` and the daily 9 AM
   store-day boundary. Its signature is
-  `https://localyokels.localfoodmarketplace.com/categories/1230/1232/1222/1225/subcategories/1289/v2`, covering the host,
-  selected meat, vegetable, dairy/egg, and fruit categories, the pasta subcategory,
-  and parser version. The expanded selection bypasses earlier meat/vegetable-only
-  snapshots. Ingredient snapshots
-  use the existing `ingredients/` prefix; no cache container is added. Product
-  IDs retain the storefront's `uniqueId` (product ID plus producer GUID), and
-  selected variant IDs retain the purchase unit's numeric `puId`.
+  `https://localyokels.localfoodmarketplace.com/all-products/v3`, covering the host,
+  full-catalog policy, and parser version. This bypasses earlier category-filtered
+  snapshots. The complete available catalog is graded and cached using the
+  existing `ingredients/` prefix; no cache container is added. Product IDs retain
+  the storefront's `uniqueId` (product ID plus producer GUID), and selected
+  variant IDs retain the purchase unit's numeric `puId`.
+  Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
+  location/date/style wine cache keys under `ingredients/`; staples remain
+  unfiltered.

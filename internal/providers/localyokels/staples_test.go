@@ -2,6 +2,7 @@ package localyokels_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -15,23 +16,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type catalog struct{ t *testing.T }
+type catalog struct {
+	t         *testing.T
+	selection localfoodmarketplace.Selection
+	items     []ai.InputIngredient
+	err       error
+}
 
 func (c catalog) Fetch(_ context.Context, selection localfoodmarketplace.Selection) ([]ai.InputIngredient, error) {
-	assert.Equal(c.t, localfoodmarketplace.Selection{CategoryIDs: []int{1230, 1232, 1222, 1225}, SubcategoryIDs: []int{1289}}, selection)
-	return []ai.InputIngredient{{ProductID: "beef_farm", Description: "Beef", Size: "1 lb", PriceRegular: new(float32(10))}}, nil
+	assert.Equal(c.t, c.selection, selection)
+	return c.items, c.err
 }
 
 func TestRoutingAndLocation(t *testing.T) {
-	b := localyokels.NewStaplesProvider(catalog{t})
+	b := localyokels.NewStaplesProvider(catalog{t: t, items: []ai.InputIngredient{{ProductID: "beef_farm", Description: "Beef", Size: "1 lb", PriceRegular: new(float32(10))}}})
 	p := recipes.NewStaplesProvider([]recipes.StaplesBackend{b})
 	items, err := p.FetchStaples(t.Context(), "localyokels_market")
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	_, err = b.FetchStaples(t.Context(), "localyokels_invalid")
 	require.Error(t, err)
-	_, err = p.FetchWines(t.Context(), "localyokels_market", []string{"red"})
-	require.ErrorContains(t, err, "not supported")
 	l := localyokels.NewLocationBackend()
 	location, err := l.GetLocationByID(t.Context(), "localyokels_market")
 	require.NoError(t, err)
@@ -51,6 +55,27 @@ func TestRoutingAndLocation(t *testing.T) {
 	cancel()
 	_, err = l.GetLocationsByCoordinates(ctx, geo.Coordinate{Lat: 47.6, Lon: -122.3})
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestWineRouting(t *testing.T) {
+	wines := []ai.InputIngredient{{ProductID: "wine_farm", Description: "Sparkling Rosé Wine", Size: "750 ml", PriceRegular: new(float32(24))}}
+	failure := errors.New("catalog unavailable")
+	for _, err := range []error{nil, failure} {
+		b := localyokels.NewStaplesProvider(catalog{t: t, selection: localfoodmarketplace.Selection{CategoryIDs: []int{1220}}, items: wines, err: err})
+		p := recipes.NewStaplesProvider([]recipes.StaplesBackend{b})
+		got, gotErr := p.FetchWines(t.Context(), "localyokels_market", []string{"red", "sparkling"})
+		if err != nil {
+			require.ErrorIs(t, gotErr, failure)
+			require.ErrorContains(t, gotErr, "fetch Local Yokels wines")
+			assert.Nil(t, got)
+		} else {
+			require.NoError(t, gotErr)
+			assert.Equal(t, wines, got)
+		}
+		got, gotErr = b.FetchWines(t.Context(), "localyokels_unknown", []string{"red"})
+		require.ErrorContains(t, gotErr, "invalid Local Yokels location")
+		assert.Nil(t, got)
+	}
 }
 
 func TestDailyIdentity(t *testing.T) {

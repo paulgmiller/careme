@@ -13,16 +13,26 @@ import (
 )
 
 const (
-	baseURL    = "https://localyokels.localfoodmarketplace.com"
-	locationID = "localyokels_market"
+	baseURL        = "https://localyokels.localfoodmarketplace.com"
+	locationID     = "localyokels_market"
+	wineCategoryID = 1220 // Beer, Wine, and Cider.
 )
+
+// Former selection IDs, kept for possible category filtering later.
+// const (
+// 	meatsCategoryID = 1230
+// 	vegetablesCategoryID = 1232
+// 	dairyAndEggsCategoryID = 1222
+// 	fruitCategoryID = 1225
+// 	pastaSubcategoryID = 1289
+// )
 
 type identityProvider struct{}
 
 func NewIdentityProvider() identityProvider  { return identityProvider{} }
 func (identityProvider) IsID(id string) bool { return id == locationID }
 func (identityProvider) HashForStore(id string, date time.Time) hash.Hash {
-	return cachekey.NewHash(id, cachekey.StoreDay(date), baseURL+"/categories/1230/1232/1222/1225/subcategories/1289/v2")
+	return cachekey.NewHash(id, cachekey.StoreDay(date), baseURL+"/all-products/v3")
 }
 
 type catalogClient interface {
@@ -39,16 +49,22 @@ func (p staplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.Inpu
 	if !p.IsID(id) {
 		return nil, fmt.Errorf("invalid Local Yokels location ID %q", id)
 	}
-	items, err := p.client.Fetch(ctx, localfoodmarketplace.Selection{
-		CategoryIDs:    []int{1230, 1232, 1222, 1225},
-		SubcategoryIDs: []int{1289},
-	})
+	// Keep the full catalog for the ingredient grader and shared ingredient cache.
+	items, err := p.client.Fetch(ctx, localfoodmarketplace.Selection{})
 	if err != nil {
 		return nil, fmt.Errorf("fetch Local Yokels staples: %w", err)
 	}
 	return items, nil
 }
 
-func (p staplesProvider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
-	return nil, fmt.Errorf("wine lookup is not supported for location %q", id)
+func (p staplesProvider) FetchWines(ctx context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
+	if !p.IsID(id) {
+		return nil, fmt.Errorf("invalid Local Yokels location ID %q", id)
+	}
+	// Return all beer, wine, and cider candidates; pairing chooses among them using recipe styles.
+	items, err := p.client.Fetch(ctx, localfoodmarketplace.Selection{CategoryIDs: []int{wineCategoryID}})
+	if err != nil {
+		return nil, fmt.Errorf("fetch Local Yokels wines: %w", err)
+	}
+	return items, nil
 }

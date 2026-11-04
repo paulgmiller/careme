@@ -1545,6 +1545,72 @@
         }
       ],
       "subCatId": 1263
+    },
+    {
+      "uniqueId": "88_06a6007c-fdf6-4640-a654-5dbb79c918fe",
+      "productName": "Sparkling Ros\u00e9 Wine",
+      "producerName": "Boujee Wines",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Wine",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245625,
+          "unitName": "8.5 oz can",
+          "unitPrice": "$5.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1317
+    },
+    {
+      "uniqueId": "93_df5b8d09-6e36-431d-abb0-cc58d201b92d",
+      "productName": "Honey Cinnamon Cream Stout",
+      "producerName": "Lucky Envelope Brewing",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Beer",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245497,
+          "unitName": "4 pack",
+          "unitPrice": "$18.75",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1236
+    },
+    {
+      "uniqueId": "4735_97a4e9e4-7666-4b17-bc24-0a0d391215c0",
+      "productName": "Black Currant Cider 500ml",
+      "producerName": "Finnriver Cidery",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Cider",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246725,
+          "unitName": "Black Currant",
+          "unitPrice": "$12.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 13,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1246
     }
   ],
   "featured": [

@@ -65,6 +65,25 @@ func TestPublicCatalog(t *testing.T) {
 		assert.Contains(t, rendered.String(), name)
 	}
 	assert.NotContains(t, rendered.String(), "Alo Tama Bodi Soup")
+	all, err := c.Fetch(t.Context(), Selection{})
+	require.NoError(t, err)
+	require.Len(t, all, 65)
+	rendered.Reset()
+	require.NoError(t, ai.InputIngredientsToTSV(all, &rendered))
+	assert.Contains(t, rendered.String(), "Alo Tama Bodi Soup", "unfiltered catalog retains products outside the former selection for grading")
+	assert.Contains(t, rendered.String(), "Sparkling Rosé Wine", "staples retain wine too")
+	assert.Contains(t, rendered.String(), "Honey Cinnamon Cream Stout")
+	wines, err := c.Fetch(t.Context(), Selection{CategoryIDs: []int{1220}})
+	require.NoError(t, err)
+	require.Len(t, wines, 3)
+	assert.Equal(t, "Sparkling Rosé Wine", wines[0].Description)
+	assert.Contains(t, wines[0].Categories, "Wine")
+	rendered.Reset()
+	require.NoError(t, ai.InputIngredientsToTSV(wines, &rendered))
+	assert.Contains(t, rendered.String(), "Sparkling Rosé Wine")
+	assert.Contains(t, rendered.String(), "Black Currant Cider 500ml")
+	assert.NotContains(t, rendered.String(), "Albacore Tuna Loin")
+	assert.Contains(t, rendered.String(), "Honey Cinnamon Cream Stout")
 }
 
 func TestSubcategorySelection(t *testing.T) {
@@ -155,10 +174,17 @@ func TestLiveLocalYokels(t *testing.T) {
 	if os.Getenv("LOCALYOKELS_LIVE") != "1" {
 		t.Skip("set LOCALYOKELS_LIVE=1 for public catalog smoke test")
 	}
-	items, err := NewClient("https://localyokels.localfoodmarketplace.com", http.DefaultClient).Fetch(t.Context(), Selection{CategoryIDs: []int{1230, 1232, 1222, 1225}, SubcategoryIDs: []int{1289}})
+	items, err := NewClient("https://localyokels.localfoodmarketplace.com", http.DefaultClient).Fetch(t.Context(), Selection{})
 	require.NoError(t, err)
 	require.NotEmpty(t, items)
 	t.Logf("Fetched %d staple products", len(items))
+	wines, err := NewClient("https://localyokels.localfoodmarketplace.com", http.DefaultClient).Fetch(t.Context(), Selection{CategoryIDs: []int{1220}})
+	require.NoError(t, err)
+	require.NotEmpty(t, wines)
+	for _, wine := range wines {
+		assert.Contains(t, wine.Categories, "Beer, Wine, and Cider")
+	}
+	t.Logf("Fetched %d beer, wine, and cider products", len(wines))
 }
 
 func TestRetryAndCancellation(t *testing.T) {

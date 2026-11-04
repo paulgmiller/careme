@@ -28,9 +28,21 @@ type client struct {
 }
 
 // Selection includes products matching any category or subcategory ID.
+// An empty selection includes the full catalog.
 type Selection struct {
 	CategoryIDs    []int
 	SubcategoryIDs []int
+}
+
+// catalogRequest is the JSON body posted by the storefront's getProducts()
+// JavaScript. IDs remain strings to match the hidden HTML input values.
+type catalogRequest struct {
+	SubPeriodID  string `json:"subPeriodId"`  // Current shopping period from selectedSubId.
+	ListType     string `json:"listType"`     // Catalog view, such as ShowAll.
+	CustomListID string `json:"customListId"` // Storefront's selected custom list; normally "0".
+	CategoryID   string `json:"catId"`        // Page's category scope; empty on /Products.
+	LocationID   string `json:"locId"`        // Storefront fulfillment location from currentLocId, not a Careme location ID.
+	CallingPage  string `json:"callingPage"`  // Fixed "Products" value supplied by the JavaScript.
 }
 
 func NewClient(baseURL string, httpClient *http.Client) *client {
@@ -49,10 +61,10 @@ func NewClient(baseURL string, httpClient *http.Client) *client {
 // Fetch scrapes the current storefront request parameters before reading its
 // catalog. Category filtering is local, matching the storefront JavaScript.
 func (c *client) Fetch(ctx context.Context, selection Selection) ([]ai.InputIngredient, error) {
-	var params map[string]string
+	var params catalogRequest
 	err := c.request(ctx, http.MethodGet, "/Products", nil, func(r io.Reader) error {
 		var err error
-		params, err = storefrontParams(r)
+		params, err = parseCatalogRequest(r)
 		return err
 	})
 	if err != nil {
@@ -97,13 +109,15 @@ func (c *client) request(ctx context.Context, method, path string, body []byte, 
 	return nil
 }
 
-func storefrontParams(r io.Reader) (map[string]string, error) {
+// parseCatalogRequest reads the five hidden inputs used by getProducts() on
+// /Products and adds its fixed callingPage value. Reading them on each fetch
+// follows the storefront's current shopping period and fulfillment location.
+func parseCatalogRequest(r io.Reader) (catalogRequest, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
-		return nil, err
+		return catalogRequest{}, err
 	}
-	fields := map[string]string{"selectedSubId": "subPeriodId", "listType": "listType", "customListId": "customListId", "catId": "catId", "currentLocId": "locId"}
-	params := map[string]string{"callingPage": "Products"}
+	inputs := map[string]string{}
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "input" {
@@ -116,20 +130,30 @@ func storefrontParams(r io.Reader) (map[string]string, error) {
 					value = a.Val
 				}
 			}
-			if key, ok := fields[id]; ok {
-				params[key] = value
-			}
+			inputs[id] = value
 		}
 		for child := n.FirstChild; child != nil; child = child.NextSibling {
 			walk(child)
 		}
 	}
 	walk(doc)
-	for _, key := range fields {
-		value, exists := params[key]
-		if !exists || (key != "catId" && strings.TrimSpace(value) == "") {
-			return nil, fmt.Errorf("storefront missing %s", key)
+	params := catalogRequest{CallingPage: "Products"}
+	fields := []struct {
+		inputID string
+		target  *string
+	}{
+		{"selectedSubId", &params.SubPeriodID},
+		{"listType", &params.ListType},
+		{"customListId", &params.CustomListID},
+		{"catId", &params.CategoryID},
+		{"currentLocId", &params.LocationID},
+	}
+	for _, field := range fields {
+		value, exists := inputs[field.inputID]
+		if !exists || (field.inputID != "catId" && strings.TrimSpace(value) == "") {
+			return catalogRequest{}, fmt.Errorf("storefront missing %s", field.inputID)
 		}
+		*field.target = value
 	}
 	return params, nil
 }
@@ -156,6 +180,7 @@ type product struct {
 }
 
 func ingredients(products []product, selection Selection) ([]ai.InputIngredient, error) {
+	allProducts := len(selection.CategoryIDs) == 0 && len(selection.SubcategoryIDs) == 0
 	wanted := map[int]bool{}
 	for _, category := range selection.CategoryIDs {
 		wanted[category] = true
@@ -169,7 +194,7 @@ func ingredients(products []product, selection Selection) ([]ai.InputIngredient,
 	foundSubcategories := map[int]bool{}
 	var items []ai.InputIngredient
 	for _, p := range products {
-		if !wanted[p.CategoryID] && !wantedSubcategories[p.SubcategoryID] {
+		if !allProducts && !wanted[p.CategoryID] && !wantedSubcategories[p.SubcategoryID] {
 			continue
 		}
 		found[p.CategoryID] = true
