@@ -3,6 +3,8 @@ package localyokels_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -31,13 +33,13 @@ func (c catalog) Fetch(_ context.Context, selection localfoodmarketplace.Selecti
 func TestRoutingAndLocation(t *testing.T) {
 	b := localyokels.NewStaplesProvider(catalog{t: t, items: []ai.InputIngredient{{ProductID: "beef_farm", Description: "Beef", Size: "1 lb", PriceRegular: new(float32(10))}}})
 	p := recipes.NewStaplesProvider([]recipes.StaplesBackend{b})
-	items, err := p.FetchStaples(t.Context(), "localyokels_market")
+	items, err := p.FetchStaples(t.Context(), "localfoodmarektplace_localyokels")
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	_, err = b.FetchStaples(t.Context(), "localyokels_invalid")
 	require.Error(t, err)
 	l := localyokels.NewLocationBackend()
-	location, err := l.GetLocationByID(t.Context(), "localyokels_market")
+	location, err := l.GetLocationByID(t.Context(), "localfoodmarektplace_localyokels")
 	require.NoError(t, err)
 	assert.Equal(t, "Local Yokels", location.Chain)
 	assert.Contains(t, location.Address, "8416")
@@ -63,7 +65,7 @@ func TestWineRouting(t *testing.T) {
 	for _, err := range []error{nil, failure} {
 		b := localyokels.NewStaplesProvider(catalog{t: t, selection: localfoodmarketplace.Selection{CategoryIDs: []int{1220}}, items: wines, err: err})
 		p := recipes.NewStaplesProvider([]recipes.StaplesBackend{b})
-		got, gotErr := p.FetchWines(t.Context(), "localyokels_market", []string{"red", "sparkling"})
+		got, gotErr := p.FetchWines(t.Context(), "localfoodmarektplace_localyokels", []string{"red", "sparkling"})
 		if err != nil {
 			require.ErrorIs(t, gotErr, failure)
 			require.ErrorContains(t, gotErr, "fetch Local Yokels wines")
@@ -80,11 +82,33 @@ func TestWineRouting(t *testing.T) {
 
 func TestDailyIdentity(t *testing.T) {
 	p := localyokels.NewIdentityProvider()
-	assert.True(t, p.IsID("localyokels_market"))
+	assert.True(t, p.IsID("localfoodmarektplace_localyokels"))
 	assert.False(t, p.IsID("localyokels_unknown"))
+	assert.False(t, p.IsID("localfoodmarektplace_otherstore"))
+	assert.False(t, p.IsID("localyokels_market"))
 	date := time.Date(2026, time.November, 3, 9, 0, 0, 0, time.FixedZone("Pacific", -8*3600))
-	hash := func(d time.Time) string { return string(p.HashForStore("localyokels_market", d).Sum(nil)) }
+	hash := func(d time.Time) string {
+		return string(p.HashForStore("localfoodmarektplace_localyokels", d).Sum(nil))
+	}
 	assert.Equal(t, hash(date), hash(date.Add(10*time.Hour)))
 	assert.NotEqual(t, hash(date), hash(date.Add(-time.Minute)))
 	assert.NotEqual(t, hash(date), hash(date.AddDate(0, 0, 1)))
+}
+
+func TestLiveLocalYokels(t *testing.T) {
+	if os.Getenv("LOCALYOKELS_LIVE") != "1" {
+		t.Skip("set LOCALYOKELS_LIVE=1 for public catalog smoke test")
+	}
+	provider := localyokels.NewStaplesProvider(localyokels.NewClient(http.DefaultClient))
+	items, err := provider.FetchStaples(t.Context(), "localfoodmarektplace_localyokels")
+	require.NoError(t, err)
+	require.NotEmpty(t, items)
+	t.Logf("Fetched %d staple products", len(items))
+	drinks, err := provider.FetchWines(t.Context(), "localfoodmarektplace_localyokels", []string{"red"})
+	require.NoError(t, err)
+	require.NotEmpty(t, drinks)
+	for _, drink := range drinks {
+		assert.Contains(t, drink.Categories, "Beer, Wine, and Cider")
+	}
+	t.Logf("Fetched %d beer, wine, and cider products", len(drinks))
 }

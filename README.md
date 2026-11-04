@@ -351,9 +351,14 @@ existing ingredients command. Recipe generation context is unchanged.
 ### Local Yokels ingredients
 
 Local Yokels Market uses the public Local Food Marketplace storefront at
-<https://localyokels.localfoodmarketplace.com/Products>. The provider scrapes the
-current catalog request parameters from that page, then reads the public JSON
-catalog used by its JavaScript. It retains the full catalog, including featured
+<https://localyokels.localfoodmarketplace.com/Products>. The provider reads the
+public JSON catalog used by its JavaScript directly, without first fetching HTML.
+Local Yokels configures the observed defaults `subPeriodId=4` and `locId=5`.
+We have not established whether these represent recurring distribution days or
+changing shopping periods, or when either default changes; revisit them if the
+catalog stops matching the storefront. The shared reader supplies the fixed
+`ShowAll`, custom list `0`, empty category, and calling page `Products` values.
+It retains the full catalog, including featured
 products, for ingredient grading and caching, with the first available purchase
 unit per product and its producer, size, and regular/sale price. Unavailable
 products and sold-out units are excluded. Catalog errors fail the complete fetch.
@@ -364,15 +369,16 @@ Wine lookup uses the same full-catalog fetch and selects the full Beer, Wine, an
 Cider category (1220). It returns all beer, wine, and cider candidates for
 recipe pairing regardless of requested styles. Staples remain unfiltered.
 
-The Seattle storefront is available as `localyokels_market` at 8416 5th Ave NE;
+The Seattle storefront is available as `localfoodmarektplace_localyokels` at 8416 5th Ave NE;
 nearby searches use that fixed store location in Seattle, WA 98115 with the normal
 nearby-store radius. TODO: Widen discovery to cover Local Yokels' delivery area.
-No credentials or proxy are needed.
+No storefront credentials are needed. The staples registry uses the shared
+Bright Data proxy-aware HTTP client for Local Yokels catalog requests.
 Catalog snapshots use the normal daily store cache boundary at 9 AM.
 
 ```bash
-INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location localyokels_market -verbose
-LOCALYOKELS_LIVE=1 go test ./internal/localfoodmarketplace -run TestLiveLocalYokels -v
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location localfoodmarektplace_localyokels -verbose
+LOCALYOKELS_LIVE=1 go test ./internal/providers/localyokels -run TestLiveLocalYokels -v
 ```
 
 The catalog reader lives in `internal/localfoodmarketplace` for reuse by other

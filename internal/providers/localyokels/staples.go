@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"hash"
+	"net/http"
 	"time"
 
 	"careme/internal/ai"
@@ -14,9 +15,25 @@ import (
 
 const (
 	baseURL        = "https://localyokels.localfoodmarketplace.com"
-	locationID     = "localyokels_market"
+	locationID     = "localfoodmarektplace_localyokels"
 	wineCategoryID = 1220 // Beer, Wine, and Cider.
 )
+
+// Observed public /Products defaults: selectedSubId=4 and currentLocId=5.
+// We do not yet know whether these identify recurring distribution days or
+// changing shopping periods, or when either default may change. Keep them here
+// to avoid fetching the HTML before every catalog request; revisit if they stop
+// returning the expected catalog.
+const (
+	catalogSubPeriodID = "4"
+	catalogLocationID  = "5"
+)
+
+func NewClient(httpClient *http.Client) catalogClient {
+	return localfoodmarketplace.NewClient(localfoodmarketplace.Storefront{
+		BaseURL: baseURL, SubPeriodID: catalogSubPeriodID, LocationID: catalogLocationID,
+	}, httpClient)
+}
 
 // Former selection IDs, kept for possible category filtering later.
 // const (
@@ -62,6 +79,9 @@ func (p staplesProvider) FetchWines(ctx context.Context, id string, _ []string) 
 		return nil, fmt.Errorf("invalid Local Yokels location ID %q", id)
 	}
 	// Return all beer, wine, and cider candidates; pairing chooses among them using recipe styles.
+	// TODO: Have cachedStaplesService reuse the full ingredient snapshot for the
+	// same location/date and filter its "Beer, Wine, and Cider" category (1220),
+	// avoiding another store call. Cache/date access lives in that service layer.
 	items, err := p.client.Fetch(ctx, localfoodmarketplace.Selection{CategoryIDs: []int{wineCategoryID}})
 	if err != nil {
 		return nil, fmt.Errorf("fetch Local Yokels wines: %w", err)

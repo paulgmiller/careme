@@ -24,27 +24,22 @@ func TestPublicCatalog(t *testing.T) {
 	calls := 0
 	transport := transportFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
-		name := "storefront.html"
-		if r.Method == http.MethodPost {
-			assert.Equal(t, "/api/ProductApi/getProducts", r.URL.Path)
-			assert.Equal(t, "application/json; charset=utf-8", r.Header.Get("Content-Type"))
-			var params map[string]string
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&params))
-			assert.Equal(t, map[string]string{"callingPage": "Products", "catId": "", "customListId": "0", "listType": "ShowAll", "locId": "5", "subPeriodId": "4"}, params)
-			name = "catalog.json"
-		} else {
-			assert.Equal(t, "/Products", r.URL.Path)
-		}
-		body, err := os.ReadFile("testdata/" + name)
+		assert.Equal(t, http.MethodPost, r.Method, "catalog reads must not fetch the HTML page")
+		assert.Equal(t, "/api/ProductApi/getProducts", r.URL.Path)
+		assert.Equal(t, "application/json; charset=utf-8", r.Header.Get("Content-Type"))
+		var params map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&params))
+		assert.Equal(t, map[string]string{"callingPage": "Products", "catId": "", "customListId": "0", "listType": "ShowAll", "locId": "test-location", "subPeriodId": "test-period"}, params)
+		body, err := os.ReadFile("testdata/catalog.json")
 		require.NoError(t, err)
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(body)), Header: make(http.Header)}, nil
 	})
 	original := &http.Client{Transport: transport}
-	c := NewClient("https://store.example", original)
+	c := NewClient(Storefront{BaseURL: "https://store.example", SubPeriodID: "test-period", LocationID: "test-location"}, original)
 	items, err := c.Fetch(t.Context(), Selection{CategoryIDs: []int{1230, 1232}})
 	require.NoError(t, err)
 	require.Len(t, items, 58)
-	assert.Equal(t, 2, calls)
+	assert.Equal(t, 1, calls)
 	assert.IsType(t, transport, original.Transport)
 	var rendered bytes.Buffer
 	require.NoError(t, ai.InputIngredientsToTSV(items, &rendered))
@@ -108,31 +103,22 @@ func TestSubcategorySelection(t *testing.T) {
 
 func TestCatalogFailures(t *testing.T) {
 	for _, tc := range []struct {
-		name, page, catalog, want string
-		status                    int
+		name, catalog, want string
+		status              int
 	}{
-		{name: "missing fields", page: "<html>Login</html>", want: "storefront missing"},
 		{name: "HTTP failure", status: 403, want: "HTTP 403"},
 		{name: "malformed JSON", catalog: "{", want: "parse LFM"},
 		{name: "null JSON", catalog: "null", want: "missing category"},
 		{name: "missing categories", catalog: `{"standard":[],"featured":[]}`, want: "missing category"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			page, err := os.ReadFile("testdata/storefront.html")
-			require.NoError(t, err)
-			if tc.page != "" {
-				page = []byte(tc.page)
-			}
-			c := NewClient("https://store.example", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
-				body := string(page)
-				if r.Method == http.MethodPost {
-					body = tc.catalog
-				}
-				status := 200
+			c := NewClient(Storefront{BaseURL: "https://store.example", SubPeriodID: "test-period", LocationID: "test-location"}, &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+				assert.Equal(t, http.MethodPost, r.Method)
+				status := http.StatusOK
 				if tc.status != 0 {
 					status = tc.status
 				}
-				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(tc.catalog)), Header: make(http.Header)}, nil
 			})})
 			items, err := c.Fetch(t.Context(), Selection{CategoryIDs: []int{1230, 1232}})
 			require.ErrorContains(t, err, tc.want)
@@ -170,38 +156,19 @@ func TestSelectionAndPrices(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestLiveLocalYokels(t *testing.T) {
-	if os.Getenv("LOCALYOKELS_LIVE") != "1" {
-		t.Skip("set LOCALYOKELS_LIVE=1 for public catalog smoke test")
-	}
-	items, err := NewClient("https://localyokels.localfoodmarketplace.com", http.DefaultClient).Fetch(t.Context(), Selection{})
-	require.NoError(t, err)
-	require.NotEmpty(t, items)
-	t.Logf("Fetched %d staple products", len(items))
-	wines, err := NewClient("https://localyokels.localfoodmarketplace.com", http.DefaultClient).Fetch(t.Context(), Selection{CategoryIDs: []int{1220}})
-	require.NoError(t, err)
-	require.NotEmpty(t, wines)
-	for _, wine := range wines {
-		assert.Contains(t, wine.Categories, "Beer, Wine, and Cider")
-	}
-	t.Logf("Fetched %d beer, wine, and cider products", len(wines))
-}
-
 func TestRetryAndCancellation(t *testing.T) {
 	posts := 0
-	c := NewClient("https://store.example", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
-		name := "storefront.html"
-		if r.Method == http.MethodPost {
-			posts++
-			var params map[string]string
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&params))
-			assert.Equal(t, "4", params["subPeriodId"], "POST body must survive retry")
-			if posts == 1 {
-				return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("temporarily unavailable")), Header: make(http.Header)}, nil
-			}
-			name = "catalog.json"
+	c := NewClient(Storefront{BaseURL: "https://store.example", SubPeriodID: "test-period", LocationID: "test-location"}, &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		posts++
+		var params map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&params))
+		assert.Equal(t, "test-period", params["subPeriodId"], "POST body must survive retry")
+		assert.Equal(t, "test-location", params["locId"])
+		if posts == 1 {
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("temporarily unavailable")), Header: make(http.Header)}, nil
 		}
-		body, err := os.ReadFile("testdata/" + name)
+		body, err := os.ReadFile("testdata/catalog.json")
 		require.NoError(t, err)
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body)), Header: make(http.Header)}, nil
 	})})

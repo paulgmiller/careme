@@ -19,11 +19,24 @@ import (
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"golang.org/x/net/html"
 )
 
+const (
+	catalogListType     = "ShowAll"
+	catalogCustomListID = "0"
+	catalogCategoryID   = ""
+	catalogCallingPage  = "Products"
+)
+
+// Storefront supplies the host and provider-specific catalog defaults.
+type Storefront struct {
+	BaseURL     string
+	SubPeriodID string
+	LocationID  string
+}
+
 type client struct {
-	baseURL    string
+	storefront Storefront
 	httpClient *http.Client
 }
 
@@ -37,15 +50,15 @@ type Selection struct {
 // catalogRequest is the JSON body posted by the storefront's getProducts()
 // JavaScript. IDs remain strings to match the hidden HTML input values.
 type catalogRequest struct {
-	SubPeriodID  string `json:"subPeriodId"`  // Current shopping period from selectedSubId.
+	SubPeriodID  string `json:"subPeriodId"`  // Configured storefront selectedSubId value.
 	ListType     string `json:"listType"`     // Catalog view, such as ShowAll.
 	CustomListID string `json:"customListId"` // Storefront's selected custom list; normally "0".
 	CategoryID   string `json:"catId"`        // Page's category scope; empty on /Products.
-	LocationID   string `json:"locId"`        // Storefront fulfillment location from currentLocId, not a Careme location ID.
+	LocationID   string `json:"locId"`        // Configured storefront currentLocId value, not a Careme location ID.
 	CallingPage  string `json:"callingPage"`  // Fixed "Products" value supplied by the JavaScript.
 }
 
-func NewClient(baseURL string, httpClient *http.Client) *client {
+func NewClient(storefront Storefront, httpClient *http.Client) *client {
 	copyClient := *httpClient
 	copyClient.Transport = otelhttp.NewTransport(copyClient.Transport)
 	if copyClient.Timeout == 0 {
@@ -55,20 +68,20 @@ func NewClient(baseURL string, httpClient *http.Client) *client {
 	retry.HTTPClient = &copyClient
 	retry.Logger = nil
 	retry.RequestLogHook = httpretry.LogRetry("localfoodmarketplace")
-	return &client{baseURL: strings.TrimRight(baseURL, "/"), httpClient: retry.StandardClient()}
+	storefront.BaseURL = strings.TrimRight(storefront.BaseURL, "/")
+	return &client{storefront: storefront, httpClient: retry.StandardClient()}
 }
 
-// Fetch scrapes the current storefront request parameters before reading its
-// catalog. Category filtering is local, matching the storefront JavaScript.
+// Fetch reads the public catalog directly using the configured storefront IDs.
+// Category filtering is local, matching the storefront JavaScript.
 func (c *client) Fetch(ctx context.Context, selection Selection) ([]ai.InputIngredient, error) {
-	var params catalogRequest
-	err := c.request(ctx, http.MethodGet, "/Products", nil, func(r io.Reader) error {
-		var err error
-		params, err = parseCatalogRequest(r)
-		return err
-	})
-	if err != nil {
-		return nil, err
+	params := catalogRequest{
+		SubPeriodID:  c.storefront.SubPeriodID,
+		LocationID:   c.storefront.LocationID,
+		ListType:     catalogListType,
+		CustomListID: catalogCustomListID,
+		CategoryID:   catalogCategoryID,
+		CallingPage:  catalogCallingPage,
 	}
 	body, err := json.Marshal(params)
 	if err != nil {
@@ -88,7 +101,7 @@ func (c *client) Fetch(ctx context.Context, selection Selection) ([]ai.InputIngr
 }
 
 func (c *client) request(ctx context.Context, method, path string, body []byte, read func(io.Reader) error) error {
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, c.storefront.BaseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create LFM request: %w", err)
 	}
@@ -107,55 +120,6 @@ func (c *client) request(ctx context.Context, method, path string, body []byte, 
 		return fmt.Errorf("parse LFM %s: %w", path, err)
 	}
 	return nil
-}
-
-// parseCatalogRequest reads the five hidden inputs used by getProducts() on
-// /Products and adds its fixed callingPage value. Reading them on each fetch
-// follows the storefront's current shopping period and fulfillment location.
-func parseCatalogRequest(r io.Reader) (catalogRequest, error) {
-	doc, err := html.Parse(r)
-	if err != nil {
-		return catalogRequest{}, err
-	}
-	inputs := map[string]string{}
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "input" {
-			var id, value string
-			for _, a := range n.Attr {
-				if a.Key == "id" {
-					id = a.Val
-				}
-				if a.Key == "value" {
-					value = a.Val
-				}
-			}
-			inputs[id] = value
-		}
-		for child := n.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
-		}
-	}
-	walk(doc)
-	params := catalogRequest{CallingPage: "Products"}
-	fields := []struct {
-		inputID string
-		target  *string
-	}{
-		{"selectedSubId", &params.SubPeriodID},
-		{"listType", &params.ListType},
-		{"customListId", &params.CustomListID},
-		{"catId", &params.CategoryID},
-		{"currentLocId", &params.LocationID},
-	}
-	for _, field := range fields {
-		value, exists := inputs[field.inputID]
-		if !exists || (field.inputID != "catId" && strings.TrimSpace(value) == "") {
-			return catalogRequest{}, fmt.Errorf("storefront missing %s", field.inputID)
-		}
-		*field.target = value
-	}
-	return params, nil
 }
 
 type product struct {

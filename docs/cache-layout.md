@@ -316,8 +316,10 @@ pending transfers without changing the idempotent POST result. Older applied
 rows with no `post_response` use their original `response`. These records
 survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
 
-- Local Yokels uses the exact store ID `localyokels_market` and the daily 9 AM
-  store-day boundary. Its signature is
+- Local Yokels uses the exact store ID `localfoodmarektplace_localyokels` and the daily 9 AM
+  store-day boundary. Renaming the location from `localyokels_market` changes
+  location, ingredient, and recipe cache identities; previous snapshots are not
+  reused for the new ID. Its signature is
   `https://localyokels.localfoodmarketplace.com/all-products/v3`, covering the host,
   full-catalog policy, and parser version. This bypasses earlier category-filtered
   snapshots. The complete available catalog is graded and cached using the
