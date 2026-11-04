@@ -315,3 +315,17 @@ original POST response in `post_response`. Browser login atomically resolves
 pending transfers without changing the idempotent POST result. Older applied
 rows with no `post_response` use their original `response`. These records
 survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
+
+- Local Yokels uses the exact store ID `localfoodmarektplace_localyokels` and the daily 9 AM
+  store-day boundary. Renaming the location from `localyokels_market` changes
+  location, ingredient, and recipe cache identities; previous snapshots are not
+  reused for the new ID. Its signature is
+  `https://localyokels.localfoodmarketplace.com/all-products/v3`, covering the host,
+  full-catalog policy, and parser version. This bypasses earlier category-filtered
+  snapshots. The complete available catalog is graded and cached using the
+  existing `ingredients/` prefix; no cache container is added. Product IDs retain
+  the storefront's `uniqueId` (product ID plus producer GUID), and selected
+  variant IDs retain the purchase unit's numeric `puId`.
+  Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
+  location/date/style wine cache keys under `ingredients/`; staples remain
+  unfiltered.

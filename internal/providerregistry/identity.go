@@ -11,6 +11,7 @@ import (
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/localyokels"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"
 	"careme/internal/providers/smithbrothersfarms"
@@ -39,6 +40,7 @@ func (testKrogerIdentity) HashForStore(id string, date time.Time) hash.Hash {
 func staplesIdentities() []cachekey.StoreHasher {
 	return []cachekey.StoreHasher{
 		kroger.NewIdentityProvider(),
+		localyokels.NewIdentityProvider(),
 		albertsons.NewIdentityProvider(),
 		heb.NewIdentityProvider(),
 		aldi.NewIdentityProvider(),
