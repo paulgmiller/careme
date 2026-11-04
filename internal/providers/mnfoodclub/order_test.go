@@ -71,6 +71,8 @@ func TestOrderAppliedRelaysFormAndReusesResult(t *testing.T) {
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		assert.Equal(t, []requestedItem{{ProductID: "101", VariantID: "1005", Quantity: 3}, {ProductID: "202", Quantity: 1}}, request.Items)
 		assert.Equal(t, []string{"you@careme.cooking"}, request.IdentityHints.Emails)
+		assert.Equal(t, "tcfarm", request.IdentityHints.Store)
+		assert.Equal(t, "mock-clerk-user-id", request.IdentityHints.CaremeUserID)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(appliedResult))
 	})
@@ -229,8 +231,12 @@ func (u orderUser) GetUserIDFromRequest(*http.Request) (string, bool) { return u
 
 func TestOrderIdempotencyIsScopedToCaremeUser(t *testing.T) {
 	keys := make(chan string, 2)
+	userIDs := make(chan string, 2)
 	h, _, _ := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
 		keys <- r.Header.Get("Idempotency-Key")
+		var request handoffRequest
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+		userIDs <- request.IdentityHints.CaremeUserID
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(appliedResult))
 	})
@@ -239,6 +245,8 @@ func TestOrderIdempotencyIsScopedToCaremeUser(t *testing.T) {
 		assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, orderInput()).Code)
 	}
 	assert.NotEqual(t, <-keys, <-keys, "different shoppers must not share an integration-wide idempotency key")
+	assert.Equal(t, "first-user", <-userIDs)
+	assert.Equal(t, "second-user", <-userIDs)
 }
 
 func TestOrderAllRejectedIsApplied(t *testing.T) {
@@ -298,6 +306,34 @@ func TestOrderClientPreservesTransportWithoutReplayingFailures(t *testing.T) {
 	_, err = client.create(t.Context(), "original-key", handoffRequest{Items: []requestedItem{{ProductID: "101", Quantity: 1}}})
 	require.Error(t, err)
 	assert.Equal(t, int32(1), calls.Load())
+}
+
+func TestOrderStorefrontHint(t *testing.T) {
+	for _, tc := range []struct {
+		locationID string
+		store      string
+	}{
+		{MNFoodClubLocationID, "mnfoodclub"},
+		{TCFarmLocationID, "tcfarm"},
+		{NelsonGrassFarmLocationID, "nelsongrassfarm"},
+	} {
+		t.Run(tc.store, func(t *testing.T) {
+			h, _, _ := newOrderTest(t, func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					IdentityHints map[string]any `json:"identity_hints"`
+				}
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+				assert.Equal(t, tc.store, request.IdentityHints["store"])
+				assert.Equal(t, "mock-clerk-user-id", request.IdentityHints["careme_user_id"])
+				assert.NotContains(t, request.IdentityHints, "storefront_brand")
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(appliedResult))
+			})
+			input := orderInput()
+			input.Location = locationtypes.Location{ID: tc.locationID, Chain: "untrusted brand"}
+			assert.Equal(t, http.StatusSeeOther, postTransfer(t, h, input).Code)
+		})
+	}
 }
 
 func TestOrderOptionalZIPHint(t *testing.T) {

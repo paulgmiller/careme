@@ -27,7 +27,8 @@ partner's actual endpoint before use.
   "identity_hints": {
     "emails": ["chef@example.com", "kitchen@example.com"],
     "user_id": "customer-42",
-    "storefront_brand": "preferred-storefront",
+    "careme_user_id": "user-careme-42",
+    "store": "mnfoodclub",
     "zip_code": "55401"
   }
 }
@@ -59,7 +60,9 @@ connection. MN Food Club owns matching, including conflicts between a saved ID
 and emails, ambiguous matches, and unknown hints. An unresolved customer gets a
 login handoff rather than an error. The storefront brand is a preferred site for
 branding and the destination URL, not a product brand or an account boundary.
-MN Food Club defines the recognized brand values.
+Careme sends `store` as `mnfoodclub`, `tcfarm`, or `nelsongrassfarm`, derived
+from the selected location ID. It sends `careme_user_id` from the authenticated
+Careme session, separately from the partner customer `user_id`.
 
 The optional `zip_code` is another customer-matching hint, supplied as a string
 to preserve leading zeros. It accepts a five-digit ZIP or ZIP+4. MN Food Club

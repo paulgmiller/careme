@@ -91,7 +91,8 @@ paths:
                   identity_hints:
                     emails: [chef@example.com, kitchen@example.com]
                     user_id: customer-42
-                    storefront_brand: preferred-storefront
+                    careme_user_id: user-careme-42
+                    store: mnfoodclub
                     zip_code: '55401'
               explicitQuantity:
                 summary: Two packages of product 101, without identity hints
@@ -414,13 +415,18 @@ components:
           type: string
           minLength: 1
           description: Opaque MN Food Club customer ID returned by a previous matched transfer.
-        storefront_brand:
+        careme_user_id:
           type: string
           minLength: 1
+          description: Careme user ID derived from the authenticated session, separate from the MN Food Club customer ID.
+        store:
+          type: string
+          minLength: 1
+          enum: [mnfoodclub, tcfarm, nelsongrassfarm]
           description: |
             Preferred storefront for branding and destination URL. This is not a
             catalog product brand or a strict customer/account boundary.
-            MN Food Club owns recognized values and handling of unknown brands.
+            Derived from the selected Careme location ID.
         zip_code:
           type: string
           pattern: '^[0-9]{5}(-[0-9]{4})?$'

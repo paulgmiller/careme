@@ -21,8 +21,10 @@ type requestedItem struct {
 }
 
 type identityHints struct {
-	Emails  []string `json:"emails,omitempty"`
-	ZipCode string   `json:"zip_code,omitempty"`
+	Emails       []string `json:"emails,omitempty"`
+	ZipCode      string   `json:"zip_code,omitempty"`
+	CaremeUserID string   `json:"careme_user_id,omitempty"`
+	Store        string   `json:"store,omitempty"`
 }
 
 type handoffRequest struct {

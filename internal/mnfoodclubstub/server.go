@@ -29,10 +29,11 @@ type item struct {
 	Quantity  *int   `json:"quantity,omitempty"`
 }
 type hints struct {
-	Emails          []string `json:"emails"`
-	UserID          string   `json:"user_id,omitempty"`
-	StorefrontBrand string   `json:"storefront_brand,omitempty"`
-	ZipCode         string   `json:"zip_code,omitempty"`
+	Emails       []string `json:"emails"`
+	UserID       string   `json:"user_id,omitempty"`
+	CaremeUserID string   `json:"careme_user_id,omitempty"`
+	Store        string   `json:"store,omitempty"`
+	ZipCode      string   `json:"zip_code,omitempty"`
 }
 type request struct {
 	Items         []item `json:"items"`

@@ -130,6 +130,7 @@ func (h *orderHandler) handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request := orderItems(input)
+	request.IdentityHints.CaremeUserID = userID
 	if len(request.Items) == 0 {
 		http.Error(w, "MN Food Club transfer has no purchase quantities.", http.StatusBadRequest)
 		return
@@ -177,7 +178,10 @@ func validOrderForm(key string, input ordertypes.TransferRequest) bool {
 }
 
 func orderItems(input ordertypes.TransferRequest) handoffRequest {
-	request := handoffRequest{IdentityHints: identityHints{ZipCode: input.ZipCode}}
+	request := handoffRequest{IdentityHints: identityHints{
+		ZipCode: input.ZipCode,
+		Store:   strings.TrimSuffix(input.Location.ID, "_delivery"),
+	}}
 	for _, item := range input.Items {
 		if quantity := item.PackageQuantity(); quantity > 0 {
 			request.Items = append(request.Items, requestedItem{ProductID: item.ProductID, VariantID: item.VariantID, Quantity: quantity})

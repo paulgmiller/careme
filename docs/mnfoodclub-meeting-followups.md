@@ -34,6 +34,7 @@ it is not a claim that the partner API is deployed or that these changes ship.
 - Send the signed-in Careme user's ID as `careme_user_id`, and the selected
   store identity, using the partner artifact's exact field names and nesting.
   Never source the Careme user ID from browser-submitted JSON.
+  Paul subsequently confirmed both fields belong under `identity_hints`.
 - Send `link_id` when available. Persist the partner-issued link for subsequent
   transfers. The old proposal's `user_id` means a partner customer ID and must
   not be repurposed as the Careme/Clerk ID.
@@ -57,12 +58,12 @@ it is not a claim that the partner API is deployed or that these changes ship.
   separator, and the shopping-list key. The list hash incorporates the selected
   store and recipe parameters but does not itself include the user ID.
 - Location IDs are `mnfoodclub_delivery`, `tcfarm_delivery`, and
-  `nelsongrassfarm_delivery`. The intended partner identifiers discussed are
-  `mnfoodclub`, `tcfarm`, and `nelsongrassfarm`; confirm against the artifact.
-- Earlier uncommitted work adds `identity_hints.storefront_brand`, using display
-  names derived from location IDs, and tests all three stores. This is interim
-  work: reconcile it with the partner artifact rather than treating it as the
-  final schema. The existing local docs still describe `storefront_brand`.
+  `nelsongrassfarm_delivery`. The adapter sends partner identifiers
+  `mnfoodclub`, `tcfarm`, and `nelsongrassfarm`, respectively.
+- The adapter now sends `identity_hints.careme_user_id` from the authenticated
+  session and `identity_hints.store` from the validated selected location ID.
+  This replaces the interim `storefront_brand` display-name field. The stub,
+  OpenAPI schema, Markdown proposal, and embedded HTML schema use the new fields.
 - The existing provider shares a catalog across stores, adds static produce
   shares, and fetches wines. Those behaviors await the partner catalog API.
 - Transfer responses currently expose a partner `user_id`; the adapter has
@@ -73,8 +74,8 @@ it is not a claim that the partner API is deployed or that these changes ship.
 
 ## Immediate implementation task
 
-1. Obtain the partner artifact's request schema, especially the placement of
-   `careme_user_id` and `store`, and the exact store identifier values.
+1. Placement is resolved by Paul's follow-up: `careme_user_id` and `store`
+   belong under `identity_hints`. Review the remaining artifact schema when available.
 2. Set `careme_user_id` from `GetUserIDFromRequest`, after authentication.
 3. Map the validated selected location ID to the partner store identifier;
    do not trust submitted location display names or submitted identity hints.
@@ -106,7 +107,7 @@ Run verification again after implementing the final identity fields.
 
 ## Open contract details
 
-- Exact request nesting and canonical store values in the partner artifact.
+- Remaining differences between the complete partner artifact and local schema.
 - Where `link_id` is returned, whether it spans stores, and how expiry or
   revocation is communicated.
 - Whether item labels are required and what they are used for.
