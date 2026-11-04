@@ -238,7 +238,8 @@ mode still uses only the mock provider. Localhost and loopback `PUBLIC_ORIGIN`
 hosts always select `https://connect.dev.instacart.tools`, overriding an explicit
 production endpoint; use a development key locally. For other origins,
 `INSTACART_BASE_URL` defaults to `https://connect.instacart.com` and can explicitly
-select the development endpoint.
+select the development endpoint. `deploy/deploy.sh` explicitly sets the development
+endpoint for `caremetest` staging, which requires a development API key.
 
 Instacart follows the same native form, sign-in return, conditional reservation,
 and saved `Transfer` flow as Kroger and MN Food Club. The key is the finalized
