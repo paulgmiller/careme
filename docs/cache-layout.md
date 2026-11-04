@@ -315,3 +315,13 @@ original POST response in `post_response`. Browser login atomically resolves
 pending transfers without changing the idempotent POST result. Older applied
 rows with no `post_response` use their original `response`. These records
 survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
+
+- Local Yokels uses the exact store ID `localyokels_market` and the daily 9 AM
+  store-day boundary. Its signature is
+  `https://localyokels.localfoodmarketplace.com/categories/1230/1232/1222/1225/subcategories/1289/v2`, covering the host,
+  selected meat, vegetable, dairy/egg, and fruit categories, the pasta subcategory,
+  and parser version. The expanded selection bypasses earlier meat/vegetable-only
+  snapshots. Ingredient snapshots
+  use the existing `ingredients/` prefix; no cache container is added. Product
+  IDs retain the storefront's `uniqueId` (product ID plus producer GUID), and
+  selected variant IDs retain the purchase unit's numeric `puId`.

@@ -347,3 +347,29 @@ grade, and cosine similarity, ordered from closest to furthest. The first lookup
 may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
+
+### Local Yokels ingredients
+
+Local Yokels Market uses the public Local Food Marketplace storefront at
+<https://localyokels.localfoodmarketplace.com/Products>. The provider scrapes the
+current catalog request parameters from that page, then reads the public JSON
+catalog used by its JavaScript. It selects All Meats (1230), All Vegetables
+(1232), All Dairy & Eggs (1222), All Fruit (1225), and the Pasta subcategory
+(1289), including featured products, and keeps the first available purchase unit
+per product with its producer, size, and regular/sale price. Unavailable products
+and sold-out units are excluded. Catalog errors fail the complete fetch.
+
+The Seattle storefront is available as `localyokels_market` at 8416 5th Ave NE;
+nearby searches use that fixed store location in Seattle, WA 98115 with the normal
+nearby-store radius. TODO: Widen discovery to cover Local Yokels' delivery area.
+No credentials or proxy are needed.
+Catalog snapshots use the normal daily store cache boundary at 9 AM.
+
+```bash
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location localyokels_market -verbose
+LOCALYOKELS_LIVE=1 go test ./internal/localfoodmarketplace -run TestLiveLocalYokels -v
+```
+
+The catalog reader lives in `internal/localfoodmarketplace` for reuse by other
+Local Food Marketplace storefronts. Farmstand Local Foods uses the same endpoint
+and request format; it is not registered as a provider yet.

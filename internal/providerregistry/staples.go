@@ -6,10 +6,12 @@ import (
 
 	"careme/internal/brightdata"
 	"careme/internal/farmersmarket"
+	"careme/internal/localfoodmarketplace"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/localyokels"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"
 	"careme/internal/providers/smithbrothersfarms"
@@ -65,6 +67,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 
 	return []recipes.StaplesBackend{
 		albertsonsProvider,
+		localyokels.NewStaplesProvider(localfoodmarketplace.NewClient("https://localyokels.localfoodmarketplace.com", httpClient)),
 		hebProvider,
 		aldiProvider,
 		krogerBackend,
