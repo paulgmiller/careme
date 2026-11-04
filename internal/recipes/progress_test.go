@@ -135,7 +135,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	assert.NotContains(t, body, `id="shopping-content"`)
 
 	// A retry clears progress and removes previously published cards.
-	require.NoError(t, statuses.Start(t.Context(), hash, ""))
+	require.NoError(t, statuses.Restart(t.Context(), hash, ""))
 	assert.NotContains(t, poll(true), `href="/recipe/`)
 	selection, err = s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
