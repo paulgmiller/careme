@@ -137,7 +137,9 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 
 func estimateOpenAIImageSpend(model string, textInputTokens, imageInputTokens, outputTokens int64) estimatedSpend {
 	switch normalizeModelName(model) {
-	case "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2":
+	// GPT Image 2.6 rates verified 2026-11-05:
+	// https://developers.openai.com/api/docs/models/gpt-image-2.6-flare
+	case "gpt-image-2.6-sunburst", "gpt-image-2.6-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2":
 		return estimatedSpend{
 			inputUSD: tokensToUSD(textInputTokens, 5) +
 				tokensToUSD(imageInputTokens, 8),
