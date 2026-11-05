@@ -22,7 +22,7 @@ const (
 	// DefaultRecipeModel is the production model for recipe and menu generation.
 	DefaultRecipeModel openai.ResponsesModel = "gpt-6.1-sol"
 	// DefaultImageModel is the production model for recipe image generation.
-	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Flare
+	DefaultImageModel openai.ImageModel = "gpt-image-2.6-flare"
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
 	DefaultCritiqueModel = "google/gemini-4-argon"
 )
