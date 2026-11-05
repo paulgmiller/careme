@@ -9,6 +9,7 @@ import (
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/heb"
+	"careme/internal/providers/imperfectfoods"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/localyokels"
 	"careme/internal/providers/mnfoodclub"
@@ -65,6 +66,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 	}
 
 	return []recipes.StaplesBackend{
+		imperfectfoods.NewStaplesProvider(),
 		albertsonsProvider,
 		localyokels.NewStaplesProvider(localyokels.NewClient(brightdataClient)),
 		hebProvider,
