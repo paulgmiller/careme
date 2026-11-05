@@ -9,6 +9,7 @@ import (
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/fullcircle"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/localyokels"
@@ -47,6 +48,7 @@ func staplesIdentities() []cachekey.StoreHasher {
 		publix.NewIdentityProvider(),
 		farmersmarket.NewIdentityProvider(),
 		mnfoodclub.NewIdentityProvider(),
+		fullcircle.NewIdentityProvider(),
 		smithbrothersfarms.NewIdentityProvider(),
 		wholefoods.NewIdentityProvider(),
 		walmart.NewIdentityProvider(),

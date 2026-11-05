@@ -295,6 +295,34 @@ the existing grading and nearest-ingredient lookup. Wine candidates include ever
 page of the Wine & Wine Alternatives category (BigCommerce category 178), using
 the same stock and pricing rules. Requested wine styles do not restrict this list.
 
+### Full Circle ingredients
+
+Full Circle staples are available under `fullcircle_delivery`:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location fullcircle_delivery -verbose
+```
+
+The provider imports Dairy, Meat, and Grains & Rice using the public JSON
+requests behind [Full Circle's grocery catalog](https://www.fullcircle.com/product/farm-product-list).
+It retains listing IDs, brands, package sizes, and published prices, merges
+products listed in multiple categories, and excludes explicitly sold-out products.
+The anonymous catalog does not confirm stock or pricing for a particular delivery.
+No credentials or new environment configuration are required. Full Circle is not
+yet included in nearby location discovery; use the ID above for catalog imports.
+
+The [Traditional CSA page](https://www.fullcircle.com/product/detail/2#comparesizes)
+has a “Show Sample Box Content For Each Size” link. Those are sample contents,
+so this provider does not import them as current produce inventory.
+[Actual delivery contents](https://www.fullcircle.com/how-it-works/customize-your-box)
+are available in the customer's account during the customization window. Full
+Circle sends a reminder on Thursday afternoon before the delivery week; the
+window usually closes 48–72 hours before delivery, depending on the area.
+
+Run the optional public catalog check with
+`FULLCIRCLE_LIVE_TEST=1 go test ./internal/providers/fullcircle -run TestLiveCatalog -v`.
+The default tests use small catalog fixtures and do not access Full Circle.
+
 ### Smith Brothers Farms ingredients
 
 Nearby search includes Smith Brothers Farms home delivery in two approximate
