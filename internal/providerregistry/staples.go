@@ -65,10 +65,8 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		return nil, fmt.Errorf("create MNFoodClub catalog client: %w", err)
 	}
 
-	return []recipes.StaplesBackend{
-		imperfectfoods.NewStaplesProvider(),
+	backends := []recipes.StaplesBackend{
 		albertsonsProvider,
-		localyokels.NewStaplesProvider(localyokels.NewClient(brightdataClient)),
 		hebProvider,
 		aldiProvider,
 		krogerBackend,
@@ -78,5 +76,13 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
-	}, nil
+	}
+	// TODO: Replace this temporary production gate with provider configuration.
+	if cfg.ResolvedPublicOrigin() != "https://careme.cooking" {
+		backends = append([]recipes.StaplesBackend{
+			imperfectfoods.NewStaplesProvider(),
+			localyokels.NewStaplesProvider(localyokels.NewClient(brightdataClient)),
+		}, backends...)
+	}
+	return backends, nil
 }

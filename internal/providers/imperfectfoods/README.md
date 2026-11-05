@@ -2,8 +2,9 @@
 
 `imperfectfoods_demo` serves the product-only `snapshot.json` captured on
 November 4, 2026 (Pacific time). It needs no API credentials or network access
-at runtime. Access is by explicit location ID; the demo is not advertised as a
-verified delivery option in location searches. Prices and availability are fixed
+at runtime. Location searches near the 98005 reference point return the demo;
+the shared distance filter excludes it from distant searches. This reference
+point does not establish a verified delivery area. Prices and availability are fixed
 at capture time and are not a promise of current inventory.
 
 The snapshot contains 483 food products and 28 wines after deduplication. The

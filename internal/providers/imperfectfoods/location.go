@@ -37,13 +37,17 @@ func (b locationBackend) GetLocationByID(ctx context.Context, id string) (*locat
 	}, nil
 }
 
-func (locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinate geo.Coordinate) ([]locationtypes.Location, error) {
+func (b locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinate geo.Coordinate) ([]locationtypes.Location, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := coordinate.Valid(); err != nil {
 		return nil, err
 	}
-	// Explicit demo access only; no claim of a verified delivery service area.
-	return nil, nil
+	location, err := b.GetLocationByID(ctx, locationID)
+	if err != nil {
+		return nil, err
+	}
+	// The shared nearby-store filter limits discovery around the 98005 demo point.
+	return []locationtypes.Location{*location}, nil
 }
