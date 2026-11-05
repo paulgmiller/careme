@@ -61,7 +61,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 			} `json:"input"`
 		}
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, gpt56Luna, body.Model)
+		assert.Equal(t, "gpt-6.1-terra", body.Model)
 		assert.Equal(t, "none", body.Reasoning.Effort)
 		assert.Contains(t, body.Instructions, "JSON number")
 		assert.Contains(t, body.Instructions, "conversion is uncertain")
@@ -164,5 +164,5 @@ func shoppingMergeHTTPResponse(req *http.Request, output string) *http.Response 
 		"id":"resp-merge","object":"response","created_at":1778529600,"status":"completed","model":%q,
 		"output":[{"id":"msg-merge","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":%q,"annotations":[]}]}],
 		"usage":{"input_tokens":1,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":2}
-	}`, gpt56Luna, output))), Request: req}
+	}`, shoppingMergeModel, output))), Request: req}
 }

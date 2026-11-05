@@ -15,6 +15,7 @@ func TestEstimateResponseCostUSD(t *testing.T) {
 		wantErr                      string
 	}{
 		{name: "gpt-6 luna mixed cache", model: "gpt-6-luna", input: 1000, cached: 200, write: 300, output: 100, want: 0.0001395},
+		{name: "gpt-6.1 terra mixed cache", model: "gpt-6.1-terra", input: 1000, cached: 200, write: 300, output: 100, want: 0.001385},
 		{name: "gpt-6.1 sol mixed cache", model: "gpt-6.1-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00277},
 		{name: "gpt-6 sol mixed cache", model: "gpt-6-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00279},
 		{name: "astra mixed cache", model: "gpt-6-astra", input: 1000, cached: 200, write: 300, output: 100, want: 0.01395},

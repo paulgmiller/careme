@@ -18,11 +18,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const (
-	gpt56Terra = openai.ChatModelGPT5_6Terra
-	gpt56Luna  = openai.ChatModelGPT5_6Luna
-	gpt6Luna   = openai.ChatModelGPT6Luna
-)
+const gpt6Luna = openai.ChatModelGPT6Luna
 
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {

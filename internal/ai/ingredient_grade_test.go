@@ -54,10 +54,10 @@ func TestInputIngredientHashStableAcrossCategoryOrder(t *testing.T) {
 func TestIngredientGradeCacheVersionChangesWhenPromptOrModelChanges(t *testing.T) {
 	assert.NotEqual(t, ingredientGradeCacheVersion("gpt-5.6-luna"), ingredientGradeCacheVersion(""))
 	assert.Equal(t, ingredientGradeCacheVersion("gpt-6-luna"), ingredientGradeCacheVersion(""))
-	base := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion(gpt56Luna, "prompt a")}).CacheVersion()
-	same := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion(gpt56Luna, "prompt a")}).CacheVersion()
+	base := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion("gpt-5.6-luna", "prompt a")}).CacheVersion()
+	same := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion("gpt-5.6-luna", "prompt a")}).CacheVersion()
 	differentModel := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion("gpt-5-nano", "prompt a")}).CacheVersion()
-	differentPrompt := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion(gpt56Luna, "prompt b")}).CacheVersion()
+	differentPrompt := (&ingredientGrader{cacheVersion: hashIngredientGradeVersion("gpt-5.6-luna", "prompt b")}).CacheVersion()
 
 	assert.Equal(t, base, same)
 	assert.NotEqual(t, base, differentModel)

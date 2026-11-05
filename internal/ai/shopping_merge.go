@@ -11,6 +11,8 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
+const shoppingMergeModel = openai.ChatModelGPT6_1Terra
+
 // ShoppingItem separates the recipe amount from a numeric multiple of catalog size.
 // Buy is nil for pantry items, missing sizes, and uncertain conversions.
 type ShoppingItem struct {
@@ -76,7 +78,7 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 	text.Format.OfJSONSchema.Name = "shopping_ingredients"
 	text.Format.OfJSONSchema.Strict = openai.Bool(true)
 	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
-		Model:        gpt56Luna,
+		Model:        shoppingMergeModel,
 		Reasoning:    noReasoning(),
 		ServiceTier:  c.serviceTier,
 		Instructions: openai.String(shoppingPurchaseInstructions),
@@ -87,7 +89,7 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 		return nil, fmt.Errorf("merge shopping quantities: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryShoppingMerge, "model", gpt56Luna, responseUsageLogAttr(gpt56Luna, resp.Usage, string(resp.ServiceTier)))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryShoppingMerge, "model", shoppingMergeModel, responseUsageLogAttr(shoppingMergeModel, resp.Usage, string(resp.ServiceTier)))
 	var merged shoppingIngredientsResponse
 	if err := json.Unmarshal([]byte(resp.OutputText()), &merged); err != nil {
 		return nil, fmt.Errorf("decode shopping ingredients: %w", err)
