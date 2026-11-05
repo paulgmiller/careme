@@ -125,7 +125,9 @@ func (g *decisionGrader) gradeIngredient(ctx context.Context, item InputIngredie
 		Model: gpt6Luna,
 		Input: openai.DecisionNewParamsInputUnion{OfString: openai.String(string(input))},
 		Questions: []openai.DecisionNewParamsQuestionUnion{{OfScore: &openai.DecisionNewParamsQuestionScore{
-			Name: openai.String("ingredient_score"), Instructions: ingredientDecisionInstruction, Levels: g.levels,
+			Name:         openai.String("ingredient_score"),
+			Instructions: openai.DecisionNewParamsQuestionScoreInstructionsUnion{OfString: openai.String(ingredientDecisionInstruction)},
+			Levels:       g.levels,
 		}}},
 	})
 	if err != nil {
