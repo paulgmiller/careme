@@ -8,6 +8,7 @@ import (
 	"careme/internal/farmersmarket"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/fullcircle"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
@@ -71,6 +72,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		publixProvider,
 		farmersMarketProvider,
 		mnfoodclub.NewStaplesProvider(mnfoodclubClient),
+		fullcircle.NewStaplesProvider(fullcircle.NewClient(http.DefaultClient)),
 		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
