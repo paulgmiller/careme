@@ -19,8 +19,6 @@ func TestEstimateResponseCostUSD(t *testing.T) {
 		{name: "gpt-6.1 sol mixed cache", model: "gpt-6.1-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00277},
 		{name: "gpt-6 sol mixed cache", model: "gpt-6-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00279},
 		{name: "astra mixed cache", model: "gpt-6-astra", input: 1000, cached: 200, write: 300, output: 100, want: 0.01395},
-		{name: "sol mixed cache", model: "gpt-5.6-sol", input: 1000, cached: 200, write: 300, output: 100, want: 0.00558},
-		{name: "luna mixed cache", model: "gpt-5.6-luna", input: 1000, cached: 200, write: 300, output: 100, want: 0.000299},
 		{name: "unknown", model: "unknown", input: 1000, output: 100, wantErr: "price_not_configured"},
 		{name: "large context", model: "gpt-6-astra", input: 272001, output: 100, wantErr: "up to 272000"},
 		{name: "invalid cache", model: "gpt-6-astra", input: 100, cached: 80, write: 30, output: 100, wantErr: "invalid token usage"},

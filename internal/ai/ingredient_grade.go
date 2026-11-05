@@ -18,7 +18,7 @@ import (
 	"github.com/samber/lo"
 )
 
-const defaultIngredientGradeModel = gpt6Luna
+const defaultIngredientGradeModel = openai.ChatModelGPT6Luna
 
 // should we have category spefic grading prompts?
 const ingredientGradeRubric = `

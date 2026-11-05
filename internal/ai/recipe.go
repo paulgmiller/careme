@@ -18,8 +18,6 @@ import (
 	"github.com/samber/lo"
 )
 
-const gpt6Luna = openai.ChatModelGPT6Luna
-
 // how close should this be to Input ingredint. Should we also add aisle or just echo productid so we can look it up
 type Ingredient struct {
 	ProductID   string `json:"id"`

@@ -11,7 +11,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-const shoppingMergeModel = openai.ChatModelGPT6_1Terra
+const shoppingMergeModel = openai.ChatModelGPT6Luna
 
 // ShoppingItem separates the recipe amount from a numeric multiple of catalog size.
 // Buy is nil for pantry items, missing sizes, and uncertain conversions.

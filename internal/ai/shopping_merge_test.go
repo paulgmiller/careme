@@ -61,7 +61,7 @@ func TestMergeShoppingQuantitiesSendsIngredientsAndCatalog(t *testing.T) {
 			} `json:"input"`
 		}
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "gpt-6.1-terra", body.Model)
+		assert.Equal(t, "gpt-6-luna", body.Model)
 		assert.Equal(t, "none", body.Reasoning.Effort)
 		assert.Contains(t, body.Instructions, "JSON number")
 		assert.Contains(t, body.Instructions, "conversion is uncertain")

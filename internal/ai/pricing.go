@@ -64,15 +64,10 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, c
 		cacheWriteTokens = inputTokens - cachedInputTokens
 	}
 	uncachedInputTokens := inputTokens - cachedInputTokens - cacheWriteTokens
-	cacheWriteRate := price.cacheWriteUSDPerMillion
-	if cacheWriteRate == 0 {
-		// Before GPT-5.6, cache writes have no premium and remain ordinary input.
-		cacheWriteRate = price.inputUSDPerMillion
-	}
 	return estimatedSpend{
 		inputUSD:       tokensToUSD(uncachedInputTokens, price.inputUSDPerMillion),
 		cachedInputUSD: tokensToUSD(cachedInputTokens, price.cachedInputUSDPerMillion),
-		cacheWriteUSD:  tokensToUSD(cacheWriteTokens, cacheWriteRate),
+		cacheWriteUSD:  tokensToUSD(cacheWriteTokens, price.cacheWriteUSDPerMillion),
 		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
 	}
 }
@@ -113,28 +108,6 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	case openai.ChatModelGPT6Astra:
 		// Verified 2026-09-08: https://developers.openai.com/api/docs/models/gpt-6-astra
 		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true
-	case "gpt-5.6", openai.ChatModelGPT5_6Sol:
-		// Promotional rates verified 2026-09-09, available at least through 2026-11-21:
-		// https://developers.openai.com/api/docs/models/gpt-5.6-sol
-		return textTokenPrice{inputUSDPerMillion: 4, cachedInputUSDPerMillion: 0.40, cacheWriteUSDPerMillion: 5, outputUSDPerMillion: 20}, true
-	case openai.ChatModelGPT5_6Terra:
-		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 12}, true
-	case openai.ChatModelGPT5_6Luna:
-		return textTokenPrice{inputUSDPerMillion: 0.20, cachedInputUSDPerMillion: 0.02, cacheWriteUSDPerMillion: 0.25, outputUSDPerMillion: 1.20}, true
-	case openai.ChatModelGPT5_5:
-		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
-	case openai.ChatModelGPT5_4:
-		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
-	case openai.ChatModelGPT5_4Mini:
-		return textTokenPrice{inputUSDPerMillion: 0.75, cachedInputUSDPerMillion: 0.075, outputUSDPerMillion: 4.50}, true
-	case openai.ChatModelGPT5_2:
-		return textTokenPrice{inputUSDPerMillion: 1.75, cachedInputUSDPerMillion: 0.175, outputUSDPerMillion: 14}, true
-	case openai.ChatModelGPT5_1, openai.ChatModelGPT5: //nolint:staticcheck // Retain pricing support for historical model usage.
-		return textTokenPrice{inputUSDPerMillion: 1.25, cachedInputUSDPerMillion: 0.125, outputUSDPerMillion: 10}, true
-	case openai.ChatModelGPT5Mini: //nolint:staticcheck // Retain pricing support for historical model usage.
-		return textTokenPrice{inputUSDPerMillion: 0.25, cachedInputUSDPerMillion: 0.025, outputUSDPerMillion: 2}, true
-	case openai.ChatModelGPT5Nano: //nolint:staticcheck // Retain pricing support for historical model usage.
-		return textTokenPrice{inputUSDPerMillion: 0.05, cachedInputUSDPerMillion: 0.005, outputUSDPerMillion: 0.40}, true
 	default:
 		return textTokenPrice{}, false
 	}
