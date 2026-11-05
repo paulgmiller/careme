@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/config"
@@ -66,12 +67,15 @@ func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (ma
 		return nil, fmt.Errorf("eval image_style must be photo or sketch")
 	}
 
+	start := time.Now()
 	err := measure(context.Background(), generator, pf.Vars.Recipe, pf.Vars.ImageStyle)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("measure %s latency: %w", pf.Vars.ImageStyle, err)
 	}
 	return map[string]any{
-		"output": string(pf.Vars.ImageStyle),
+		"output":    string(pf.Vars.ImageStyle),
+		"latencyMs": latency.Milliseconds(),
 	}, nil
 }
 

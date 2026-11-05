@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"math"
 	"strings"
+
+	openai "github.com/openai/openai-go/v3"
 )
 
 const tokensPerMillion = 1_000_000
@@ -62,15 +64,10 @@ func estimateOpenAIResponseSpend(model string, inputTokens, cachedInputTokens, c
 		cacheWriteTokens = inputTokens - cachedInputTokens
 	}
 	uncachedInputTokens := inputTokens - cachedInputTokens - cacheWriteTokens
-	cacheWriteRate := price.cacheWriteUSDPerMillion
-	if cacheWriteRate == 0 {
-		// Before GPT-5.6, cache writes have no premium and remain ordinary input.
-		cacheWriteRate = price.inputUSDPerMillion
-	}
 	return estimatedSpend{
 		inputUSD:       tokensToUSD(uncachedInputTokens, price.inputUSDPerMillion),
 		cachedInputUSD: tokensToUSD(cachedInputTokens, price.cachedInputUSDPerMillion),
-		cacheWriteUSD:  tokensToUSD(cacheWriteTokens, cacheWriteRate),
+		cacheWriteUSD:  tokensToUSD(cacheWriteTokens, price.cacheWriteUSDPerMillion),
 		outputUSD:      tokensToUSD(outputTokens, price.outputUSDPerMillion),
 	}
 }
@@ -96,40 +93,21 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	// Standard short-context USD per 1M tokens, verified 2026-08-04:
 	// https://developers.openai.com/api/docs/pricing
 	switch normalizeModelName(model) {
-	case "gpt-6-luna":
+	case openai.ChatModelGPT6Luna:
 		// Verified 2026-09-29: https://developers.openai.com/api/docs/models/gpt-6-luna
 		return textTokenPrice{inputUSDPerMillion: 0.10, cachedInputUSDPerMillion: 0.01, cacheWriteUSDPerMillion: 0.125, outputUSDPerMillion: 0.50}, true
-	case "gpt-6.1-sol":
+	case openai.ChatModelGPT6_1Terra:
+		// Verified 2026-11-05: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.05, cacheWriteUSDPerMillion: 1.25, outputUSDPerMillion: 5}, true
+	case openai.ChatModelGPT6_1Sol:
 		// Verified 2026-09-29: https://developers.openai.com/api/docs/models/gpt-6.1-sol
 		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.10, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 10}, true
-	case "gpt-6-sol":
+	case openai.ChatModelGPT6Sol:
 		// Verified 2026-09-22: https://developers.openai.com/api/docs/models/gpt-6-sol
 		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 10}, true
-	case "gpt-6-astra":
+	case openai.ChatModelGPT6Astra:
 		// Verified 2026-09-08: https://developers.openai.com/api/docs/models/gpt-6-astra
 		return textTokenPrice{inputUSDPerMillion: 10, cachedInputUSDPerMillion: 1, cacheWriteUSDPerMillion: 12.50, outputUSDPerMillion: 50}, true
-	case "gpt-5.6", "gpt-5.6-sol":
-		// Promotional rates verified 2026-09-09, available at least through 2026-11-21:
-		// https://developers.openai.com/api/docs/models/gpt-5.6-sol
-		return textTokenPrice{inputUSDPerMillion: 4, cachedInputUSDPerMillion: 0.40, cacheWriteUSDPerMillion: 5, outputUSDPerMillion: 20}, true
-	case "gpt-5.6-terra":
-		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.20, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 12}, true
-	case "gpt-5.6-luna":
-		return textTokenPrice{inputUSDPerMillion: 0.20, cachedInputUSDPerMillion: 0.02, cacheWriteUSDPerMillion: 0.25, outputUSDPerMillion: 1.20}, true
-	case "gpt-5.5":
-		return textTokenPrice{inputUSDPerMillion: 5, cachedInputUSDPerMillion: 0.50, outputUSDPerMillion: 30}, true
-	case "gpt-5.4":
-		return textTokenPrice{inputUSDPerMillion: 2.50, cachedInputUSDPerMillion: 0.25, outputUSDPerMillion: 15}, true
-	case "gpt-5.4-mini":
-		return textTokenPrice{inputUSDPerMillion: 0.75, cachedInputUSDPerMillion: 0.075, outputUSDPerMillion: 4.50}, true
-	case "gpt-5.2":
-		return textTokenPrice{inputUSDPerMillion: 1.75, cachedInputUSDPerMillion: 0.175, outputUSDPerMillion: 14}, true
-	case "gpt-5.1", "gpt-5":
-		return textTokenPrice{inputUSDPerMillion: 1.25, cachedInputUSDPerMillion: 0.125, outputUSDPerMillion: 10}, true
-	case "gpt-5-mini":
-		return textTokenPrice{inputUSDPerMillion: 0.25, cachedInputUSDPerMillion: 0.025, outputUSDPerMillion: 2}, true
-	case "gpt-5-nano":
-		return textTokenPrice{inputUSDPerMillion: 0.05, cachedInputUSDPerMillion: 0.005, outputUSDPerMillion: 0.40}, true
 	default:
 		return textTokenPrice{}, false
 	}
@@ -139,7 +117,7 @@ func estimateOpenAIImageSpend(model string, textInputTokens, imageInputTokens, o
 	switch normalizeModelName(model) {
 	// GPT Image 2.6 rates verified 2026-11-05:
 	// https://developers.openai.com/api/docs/models/gpt-image-2.6-flare
-	case "gpt-image-2.6-sunburst", "gpt-image-2.6-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2":
+	case openai.ImageModelGPTImage2_6Sunburst, openai.ImageModelGPTImage2_6Flare, openai.ImageModelGPTImage2_5Sunburst, openai.ImageModelGPTImage2_5Flare, openai.ImageModelGPTImage2:
 		return estimatedSpend{
 			inputUSD: tokensToUSD(textInputTokens, 5) +
 				tokensToUSD(imageInputTokens, 8),

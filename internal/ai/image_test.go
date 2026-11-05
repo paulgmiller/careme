@@ -69,7 +69,7 @@ func TestBuildStepImagePromptFocusesOnSelectedInstruction(t *testing.T) {
 }
 
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
-	for _, imageModel := range []string{config.DefaultImageModel, "gpt-image-2.6-sunburst"} {
+	for _, imageModel := range []string{config.DefaultImageModel, openai.ImageModelGPTImage2_6Sunburst} {
 		t.Run(imageModel, func(t *testing.T) {
 			aiConfig := testAIConfig(config.DefaultRecipeModel)
 			aiConfig.ImageModel = imageModel
@@ -150,7 +150,7 @@ func TestImageUsageLogAttr(t *testing.T) {
 }
 
 func TestEstimateOpenAIImageSpendSupportsGPTImageModels(t *testing.T) {
-	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2"} {
+	for _, model := range []string{openai.ImageModelGPTImage2_6Flare, openai.ImageModelGPTImage2_6Sunburst, openai.ImageModelGPTImage2_5Flare, openai.ImageModelGPTImage2_5Sunburst, openai.ImageModelGPTImage2} {
 		t.Run(model, func(t *testing.T) {
 			spend := estimateOpenAIImageSpend(model, 40, 60, 200)
 
