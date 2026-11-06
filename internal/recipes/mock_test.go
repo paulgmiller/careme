@@ -1,9 +1,16 @@
 package recipes
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
+
+	"careme/internal/ai"
+	"careme/internal/recipes/status"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"careme/internal/cache"
 	"careme/internal/locations"
@@ -149,4 +156,64 @@ func TestMockGenerateRecipes_SavesRubberstampCritiques(t *testing.T) {
 			t.Fatalf("unexpected critique score for %q: got %d want 10", recipe.Title, got.OverallScore)
 		}
 	}
+}
+
+type replaceMockPlan struct {
+	*status.Store
+	replica  *status.Store
+	original string
+}
+
+func (s *replaceMockPlan) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error {
+	if err := s.Store.Plan(ctx, hash, plans); err != nil {
+		return err
+	}
+	s.original = plans[0].Cuisine
+	return s.replica.RequestReplacement(ctx, hash, 0, 0)
+}
+
+func TestMockGenerateRecipes_ReplacementUsesSharedCoordinator(t *testing.T) {
+	t.Parallel()
+	c := cache.NewInMemoryCache()
+	owner := status.NewStore(c)
+	statuses := &replaceMockPlan{Store: owner, replica: status.NewStore(c)}
+	m := NewMockGenerator(IO(c), critique.NewMock(c), statuses)
+	params := DefaultParams(&locations.Location{ID: "70000002"}, time.Now())
+	require.NoError(t, owner.Start(t.Context(), params.Hash(), "planning"))
+	result, err := m.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, result.Recipes, 3)
+	assert.NotEqual(t, statuses.original, result.Recipes[0].Title)
+	assert.NotEmpty(t, result.Plan.ResponseID)
+	got, err := statuses.replica.Load(t.Context(), params.Hash())
+	require.NoError(t, err)
+	assert.Equal(t, 1, got.Slots[0].Revision)
+	for i, slot := range got.Slots {
+		assert.True(t, slot.Reviewed)
+		assert.Equal(t, result.Recipes[i].ComputeHash(), slot.RecipeHash)
+		assert.NotEmpty(t, result.Recipes[i].ResponseID)
+	}
+}
+
+func TestMockGenerateRecipes_KeepsSavedOrder(t *testing.T) {
+	t.Parallel()
+	c := cache.NewInMemoryCache()
+	m := NewMockGenerator(IO(c), critique.NewMock(c), noopstatuswriter{})
+	params := DefaultParams(&locations.Location{ID: "70000002"}, time.Now())
+	params.Saved = []ai.Recipe{mockRecipes[1], mockRecipes[2]}
+	result, err := m.GenerateRecipes(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, result.Recipes, 3)
+	assert.Equal(t, params.Saved, result.Recipes[1:])
+	require.Len(t, result.Plan.Plans, 1)
+}
+
+func TestMockGenerateRecipes_CanceledPlanning(t *testing.T) {
+	t.Parallel()
+	c := cache.NewInMemoryCache()
+	m := NewMockGenerator(IO(c), critique.NewMock(c), noopstatuswriter{})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := m.GenerateRecipes(ctx, DefaultParams(&locations.Location{ID: "70000002"}, time.Now()))
+	require.ErrorIs(t, err, context.Canceled)
 }

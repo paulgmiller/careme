@@ -402,7 +402,9 @@ var mockRecipes = []ai.Recipe{
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	originHash := p.Hash()
 	// Keep the planning stage observable in local mock mode.
-	time.Sleep(100 * time.Millisecond)
+	if err := mockGenerationDelay(ctx); err != nil {
+		return nil, err
+	}
 
 	// Select 3 random recipes from the pool of 20
 	// Create a new random generator with current time as seed
@@ -434,7 +436,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
-	plan := &ai.MenuPlan{}
+	plan := &ai.MenuPlan{ResponseID: uuid.NewString()}
 	categories := []ai.MealCategory{ai.MealCategoryHealthy, ai.MealCategoryFancy, ai.MealCategoryLocal, ai.MealCategoryDifferent}
 	for _, recipe := range selectedRecipes[:len(selectedRecipes)-len(p.Saved)] {
 		plan.Plans = append(plan.Plans, ai.RecipePlan{Cuisine: recipe.Title, AnchorIngredient: recipe.Ingredients[0].Name, Category: categories[len(plan.Plans)%len(categories)]})
@@ -442,24 +444,17 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	if err := m.statuses.Plan(ctx, originHash, plan.Plans); err != nil {
 		return nil, err
 	}
-	for i, recipe := range selectedRecipes {
-		if m.saver != nil {
-			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
-				return nil, err
-			}
-		}
-		if m.critiquer != nil {
-			if _, err := m.critiquer.CritiqueRecipe(ctx, recipe); err != nil {
-				return nil, err
-			}
-		}
-		if i < len(plan.Plans) {
-			time.Sleep(100 * time.Millisecond)
-			if err := m.statuses.RecipeReady(ctx, originHash, i, recipe.ComputeHash()); err != nil {
-				return nil, err
-			}
-		}
+	g := generatorService{
+		aiClient:     mockMenuClient{mock: m},
+		critiquer:    mockGenerationCritiquer{critiquer: m.critiquer},
+		saver:        m.saver,
+		statusWriter: m.statuses,
 	}
+	generated, err := g.generatePlannedRecipes(ctx, p, plan, map[string]ai.InputIngredient{})
+	if err != nil {
+		return nil, err
+	}
+	selectedRecipes = append(generated, p.Saved...)
 
 	return &ai.ShoppingList{
 		Recipes: selectedRecipes,

@@ -180,7 +180,9 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	redirect, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
-	assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
+	retry := *p
+	retry.RetryOf = p.Hash()
+	assert.Equal(t, retry.Hash(), redirect.Query().Get(queryArgHash))
 	assert.Equal(t, "Save two dinners", redirect.Query().Get(QueryArgHelp))
 	select {
 	case <-generator.called:
@@ -188,7 +190,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 		t.Fatal("timed out waiting for retried generation")
 	}
 	s.Wait()
-	status, err := s.generationStatuses.Load(t.Context(), p.Hash())
+	status, err := s.generationStatuses.Load(t.Context(), retry.Hash())
 	require.NoError(t, err)
 	assert.NotContains(t, status.Failed, "first attempt failed")
 }
