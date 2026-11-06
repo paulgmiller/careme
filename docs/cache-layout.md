@@ -21,6 +21,14 @@ Go decides whether compiled packages and test results can be reused. The `go-v2`
 namespace bypasses the older shared `setup-go-*` snapshots; those expire normally.
 No warm-up job or dependency-based check filtering is required.
 
+To verify reuse, first let a PR run finish successfully and populate both caches.
+Rerun the same workflow: both cache steps should report exact hits, with no new
+Go module downloads. Then push a documentation-only commit to the same PR:
+modules should still hit exactly, while builds restore the previous commit's
+snapshot through the prefix and save a new snapshot after success. Compare the
+check step and total job times, including cache restore/save overhead. Go may
+still rerun tests whose tracked file or environment inputs differ.
+
 ## Application caches
 
 Imperfect Foods uses the explicit demo location `imperfectfoods_demo` and the
