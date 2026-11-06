@@ -1,5 +1,36 @@
 # Cache Layout
 
+## GitHub Actions Go caches
+
+Both workflows use `.github/actions/setup-go` with `setup-go`'s built-in cache
+disabled. Each job has two independent caches, using the prefix
+`go-v2-<OS>-<runner image OS>-<architecture>-<resolved Go version>-<job ID>-<dependency hash>`.
+The dependency hash covers `go.mod`, `go.sum`, `tools/tool.mod`, and `tools/tool.sum`.
+
+- `<prefix>-modules` stores `go env GOMODCACHE`. Each job downloads and saves
+  only its own required modules, so unrelated jobs cannot win a shared cache key
+  with an incomplete dependency set. Manifest changes create a new entry.
+- `<prefix>-build-<commit SHA>` stores `go env GOCACHE`, including compiled tools,
+  packages, and successful test results. New commits restore the latest entry
+  matching `<prefix>-build-`, then save updated results after the job succeeds.
+  Exact hits reuse the existing entry; failed or cancelled jobs do not save.
+
+GitHub's branch scoping applies: default-branch entries can seed PR jobs, while
+PR entries are scoped to that PR's merge ref. All checks still run on cache hits;
+Go decides whether compiled packages and test results can be reused. The `go-v2`
+namespace bypasses the older shared `setup-go-*` snapshots; those expire normally.
+No warm-up job or dependency-based check filtering is required.
+
+To verify reuse, first let a PR run finish successfully and populate both caches.
+Rerun the same workflow: both cache steps should report exact hits, with no new
+Go module downloads. Then push a documentation-only commit to the same PR:
+modules should still hit exactly, while builds restore the previous commit's
+snapshot through the prefix and save a new snapshot after success. Compare the
+check step and total job times, including cache restore/save overhead. Go may
+still rerun tests whose tracked file or environment inputs differ.
+
+## Application caches
+
 Imperfect Foods uses the explicit demo location `imperfectfoods_demo` and the
 daily 9 AM store-day boundary. Its signature is
 `imperfectfoods-snapshot-v1/<SHA-256 of embedded snapshot.json>`, so replacing the
