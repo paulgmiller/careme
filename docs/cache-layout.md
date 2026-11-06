@@ -1,5 +1,26 @@
 # Cache Layout
 
+## GitHub Actions Go caches
+
+Both workflows use `.github/actions/setup-go` with `setup-go`'s built-in cache
+disabled. Each job has two independent caches, using the prefix
+`go-v2-<OS>-<runner image OS>-<architecture>-<resolved Go version>-<job ID>-<dependency hash>`.
+The dependency hash covers `go.mod`, `go.sum`, `tools/tool.mod`, and `tools/tool.sum`.
+
+- `<prefix>-modules` stores `go env GOMODCACHE`. Each job downloads and saves
+  only its own required modules, so unrelated jobs cannot win a shared cache key
+  with an incomplete dependency set. Manifest changes create a new entry.
+- `<prefix>-build-<commit SHA>` stores `go env GOCACHE`, including compiled tools,
+  packages, and successful test results. New commits restore the latest entry
+  matching `<prefix>-build-`, then save updated results after the job succeeds.
+  Exact hits reuse the existing entry; failed or cancelled jobs do not save.
+
+GitHub's branch scoping applies: default-branch entries can seed PR jobs, while
+PR entries are scoped to that PR's merge ref. All checks still run on cache hits;
+Go decides whether compiled packages and test results can be reused. The `go-v2`
+namespace bypasses the older shared `setup-go-*` snapshots; those expire normally.
+No warm-up job or dependency-based check filtering is required.
+
 MNFoodClub, HEB, and Whole Foods keep their existing signature schemes for size
 mapping changes. Size fields may be empty in older cached catalogs or when the
 source does not provide a size; cached catalogs gain size data when fetched again.
