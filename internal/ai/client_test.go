@@ -38,7 +38,7 @@ func TestNewClientUsesModelsByRole(t *testing.T) {
 	if client.model != config.DefaultRecipeModel {
 		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)
 	}
-	if client.wineModel != gpt6Luna {
+	if client.wineModel != openai.ChatModelGPT6Luna {
 		t.Fatalf("expected wine model to use low-cost Luna path, got %q", client.wineModel)
 	}
 }

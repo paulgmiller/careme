@@ -21,6 +21,16 @@ Go decides whether compiled packages and test results can be reused. The `go-v2`
 namespace bypasses the older shared `setup-go-*` snapshots; those expire normally.
 No warm-up job or dependency-based check filtering is required.
 
+## Application caches
+
+Imperfect Foods uses the explicit demo location `imperfectfoods_demo` and the
+daily 9 AM store-day boundary. Its signature is
+`imperfectfoods-snapshot-v1/<SHA-256 of embedded snapshot.json>`, so replacing the
+static product catalog invalidates ingredient and recipe hashes. Catalogs use
+the existing `ingredients/` prefix; no credentials, raw API responses, or new
+cache containers are needed. Wine candidates retain the existing
+location/date/style wine cache policy.
+
 MNFoodClub, HEB, and Whole Foods keep their existing signature schemes for size
 mapping changes. Size fields may be empty in older cached catalogs or when the
 source does not provide a size; cached catalogs gain size data when fetched again.
