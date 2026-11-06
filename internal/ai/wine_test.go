@@ -11,6 +11,7 @@ import (
 
 	"careme/internal/config"
 
+	openai "github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +96,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
 		}
-		if !strings.Contains(string(body), `"model":"`+gpt6Luna+`"`) {
+		if !strings.Contains(string(body), `"model":"`+openai.ChatModelGPT6Luna+`"`) {
 			t.Fatalf("expected Luna model in request: %s", body)
 		}
 		if !strings.Contains(string(body), `"reasoning":{"effort":"none"}`) {
@@ -144,7 +145,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, gpt6Luna))),
+			}`, openai.ChatModelGPT6Luna))),
 			Request: req,
 		}, nil
 	})}, nil)

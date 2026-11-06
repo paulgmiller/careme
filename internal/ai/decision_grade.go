@@ -61,7 +61,7 @@ var ingredientGradeCriteria = []string{
 
 func ingredientDecisionCacheVersion() string {
 	fnv := fnv.New128()
-	lo.Must(io.WriteString(fnv, "decisions/v1/"+gpt6Luna))
+	lo.Must(io.WriteString(fnv, "decisions/v1/"+openai.ChatModelGPT6Luna))
 	lo.Must(io.WriteString(fnv, ingredientDecisionInstruction))
 	for _, crit := range ingredientGradeCriteria {
 		lo.Must(io.WriteString(fnv, crit))
@@ -122,16 +122,18 @@ func (g *decisionGrader) gradeIngredient(ctx context.Context, item InputIngredie
 		return InputIngredient{}, fmt.Errorf("marshal ingredient %s: %w", item.ProductID, err)
 	}
 	decision, err := g.oai.Decisions.New(ctx, openai.DecisionNewParams{
-		Model: gpt6Luna,
+		Model: openai.ChatModelGPT6Luna,
 		Input: openai.DecisionNewParamsInputUnion{OfString: openai.String(string(input))},
 		Questions: []openai.DecisionNewParamsQuestionUnion{{OfScore: &openai.DecisionNewParamsQuestionScore{
-			Name: openai.String("ingredient_score"), Instructions: ingredientDecisionInstruction, Levels: g.levels,
+			Name:         openai.String("ingredient_score"),
+			Instructions: openai.DecisionNewParamsQuestionScoreInstructionsUnion{OfString: openai.String(ingredientDecisionInstruction)},
+			Levels:       g.levels,
 		}}},
 	})
 	if err != nil {
 		return InputIngredient{}, fmt.Errorf("grade ingredient %s: %w", item.ProductID, err)
 	}
-	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", gpt6Luna, "api", "decisions", "input", decision.Usage.InputTokens)
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", openai.ChatModelGPT6Luna, "api", "decisions", "input", decision.Usage.InputTokens)
 	if len(decision.Answers) != 1 {
 		return InputIngredient{}, fmt.Errorf("grade ingredient %s: expected one answer, got %d", item.ProductID, len(decision.Answers))
 	}
