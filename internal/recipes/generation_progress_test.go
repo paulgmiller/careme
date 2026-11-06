@@ -78,7 +78,9 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			}}
 			generator := newTestGenerator(t, client, critiquer, fixedStaplesService{}, progress, rio)
 			done := make(chan error, 1)
-			go func() { _, err := generator.GenerateRecipes(t.Context(), p); done <- err }()
+			// The deferred review release owns worker shutdown; test contexts are
+			// canceled before Cleanup waits for the published final recipes.
+			go func() { _, err := generator.GenerateRecipes(context.WithoutCancel(t.Context()), p); done <- err }()
 			select {
 			case <-reviewStarted:
 			case <-time.After(5 * time.Second):
@@ -114,37 +116,40 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 
 type failingProgress struct {
 	noopstatuswriter
-	failPlan bool
+	stage string
 }
 
 func (p failingProgress) Plan(context.Context, string, []ai.RecipePlan) error {
-	if p.failPlan {
+	if p.stage == "plan" {
 		return errors.New("progress storage unavailable")
 	}
 	return nil
 }
 
 func (p failingProgress) RecipeReady(context.Context, string, int, string) error {
-	return errors.New("progress storage unavailable")
+	if p.stage == "ready" {
+		return errors.New("progress storage unavailable")
+	}
+	return nil
+}
+
+func (p failingProgress) RecipeDraft(context.Context, string, int, string) error {
+	if p.stage == "draft" {
+		return errors.New("progress storage unavailable")
+	}
+	return nil
 }
 
 func TestGenerationHandlesProgressWriteFailures(t *testing.T) {
 	t.Parallel()
-	for _, failPlan := range []bool{true, false} {
-		t.Run(map[bool]string{true: "plan", false: "ready recipe"}[failPlan], func(t *testing.T) {
+	for _, stage := range []string{"plan", "draft", "ready"} {
+		t.Run(stage, func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
 			client := &captureGenerateAIClient{shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Dinner"}}}}
-			generator := newTestGenerator(t, client, &captureCritiqueService{}, fixedStaplesService{}, failingProgress{failPlan: failPlan}, noopRecipeSaver{})
+			generator := newTestGenerator(t, client, &captureCritiqueService{}, fixedStaplesService{}, failingProgress{stage: stage}, noopRecipeSaver{})
 			list, err := generator.GenerateRecipes(t.Context(), p)
-			if failPlan {
-				require.ErrorContains(t, err, "progress storage unavailable")
-				assert.Nil(t, list)
-				return
-			}
-			require.NoError(t, err)
-			require.NotNil(t, list)
-			require.Len(t, list.Recipes, 1)
-			assert.Equal(t, "Dinner", list.Recipes[0].Title)
+			require.ErrorContains(t, err, "progress storage unavailable")
+			assert.Nil(t, list)
 		})
 	}
 }

@@ -133,18 +133,29 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
-	missing := errors.Is(err, cache.ErrNotFound)
-	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
-		return fmt.Errorf("start campaign status: %w", err)
-	}
-
-	if !missing { // small chance someone got to this locationb before us?
+	if err == nil {
 		if err := s.prepareImage(ctx, list); err != nil {
 			return err
 		}
 		return nil
 	}
 
+	if err := s.store.SaveParams(ctx, p); err != nil {
+		if !errors.Is(err, recipes.ErrAlreadyExists) {
+			return fmt.Errorf("save campaign params: %w", err)
+		}
+		list, err := s.store.FromCache(ctx, hash)
+		if errors.Is(err, cache.ErrNotFound) {
+			return fmt.Errorf("campaign generation already admitted; shopping list is not ready")
+		}
+		if err != nil {
+			return fmt.Errorf("read admitted campaign shopping list: %w", err)
+		}
+		return s.prepareImage(ctx, list)
+	}
+	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
+		return fmt.Errorf("start campaign status: %w", err)
+	}
 	if err := s.prepare(ctx, p); err != nil {
 		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
 			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
@@ -156,9 +167,6 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 }
 
 func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
-	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
-		return fmt.Errorf("save campaign params: %w", err)
-	}
 	list, err := s.generator.GenerateRecipes(ctx, p)
 	if err != nil {
 		return fmt.Errorf("generate campaign recipes: %w", err)

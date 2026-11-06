@@ -39,11 +39,6 @@ func Flatten[T any, T2 any](items []T, fn func(T) ([]T2, error)) ([]T2, error) {
 // MapWithErrors collects errors but doesn't cancel anything.
 // fn must return errors instead of calling t.Fatal or anything else that exits the worker goroutine.
 func MapWithErrors[T any, T2 any](items []T, fn func(T) (T2, error)) ([]T2, error) {
-	return MapWithErrorsI(items, func(t T, _ int) (T2, error) { return fn(t) })
-}
-
-// MapWithErrorsI is same as map with errros but it gives you the index
-func MapWithErrorsI[T any, T2 any](items []T, fn func(T, int) (T2, error)) ([]T2, error) {
 	if len(items) == 0 {
 		return []T2{}, nil
 	}
@@ -53,8 +48,8 @@ func MapWithErrorsI[T any, T2 any](items []T, fn func(T, int) (T2, error)) ([]T2
 		err   error
 	}
 
-	mapped := lop.Map(items, func(item T, i int) result {
-		value, err := fn(item, i)
+	mapped := lop.Map(items, func(item T, _ int) result {
+		value, err := fn(item)
 		return result{value: value, err: err}
 	})
 

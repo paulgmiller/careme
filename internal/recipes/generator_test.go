@@ -1548,3 +1548,12 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 		})
 	}
 }
+
+func (noopstatuswriter) Decision(context.Context, string, int, int) (bool, error) { return false, nil }
+func (noopstatuswriter) ReplaceSlot(context.Context, string, int, int, ai.RecipePlan) error {
+	return nil
+}
+
+func (noopstatuswriter) FinishSlot(context.Context, string, int, int, string) (bool, error) {
+	return true, nil
+}

@@ -205,6 +205,19 @@ hx-sync="this:drop"
 {{end}}
 
 {{define "shopping_recipe_actions"}}
+{{if .Replacing}}
+<p class="text-sm text-ink-600" role="status">Finding another meal…</p>
+{{else if .ReplaceURL}}
+<form method="post" action="{{.ReplaceURL}}"
+      hx-post="{{.ReplaceURL}}" hx-target="#shopping-content" hx-swap="outerHTML"
+      hx-sync="#shopping-content:replace" hx-disabled-elt="find button">
+  <input type="hidden" name="revision" value="{{.Revision}}">
+  <button type="submit"
+          class="inline-flex items-center justify-center rounded-lg border-2 border-action-red-500 bg-action-red-50 px-4 py-2 text-sm font-medium text-action-red-700 transition hover:bg-action-red-100 focus:outline-none focus:ring-2 focus:ring-action-red-300 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70">
+    Replace
+  </button>
+</form>
+{{end}}
 {{if .Ready}}
 <div class="shopping-recipe-actions flex flex-wrap items-center gap-3">
   {{if .Dismissed}}
