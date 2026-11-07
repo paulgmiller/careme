@@ -285,6 +285,16 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - Recipes asks a provider-owned view builder for the authenticated viewer’s saved handoff; it never reads provider cache keys or OAuth records directly. Its shopping-list form uses a native POST to the destination's [cart-transfer route](ordering.md). The provider handler redirects directly into OAuth when needed, redirects completed additions back to the shopping list, and returns HTTP errors when no outcome can be saved. The shopping list renders a cart link for completed or possibly applied writes, shows a failure label for failed transfers, retains its form for missing records, and fails on transfer-read errors. It has no browser transfer-status URL, polling, or connect-account control. The handler reads the single saved transfer. A failed final save leaves it pending; concurrent overwrites are not protected until ETag support is implemented.
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger uses the provider-specific transfer layout above.
 
+Kroger query optimization (#927): the seven staples searches replace the
+older ten-search configuration. The existing JSON staple-definition signature
+changes automatically, invalidating store catalogs and dependent recipe hashes
+without changing the `ingredients/` prefix or `item-upc-v1/` marker. Search
+signatures include the API-side brand-filter flag, so changing that retrieval
+policy also invalidates catalogs. Inventory
+refreshes on the next fetch; finalized shopping snapshots are preserved. The
+`cmd/ingredients -optimize-staples` study uses only its explicitly supplied local
+directory for query snapshots and grading and does not publish store inventory.
+
 Kroger selected item identity (#1045): store catalog signatures include
 `item-upc-v1/` before the staple definitions, refreshing staples and pantry
 snapshots. Wine candidate keys use `wines/`; wine recommendations retain
