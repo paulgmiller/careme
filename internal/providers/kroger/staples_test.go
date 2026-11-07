@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/kroger/products"
 
@@ -95,7 +96,7 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	got, err := searchIngredients(t.Context(), client, "70500874", "pork", []string{"*"}, false, 0)
+	got, err := searchIngredients(t.Context(), client, "70500874", "pork", []string{"*"}, false)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.Equal(t, int32(3), calls.Load())
@@ -245,7 +246,7 @@ func TestSearchIngredientsSelectsItemByInventory(t *testing.T) {
 				return cartResponse(http.StatusOK, string(body)), nil
 			})}))
 			require.NoError(t, err)
-			got, err := searchIngredients(t.Context(), client, "70500874", "food", []string{"*"}, false, 0)
+			got, err := searchIngredients(t.Context(), client, "70500874", "food", []string{"*"}, false)
 			require.NoError(t, err)
 			if tc.want == "" {
 				assert.Empty(t, got)
@@ -258,6 +259,86 @@ func TestSearchIngredientsSelectsItemByInventory(t *testing.T) {
 			assert.Equal(t, tc.want+" size", selected.Size)
 			assert.Equal(t, float32(4), *selected.PriceRegular)
 			assert.Equal(t, float32(3), *selected.PriceSale)
+		})
+	}
+}
+
+func TestStaplesBroadMeatSearchIncludesSausageAndFrozenSeafoodAcrossBrands(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	var filteredDairyCalls int
+	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(&http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		term := req.URL.Query().Get("filter.term")
+		mu.Lock()
+		terms = append(terms, term)
+		mu.Unlock()
+		if term == "Dairy & Eggs" && req.URL.Query().Has("filter.brand") {
+			mu.Lock()
+			filteredDairyCalls++
+			mu.Unlock()
+			assert.Equal(t, "Simple Truth Organic|Kroger|Simple Truth", req.URL.Query().Get("filter.brand"))
+		} else {
+			assert.NotContains(t, req.URL.Query(), "filter.brand")
+		}
+		if term != "Meat & Seafood" {
+			return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"data":[
+   {"productId":"italian","brand":"Isernio's","description":"Mild Italian Sausage","categories":["Meat & Seafood"],"items":[{"itemId":"italian-upc","price":{"regular":5},"inventory":{"stockLevel":"HIGH"}}]},
+   {"productId":"shrimp","brand":"Other Seafood","description":"Raw frozen shrimp","categories":["Frozen","Meat & Seafood"],"items":[{"itemId":"shrimp-upc","price":{"regular":8},"inventory":{"stockLevel":"LOW"}}]},
+   {"productId":"country","brand":"Kroger","description":"Country sausage","categories":["Meat & Seafood"],"items":[{"itemId":"country-upc","price":{"regular":5},"inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}}]}
+  ]}`), nil
+	})}))
+	require.NoError(t, err)
+	rows, err := (staplesProvider{client: client}).FetchStaples(t.Context(), "70500874")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "italian", rows[0].ProductID)
+	assert.Equal(t, "italian-upc", rows[0].VariantID)
+	assert.Equal(t, "shrimp", rows[1].ProductID)
+	assert.Equal(t, "shrimp-upc", rows[1].VariantID)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Len(t, terms, 7)
+	assert.Equal(t, 1, filteredDairyCalls)
+	assert.Contains(t, terms, "fresh vegetables")
+	assert.Contains(t, terms, "fresh fruit")
+}
+
+func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
+	var page []products.ProductsProductModel
+	for range 50 {
+		page = append(page, products.ProductsProductModel{ProductId: new("food"), Description: new("Food"), Categories: new([]string{"Produce"}), Items: new([]products.ProductsProductItemModel{{ItemId: new("food-upc"), Price: &products.ProductsProductItemPriceModel{Regular: new(float32(2))}}})})
+	}
+	body, err := json.Marshal(map[string]any{"data": page})
+	require.NoError(t, err)
+	for _, tc := range []struct{ name, term string }{{"staples", "fresh vegetables"}, {"pantry", "spices"}, {"wines", "red"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(&http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				assert.Equal(t, "70500874", req.URL.Query().Get("filter.locationId"))
+				if req.URL.Query().Get("filter.term") != tc.term {
+					return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
+				}
+				if req.URL.Query().Get("filter.start") == "0" {
+					return jsonResponse(req, http.StatusOK, string(body)), nil
+				}
+				assert.Equal(t, "50", req.URL.Query().Get("filter.start"))
+				return jsonResponse(req, http.StatusBadRequest, `{"errors":{"reason":"page failed"}}`), nil
+			})}))
+			require.NoError(t, err)
+			provider := staplesProvider{client: client}
+			var rows []ai.InputIngredient
+			switch tc.name {
+			case "staples":
+				rows, err = provider.FetchStaples(t.Context(), "70500874")
+			case "pantry":
+				rows, err = provider.FetchPantry(t.Context(), "70500874")
+			case "wines":
+				rows, err = provider.FetchWines(t.Context(), "70500874", []string{"red"})
+			}
+			require.ErrorContains(t, err, "offset 50")
+			assert.ErrorContains(t, err, "page failed")
+			assert.Empty(t, rows)
 		})
 	}
 }
