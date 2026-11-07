@@ -12,6 +12,8 @@ import (
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/recipes"
+
+	"github.com/samber/lo"
 )
 
 type server struct {
@@ -36,14 +38,14 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if locationID == "" {
 
-		w.Write([]byte(`<!doctype html>
+		lo.Must(w.Write([]byte(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grade Stores/title>
 </head>
-<body>`))
+<body>`)))
 
 		for _, locationID := range recipes.StaplesWatchdogLocationIDs() {
 			l, err := s.store.locations.GetLocationByID(ctx, locationID)
@@ -52,10 +54,10 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			locLine := `<a href="/grade?location=` + locationID + `">` + l.Name + `</a><br />`
-			w.Write([]byte(locLine))
+			lo.Must(w.Write([]byte(locLine)))
 		}
-		w.Write([]byte(`</body>
-	</html>`))
+		lo.Must(w.Write([]byte(`</body>
+	</html>`)))
 	}
 
 	location, candidate, err := s.store.Next(r.Context(), locationID)
