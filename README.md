@@ -348,78 +348,7 @@ may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
 
-### Investigating Kroger product variants
-
-Compare raw in-store API results with the staples catalog, without AI grading or
-ingredient caches (requires only Kroger provider credentials):
-
-```sh
-go run ./cmd/ingredients -location 70500874 \
-  -kroger-search "sausage" -kroger-search "ground pork" \
-  -kroger-search "mild italian" -kroger-search "country pork" > /tmp/kroger-inspection.json
-```
-
-Replace the location ID with your store. Repeat `-kroger-search` for each term.
-The JSON includes the production staples search terms and brand filters, raw
-products with all item UPCs, sizes, prices and stock levels, and matching staples
-rows before product-ID deduplication. Raw searches still request in-store
-fulfillment and use the production search window (50 results per page, offsets
-0 through 250); they bypass frozen, price and stock filtering. Brands are
-unrestricted unless `-kroger-brands` is supplied. This sends a pipe-separated,
-case-sensitive brand list to the API before pagination:
-
-```sh
-go run ./cmd/ingredients -location 70500874 -kroger-search "Meat & Seafood" \
-  -kroger-brands 'Kroger|Simple Truth|Foster Farms|Draper Valley|PORK|Harris Teeter|Sand Bar'
-```
-
-The report records the requested brands for each diagnostic search. The
-production staples comparison still uses its own configured search filters.
-
-Compare `productId` and `items[].itemId` across descriptions. A product absent
-from `matchingStaplesBeforeDeduplication` was not emitted by the staples backend:
-check the configured search terms, brands, Frozen category, prices and stock.
-The backend selects one priced item per product, excluding temporarily
-out-of-stock items and preferring HIGH stock, then LOW, then unknown stock.
-The shared catalog then keeps only the first row for each product ID. Repeated
-IDs with different descriptions or item UPCs in the report expose that loss.
-
-### Comparing staples score and query cost
-
-Run a repeatable, graded Kroger query study:
-
-```sh
-go run ./cmd/ingredients -location 70500874 \
-  -optimize-staples /tmp/qfc-staples-study -staples-request-budget 39 \
-  > /tmp/qfc-staples-report.json
-```
-
-This explicitly enables real ingredient grading and requires Kroger credentials
-and `AI_API_KEY`. The directory stores the starting query configuration, query
-snapshots, a private grade cache, `graded.json`, and `report.json`. Rerunning with
-the same directory reuses those snapshots and grades; use a new directory for a
-fresh inventory sample. Nothing writes the production ingredient catalog.
-
-The app's produce score is the sum of unique products' grades above 6, divided
-by 100 with integer truncation. The report records the unrounded grade points
-as well, so small gains remain visible. It counts actual product API requests,
-including pagination and retries, and deduplicates products before grading.
-`optimalUnderBudget` gives the exact highest grade-point coverage among the
-measured candidates within `-staples-request-budget` (default 39, strictly below
-40). `requestFrontier` contains the exact best plans at each improving request
-cost up to that budget, computed together in one subset search. It does not
-limit search count. Ties prefer fewer API requests, then fewer
-searches. The subset search drops dominated queries and may take longer with
-large candidate sets. `greedyFrontier` remains available as a quick comparison;
-`searches` entries index the report's `queries` array.
-
-Pass `-staples-candidates /tmp/candidates.json` to replace the experimental
-queries with a JSON array of `{ "term": "Meat & Seafood", "brands": ["Kroger"],
-"frozen": true, "apiBrands": true }` objects. Without `apiBrands`, the supplied
-brands are screened locally to reproduce older production queries. Use
-`"brands": ["*"]` for all brands. Production defaults remain the baseline at
-the start of a new study. See [the QFC study](docs/kroger-staples-study.md) for
-the QFC and Fred Meyer measurements behind the current seven searches.
+See [Kroger staples diagnostics and query study](docs/kroger-staples-study.md) for catalog inspection and query optimization.
 
 ### Local Yokels ingredients
 

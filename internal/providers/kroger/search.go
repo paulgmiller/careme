@@ -9,7 +9,9 @@ import (
 	"careme/internal/providers/kroger/products"
 )
 
-func (p staplesProvider) searchProducts(ctx context.Context, locationID, term string, brands []string) ([]products.ProductsProductModel, error) {
+// SearchProducts returns in-store API products with every item variant intact.
+// Brands are filtered on the API before pagination; an empty list accepts all brands.
+func (p staplesProvider) SearchProducts(ctx context.Context, locationID, term string, brands []string) ([]products.ProductsProductModel, error) {
 	const limit = 50
 	var brandFilter *string
 	if len(brands) > 0 {
@@ -43,7 +45,7 @@ func (p staplesProvider) searchProducts(ctx context.Context, locationID, term st
 // StaplesSearch describes a production or experimental staples query. APIBrands
 // filters brands before pagination; otherwise Brands is applied locally.
 type StaplesSearch struct {
-	Term      string   `json:"term"`
+	Term      string   `json:"term,omitempty"`
 	Brands    []string `json:"brands,omitempty"`
 	Frozen    bool     `json:"frozen,omitempty"`
 	APIBrands bool     `json:"apiBrands,omitempty"`
@@ -51,11 +53,7 @@ type StaplesSearch struct {
 
 // DefaultStaplesSearches returns the current production searches for comparison.
 func DefaultStaplesSearches() []StaplesSearch {
-	searches := make([]StaplesSearch, 0, len(defaultStaples()))
-	for _, filter := range defaultStaples() {
-		searches = append(searches, StaplesSearch(filter))
-	}
-	return searches
+	return defaultStaples()
 }
 
 // SearchStaples evaluates one query using the same item selection as production.
@@ -67,7 +65,7 @@ func (p staplesProvider) SearchStaples(ctx context.Context, locationID string, s
 		brands = search.Brands
 		localBrands = []string{"*"}
 	}
-	rows, err := p.searchProducts(ctx, locationID, search.Term, brands)
+	rows, err := p.SearchProducts(ctx, locationID, search.Term, brands)
 	if err != nil {
 		return nil, err
 	}

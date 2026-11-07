@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 
@@ -16,7 +14,6 @@ import (
 	"careme/internal/config"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/providerregistry"
-	"careme/internal/providers/kroger"
 	"careme/internal/recipes"
 
 	"github.com/samber/lo"
@@ -163,38 +160,4 @@ func priceString(price *float32) string {
 		return "-"
 	}
 	return fmt.Sprintf("%.2f", *price)
-}
-
-func inspectKroger(ctx context.Context, location string, terms []string, searchBrands string) error {
-	cfg, err := config.LoadOnlyProviders()
-	if err != nil {
-		return fmt.Errorf("load provider configuration: %w", err)
-	}
-	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-		return fmt.Errorf("kroger inspection requires KROGER_CLIENT_ID and KROGER_CLIENT_SECRET")
-	}
-	provider, err := kroger.NewStaplesProvider(cfg, http.DefaultClient)
-	if err != nil {
-		return err
-	}
-	if !provider.IsID(location) {
-		return fmt.Errorf("kroger inspection requires a numeric Kroger location ID")
-	}
-	report, err := provider.InspectStaples(ctx, location, terms, splitBrands(searchBrands))
-	if err != nil {
-		return err
-	}
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(report)
-}
-
-func splitBrands(value string) []string {
-	var brands []string
-	for brand := range strings.SplitSeq(value, "|") {
-		if brand = strings.TrimSpace(brand); brand != "" {
-			brands = append(brands, brand)
-		}
-	}
-	return brands
 }

@@ -22,13 +22,6 @@ import (
 
 var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
 
-type staplesFilter struct {
-	Term      string   `json:"term,omitempty"`
-	Brands    []string `json:"brands,omitempty"`
-	Frozen    bool     `json:"frozen,omitempty"`
-	APIBrands bool     `json:"apiBrands,omitempty"`
-}
-
 type identityProvider struct{}
 
 func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
@@ -67,8 +60,8 @@ func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*staplesPr
 }
 
 func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
-		ingredients, err := p.SearchStaples(ctx, locationID, StaplesSearch(category))
+	return parallelism.Flatten(defaultStaples(), func(category StaplesSearch) ([]ai.InputIngredient, error) {
+		ingredients, err := p.SearchStaples(ctx, locationID, category)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
 			return nil, err
@@ -80,7 +73,7 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 
 // FetchPantry returns the separate pantry catalog used for meal-plan retrieval.
 func (p staplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(pantryFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
+	return parallelism.Flatten(pantryFilters(), func(category StaplesSearch) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, false)
 		if err != nil {
 			return nil, err
@@ -99,7 +92,7 @@ func (p staplesProvider) FetchPantry(ctx context.Context, locationID string) ([]
 
 // PantryCategories returns the search terms used to source pantry products.
 func PantryCategories() []string {
-	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
+	return lo.Map(pantryFilters(), func(filter StaplesSearch, _ int) string { return filter.Term })
 }
 
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
@@ -115,7 +108,7 @@ func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styl
 var availableInStore = products.Ais
 
 func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool) ([]ingredient, error) {
-	rows, err := (staplesProvider{client: client}).searchProducts(ctx, locationID, term, nil)
+	rows, err := (staplesProvider{client: client}).SearchProducts(ctx, locationID, term, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -166,10 +159,10 @@ func clonePrice(price *float32) *float32 {
 	return &value
 }
 
-func defaultStaples() []staplesFilter {
+func defaultStaples() []StaplesSearch {
 	// Measured at QFC 70500874 and Fred Meyer 70100023: these searches improve
 	// ingredient-grade coverage using 39 product API requests at each store.
-	return append(produceFilters(), []staplesFilter{
+	return append(produceFilters(), []StaplesSearch{
 		{Term: "Meat & Seafood", Brands: []string{"*"}, Frozen: true},
 		{Term: "Seafood", Brands: []string{"*"}},
 		{Term: "Beans", Brands: []string{"*"}},
@@ -180,8 +173,8 @@ func defaultStaples() []staplesFilter {
 	}...)
 }
 
-func pantryFilters() []staplesFilter {
-	return []staplesFilter{
+func pantryFilters() []StaplesSearch {
+	return []StaplesSearch{
 		{Term: "spices", Brands: []string{"*"}},
 		{Term: "dairy", Brands: []string{"*"}},
 		{Term: "international", Brands: []string{"*"}},
@@ -189,8 +182,8 @@ func pantryFilters() []staplesFilter {
 	}
 }
 
-func produceFilters() []staplesFilter {
-	return []staplesFilter{
+func produceFilters() []StaplesSearch {
+	return []StaplesSearch{
 		{
 			Term:   "fresh vegetables",
 			Brands: []string{"*"},

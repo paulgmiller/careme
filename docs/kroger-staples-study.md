@@ -115,6 +115,84 @@ A 30–40 request budget is a reasonable tradeoff for these samples; the selecte
 budget. Larger budgets still add useful products, so 39 is not a saturation
 point or a proven universal optimum.
 
+## Running diagnostics
+
+### Inspect products and variants
+
+Compare raw in-store API results with the staples catalog, without grading or
+ingredient caches. Only Kroger provider credentials are required:
+
+```sh
+go run ./cmd/ingredients -location 70500874 \
+  -kroger-search "sausage" -kroger-search "ground pork" \
+  -kroger-search "mild italian" -kroger-search "country pork" > /tmp/kroger-inspection.json
+```
+
+Replace the location ID with your store and repeat `-kroger-search` for each
+term. The JSON includes production search filters, raw products with every item
+UPC, size, price and stock level, and matching staples rows before product-ID
+deduplication. Raw searches request in-store fulfillment and page through
+offsets 0–250 in batches of 50. They bypass frozen, price and stock filtering.
+
+To filter brands on the API before pagination, supply a case-sensitive,
+pipe-separated list:
+
+```sh
+go run ./cmd/ingredients -location 70500874 -kroger-search "Meat & Seafood" \
+  -kroger-brands 'Kroger|Simple Truth|Foster Farms|Draper Valley|PORK|Harris Teeter|Sand Bar'
+```
+
+The report records these diagnostic brands separately from the production
+staples filters. Without `-kroger-brands`, diagnostic searches accept all brands.
+Compare `productId` and `items[].itemId` across descriptions. A product absent
+from `matchingStaplesBeforeDeduplication` was not emitted by the staples backend;
+check search terms, brands, frozen categories, prices and stock. Repeated IDs
+with different descriptions or UPCs in those rows expose what the shared
+catalog's first-row-per-product-ID deduplication discards.
+
+### Compare score and request cost
+
+Run a graded query study with a measured product API request budget:
+
+```sh
+go run ./cmd/ingredients -location 70500874 \
+  -optimize-staples /tmp/qfc-staples-study -staples-request-budget 39 \
+  > /tmp/qfc-staples-report.json
+```
+
+This explicitly enables real ingredient grading and requires Kroger credentials
+and `AI_API_KEY`. The study directory stores the starting query configuration,
+query snapshots, a private grade cache, `graded.json`, and `report.json`.
+Rerunning with that directory reuses its snapshots and grades; use a new
+directory for a fresh inventory sample. Studies do not write production
+ingredient catalogs.
+
+The report includes unrounded grade points, product counts, and product API
+request counts including pagination and retries. `optimalUnderBudget` is the
+best plan within the supplied budget (default 39). `requestFrontier` contains
+the exact best plans at each improving request cost; `greedyFrontier` provides
+a heuristic comparison. Each plan's `searches` entries index the report's
+`queries` array. Larger candidate sets can make the exact subset search slower.
+
+Pass `-staples-candidates /tmp/candidates.json` to replace the experimental
+queries with a JSON array, for example:
+
+```json
+[
+  {
+    "term": "Meat & Seafood",
+    "brands": ["Kroger"],
+    "frozen": true,
+    "apiBrands": true
+  }
+]
+```
+
+`apiBrands` applies the brand filter before pagination. Without it, brands are
+screened locally to reproduce older production queries. Use `"brands": ["*"]`
+for all brands. The production defaults at the start of a new study form its
+baseline; later changes to defaults do not replace a saved baseline.
+
 ## Limits and reruns
 
 The API's 300-result window still limits broad searches. Query combinations do
