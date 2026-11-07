@@ -348,6 +348,8 @@ may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
 
+See [Kroger staples diagnostics and query study](docs/kroger-staples-study.md) for catalog inspection and query optimization.
+
 ### Local Yokels ingredients
 
 Local Yokels Market uses the public Local Food Marketplace storefront at

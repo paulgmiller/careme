@@ -21,7 +21,7 @@ func TestSelectedCatalogItemUPCReachesCart(t *testing.T) {
 	})}
 	catalogClient, err := products.NewClientWithResponses(krogerAPIOrigin, products.WithHTTPClient(client))
 	require.NoError(t, err)
-	rows, err := searchIngredients(t.Context(), catalogClient, "70500874", "milk", []string{"*"}, false, 0)
+	rows, err := searchIngredients(t.Context(), catalogClient, "70500874", "milk", false)
 	require.NoError(t, err)
 	catalog := lo.UniqBy(lo.Map(rows, inputIngredientFromKrogerIngredient), func(i ai.InputIngredient) string { return i.ProductID })
 	require.Len(t, catalog, 1)
