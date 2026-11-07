@@ -2,6 +2,7 @@ package kroger
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -96,7 +97,7 @@ func TestSearchIngredients_RetriesTransientProductFailures(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	got, err := searchIngredients(t.Context(), client, "70500874", "pork", []string{"*"}, false)
+	got, err := searchIngredients(t.Context(), client, "70500874", "pork", false)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.Equal(t, int32(3), calls.Load())
@@ -246,7 +247,7 @@ func TestSearchIngredientsSelectsItemByInventory(t *testing.T) {
 				return cartResponse(http.StatusOK, string(body)), nil
 			})}))
 			require.NoError(t, err)
-			got, err := searchIngredients(t.Context(), client, "70500874", "food", []string{"*"}, false)
+			got, err := searchIngredients(t.Context(), client, "70500874", "food", false)
 			require.NoError(t, err)
 			if tc.want == "" {
 				assert.Empty(t, got)
@@ -263,46 +264,47 @@ func TestSearchIngredientsSelectsItemByInventory(t *testing.T) {
 	}
 }
 
-func TestStaplesBroadMeatSearchIncludesSausageAndFrozenSeafoodAcrossBrands(t *testing.T) {
+func TestStaplesKeepsStarchesAndAllowsFrozenShellfishOnly(t *testing.T) {
 	var mu sync.Mutex
 	var terms []string
-	var filteredDairyCalls int
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(&http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		term := req.URL.Query().Get("filter.term")
 		mu.Lock()
 		terms = append(terms, term)
 		mu.Unlock()
-		if term == "Dairy & Eggs" && req.URL.Query().Has("filter.brand") {
-			mu.Lock()
-			filteredDairyCalls++
-			mu.Unlock()
-			assert.Equal(t, "Simple Truth Organic|Kroger|Simple Truth", req.URL.Query().Get("filter.brand"))
-		} else {
-			assert.NotContains(t, req.URL.Query(), "filter.brand")
+		assert.NotContains(t, req.URL.Query(), "filter.brand")
+		var body string
+		switch term {
+		case "Meat & Seafood":
+			body = `{"data":[
+   {"productId":"italian","brand":"Isernio's","description":"Mild Italian Sausage","categories":["Meat & Seafood"],"items":[{"itemId":"italian-upc","price":{"regular":5}}]},
+   {"productId":"salmon","description":"Frozen salmon fillets","categories":["Meat & Seafood"],"items":[{"itemId":"salmon-upc","price":{"regular":8}}]}
+  ]}`
+		case "shellfish":
+			body = `{"data":[{"productId":"shrimp","description":"Frozen raw shrimp","categories":["Frozen"],"items":[{"itemId":"shrimp-upc","price":{"regular":8}}]}]}`
+		case "grains":
+			body = `{"data":[{"productId":"rice","description":"Brown rice","categories":["Grains"],"items":[{"itemId":"rice-upc","price":{"regular":3}}]}]}`
+		case "pasta":
+			body = `{"data":[{"productId":"pasta","description":"Spaghetti","categories":["Pasta"],"items":[{"itemId":"pasta-upc","price":{"regular":2}}]}]}`
+		default:
+			body = `{"data":[]}`
 		}
-		if term != "Meat & Seafood" {
-			return jsonResponse(req, http.StatusOK, `{"data":[]}`), nil
-		}
-		return jsonResponse(req, http.StatusOK, `{"data":[
-   {"productId":"italian","brand":"Isernio's","description":"Mild Italian Sausage","categories":["Meat & Seafood"],"items":[{"itemId":"italian-upc","price":{"regular":5},"inventory":{"stockLevel":"HIGH"}}]},
-   {"productId":"shrimp","brand":"Other Seafood","description":"Raw frozen shrimp","categories":["Frozen","Meat & Seafood"],"items":[{"itemId":"shrimp-upc","price":{"regular":8},"inventory":{"stockLevel":"LOW"}}]},
-   {"productId":"country","brand":"Kroger","description":"Country sausage","categories":["Meat & Seafood"],"items":[{"itemId":"country-upc","price":{"regular":5},"inventory":{"stockLevel":"TEMPORARILY_OUT_OF_STOCK"}}]}
-  ]}`), nil
+		return jsonResponse(req, http.StatusOK, body), nil
 	})}))
 	require.NoError(t, err)
 	rows, err := (staplesProvider{client: client}).FetchStaples(t.Context(), "70500874")
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	assert.Equal(t, "italian", rows[0].ProductID)
-	assert.Equal(t, "italian-upc", rows[0].VariantID)
-	assert.Equal(t, "shrimp", rows[1].ProductID)
-	assert.Equal(t, "shrimp-upc", rows[1].VariantID)
+	var ids []string
+	for _, row := range rows {
+		ids = append(ids, row.ProductID)
+		assert.Equal(t, row.ProductID+"-upc", row.VariantID)
+	}
+	assert.ElementsMatch(t, []string{"italian", "shrimp", "rice", "pasta"}, ids)
 	mu.Lock()
 	defer mu.Unlock()
-	assert.Len(t, terms, 7)
-	assert.Equal(t, 1, filteredDairyCalls)
-	assert.Contains(t, terms, "fresh vegetables")
-	assert.Contains(t, terms, "fresh fruit")
+	assert.ElementsMatch(t, []string{"fresh vegetables", "fresh produce", "beef", "chicken", "fish", "pork", "shellfish", "lamb", "grains", "pasta", "Meat & Seafood", "Dairy & Eggs"}, terms)
+	assert.Contains(t, terms, "grains")
+	assert.Contains(t, terms, "pasta")
 }
 
 func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
@@ -339,6 +341,71 @@ func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
 			require.ErrorContains(t, err, "offset 50")
 			assert.ErrorContains(t, err, "page failed")
 			assert.Empty(t, rows)
+		})
+	}
+}
+
+func TestSearchProductsPagination(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		second  string
+		status  int
+		wantErr string
+	}{
+		{"success", `{"data":[{"productId":"last"}]}`, http.StatusOK, ""},
+		{"later failure", `{"errors":{"reason":"failed"}}`, http.StatusBadRequest, "offset 50"},
+		{"missing data", `{}`, http.StatusOK, "missing product data"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(&http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				assert.NotContains(t, req.URL.Query(), "filter.brand")
+				if calls == 1 {
+					assert.Equal(t, "0", req.URL.Query().Get("filter.start"))
+					body := `{"data":[`
+					for i := 0; i < 50; i++ {
+						if i > 0 {
+							body += ","
+						}
+						body += fmt.Sprintf(`{"productId":"%d"}`, i)
+					}
+					return jsonResponse(req, http.StatusOK, body+`]}`), nil
+				}
+				assert.Equal(t, "50", req.URL.Query().Get("filter.start"))
+				return jsonResponse(req, tc.status, tc.second), nil
+			})}))
+			require.NoError(t, err)
+			rows, err := (staplesProvider{client: client}).SearchProducts(t.Context(), "store", "pork")
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				assert.Nil(t, rows)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, rows, 51)
+				assert.Equal(t, "last", *rows[50].ProductId)
+			}
+			assert.Equal(t, 2, calls)
+		})
+	}
+}
+
+func TestFrozenProductDetection(t *testing.T) {
+	for _, tc := range []struct {
+		name, description string
+		categories        []string
+		want              bool
+	}{
+		{"category", "Salmon fillets", []string{"Frozen"}, true},
+		{"missing category", "Kroger Wild Caught Cod Fillets Frozen BIG DEAL!", []string{"Meat & Seafood"}, true},
+		{"frozen prefix", "Frozen salmon fillets", []string{"Meat & Seafood"}, true},
+		{"counter thawed", "Sockeye salmon fillet (Previously Frozen)", []string{"Meat & Seafood"}, false},
+		{"never frozen", "Fresh Atlantic salmon (never frozen sustainably sourced)", []string{"Meat & Seafood"}, false},
+		{"hyphenated never frozen", "Never-frozen salmon", []string{"Meat & Seafood"}, false},
+		{"fresh", "Fresh Pacific cod fillet", []string{"Meat & Seafood"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isFrozenProduct(products.ProductsProductModel{Description: new(tc.description), Categories: &tc.categories}))
 		})
 	}
 }

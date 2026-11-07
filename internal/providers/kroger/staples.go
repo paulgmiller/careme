@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"careme/internal/ai"
 	"careme/internal/config"
@@ -21,6 +22,11 @@ import (
 )
 
 var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
+
+type staplesFilter struct {
+	Term   string `json:"term,omitempty"`
+	Frozen bool   `json:"frozen,omitempty"`
+}
 
 type identityProvider struct{}
 
@@ -60,21 +66,21 @@ func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*staplesPr
 }
 
 func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(defaultStaples(), func(category StaplesSearch) ([]ai.InputIngredient, error) {
-		ingredients, err := p.SearchStaples(ctx, locationID, category)
+	return parallelism.Flatten(defaultStaples(), func(category staplesFilter) ([]ai.InputIngredient, error) {
+		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Frozen)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to fetch category", "category", category.Term, "location", locationID, "error", err)
 			return nil, err
 		}
 		slog.InfoContext(ctx, "Found ingredients for category", "count", len(ingredients), "category", category.Term, "location", locationID)
-		return ingredients, nil
+		return lo.Map(ingredients, inputIngredientFromKrogerIngredient), nil
 	})
 }
 
 // FetchPantry returns the separate pantry catalog used for meal-plan retrieval.
 func (p staplesProvider) FetchPantry(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
-	return parallelism.Flatten(pantryFilters(), func(category StaplesSearch) ([]ai.InputIngredient, error) {
-		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, category.Brands, false)
+	return parallelism.Flatten(pantryFilters(), func(category staplesFilter) ([]ai.InputIngredient, error) {
+		ingredients, err := searchIngredients(ctx, p.client, locationID, category.Term, false)
 		if err != nil {
 			return nil, err
 		}
@@ -92,12 +98,12 @@ func (p staplesProvider) FetchPantry(ctx context.Context, locationID string) ([]
 
 // PantryCategories returns the search terms used to source pantry products.
 func PantryCategories() []string {
-	return lo.Map(pantryFilters(), func(filter StaplesSearch, _ int) string { return filter.Term })
+	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
 }
 
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
-		ingredients, err := searchIngredients(ctx, p.client, locationID, style, []string{"*"}, false)
+		ingredients, err := searchIngredients(ctx, p.client, locationID, style, false)
 		if err != nil {
 			return nil, err
 		}
@@ -107,12 +113,108 @@ func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styl
 
 var availableInStore = products.Ais
 
-func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, brands []string, frozen bool) ([]ingredient, error) {
-	rows, err := (staplesProvider{client: client}).SearchProducts(ctx, locationID, term, nil)
+func searchIngredients(ctx context.Context, client *products.ClientWithResponses, locationID, term string, frozen bool) ([]ingredient, error) {
+	rows, err := (staplesProvider{client: client}).SearchProducts(ctx, locationID, term)
 	if err != nil {
 		return nil, err
 	}
-	return ingredientsFromProducts(rows, brands, frozen), nil
+
+	var ingredients []ingredient
+
+	for _, product := range rows {
+		if !frozen && isFrozenProduct(product) {
+			continue
+		}
+		// TODO(#1051): Revisit size-based selection as an alternative to inventory ranking.
+		var selected *products.ProductsProductItemModel
+		for _, item := range *product.Items {
+			if item.Price == nil {
+				continue
+			}
+			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
+				continue
+			}
+			if selected == nil || itemStockRank(item) > itemStockRank(*selected) {
+				selected = &item
+			}
+		}
+		if selected == nil {
+			continue
+		}
+		var aisle *string
+		if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
+			aisle = (*product.AisleLocations)[0].Number
+		}
+		ingredients = append(ingredients, ingredient{
+			ProductId:    product.ProductId,
+			ItemId:       selected.ItemId,
+			Brand:        product.Brand,
+			Description:  product.Description,
+			Size:         selected.Size,
+			PriceRegular: selected.Price.Regular,
+			PriceSale:    selected.Price.Promo,
+			Categories:   product.Categories,
+			AisleNumber:  aisle,
+		})
+
+		//DO we care about these?
+		/*"taxonomies": [
+		{
+		"department": {},
+		"commodity": {},
+		"subCommodity": {}
+		}
+		],*/
+		//Taxonomy:  product.,
+		// CountryOrigin: product.CountryOrigin,
+		// Favorite: item.Favorite,
+	}
+
+	return ingredients, nil
+}
+
+// SearchProducts returns in-store API products with every item variant intact.
+// It shares pagination with the ingredient command and never filters brands.
+func (p staplesProvider) SearchProducts(ctx context.Context, locationID, term string) ([]products.ProductsProductModel, error) {
+	const limit = 50
+	var matches []products.ProductsProductModel
+	// Kroger allows page starts through 250 with 50 products per request.
+	for start := 0; start <= 250; start += limit {
+		response, err := p.client.ProductGetWithResponse(ctx, &products.ProductGetParams{
+			FilterLocationId: &locationID, FilterTerm: &term,
+			FilterLimit: new(limit), FilterStart: &start, FilterFulfillment: &availableInStore,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("kroger product search %q at offset %d: %w", term, start, err)
+		}
+		if err := requireSuccess(response.StatusCode(), productSearchErrorPayload(response)); err != nil {
+			return nil, fmt.Errorf("kroger product search %q at offset %d: %w", term, start, err)
+		}
+		if response.JSON200 == nil || response.JSON200.Data == nil {
+			return nil, fmt.Errorf("kroger product search %q at offset %d: missing product data", term, start)
+		}
+		page := *response.JSON200.Data
+		matches = append(matches, page...)
+		if len(page) < limit {
+			break
+		}
+	}
+	return matches, nil
+}
+
+// isFrozenProduct also checks descriptions because Kroger omits the Frozen
+// category on some frozen fillets. Previously frozen counter items are thawed.
+func isFrozenProduct(product products.ProductsProductModel) bool {
+	if slices.Contains(*product.Categories, "Frozen") {
+		return true
+	}
+	words := strings.FieldsFunc(strings.ToLower(toStr(product.Description)), func(r rune) bool { return !unicode.IsLetter(r) })
+	for i, word := range words {
+		if word == "frozen" && (i == 0 || (words[i-1] != "previously" && words[i-1] != "never")) {
+			return true
+		}
+	}
+	return false
 }
 
 // itemStockRank prefers HIGH, then LOW, then unknown stock. Equal ranks retain API order.
@@ -159,38 +261,54 @@ func clonePrice(price *float32) *float32 {
 	return &value
 }
 
-func defaultStaples() []StaplesSearch {
-	// Measured at QFC 70500874 and Fred Meyer 70100023: these searches improve
-	// ingredient-grade coverage using 39 product API requests at each store.
-	return append(produceFilters(), []StaplesSearch{
-		{Term: "Meat & Seafood", Brands: []string{"*"}, Frozen: true},
-		{Term: "Seafood", Brands: []string{"*"}},
-		{Term: "Beans", Brands: []string{"*"}},
-		{Term: "Dairy & Eggs", Brands: []string{"*"}},
-		// The filtered search retrieves useful products outside the broad search's
-		// first 300 results. It supplements, rather than restricts, all-brand coverage.
-		{Term: "Dairy & Eggs", Brands: []string{"Simple Truth Organic", "Kroger", "Simple Truth"}, APIBrands: true},
+func defaultStaples() []staplesFilter {
+	return append(produceFilters(), []staplesFilter{
+		{
+			Term: "beef",
+		},
+		{
+			Term: "chicken",
+		},
+		{
+			Term: "fish",
+		},
+		{
+			Term: "pork",
+		},
+		{
+			Term:   "shellfish",
+			Frozen: true,
+		},
+		{
+			Term: "lamb",
+		},
+		{
+			Term: "grains",
+		},
+		{
+			Term: "pasta",
+		},
+		{Term: "Meat & Seafood"},
+		{Term: "Dairy & Eggs"},
 	}...)
 }
 
-func pantryFilters() []StaplesSearch {
-	return []StaplesSearch{
-		{Term: "spices", Brands: []string{"*"}},
-		{Term: "dairy", Brands: []string{"*"}},
-		{Term: "international", Brands: []string{"*"}},
+func pantryFilters() []staplesFilter {
+	return []staplesFilter{
+		{Term: "spices"},
+		{Term: "dairy"},
+		{Term: "international"},
 		// seasoning? herbs?
 	}
 }
 
-func produceFilters() []StaplesSearch {
-	return []StaplesSearch{
+func produceFilters() []staplesFilter {
+	return []staplesFilter{
 		{
-			Term:   "fresh vegetables",
-			Brands: []string{"*"},
+			Term: "fresh vegetables",
 		},
 		{
-			Term:   "fresh fruit",
-			Brands: []string{"*"},
+			Term: "fresh produce",
 		},
 	}
 }
@@ -232,52 +350,4 @@ func mustJSONSignature(value any) string {
 		panic(fmt.Errorf("marshal staples signature: %w", err))
 	}
 	return string(signature)
-}
-
-func ingredientsFromProducts(rows []products.ProductsProductModel, brands []string, frozen bool) []ingredient {
-	var ingredients []ingredient
-
-	for _, product := range rows {
-		wildcard := len(brands) > 0 && brands[0] == "*"
-
-		if product.Brand != nil && !slices.Contains(brands, toStr(product.Brand)) && !wildcard {
-			continue
-		}
-		if slices.Contains(*product.Categories, "Frozen") && !frozen {
-			continue
-		}
-		// TODO(#1051): Revisit size-based selection as an alternative to inventory ranking.
-		var selected *products.ProductsProductItemModel
-		for _, item := range *product.Items {
-			if item.Price == nil {
-				continue
-			}
-			if item.Inventory != nil && item.Inventory.StockLevel != nil && *item.Inventory.StockLevel == products.TEMPORARILYOUTOFSTOCK {
-				continue
-			}
-			if selected == nil || itemStockRank(item) > itemStockRank(*selected) {
-				selected = &item
-			}
-		}
-		if selected == nil {
-			continue
-		}
-		var aisle *string
-		if product.AisleLocations != nil && len(*product.AisleLocations) > 0 {
-			aisle = (*product.AisleLocations)[0].Number
-		}
-		ingredients = append(ingredients, ingredient{
-			ProductId:    product.ProductId,
-			ItemId:       selected.ItemId,
-			Brand:        product.Brand,
-			Description:  product.Description,
-			Size:         selected.Size,
-			PriceRegular: selected.Price.Regular,
-			PriceSale:    selected.Price.Promo,
-			Categories:   product.Categories,
-			AisleNumber:  aisle,
-		})
-	}
-
-	return ingredients
 }

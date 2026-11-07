@@ -24,14 +24,7 @@ func main() {
 	var verbose bool
 	var ingredient string
 	var limit int
-	var studyDirectory, candidateFile string
-	var requestBudget int
-	flag.IntVar(&requestBudget, "staples-request-budget", 39, "Maximum measured product API requests for exact staples optimization")
-	flag.StringVar(&studyDirectory, "optimize-staples", "", "Run a graded Kroger query study; save reusable query snapshots and report in this directory")
-	flag.StringVar(&candidateFile, "staples-candidates", "", "Optional JSON array of experimental staples searches")
 	var searches []string
-	var searchBrands string
-	flag.StringVar(&searchBrands, "kroger-brands", "", "Pipe-separated API brand filter for diagnostic searches; omitted searches all brands")
 	flag.Func("kroger-search", "Inspect a raw Kroger search and compare with staples; repeat for multiple terms (no grading)", func(term string) error {
 		term = strings.TrimSpace(term)
 		if term == "" {
@@ -54,15 +47,8 @@ func main() {
 	}
 	ctx := context.Background()
 
-	if studyDirectory != "" {
-		if err := optimizeStaples(ctx, location, studyOptions{directory: studyDirectory, candidateFile: candidateFile, requestBudget: requestBudget}); err != nil {
-			log.Fatal(err)
-		}
-		return
-	}
-
 	if len(searches) > 0 {
-		if err := inspectKroger(ctx, location, searches, searchBrands); err != nil {
+		if err := inspectKroger(ctx, location, searches); err != nil {
 			log.Fatal(err)
 		}
 		return
