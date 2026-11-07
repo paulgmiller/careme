@@ -39,6 +39,9 @@ type shoppingRecipeView struct {
 	HasImage           bool
 	WineRecommendation *ai.WineSelection
 	Ready              bool // enables saving, dismissing, and links to the recipe
+	ReplaceURL         string
+	Revision           int
+	Replacing          bool
 }
 
 // DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
@@ -196,6 +199,16 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 			})
 		} else if err := appendRecipe(progress.Finished[slot.RecipeHash], slot.Reviewed); err != nil {
 			return nil, err
+		}
+		view := &views[len(views)-1]
+		view.Revision = slot.Revision
+		view.Replacing = slot.Replacing
+		if !slot.Reviewed && !slot.Replacing {
+			view.ReplaceURL = "/recipes/" + listHash + "/slots/" + strconv.Itoa(index) + "/replace"
+		}
+		if slot.Replacing {
+			view.Title = "Finding another meal…"
+			view.Description = "Your other meals are still taking shape."
 		}
 	}
 	for _, recipe := range recipes {

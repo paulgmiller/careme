@@ -72,6 +72,31 @@ Within a given cache backend, keys with `/` become subdirectories (filesystem) o
 
 ## Key Prefixes
 
+Meal steering uses immutable
+`generation_slot_decision/<generation hash>/<started_at Unix nanoseconds>/<slot index>/<revision>`
+records in the default app cache. A create-only write chooses either replacement
+or reviewed completion for each slot revision. Only the generation owner updates
+`generation_status/<generation hash>`; requests on other replicas write decisions.
+Progress reads overlay accepted replacements to hide superseded drafts immediately.
+New plans increment the slot revision. The start timestamp separates decisions
+when a background job explicitly starts the same hash again. Older status entries
+without revisions load as revision zero.
+
+Whole-generation web retries persist `retry_of` in the existing `params/` payload.
+Its parent generation hash contributes to the new hash only when present, so
+existing hashes stay unchanged. Concurrent retries of the same parent share one
+successor, selected by the existing create-only parameter write. The successor
+keeps its own status, decisions, and shopping list; late work from the parent
+cannot overwrite it. Steering remains shared by URL and does not affect
+ingredient cache keys or persist a dietary preference.
+
+Web, mail, and advertised-recipe jobs all require a successful create-only
+parameter write before starting generation. A background job that encounters
+existing parameters reuses the completed list if available; otherwise it returns
+a contextual not-ready error without resetting the owner's status. Failed or
+abandoned runs require the explicit web retry above. Retrying optional images
+for an existing list still works without regenerating recipes.
+
 New recipe parameters retain the actual store-local timestamp, including its time
 of day. Timezone resolution preserves the instant; it does not select a shopping
 day. Each provider registers its cache hashing implementation with `cachekey`.

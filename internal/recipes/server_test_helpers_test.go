@@ -184,3 +184,7 @@ type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView
 func (f orderViewBuilderFunc) OrderView(_ context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	return f(input)
 }
+
+func (s *fakeStatusStore) RequestReplacement(context.Context, string, int, int) error {
+	return status.ErrInvalidSlot
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
+	"careme/internal/recipes/status"
 	"careme/internal/templates"
 	"careme/internal/users"
 	utypes "careme/internal/users/types"
@@ -703,6 +705,69 @@ func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
 				require.NotNil(t, client.last)
 				assert.Contains(t, c.data, sentMailKey("user-1", p.Hash()))
 			})
+		})
+	}
+}
+
+func TestDeliverEmailDoesNotRestartAdmittedGeneration(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(fmt.Sprint("failed=", failed), func(t *testing.T) {
+			c := cache.NewInMemoryCache()
+			p := recipes.DefaultParams(testMailLocation(), time.Now())
+			require.NoError(t, recipes.IO(c).SaveParams(t.Context(), p))
+			statuses := status.NewStore(c)
+			require.NoError(t, statuses.Start(t.Context(), p.Hash(), "existing owner"))
+			if failed {
+				require.NoError(t, statuses.Fail(t.Context(), p.Hash(), errors.New("existing failure")))
+			}
+			before, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			g := &capturingMailGenerator{}
+			m := &mailer{cache: c, generator: g, generationStatuses: statuses}
+			require.ErrorContains(t, m.deliverEmail(t.Context(), utypes.User{ID: "user"}, p), "generation already admitted; shopping list is not ready")
+			after, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Nil(t, g.params)
+		})
+	}
+}
+
+type completingMailAdmissionCache struct {
+	cache.Cache
+	first bool
+}
+
+func (c *completingMailAdmissionCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	if strings.HasPrefix(key, "shoppinglist/") && c.first {
+		c.first = false
+		return nil, cache.ErrNotFound
+	}
+	return c.Cache.Get(ctx, key)
+}
+
+func TestDeliverEmailCompletedReusePreservesStatus(t *testing.T) {
+	for _, completedDuringAdmission := range []bool{false, true} {
+		t.Run(fmt.Sprint("completion race=", completedDuringAdmission), func(t *testing.T) {
+			c := cache.NewInMemoryCache()
+			p := recipes.DefaultParams(testMailLocation(), time.Now())
+			rio := recipes.IO(c)
+			require.NoError(t, rio.SaveParams(t.Context(), p))
+			require.NoError(t, rio.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Existing meal"}}}, p.Hash()))
+			statuses := status.NewStore(c)
+			require.NoError(t, statuses.Start(t.Context(), p.Hash(), "original progress"))
+			before, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			g := &capturingMailGenerator{}
+			client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+			m := &mailer{cache: &completingMailAdmissionCache{Cache: c, first: completedDuringAdmission}, generator: g, generationStatuses: statuses, client: client, publicOrigin: "https://careme.cooking", unsubscribeFactory: users.FakeUnsubscribeTokenFactory()}
+			configureFakeMailImages(m)
+			require.NoError(t, m.deliverEmail(t.Context(), utypes.User{ID: "user", Email: []string{"user@example.com"}}, p))
+			after, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Nil(t, g.params)
+			require.NotNil(t, client.last)
 		})
 	}
 }

@@ -44,6 +44,7 @@ type ImageStore interface {
 }
 
 type statusStore interface {
+	RequestReplacement(ctx context.Context, hash string, index, revision int) error
 	Start(ctx context.Context, hash, message string) error
 	Update(ctx context.Context, hash, message string) error
 	Fail(ctx context.Context, hash string, err error) error

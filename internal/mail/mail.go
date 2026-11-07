@@ -289,29 +289,38 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 			return fmt.Errorf("read shopping list %q from cache: %w", paramsHash, err)
 		}
 
-		if err := rio.SaveParams(ctx, p); err != nil {
-			if !errors.Is(err, recipes.ErrAlreadyExists) {
+		if err := rio.SaveParams(ctx, p); errors.Is(err, recipes.ErrAlreadyExists) {
+			shoppingList, err = rio.FromCache(ctx, paramsHash)
+			if errors.Is(err, cache.ErrNotFound) {
+				return fmt.Errorf("mail generation already admitted; shopping list is not ready")
+			}
+			if err != nil {
+				return fmt.Errorf("read admitted shopping list %q: %w", paramsHash, err)
+			}
+		} else {
+			if err != nil {
 				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
-		}
-		if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
-			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
-		}
 
-		// can orphan recipes here with crash or shutdown. Params should have a start time
+			if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
+				return fmt.Errorf("start generation status %q: %w", paramsHash, err)
+			}
 
-		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
-		if err != nil {
-			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", paramsHash, "error", statusErr)
+			// can orphan recipes here with crash or shutdown. Params should have a start time
+
+			shoppingList, err = m.generator.GenerateRecipes(ctx, p)
+			if err != nil {
+				if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
+					slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", paramsHash, "error", statusErr)
+				}
+				return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
 			}
-			return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
-		}
-		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
-			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", paramsHash, "error", statusErr)
+			if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
+				if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
+					slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", paramsHash, "error", statusErr)
+				}
+				return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 			}
-			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 		}
 	}
 	if len(shoppingList.Recipes) == 0 {
