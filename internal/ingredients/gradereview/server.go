@@ -53,11 +53,12 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 				slog.ErrorContext(ctx, "location lookup failed", "loc", locationID)
 				continue
 			}
-			locLine := `<a href="/grade?location=` + locationID + `">` + l.Name + `</a><br />`
+			locLine := `<a href="/grader?location=` + locationID + `">` + l.Name + `</a><br />`
 			lo.Must(w.Write([]byte(locLine)))
 		}
 		lo.Must(w.Write([]byte(`</body>
 	</html>`)))
+		return
 	}
 
 	location, candidate, err := s.store.Next(r.Context(), locationID)
