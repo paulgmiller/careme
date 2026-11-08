@@ -58,6 +58,7 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 		lo.Must(w.Write([]byte(`</body>
 	</html>`)))
+		return
 	}
 
 	location, candidate, err := s.store.Next(r.Context(), locationID)
