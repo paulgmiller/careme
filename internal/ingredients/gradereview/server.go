@@ -43,7 +43,7 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Grade Stores/title>
+  <title>Grade Stores</title>
 </head>
 <body>`)))
 
