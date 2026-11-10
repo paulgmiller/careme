@@ -1,0 +1,25 @@
+model,case,quality_out_of_10,generation_ms,judge_ms,passed,failed_metrics,eval_id
+gpt-6-astra,Yucatecan chicken,9,43148,25992,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Korean tri-tip,10,39432,24778,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Moroccan lamb,8,43943,23358,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Sichuan chicken,6,44278,80711,false,critique-quality,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Lemon-Parmesan coho,9,31229,24552,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Jicama cucumber side,9,23517,31448,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Chilean tri-tip,9,34336,33734,true,,eval-oLp-2026-09-08T00:01:24
+gpt-6-astra,Sumac-pistachio coho,9,39862,21908,true,,eval-oLp-2026-09-08T00:01:24
+gpt-5.6-sol,Yucatecan chicken,9,65126,30773,false,generation-latency-under-60s,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Korean tri-tip,8,49700,30155,true,,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Moroccan lamb,8,60896,29606,false,generation-latency-under-60s,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Sichuan chicken,9,53766,24964,true,,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Lemon-Parmesan coho,10,53028,27682,true,,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Jicama cucumber side,10,31205,43717,true,,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Chilean tri-tip,9,65431,35209,false,generation-latency-under-60s,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-sol,Sumac-pistachio coho,9,62004,51637,false,generation-latency-under-60s,eval-uhD-2026-09-08T04:11:30
+gpt-5.6-luna,Yucatecan chicken,7,29283,26783,false,critique-quality,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Korean tri-tip,6,16066,34449,false,critique-quality,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Moroccan lamb,4,19398,29977,false,critique-quality,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Sichuan chicken,9,16124,25485,true,,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Lemon-Parmesan coho,6,15442,26003,false,critique-quality,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Jicama cucumber side,9,11088,22517,true,,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Chilean tri-tip,7,26481,21951,false,critique-quality,eval-7c3-2026-09-08T04:27:02
+gpt-5.6-luna,Sumac-pistachio coho,6,14355,21119,false,critique-quality,eval-7c3-2026-09-08T04:27:02

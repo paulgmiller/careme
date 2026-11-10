@@ -10,24 +10,33 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-var instructionMarkdown = goldmark.New(goldmark.WithParser(parser.NewParser(
+var recipeMarkdown = goldmark.New(goldmark.WithParser(parser.NewParser(
 	parser.WithBlockParsers(
 		util.Prioritized(parser.NewListParser(), 300),
 		util.Prioritized(parser.NewListItemParser(), 400),
 		util.Prioritized(parser.NewParagraphParser(), 1000),
 	),
+	parser.WithInlineParsers(util.Prioritized(parser.NewEmphasisParser(), 500)),
 )))
 
 func renderRecipeInstructions(instructions []string) ([]template.HTML, error) {
 	rendered := make([]template.HTML, 0, len(instructions))
 	for index, instruction := range instructions {
-		var output strings.Builder
-		// The parser accepts only paragraphs and lists. Other Markdown remains
-		// escaped text, so model output cannot add links, images, or raw HTML.
-		if err := instructionMarkdown.Convert([]byte(instruction), &output); err != nil {
+		html, err := renderRecipeMarkdown(instruction)
+		if err != nil {
 			return nil, fmt.Errorf("render instruction %d: %w", index+1, err)
 		}
-		rendered = append(rendered, template.HTML(output.String()))
+		rendered = append(rendered, html)
 	}
 	return rendered, nil
+}
+
+func renderRecipeMarkdown(text string) (template.HTML, error) {
+	var output strings.Builder
+	// Only paragraphs, lists, and emphasis are parsed. Links, images, and
+	// raw HTML remain escaped text.
+	if err := recipeMarkdown.Convert([]byte(text), &output); err != nil {
+		return "", err
+	}
+	return template.HTML(output.String()), nil
 }

@@ -1,4 +1,4 @@
-package main
+package eval
 
 import (
 	"context"
@@ -27,24 +27,24 @@ type evalCase struct {
 }
 
 type recipeCritiquer interface {
-	CritiqueRecipe(context.Context, ai.Recipe) (*ai.RecipeCritique, error)
+	CritiqueRecipeWithCost(context.Context, ai.Recipe) (*ai.RecipeCritique, float64, error)
 }
 
 type recipeLoader interface {
 	SingleFromCache(context.Context, string) (*ai.Recipe, error)
 }
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(ctx)
 	if err != nil {
 		// Promptfoo's generated Go wrapper exits without exposing the error text
 		// when CallApi returns an error. ProviderResponse.error keeps it visible.
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func callAPI(ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
@@ -90,7 +90,7 @@ func decodeEvalCase(body []byte) (evalCase, error) {
 	return pf.Vars, nil
 }
 
-func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiquer recipeCritiquer) (map[string]interface{}, error) {
+func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiquer recipeCritiquer) (map[string]any, error) {
 	recipe := testCase.Recipe
 	if recipe == nil {
 		loaded, err := loader.SingleFromCache(ctx, testCase.RecipeHash)
@@ -105,9 +105,9 @@ func runEval(ctx context.Context, testCase evalCase, loader recipeLoader, critiq
 	return critiqueRecipe(ctx, *recipe, critiquer)
 }
 
-func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCritiquer) (map[string]interface{}, error) {
+func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCritiquer) (map[string]any, error) {
 	start := time.Now()
-	critique, err := critiquer.CritiqueRecipe(ctx, recipe)
+	critique, cost, err := critiquer.CritiqueRecipeWithCost(ctx, recipe)
 	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
@@ -119,8 +119,9 @@ func critiqueRecipe(ctx context.Context, recipe ai.Recipe, critiquer recipeCriti
 	if err != nil {
 		return nil, fmt.Errorf("encode recipe critique: %w", err)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"output":    string(output),
 		"latencyMs": latency.Milliseconds(),
+		"cost":      cost,
 	}, nil
 }

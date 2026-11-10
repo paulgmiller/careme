@@ -1,0 +1,52 @@
+description: Recipe photo and sketch latency budgets
+evaluateOptions:
+  maxConcurrency: 1
+
+# The Go provider ignores the rendered prompt. Each test generates one image
+# style from the same recipe. Each style must finish within 11 seconds.
+prompts:
+  - image-latency-eval
+
+providers:
+  - id: 'file://provider.go'
+    label: imagegeneration
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 11000
+      metric: fastenough
+
+tests:
+  - description: Photo and sketch each finish within 11 seconds
+    vars:
+      image_style:
+        - photo
+        - sketch
+      recipe:
+        title: Sheet Pan Lemon Chicken and Broccoli
+        description: Roasted lemon-garlic chicken thighs with browned broccoli and tender potatoes.
+        properties:
+          total_minutes: 45
+          servings: 4
+          estimated_cost_dollars: 18
+          calories_per_serving: 540
+          cooking_methods: [oven]
+        ingredients:
+          - name: Bone-in chicken thighs
+            quantity: 2 pounds
+          - name: Broccoli florets
+            quantity: 12 ounces
+          - name: Baby potatoes
+            quantity: 1 pound
+          - name: Lemon
+            quantity: '1'
+          - name: Garlic
+            quantity: 3 cloves
+        instructions:
+          - Arrange the seasoned chicken, broccoli, and potatoes on a sheet pan.
+          - Roast until the chicken is browned and cooked through, the potatoes are tender, and the broccoli edges are crisp.
+          - Finish with fresh lemon juice and serve everything together.
+        health: ''
+        drink_pairing: Sparkling water with lemon
+        wine_styles: []

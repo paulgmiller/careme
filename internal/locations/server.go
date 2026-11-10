@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"careme/internal/auth"
-	"careme/internal/guest"
 	"careme/internal/httpx"
 	"careme/internal/locations/geo"
 	"careme/internal/routing"
@@ -35,7 +34,7 @@ type locationServer struct {
 }
 
 type produceScoreLookup interface {
-	ProduceScore(ctx context.Context, loc Location) *int
+	ProduceScore(context.Context, Location) *int
 }
 
 func NewServer(storage locationStore, zipCentroids centroidByZip, userStorage userLookup, produceScores produceScoreLookup) *locationServer {
@@ -66,8 +65,6 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 				slog.ErrorContext(ctx, "failed to get user from request", "error", err)
 				return
 			}
-			// give them a few free samples since they came in through locaitons
-			guest.EnsureShoppingListCount(w, r)
 		}
 
 		coordinates, err := l.searchCoordinates(r)
@@ -80,7 +77,7 @@ func (l *locationServer) Register(mux routing.Registrar, authClient auth.AuthCli
 		if currentUser != nil {
 			favoriteStore = currentUser.FavoriteStore
 		}
-		if err := l.renderLocationsPage(w, ctx, coordinates, favoriteStore, currentUser != nil); err != nil {
+		if err := l.renderLocationsPage(w, ctx, coordinates, favoriteStore, currentUser != nil, r.URL.Query().Get("instructions")); err != nil {
 			slog.ErrorContext(ctx, "failed to render locations page", "lat", coordinates.Lat, "lon", coordinates.Lon, "error", err)
 			http.Error(w, "Failed to render locations page. ", http.StatusInternalServerError)
 		}
@@ -153,7 +150,7 @@ func (l *locationServer) searchCoordinates(r *http.Request) (geo.Coordinate, err
 	return coordinates, nil
 }
 
-func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, favoriteStore string, serverSignedIn bool) error {
+func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.Context, coordinates geo.Coordinate, favoriteStore string, serverSignedIn bool, instructions string) error {
 	// zero locations is valid here.
 	locs, err := l.storage.GetLocationsByCoordinates(ctx, coordinates)
 	if err != nil {
@@ -188,6 +185,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 	wg.Wait()
 
 	data := struct {
+		Instructions    string
 		Locations       []locationRow
 		FavoriteStore   string
 		ClarityScript   template.HTML
@@ -195,6 +193,7 @@ func (l *locationServer) renderLocationsPage(w http.ResponseWriter, ctx context.
 		Style           seasons.Style
 		ServerSignedIn  bool
 	}{
+		Instructions:    instructions,
 		Locations:       lo.FromSlicePtr(rows),
 		FavoriteStore:   favoriteStore,
 		ClarityScript:   templates.ClarityScript(ctx),

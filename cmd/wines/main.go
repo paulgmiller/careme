@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"careme/internal/config"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 )
 
@@ -26,10 +27,11 @@ func main() {
 		log.Fatalf("failed to load configuration: %s", err)
 	}
 
-	sp, err := recipes.NewStaplesProvider(cfg)
+	backends, err := providerregistry.NewFactory(cfg).NewStaplesBackends()
 	if err != nil {
-		log.Fatalf("failed to create recipe generator: %s", err)
+		log.Fatalf("failed to create staples backends: %s", err)
 	}
+	sp := recipes.NewStaplesProvider(backends)
 
 	wines, err := sp.FetchWines(ctx, location, []string{style})
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 
 	"careme/internal/config"
 	"careme/internal/locations/geo"
-	"careme/internal/walmart"
+	"careme/internal/providers/walmart"
 )
 
 const defaultConsumerID = "52dae855-d02f-488b-b179-1df6700d7dcf"

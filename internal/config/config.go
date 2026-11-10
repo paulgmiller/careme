@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	"careme/internal/brightdata"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 
@@ -17,9 +20,11 @@ const (
 	defaultLocalOrigin = "http://localhost:8080"
 
 	// DefaultRecipeModel is the production model for recipe and menu generation.
-	DefaultRecipeModel = "gpt-5.6-sol"
+	DefaultRecipeModel openai.ResponsesModel = "gpt-6.1-sol"
+	// DefaultImageModel is the production model for recipe image generation.
+	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_5Flare
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
-	DefaultCritiqueModel = "google/gemini-3.1-pro-preview"
+	DefaultCritiqueModel = "google/gemini-4-argon"
 )
 
 type Config struct {
@@ -27,6 +32,7 @@ type Config struct {
 	OpenRouter        OpenRouterConfig        `json:"openrouter"`
 	IngredientGrading IngredientGradingConfig `json:"ingredient_grading"`
 	Kroger            KrogerConfig            `json:"kroger"`
+	MNFoodClub        MNFoodClubConfig        `json:"mnfoodclub"`
 	Walmart           WalmartConfig           `json:"walmart"`
 	Aldi              AldiConfig              `json:"aldi"`
 	WholeFoods        WholeFoodsConfig        `json:"wholefoods"`
@@ -42,8 +48,11 @@ type Config struct {
 }
 
 type AIConfig struct {
-	APIKey      string `json:"api_key"`
-	RecipeModel string `json:"recipe_model"`
+	// ServiceTier selects processing for recipe and menu requests on this client.
+	ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier,omitempty"`
+	APIKey      string                                 `json:"api_key"`
+	RecipeModel openai.ResponsesModel                  `json:"recipe_model"`
+	ImageModel  openai.ImageModel                      `json:"image_model"`
 }
 
 type IngredientGradingConfig struct {
@@ -63,6 +72,13 @@ func (c *OpenRouterConfig) IsEnabled() bool {
 type KrogerConfig struct {
 	ClientID     string
 	ClientSecret string
+	CartTokenKey string
+}
+
+// MNFoodClubConfig supplies the store-level credentials used for MNFoodClub.
+type MNFoodClubConfig struct {
+	APIPath     string `json:"api_path"`
+	AccessToken string `json:"-"`
 }
 
 type MockConfig struct {
@@ -170,40 +186,55 @@ func (c *Config) ResolvedPublicOrigin() string {
 }
 
 func Load() (*Config, error) {
+	cfg, err := LoadOnlyProviders()
+	if err != nil {
+		return nil, err
+	}
+	cfg.AI = AIConfig{
+		APIKey:      os.Getenv("AI_API_KEY"),
+		RecipeModel: DefaultRecipeModel,
+		ImageModel:  DefaultImageModel,
+	}
+	cfg.IngredientGrading = IngredientGradingConfig{
+		Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
+		Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
+	}
+	cfg.OpenRouter = OpenRouterConfig{
+		APIKey:        os.Getenv("OPENROUTER_API_KEY"),
+		CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
+	}
+	cfg.Clerk = ClerkConfig{
+		SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
+		PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		Domain:         os.Getenv("CLERK_DOMAIN"),
+	}
+	cfg.Admin = AdminConfig{
+		Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
+	}
+	cfg.PublicOrigin = os.Getenv("PUBLIC_ORIGIN")
+	return cfg, validate(cfg)
+}
+
+// LoadOnlyProviders loads provider credentials and flags without app, AI, or
+// authentication settings. Provider clients validate their remaining credentials.
+func LoadOnlyProviders() (*Config, error) {
 	if err := kage.Load(); err != nil {
 		return nil, err
 	}
-
-	config := &Config{
-		AI: AIConfig{
-			APIKey:      os.Getenv("AI_API_KEY"),
-			RecipeModel: DefaultRecipeModel,
-		},
-		IngredientGrading: IngredientGradingConfig{
-			Enable: envEnabled("INGREDIENT_GRADING_ENABLE"),
-			Model:  os.Getenv("INGREDIENT_GRADING_MODEL"),
-		},
-		OpenRouter: OpenRouterConfig{
-			APIKey:        os.Getenv("OPENROUTER_API_KEY"),
-			CritiqueModel: envOrDefault("OPENROUTER_CRITIQUE_MODEL", DefaultCritiqueModel),
-		},
+	cfg := &Config{
 		Kroger: KrogerConfig{
 			ClientID:     os.Getenv("KROGER_CLIENT_ID"),
 			ClientSecret: os.Getenv("KROGER_CLIENT_SECRET"),
+			CartTokenKey: os.Getenv("KROGER_CART_TOKEN_KEY"),
+		},
+		MNFoodClub: MNFoodClubConfig{
+			APIPath:     os.Getenv("MNFOODCLUB_API_PATH"),
+			AccessToken: os.Getenv("MNFOODCLUB_ACCESS_TOKEN"),
 		},
 		Mocks: MockConfig{
 			Enable: os.Getenv("ENABLE_MOCKS") != "", // strconv
 			Email:  os.Getenv("MOCK_USER_EMAIL"),
 		},
-		Clerk: ClerkConfig{
-			SecretKey:      os.Getenv("CLERK_SECRET_KEY"),
-			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
-			Domain:         os.Getenv("CLERK_DOMAIN"),
-		},
-		Admin: AdminConfig{
-			Emails: parseAdminEmails(os.Getenv("ADMIN_EMAILS")),
-		},
-		PublicOrigin: os.Getenv("PUBLIC_ORIGIN"),
 		Aldi: AldiConfig{
 			Enable: envEnabled("ALDI_ENABLE"),
 		},
@@ -233,8 +264,10 @@ func Load() (*Config, error) {
 			BaseURL:    os.Getenv("WALMART_BASE_URL"),
 		},
 	}
-
-	return config, validate(config)
+	if !cfg.Mocks.Enable && (cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "") {
+		return nil, fmt.Errorf("kroger client ID and secret must be set")
+	}
+	return cfg, nil
 }
 
 func envEnabled(name string) bool {
@@ -262,6 +295,10 @@ func validate(cfg *Config) error {
 		}
 	}
 
+	if cfg.IngredientGrading.Enable && strings.TrimSpace(cfg.AI.APIKey) == "" {
+		return fmt.Errorf("AI_API_KEY is required for ingredient grading")
+	}
+
 	if cfg.Mocks.Enable {
 		return nil
 	}
@@ -269,9 +306,6 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("clerk configuration must be set")
 	}
 
-	if cfg.Kroger.ClientID == "" || cfg.Kroger.ClientSecret == "" {
-		return fmt.Errorf("kroger client ID and secret must be set")
-	}
 	if cfg.AI.APIKey == "" {
 		return fmt.Errorf("AI API  key must be set")
 	}

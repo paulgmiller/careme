@@ -188,6 +188,7 @@ func productToIngredient(product Product, category StapleCategory) ai.InputIngre
 	return ai.NormalizeInputIngredient(ai.InputIngredient{
 		ProductID:    product.ID,
 		Description:  product.DisplayName,
+		Size:         product.Size,
 		Brand:        brand,
 		Categories:   categories,
 		AisleNumber:  location,

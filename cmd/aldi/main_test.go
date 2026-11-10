@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"careme/internal/aldi"
 	"careme/internal/cache"
+	"careme/internal/providers/aldi"
 )
 
 func TestSyncLocationsCachesSummaries(t *testing.T) {

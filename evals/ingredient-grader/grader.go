@@ -1,4 +1,4 @@
-package main
+package eval
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -34,20 +35,31 @@ type ingredientGrader interface {
 	GradeIngredients(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
 }
 
-func CallApi(_ string, _ map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %s", err)
-	}
-	cacheStore, err := cache.MakeCache()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache for ingredient grading: %w", err)
-	}
-	grader := grading.NewManager(cfg, cacheStore, http.DefaultClient)
-	return runEval(ctx, grader)
+func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
+	return callAPI(ctx)
 }
 
-func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]interface{}, error) {
+func callAPI(ctx map[string]any) (map[string]any, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+	if !cfg.IngredientGrading.Enable {
+		return nil, fmt.Errorf("ingredient grading eval requires INGREDIENT_GRADING_ENABLE to be enabled")
+	}
+	// Every evaluation must grade fresh inputs, regardless of previously stored
+	// grades. Keep the production batching path.
+	grader := grading.NewManager(cfg, cache.NewInMemoryCache(), http.DefaultClient)
+	result, err := runEval(ctx, grader)
+	if err != nil {
+		return nil, err
+	}
+	metadata := result["metadata"].(map[string]any)
+	metadata["requestedModel"] = cfg.IngredientGrading.Model
+	return result, nil
+}
+
+func runEval(ctx map[string]any, grader ingredientGrader) (map[string]any, error) {
 	var pf promptfooContext
 	b, err := json.Marshal(ctx)
 	if err != nil {
@@ -55,6 +67,9 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 	}
 	if err := json.Unmarshal(b, &pf); err != nil {
 		return nil, err
+	}
+	if len(pf.Vars.Cases) == 0 {
+		return nil, fmt.Errorf("at least one ingredient eval case is required")
 	}
 
 	var ings []ai.InputIngredient
@@ -69,16 +84,29 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 			eval.Expect.Max = 10
 		}
 		ings = append(ings, ing)
+		if _, exists := expectations[ing.ProductID]; exists {
+			return nil, fmt.Errorf("duplicate eval product id %q", ing.ProductID)
+		}
 		expectations[ing.ProductID] = eval.Expect
 	}
 
+	start := time.Now()
 	grades, err := grader.GradeIngredients(context.Background(), ings)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
 	var failures []string
+	seen := map[string]bool{}
 	for _, g := range grades {
-		expect := expectations[g.ProductID]
+		expect, exists := expectations[g.ProductID]
+		if !exists || seen[g.ProductID] {
+			return nil, fmt.Errorf("unexpected or duplicate graded product id %q", g.ProductID)
+		}
+		if g.Grade == nil {
+			return nil, fmt.Errorf("missing grade for product id %q", g.ProductID)
+		}
+		seen[g.ProductID] = true
 		score := g.Grade.Score
 		if score > expect.Max {
 			failures = append(failures, fmt.Sprintf("grade=%d>%d  desc=%s reason=%s\n",
@@ -100,13 +128,20 @@ func runEval(ctx map[string]interface{}, grader ingredientGrader) (map[string]in
 			continue
 		}
 	}
-	if len(failures) == 0 {
-		return map[string]interface{}{
-			"output": "PASS",
-		}, nil
+	if len(seen) != len(expectations) {
+		return nil, fmt.Errorf("incomplete ingredient grading: received %d of %d grades", len(seen), len(expectations))
 	}
-
-	return map[string]interface{}{
-		"output": strings.Join(failures, "\n"),
+	output := "PASS"
+	if len(failures) != 0 {
+		output = strings.Join(failures, "\n")
+	}
+	return map[string]any{
+		"output":    output,
+		"latencyMs": latency.Milliseconds(),
+		"metadata": map[string]any{
+			"grades":                grades,
+			"ingredientCount":       len(ings),
+			"passedIngredientCount": len(ings) - len(failures),
+		},
 	}, nil
 }

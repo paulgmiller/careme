@@ -1,4 +1,4 @@
-package main
+package eval
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/config"
+
+	"github.com/openai/openai-go/v3/responses"
 )
 
 type promptfooContext struct {
@@ -22,7 +24,7 @@ type evalCase struct {
 }
 
 type recipeGenerator interface {
-	GenerateRecipe(context.Context, []string, ai.ResponseRef) (*ai.Recipe, error)
+	GenerateRecipeWithCost(context.Context, []string, ai.ResponseRef) (*ai.Recipe, float64, error)
 }
 
 type recipeCritiquer interface {
@@ -31,21 +33,22 @@ type recipeCritiquer interface {
 
 type providerOptions struct {
 	Config struct {
-		Model      string `json:"model"`
-		JudgeModel string `json:"judge_model"`
+		Model           string                    `json:"model"`
+		ReasoningEffort responses.ReasoningEffort `json:"reasoning_effort"`
+		JudgeModel      string                    `json:"judge_model"`
 	} `json:"config"`
 }
 
-func CallApi(_ string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(options, ctx)
 	if err != nil {
 		// Preserve errors in Promptfoo's Go wrapper, which otherwise hides them.
-		return map[string]interface{}{"error": err.Error()}, nil
+		return map[string]any{"error": err.Error()}, nil
 	}
 	return result, nil
 }
 
-func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
+func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode Promptfoo context: %w", err)
@@ -68,17 +71,21 @@ func callAPI(options map[string]interface{}, ctx map[string]interface{}) (map[st
 	if strings.TrimSpace(cfg.AI.APIKey) == "" || strings.TrimSpace(cfg.OpenRouter.APIKey) == "" {
 		return nil, fmt.Errorf("AI_API_KEY and OPENROUTER_API_KEY are required for judged recipe generation evals")
 	}
-	generator := ai.NewClient(cfg.AI.APIKey, settings.Config.Model, http.DefaultClient, nil)
+	aiConfig := cfg.AI
+	aiConfig.RecipeModel = settings.Config.Model
+	generator := ai.NewClient(aiConfig, http.DefaultClient, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
 	judge := ai.NewCritiquer(cfg.OpenRouter.APIKey, settings.Config.JudgeModel, http.DefaultClient)
 	result, err := runEval(body, generator, judge)
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]interface{})["requestedModel"] = settings.Config.Model
+	metadata := result["metadata"].(map[string]any)
+	metadata["requestedModel"] = settings.Config.Model
+	metadata["requestedReasoningEffort"] = settings.Config.ReasoningEffort
 	return result, nil
 }
 
-func decodeOptions(options map[string]interface{}) (providerOptions, error) {
+func decodeOptions(options map[string]any) (providerOptions, error) {
 	var settings providerOptions
 	body, err := json.Marshal(options)
 	if err != nil {
@@ -91,10 +98,19 @@ func decodeOptions(options map[string]interface{}) (providerOptions, error) {
 	if settings.Config.Model == "" {
 		settings.Config.Model = strings.TrimSpace(os.Getenv("RECIPE_EVAL_MODEL"))
 	}
+	settings.Config.ReasoningEffort = responses.ReasoningEffort(strings.TrimSpace(string(settings.Config.ReasoningEffort)))
+	if settings.Config.ReasoningEffort == "" {
+		settings.Config.ReasoningEffort = responses.ReasoningEffort(strings.TrimSpace(os.Getenv("RECIPE_EVAL_REASONING_EFFORT")))
+	}
+	switch settings.Config.ReasoningEffort {
+	case "", responses.ReasoningEffortNone, responses.ReasoningEffortMinimal, responses.ReasoningEffortLow, responses.ReasoningEffortMedium, responses.ReasoningEffortHigh, responses.ReasoningEffortXhigh, responses.ReasoningEffortMax:
+	default:
+		return settings, fmt.Errorf("invalid recipe reasoning effort %q: use none, minimal, low, medium, high, xhigh, or max", settings.Config.ReasoningEffort)
+	}
 	return settings, nil
 }
 
-func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map[string]interface{}, error) {
+func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map[string]any, error) {
 	var pf promptfooContext
 	if err := json.Unmarshal(body, &pf); err != nil {
 		return nil, fmt.Errorf("failed to decode Promptfoo context: %w", err)
@@ -109,7 +125,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 
 	instructions := pf.Vars.MenuPlan.Plans[0].Instructions()
 	start := time.Now()
-	generated, err := generator.GenerateRecipe(context.Background(), instructions, pf.Vars.MenuPlan.ResponseRef())
+	generated, generationCost, err := generator.GenerateRecipeWithCost(context.Background(), instructions, pf.Vars.MenuPlan.ResponseRef())
 	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe: %w", err)
@@ -123,9 +139,7 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 	result.PromptCacheKey = ""
 	result.OriginHash = ""
 	result.ParentHash = ""
-	judgeStart := time.Now()
 	critique, err := judge.CritiqueRecipe(context.Background(), result)
-	judgeLatency := time.Since(judgeStart)
 	if err != nil {
 		return nil, fmt.Errorf("judge generated recipe: %w", err)
 	}
@@ -136,12 +150,13 @@ func runEval(body []byte, generator recipeGenerator, judge recipeCritiquer) (map
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode recipe: %w", err)
 	}
-	return map[string]interface{}{
-		"output":    string(output),
+	return map[string]any{
+		"output": string(output),
+		// Promptfoo's cost column compares generation, like its latency column.
+		"cost":      generationCost,
 		"latencyMs": latency.Milliseconds(),
-		"metadata": map[string]interface{}{
-			"critique":       critique,
-			"judgeLatencyMs": judgeLatency.Milliseconds(),
+		"metadata": map[string]any{
+			"critique": critique,
 		},
 	}, nil
 }

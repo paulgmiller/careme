@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: oauth
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  response-type-suffix: APIResponse
+  overlay:
+    path: overlay.yaml

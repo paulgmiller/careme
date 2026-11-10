@@ -15,18 +15,40 @@ type GeneratedImage struct {
 	Body io.Reader
 }
 
+type RecipeImageStyle string
+
+const (
+	RecipeImagePhoto  RecipeImageStyle = "photo"
+	RecipeImageSketch RecipeImageStyle = "sketch"
+)
+
 const recipeImagePromptInstructions = `
 Generate a realistic overhead food photograph of a single finished plate.
 - Home cooked by a above average cook, not a restaurant or food stylist.
 - Keep plating simple and believable. No tweezers, foam, edible flowers, microgreens, or luxury flourishes unless in recipe instructions.
-- Use a simple kitchen counter, stovetop, sheet pan, wooden table, or casual dining table backdrop.
+- Use a simple dark wood dining table as backdrop.
 - Use natural colors, ordinary cookware or tableware, and realistic portions
 - Avoid text, labels, branded packaging, people, hands, collages, and extra side dishes
 - If the recipe has multiple components, show them plated together
 `
 
+const recipeSketchPromptInstructions = `
+Create an approachable black-and-white pencil sketch from a home cook's recipe notebook.
+- Use only loose graphite pencil lines on off-white paper: no color, watercolor, paint, or polished digital illustration.
+- Keep visible construction lines, light cross-hatching, and a few natural smudges.
+- Show one ordinary plate containing the finished dish, with natural portions and relaxed plating.
+- Avoid handwriting, labels, people, hands, branded packaging, collages, and extra side dishes.
+`
+
+const stepSketchPromptInstructions = `
+Create an approachable black-and-white pencil sketch from a teaching chef's recipe notebook.
+- Show one close-up scene of the most useful cutting or cooking technique in this step. If the step has several actions, choose one; favor knife work over mixing or waiting.
+- Show the food and tool during that action, with enough of the ingredient visible to make the cut and relative sizes clear.
+- Don't show explicit measurements, temperatures, or timings that are already in the instructions.
+- Avoid multiple panels, insets, arrows, diagrams, before-and-after sequences, handwriting, labels, people, branded packaging, and unrelated dishes.
+`
+
 const (
-	recipeImageModel = openai.ImageModelGPTImage2 // dalle-3 is getting deprecated. 1.5 seems way better than 1.
 	// WebP is materially smaller for these recipe photos on mobile, and GPT image models support direct WebP output.
 	recipeImageOutputFormat = openai.ImageGenerateParamsOutputFormatWebP
 	recipeImageQuality      = openai.ImageGenerateParamsQualityMedium
@@ -34,14 +56,31 @@ const (
 )
 
 func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*GeneratedImage, error) {
-	prompt, err := buildRecipeImagePrompt(recipe)
+	return c.GenerateRecipeImageWithStyle(ctx, recipe, RecipeImagePhoto)
+}
+
+// GenerateRecipeImageWithStyle lets image evaluations compare styles without changing production callers.
+func (c *client) GenerateRecipeImageWithStyle(ctx context.Context, recipe Recipe, style RecipeImageStyle) (*GeneratedImage, error) {
+	prompt, err := buildRecipeImagePromptWithStyle(recipe, style)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build recipe image prompt: %w", err)
 	}
 
+	return c.generateImage(ctx, prompt)
+}
+
+func (c *client) GenerateStepImage(ctx context.Context, recipe Recipe, step int) (*GeneratedImage, error) {
+	prompt, err := buildStepImagePrompt(recipe, step)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build step image prompt: %w", err)
+	}
+	return c.generateImage(ctx, prompt)
+}
+
+func (c *client) generateImage(ctx context.Context, prompt string) (*GeneratedImage, error) {
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
-		Model:        recipeImageModel,
+		Model:        c.imageModel,
 		N:            openai.Int(1),
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
@@ -51,7 +90,7 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}
 
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(recipeImageModel), imageUsageLogAttr(string(recipeImageModel), resp.Usage))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryImage, "model", string(c.imageModel), imageUsageLogAttr(string(c.imageModel), resp.Usage))
 	if len(resp.Data) == 0 {
 		return nil, fmt.Errorf("image generation returned no images")
 	}
@@ -63,6 +102,21 @@ func (c *client) GenerateRecipeImage(ctx context.Context, recipe Recipe) (*Gener
 	return &GeneratedImage{
 		Body: base64.NewDecoder(base64.StdEncoding, strings.NewReader(imageBody)),
 	}, nil
+}
+
+func buildStepImagePrompt(recipe Recipe, step int) (string, error) {
+	if step < 1 || step > len(recipe.Instructions) {
+		return "", fmt.Errorf("step %d is outside recipe instructions", step)
+	}
+	var prompt strings.Builder
+	fmt.Fprint(&prompt, stepSketchPromptInstructions)
+	fmt.Fprintf(&prompt, "Recipe: %s\n%s\n", recipe.Title, recipe.Description)
+	fmt.Fprintln(&prompt, "Ingredients:")
+	for _, ingredient := range recipe.Ingredients {
+		fmt.Fprintf(&prompt, "- %s %s\n", ingredient.Quantity, ingredient.Name)
+	}
+	fmt.Fprintf(&prompt, "Illustrate only step %d of %d:\n%s\n", step, len(recipe.Instructions), recipe.Instructions[step-1])
+	return prompt.String(), nil
 }
 
 func imageUsageLogAttr(model string, usage openai.ImagesResponseUsage) slog.Attr {
@@ -88,8 +142,19 @@ func imageUsageLogAttr(model string, usage openai.ImagesResponseUsage) slog.Attr
 }
 
 func buildRecipeImagePrompt(recipe Recipe) (string, error) {
+	return buildRecipeImagePromptWithStyle(recipe, RecipeImagePhoto)
+}
+
+func buildRecipeImagePromptWithStyle(recipe Recipe, style RecipeImageStyle) (string, error) {
 	var promptBuilder strings.Builder
-	fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	switch style {
+	case RecipeImagePhoto:
+		fmt.Fprintf(&promptBuilder, "%s\n", recipeImagePromptInstructions)
+	case RecipeImageSketch:
+		fmt.Fprintf(&promptBuilder, "%s\n", recipeSketchPromptInstructions)
+	default:
+		return "", fmt.Errorf("unknown recipe image style %q", style)
+	}
 	fmt.Fprintf(&promptBuilder, "\n")
 	fmt.Fprintf(&promptBuilder, "Recipe:\n")
 	fmt.Fprintf(&promptBuilder, "%s\n", recipe.Title)

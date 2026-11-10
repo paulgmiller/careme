@@ -12,14 +12,13 @@ import (
 	"careme/internal/locations"
 	"careme/internal/parallelism"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/status"
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
-
-const IngredientGradeCutoff = 6
 
 type aiClient interface {
 	CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error)
@@ -45,6 +44,9 @@ type recipeCritiquer interface {
 }
 
 type statusWriter interface {
+	Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error
+	RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error
+	RecipeDraft(ctx context.Context, hash string, index int, recipeHash string) error
 	Update(ctx context.Context, hash string, message string) error
 }
 
@@ -67,6 +69,9 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 	}
 	if staples == nil {
 		return nil, fmt.Errorf("staples service is required")
+	}
+	if statuses == nil {
+		return nil, fmt.Errorf("status writer is required")
 	}
 	if recipeSaver == nil {
 		return nil, fmt.Errorf("recipe saver is required")
@@ -135,7 +140,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		}
 		ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 			// TODO make configurable?
-			return ing.Grade == nil || ing.Grade.Score > IngredientGradeCutoff
+			return ing.Grade == nil || ing.Grade.Score > producescore.IngredientGradeCutoff
 		})
 		ingMap := inputIngredientMap(ingredients)
 		replacmentCount := max(len(p.Dismissed), 1) // if no dismissed then just regenerate one and hope for better, if dismissed then regenerate all dismissed
@@ -144,12 +149,20 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, fmt.Errorf("failed to plan recipe replacements: %w", err)
 		}
 		g.writeStatus(ctx, hash, plan.String())
+		if err := g.statusWriter.Plan(ctx, hash, plan.Plans); err != nil {
+			return nil, fmt.Errorf("publish replacement plan: %w", err)
+		}
 		menuResponse := plan.ResponseRef()
 
-		results, err := parallelism.MapWithErrors(plan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+		results, err := parallelism.MapWithErrorsI(plan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 			ctx, span := tracer.Start(ctx, "recipes.regenerate.single")
 			defer span.End()
 
+			// TODO(ingredient-neighbors): Enrich replacement recipe instructions here,
+			// using the same store-scoped lookup as initial generation below: nearest
+			// 20 neighbors for each of plan.AnchorIngredient and plan.SideVegetable.
+			// Merge by ProductID, append ingredient TSV (not vectors), and include
+			// added products in the metadata map used for enrichment and critique.
 			recipe, err := g.aiClient.GenerateRecipe(ctx, plan.Instructions(), menuResponse)
 			if err != nil {
 				return nil, err
@@ -159,7 +172,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 				return nil, err
 			}
-			return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+			if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
+				slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+			}
+			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+			if err != nil {
+				return nil, err
+			}
+			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+				slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
+			}
+			return final, nil
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate replacement recipes with AI: %w", err)
@@ -185,7 +208,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	ogCount := len(ingredients)
 	ingredients = lo.Filter(ingredients, func(ing ai.InputIngredient, _ int) bool {
 		// TODO make configurable?
-		return ing.Grade.GetScore() > IngredientGradeCutoff
+		return ing.Grade.GetScore() > producescore.IngredientGradeCutoff
 	})
 	ingMap := inputIngredientMap(ingredients)
 
@@ -213,11 +236,21 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 	menuResponse := menuPlan.ResponseRef()
 
 	g.writeStatus(ctx, hash, menuPlan.String())
+	if err := g.statusWriter.Plan(ctx, hash, menuPlan.Plans); err != nil {
+		return nil, fmt.Errorf("publish meal plan: %w", err)
+	}
 
-	results, err := parallelism.MapWithErrors(menuPlan.Plans, func(plan ai.RecipePlan) (*ai.Recipe, error) {
+	results, err := parallelism.MapWithErrorsI(menuPlan.Plans, func(plan ai.RecipePlan, index int) (*ai.Recipe, error) {
 		ctx, span := tracer.Start(ctx, "recipes.generate.single")
 		defer span.End()
 		recipeInstructions := append([]string{p.Directive}, plan.Instructions()...)
+		// TODO(ingredient-neighbors): Look up the nearest 20 neighbors for each of
+		// plan.AnchorIngredient and plan.SideVegetable in p.Location.ID's catalog.
+		// Retain the full catalog before the menu-planning grade filter above so
+		// this can add candidates beyond the ingredients already in menuResponse.
+		// Merge by ProductID, append their InputIngredientsToTSV output to these
+		// instructions, and use a per-recipe metadata map for enrichment/critique
+		// below; do not mutate the shared ingMap from these parallel callbacks.
 		recipe, err := g.aiClient.GenerateRecipe(ctx, recipeInstructions, menuResponse)
 		if err != nil {
 			return nil, err
@@ -229,7 +262,17 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
 			return nil, err
 		}
-		return g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		if err := g.statusWriter.RecipeDraft(ctx, hash, index, recipe.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to publish recipe before critique", "hash", hash, "index", index, "error", err)
+		}
+		final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
+		if err != nil {
+			return nil, err
+		}
+		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
+			slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
+		}
+		return final, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipes with AI: %w", err)
@@ -317,7 +360,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	c, err := g.critiquer.CritiqueRecipe(ctx, *recipe)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to critique recipe", "hash", hash, "title", recipe.Title, "error", err)
-		return recipe, nil
+		return nil, fmt.Errorf("critique recipe %q: %w", recipe.Title, err)
 	}
 	if c.OverallScore >= critique.MinimumRecipeScoreForModel(c.Model) {
 		return recipe, nil
@@ -325,7 +368,6 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 
 	span.SetAttributes(attribute.Bool("regenaftercrique", true))
 	slog.InfoContext(ctx, "low scoring recipe", "hash", hash, "title", recipe.Title, "score", c.OverallScore)
-	// going to overwrite other statuses
 	g.writeStatus(ctx, hash, "Adjusting "+recipe.Title+"\n")
 
 	// panic?
@@ -342,7 +384,6 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
 		return nil, err
 	}
-	// don't block
 	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)
 
 	return retry, nil

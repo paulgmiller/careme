@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"careme/internal/albertsons"
 	"careme/internal/cache"
+	"careme/internal/providers/albertsons"
 )
 
 func TestSelectedChainsDefaultsToAll(t *testing.T) {

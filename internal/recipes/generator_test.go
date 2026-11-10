@@ -12,6 +12,7 @@ import (
 	"careme/internal/cache"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/recipes/status"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -399,7 +400,7 @@ func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
 		plans = append(plans, ai.RecipePlan{
 			Cuisine:          "test",
 			AnchorIngredient: recipe.Title,
-			Technique:        "test",
+			DishFormat:       "test",
 		})
 	}
 	return &ai.MenuPlan{Plans: plans, ResponseID: "resp-menu-plan"}
@@ -508,6 +509,7 @@ func (s *captureRecipeSaver) titles() []string {
 }
 
 func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
+	t.Parallel()
 	got := wineIngredientsCacheKey(" Pinot Noir ", "70500874", time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC))
 	want := "wines/0XY3COdxwHk"
 	if got != want {
@@ -516,6 +518,7 @@ func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 }
 
 func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
+	t.Parallel()
 	const (
 		location = "70500874"
 		style    = "Pinot Noir"
@@ -572,6 +575,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 }
 
 func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
+	t.Parallel()
 	aiStub := &captureWineQuestionAIClient{
 		answer: "Try one of these bottles.",
 		selection: &ai.WineSelection{
@@ -612,6 +616,7 @@ func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 }
 
 func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstruction(t *testing.T) {
+	t.Parallel()
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	newlySaved := ai.Recipe{Title: "Newly Saved", Description: "Saved now"}
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
@@ -622,7 +627,8 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:            "test",
 			AnchorIngredient:   "Brand New Dinner",
-			Technique:          "test",
+			Category:           ai.MealCategoryLocal,
+			DishFormat:         "test",
 			RecipeInstructions: []string{"make it vegetarian"},
 		}}, ResponseID: "resp-menu-next"},
 	}
@@ -654,9 +660,11 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 	wantRecipeInstructions := ai.RecipePlan{
 		Cuisine:            "test",
 		AnchorIngredient:   "Brand New Dinner",
-		Technique:          "test",
+		Category:           ai.MealCategoryLocal,
+		DishFormat:         "test",
 		RecipeInstructions: []string{"make it vegetarian"},
 	}.Instructions()
+	assert.Contains(t, strings.Join(aiStub.instructions, "\n"), "Local: emphasize produce and proteins")
 	if !slices.Equal(aiStub.instructions, wantRecipeInstructions) {
 		t.Fatalf("unexpected recipe instructions: got %v want %v", aiStub.instructions, wantRecipeInstructions)
 	}
@@ -681,6 +689,7 @@ func TestGenerateRecipes_RegenerateIncludesOnlyNewlySavedRecipesInAvoidInstructi
 }
 
 func TestGenerateRecipes_RegenerateNoReplacementPlansReturnsHelpfulError(t *testing.T) {
+	t.Parallel()
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	aiStub := &captureRegenerateAIClient{
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{}, ResponseID: "resp-menu-next"},
@@ -698,13 +707,14 @@ func TestGenerateRecipes_RegenerateNoReplacementPlansReturnsHelpfulError(t *test
 }
 
 func TestGenerateRecipes_RegenerateAllowsUserRequestedCountDifferentFromDismissedCount(t *testing.T) {
+	t.Parallel()
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-			{Cuisine: "test", AnchorIngredient: "Slow Cooker Dinner", Technique: "slow cooker"},
-			{Cuisine: "test", AnchorIngredient: "Different Pasta", Technique: "pasta"},
+			{Cuisine: "test", AnchorIngredient: "Slow Cooker Dinner", DishFormat: "slow cooker"},
+			{Cuisine: "test", AnchorIngredient: "Different Pasta", DishFormat: "pasta"},
 		}, ResponseID: "resp-menu-next"},
 	}
 
@@ -722,6 +732,7 @@ func TestGenerateRecipes_RegenerateAllowsUserRequestedCountDifferentFromDismisse
 }
 
 func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T) {
+	t.Parallel()
 	dismissed := ai.Recipe{Title: "Dismissed Recipe", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 	aiStub := &captureRegenerateAIClient{
@@ -743,6 +754,7 @@ func TestGenerateRecipes_RegenerateWithoutMenuPlanResponseIDErrors(t *testing.T)
 }
 
 func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t *testing.T) {
+	t.Parallel()
 	saved := ai.Recipe{Title: "Saved Dinner", Description: "Keep this one"}
 	newResult := ai.Recipe{Title: "One More Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 	aiStub := &captureRegenerateAIClient{
@@ -750,7 +762,7 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t 
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "One More Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}, ResponseID: "resp-menu-next"},
 	}
 
@@ -770,13 +782,14 @@ func TestGenerateRecipes_RegenerateWithOnlySavedRecipesAddsOneRecipeByDefault(t 
 }
 
 func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *testing.T) {
+	t.Parallel()
 	newResult := ai.Recipe{Title: "One More Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
 	aiStub := &captureRegenerateAIClient{
 		recipe: &newResult,
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "One More Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}, ResponseID: "resp-menu-next"},
 	}
 
@@ -794,6 +807,7 @@ func TestGenerateRecipes_RegenerateWithNoSelectionsAddsOneRecipeByDefault(t *tes
 }
 
 func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirectionsToEveryRecipe(t *testing.T) {
+	t.Parallel()
 	params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
 	params.Directive = "Use sale ingredients."
 	params.Instructions = "I have some anise."
@@ -803,8 +817,8 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 	aiStub := &captureGenerateAIClient{
 		shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{aniseRecipe, plainRecipe}},
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{
-			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, Technique: "test", RecipeInstructions: []string{"Use the user's anise in this recipe."}},
-			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, Technique: "test"},
+			{Cuisine: "test", AnchorIngredient: aniseRecipe.Title, DishFormat: "test", Category: ai.MealCategoryDifferent, RecipeInstructions: []string{"Use the user's anise in this recipe."}},
+			{Cuisine: "test", AnchorIngredient: plainRecipe.Title, DishFormat: "test", Category: ai.MealCategoryHealthy},
 		}, ResponseID: "resp-menu-plan"},
 	}
 	g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), noopstatuswriter{}, nil)
@@ -821,11 +835,14 @@ func TestGenerateRecipes_UsesMenuPlanRecipeInstructionsInsteadOfSendingUserDirec
 
 	aniseInstructions := instructionsForAnchor(t, aiStub.generateInstructions, aniseRecipe.Title)
 	plainInstructions := instructionsForAnchor(t, aiStub.generateInstructions, plainRecipe.Title)
+	assert.Contains(t, strings.Join(aniseInstructions, "\n"), "Different: emphasize lesser-known cuisines")
+	assert.Contains(t, strings.Join(plainInstructions, "\n"), "Healthy: emphasize ancient or whole grains")
 	assert.Contains(t, aniseInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
 	assert.NotContains(t, plainInstructions, "User direction for this recipe: Use the user's anise in this recipe.")
 }
 
 func TestGenerateRecipes_SortsMenuPlanIngredientsByGradeThenProductID(t *testing.T) {
+	t.Parallel()
 	grade := func(score int) *ai.IngredientGrade {
 		return &ai.IngredientGrade{Score: score}
 	}
@@ -861,6 +878,7 @@ func instructionsForAnchor(t *testing.T, calls [][]string, title string) []strin
 }
 
 func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
+	t.Parallel()
 	generated := []ai.Recipe{
 		{Title: "Roast Chicken", Description: "Crisp and simple", Instructions: []string{"Roast the chicken."}, ResponseID: "resp-chicken"},
 		{Title: "Pasta Primavera", Description: "Vegetable pasta", Instructions: []string{"Boil pasta.", "Toss with vegetables."}, ResponseID: "resp-pasta"},
@@ -908,6 +926,7 @@ func TestGenerateRecipes_CritiquesGeneratedRecipes(t *testing.T) {
 }
 
 func TestGenerateRecipes_EnrichesGeneratedIngredientsFromCatalogProductID(t *testing.T) {
+	t.Parallel()
 	generated := []ai.Recipe{
 		{
 			Title:       "Roast Chicken",
@@ -975,6 +994,7 @@ func seededStaples(t *testing.T, params *generatorParams) staplesService {
 }
 
 func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
+	t.Parallel()
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	dismissed := ai.Recipe{Title: "Dismissed Dinner", Description: "Passed on", ResponseID: "resp-123"}
 	newResult := ai.Recipe{Title: "Brand New Dinner", Description: "Fresh idea", ResponseID: "resp-new"}
@@ -990,7 +1010,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 		menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{
 			Cuisine:          "test",
 			AnchorIngredient: "Brand New Dinner",
-			Technique:        "test",
+			DishFormat:       "test",
 		}}},
 	}
 	g := newTestGenerator(t, aiStub, critiquer, seededStaples(t, params), noopstatuswriter{}, nil)
@@ -1014,6 +1034,7 @@ func TestGenerateRecipes_RegenerateCritiquesOnlyFreshRecipes(t *testing.T) {
 }
 
 func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
+	t.Parallel()
 	initial := ai.Recipe{Title: "Weak Dinner", Description: "Needs work", ResponseID: "resp-initial"}
 	retried := ai.Recipe{Title: "Better Dinner", Description: "Improved", ResponseID: "resp-retried"}
 
@@ -1059,12 +1080,20 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 	}
 
 	saver := &captureRecipeSaver{}
-	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, saver)
+	progress := status.NewStore(cacheStore)
+	require.NoError(t, progress.Start(t.Context(), params.Hash(), ""))
+	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, progress, saver)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
 	if err != nil {
 		t.Fatalf("GenerateRecipes returned error: %v", err)
 	}
+	published, progressErr := progress.Load(t.Context(), params.Hash())
+	require.NoError(t, progressErr)
+	require.Len(t, published.Slots, 1)
+	assert.Equal(t, retried.ComputeHash(), published.Slots[0].RecipeHash)
+	assert.NotEqual(t, initial.ComputeHash(), published.Slots[0].RecipeHash)
+
 	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].Title != "Better Dinner" {
 		t.Fatalf("expected retried shopping list, got %+v", got)
 	}
@@ -1094,6 +1123,7 @@ func TestGenerateRecipes_RetriesLowScoringGeneratedRecipesOnce(t *testing.T) {
 }
 
 func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
+	t.Parallel()
 	weak := ai.Recipe{Title: "Weak Dinner", Description: "Needs work", ResponseID: "resp-weak"}
 	good := ai.Recipe{Title: "Solid Dinner", Description: "Already fine"}
 	retried := ai.Recipe{Title: "Better Dinner", Description: "Improved", ResponseID: "resp-retried"}
@@ -1153,6 +1183,7 @@ func TestGenerateRecipes_RetryKeepsHighScoringRecipes(t *testing.T) {
 }
 
 func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
+	t.Parallel()
 	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough", ResponseID: "resp-stable"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
@@ -1182,6 +1213,7 @@ func TestGenerateRecipes_DoesNotRetryWhenCritiquesMeetThreshold(t *testing.T) {
 }
 
 type statusCounter struct {
+	noopstatuswriter
 	status []string
 }
 
@@ -1191,6 +1223,7 @@ func (s *statusCounter) Update(_ context.Context, _, stat string) error {
 }
 
 func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
+	t.Parallel()
 	steady := ai.Recipe{Title: "Steady Dinner", Description: "Good enough"}
 
 	cacheStore := cache.NewFileCache(t.TempDir())
@@ -1209,6 +1242,7 @@ func TestGenerateRecipes_WritesStatusStagesForInitialGeneration(t *testing.T) {
 }
 
 func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
+	t.Parallel()
 	alreadySaved := ai.Recipe{Title: "Already Saved", Description: "Saved earlier"}
 	dismissed := ai.Recipe{Title: "Original Dinner", Description: "Original", ResponseID: "resp-original"}
 	initial := ai.Recipe{Title: "Needs Work Dinner", Description: "First pass", ResponseID: "resp-first-pass"}
@@ -1293,6 +1327,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 }
 
 func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
+	t.Parallel()
 	dismissed := ai.Recipe{Title: "Original Dinner", Description: "Original", ResponseID: "resp-original"}
 	firstPass := ai.Recipe{Title: "First Pass Dinner", Description: "Needs work", ResponseID: "resp-first-pass"}
 	retried := ai.Recipe{Title: "Second Pass Dinner", Description: "Improved", ResponseID: "resp-second-pass"}
@@ -1345,6 +1380,7 @@ func TestGenerateRecipes_CritiqueRetryPointsToImmediateParent(t *testing.T) {
 }
 
 func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
+	t.Parallel()
 	firstPassChicken := ai.Recipe{Title: "Lemon Chicken Pasta", Description: "Needs work", ResponseID: "resp-chicken"}
 	firstPassTacos := ai.Recipe{Title: "Spicy Bean Tacos", Description: "Needs work", ResponseID: "resp-tacos"}
 	retriedTacos := ai.Recipe{Title: "Weeknight Bean Tacos", Description: "Improved", ResponseID: "resp-retried-tacos"}
@@ -1405,6 +1441,7 @@ func TestGenerateRecipes_CritiqueRetryMatchesParentByTitleWords(t *testing.T) {
 }
 
 func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T) {
+	t.Parallel()
 	initial := ai.Recipe{Title: "First Try", Description: "Low score", ResponseID: "resp-one"}
 	retried := ai.Recipe{Title: "Second Try", Description: "Still low", ResponseID: "resp-two"}
 
@@ -1436,18 +1473,16 @@ func TestGenerateRecipes_RetriesAtMostOnceEvenIfRetryStillScoresLow(t *testing.T
 	g := newTestGenerator(t, aiStub, critiquer, &cachedStaplesService{cache: io, grader: ingredientgrading.NewManager(nil, nil, nil)}, noopstatuswriter{}, nil)
 
 	got, err := g.GenerateRecipes(t.Context(), params)
-	if err != nil {
-		t.Fatalf("GenerateRecipes returned error: %v", err)
-	}
-	if got == nil || len(got.Recipes) != 1 || got.Recipes[0].Title != "Second Try" {
-		t.Fatalf("unexpected retried shopping list: %+v", got)
-	}
+	require.NoError(t, err)
+	require.Len(t, got.Recipes, 1)
+	assert.Equal(t, "Second Try", got.Recipes[0].Title)
 	if aiStub.regenerateCalls != 1 {
 		t.Fatalf("expected exactly one critique-driven retry, got %d", aiStub.regenerateCalls)
 	}
 }
 
 func TestNewlySaved(t *testing.T) {
+	t.Parallel()
 	foo := ai.Recipe{Title: "foo", Description: "blah"}
 	salmon := ai.Recipe{Title: "Salmon", Description: "previusly saved"}
 	hash := foo.ComputeHash()
@@ -1460,5 +1495,51 @@ func TestNewlySaved(t *testing.T) {
 	want := []string{salmon.Title}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected saved avoid instruction: got %q want %q", got, want)
+	}
+}
+
+func (noopstatuswriter) Plan(context.Context, string, []ai.RecipePlan) error    { return nil }
+func (noopstatuswriter) RecipeReady(context.Context, string, int, string) error { return nil }
+func (noopstatuswriter) RecipeDraft(context.Context, string, int, string) error { return nil }
+
+func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
+	t.Parallel()
+	for _, replacement := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial", true: "replacement"}[replacement], func(t *testing.T) {
+			params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+			if replacement {
+				params.PreviousMenuPlanResponseID = "previous-menu"
+			}
+			initial := ai.Recipe{Title: "First dinner", ResponseID: "first-response"}
+			revised := ai.Recipe{Title: "Revised dinner", ResponseID: "revised-response"}
+			store := cache.NewInMemoryCache()
+			progress := status.NewStore(store)
+			saver := IO(store)
+			require.NoError(t, progress.Start(t.Context(), params.Hash(), ""))
+			critiquer := &captureCritiqueService{fn: func(recipe ai.Recipe) (*ai.RecipeCritique, error) {
+				if recipe.Title == initial.Title {
+					published, err := progress.Load(t.Context(), params.Hash())
+					assert.NoError(t, err)
+					if assert.Len(t, published.Slots, 1) {
+						assert.Equal(t, recipe.ComputeHash(), published.Slots[0].RecipeHash)
+						assert.False(t, published.Slots[0].Reviewed)
+					}
+					persisted, err := saver.SingleFromCache(t.Context(), recipe.ComputeHash())
+					assert.NoError(t, err)
+					assert.NotNil(t, persisted)
+					return &ai.RecipeCritique{OverallScore: 1}, nil
+				}
+				return &ai.RecipeCritique{OverallScore: 10}, nil
+			}}
+			client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{initial}}}, regenerateResponses: []*ai.Recipe{&revised}}
+			g := newTestGenerator(t, client, critiquer, seededStaples(t, params), progress, saver)
+			_, err := g.GenerateRecipes(t.Context(), params)
+			require.NoError(t, err)
+			published, err := progress.Load(t.Context(), params.Hash())
+			require.NoError(t, err)
+			require.Len(t, published.Slots, 1)
+			assert.Equal(t, revised.ComputeHash(), published.Slots[0].RecipeHash)
+			assert.True(t, published.Slots[0].Reviewed)
+		})
 	}
 }

@@ -33,7 +33,6 @@ import (
 
 	utypes "careme/internal/users/types"
 
-	"github.com/samber/lo"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -66,7 +65,7 @@ type generator interface {
 }
 
 type generationStatusStore interface {
-	Start(ctx context.Context, hash string) error
+	Start(ctx context.Context, hash string, message string) error
 	Fail(ctx context.Context, hash string, err error) error
 }
 
@@ -98,8 +97,13 @@ type mailer struct {
 	unsubscribeFactory users.UnsubscribeTokenFactory
 }
 
+type providerFactory interface {
+	NewLocationBackends(locations.CentroidByZip) ([]locations.LocationBackend, error)
+	NewStaplesBackends() ([]recipes.StaplesBackend, error)
+}
+
 // TODO share some of this with web.go? good for mocking?
-func NewMailer(cfg *config.Config) (*mailer, error) {
+func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 	cacheStore, err := cache.MakeCache()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cache: %w", err)
@@ -113,12 +117,15 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 	aiHTTPClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	mc := critique.NewManager(cfg, cacheStore, aiHTTPClient)
 	ig := ingredientgrading.NewManager(cfg, cacheStore, aiHTTPClient)
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, ig)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create staples service: %w", err)
+		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig)
 	generationStatuses := status.NewStore(cacheStore)
-	aiClient := ai.NewClient(cfg.AI.APIKey, cfg.AI.RecipeModel, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
+	aiConfig := cfg.AI
+	aiConfig.ServiceTier = "flex"
+	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
 	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
@@ -126,7 +133,11 @@ func NewMailer(cfg *config.Config) (*mailer, error) {
 
 	centroids := locations.LoadCentroids()
 
-	locationserver, err := locations.New(cfg, cacheStore, centroids)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationserver, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -253,7 +264,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 		return nil, fmt.Errorf("get location %q: %w", user.FavoriteStore, err)
 	}
 
-	date, err := recipes.StoreToDate(ctx, time.Now(), l)
+	date, err := locations.StoreToDate(ctx, time.Now(), l)
 	if err != nil {
 		return nil, fmt.Errorf("get timezone for location %q: %w", user.FavoriteStore, err)
 	}
@@ -267,10 +278,10 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	ctx = logsetup.WithUserID(ctx, user.ID)
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
-	// p.UserID = user.ID
+	rio := recipes.IO(m.cache)
+	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
 	paramsHash := p.Hash()
-	rio := recipes.IO(m.cache)
 	shoppingList, err := rio.FromCache(ctx, paramsHash)
 	if err != nil {
 		if !errors.Is(err, cache.ErrNotFound) {
@@ -282,22 +293,10 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
 		}
-		if err := m.generationStatuses.Start(ctx, paramsHash); err != nil {
+		if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
 			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
 		}
 
-		// TODO refactor with recipes/server.go
-		recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-			return r.CreatedAt.After(time.Now().AddDate(0, 0, -14)) // magic number. Should it be loner and shoul we use star rating?
-		})
-		hashes := make([]string, 0, len(recent))
-		for _, recipe := range recent {
-			hashes = append(hashes, recipe.Hash)
-		}
-		cooked := rio.FeedbackByHash(ctx, hashes)
-		p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-			return r.Title, cooked[r.Hash].Cooked
-		})
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)

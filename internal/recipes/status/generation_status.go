@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/cache"
 )
 
@@ -20,13 +21,22 @@ const (
 	recipeGenerationTimeout     = 10 * time.Minute
 )
 
+// Slot keeps meal-plan order while recipes finish concurrently.
+type Slot struct {
+	Plan       ai.RecipePlan `json:"plan"`
+	RecipeHash string        `json:"recipe_hash,omitempty"`
+	Reviewed   bool          `json:"reviewed,omitempty"`
+}
+
 type Status struct {
+	Slots    []Slot
 	Message  string
 	Failed   string
 	Redirect string
 }
 
 type payload struct {
+	Slots     []Slot    `json:"slots,omitempty"`
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	Error     string    `json:"error,omitempty"`
@@ -62,6 +72,8 @@ func IsValidID(id string) bool {
 }
 
 type Store struct {
+	// only upodate, and recipe ready use mutex. Rest have single caller.
+	// Need to replace with etags
 	mu    sync.Mutex
 	cache cache.Cache
 	now   func() time.Time
@@ -73,9 +85,10 @@ func NewStore(c cache.Cache) *Store {
 
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
-func (ss *Store) Start(ctx context.Context, hash string) error {
+func (ss *Store) Start(ctx context.Context, hash, message string) error {
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
+		Message:   message,
 	})
 }
 
@@ -92,7 +105,6 @@ func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 		return fmt.Errorf("fail generation %s: already completed", hash)
 	}
 	status.Error = err.Error()
-	// could get overwritten by parallel update
 	return ss.save(ctx, hash, status)
 }
 
@@ -133,12 +145,57 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 	return ss.save(ctx, hash, status)
 }
 
+// Plan publishes placeholders before any recipe workers start.
+func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error {
+	stored, err := ss.load(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if stored.failed() != "" || stored.Redirect != "" {
+		return fmt.Errorf("generation %s is no longer running", hash)
+	}
+	stored.Slots = make([]Slot, len(plans))
+	for i, plan := range plans {
+		stored.Slots[i].Plan = plan
+	}
+	return ss.save(ctx, hash, stored)
+}
+
+// RecipeDraft makes a persisted recipe visible while critique is still running.
+func (ss *Store) RecipeDraft(ctx context.Context, hash string, index int, recipeHash string) error {
+	return ss.publishRecipe(ctx, hash, index, recipeHash, false)
+}
+
+// RecipeReady enables saving the final, reviewed recipe in a slot.
+func (ss *Store) RecipeReady(ctx context.Context, hash string, index int, recipeHash string) error {
+	return ss.publishRecipe(ctx, hash, index, recipeHash, true)
+}
+
+func (ss *Store) publishRecipe(ctx context.Context, hash string, index int, recipeHash string, reviewed bool) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	stored, err := ss.load(ctx, hash)
+	if err != nil {
+		return err
+	}
+	if stored.failed() != "" || stored.Redirect != "" {
+		return fmt.Errorf("generation %s is no longer running", hash)
+	}
+	if index < 0 || index >= len(stored.Slots) || recipeHash == "" {
+		return fmt.Errorf("invalid ready recipe slot %d", index)
+	}
+	stored.Slots[index].RecipeHash = recipeHash
+	stored.Slots[index].Reviewed = reviewed
+	return ss.save(ctx, hash, stored)
+}
+
 func (ss *Store) Load(ctx context.Context, hash string) (Status, error) {
 	stored, err := ss.load(ctx, hash)
 	if err != nil {
 		return Status{}, err
 	}
 	return Status{
+		Slots:    stored.Slots,
 		Message:  stored.Message,
 		Failed:   stored.failed(),
 		Redirect: stored.Redirect,

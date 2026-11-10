@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"careme/internal/aldi"
 	"careme/internal/cache"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
+	"careme/internal/providers/aldi"
 )
 
 type summaryClient interface {

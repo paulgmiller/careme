@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"careme/internal/config"
+
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -17,17 +19,22 @@ import (
 )
 
 type client struct {
-	recipeSchema   map[string]any
-	wineSchema     map[string]any
-	menuSchema     map[string]any
-	model          string
-	wineModel      string
-	oai            openai.Client
-	promptRecorder PromptRecorder
+	serviceTier           responses.ResponseNewParamsServiceTier
+	recipeReasoningEffort responses.ReasoningEffort
+	recipeSchema          map[string]any
+	wineSchema            map[string]any
+	menuSchema            map[string]any
+	shoppingSchema        map[string]any
+	model                 openai.ResponsesModel
+	imageModel            openai.ImageModel
+	wineModel             string
+	oai                   openai.Client
+	promptRecorder        PromptRecorder
 }
 
-func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	model = strings.TrimSpace(model)
+func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
+	model := strings.TrimSpace(cfg.RecipeModel)
+	imageModel := strings.TrimSpace(cfg.ImageModel)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
 	}
@@ -41,28 +48,43 @@ func NewClient(apiKey, model string, httpClient *http.Client, promptRecorder Pro
 	wineSchemaJSON, _ := json.Marshal(wineSchema)
 	menuSchema := r.Reflect(&MenuPlan{})
 	menuSchemaJson, _ := json.Marshal(menuSchema)
+	shoppingSchema := r.Reflect(&shoppingIngredientsResponse{})
+	shoppingSchemaJSON, _ := json.Marshal(shoppingSchema)
 	var recipe map[string]any
 	_ = json.Unmarshal(recipeSchemaJSON, &recipe)
 	var wine map[string]any
 	_ = json.Unmarshal(wineSchemaJSON, &wine)
 	var menu map[string]any
 	_ = json.Unmarshal(menuSchemaJson, &menu)
+	var shopping map[string]any
+	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
 	aiClient := openai.NewClient(opts...)
 
 	return &client{
+		serviceTier:    cfg.ServiceTier,
 		oai:            aiClient,
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
+		shoppingSchema: shopping,
 		model:          model,
+		imageModel:     imageModel,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
 	}
+}
+
+// WithRecipeReasoningEffort returns a copy configured with an explicit effort for
+// GenerateRecipe. An empty effort preserves the production medium default.
+func (c *client) WithRecipeReasoningEffort(effort responses.ReasoningEffort) *client {
+	configured := *c
+	configured.recipeReasoningEffort = effort
+	return &configured
 }
 
 func scheme(schema map[string]any) responses.ResponseTextConfigParam {

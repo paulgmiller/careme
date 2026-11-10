@@ -91,6 +91,10 @@ function initializeRecipeSteps() {
       doneButton.addEventListener("click", () => completeStep(step));
     }
 
+    step.querySelectorAll("[data-step-image-action]").forEach((action) => {
+      action.addEventListener("pointerdown", (event) => event.stopPropagation());
+    });
+
     step.addEventListener("pointerdown", (event) => {
       if (!event.isPrimary) return;
       if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
@@ -136,7 +140,20 @@ function initializeRecipeSteps() {
   });
 }
 
+//make clicking anywhere on ingredients make it collapse.
+function initializeIngredients() {
+  const details = document.getElementById("recipe-ingredients");
+  if (!details) return;
+  details.addEventListener("click", (event) => {
+    if (event.target.closest("summary")) return;
+    if (window.getSelection()?.toString()) return;
+    details.open = false;
+  });
+}
+
+
 document.addEventListener("DOMContentLoaded", () => {
   initializeStarRating();
   initializeRecipeSteps();
+  initializeIngredients();
 });

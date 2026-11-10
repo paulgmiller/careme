@@ -18,10 +18,10 @@ import (
 	"github.com/samber/lo"
 )
 
-const defaultIngredientGradeModel = gpt56Luna
+const defaultIngredientGradeModel = gpt6Luna
 
 // should we have category spefic grading prompts?
-const ingredientGradeSystemInstruction = `
+const ingredientGradeRubric = `
 You review grocery catalog items before they are shown to a home recipe generator.
 
 Score each item from 0 to 10 for usefulness as an ingredient in home-cooked recipes.
@@ -68,20 +68,21 @@ Scoring anchors:
 
 Important calibration:
 - Do not downgrade an ingredient just because it is uncommon. Rutabaga, collard greens, artichokes, yuca, pears, soup bones, and chicken livers are valid cooking ingredients.
-- Do downgrade items whose catalog wording implies they are mostly finished foods or snack formats.
+- Do downgrade items whose catalog wording implies they are mostly finished foods or snack formats.`
 
-Return JSON only. Preserve each input id/index exactly. Be concise.`
+const ingredientGradeSystemInstruction = ingredientGradeRubric + "\n\nReturn JSON only. Preserve each input id/index exactly. Be concise."
 
 type InputIngredient struct {
-	ProductID    string           `json:"id,omitempty"`
-	AisleNumber  string           `json:"number,omitempty"` // this is a dumb json name fix it later
-	Brand        string           `json:"brand,omitempty"`
-	Description  string           `json:"description,omitempty"`
-	Size         string           `json:"size,omitempty"`
-	PriceRegular *float32         `json:"regularPrice,omitempty"`
-	PriceSale    *float32         `json:"salePrice,omitempty"`
-	Categories   []string         `json:"categories,omitempty"`
-	Grade        *IngredientGrade `json:"grade,omitempty"`
+	ProductID    string              `json:"id,omitempty"`
+	AisleNumber  string              `json:"number,omitempty"` // this is a dumb json name fix it later
+	Brand        string              `json:"brand,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	Size         string              `json:"size,omitempty"`
+	PriceRegular *float32            `json:"regularPrice,omitempty"`
+	PriceSale    *float32            `json:"salePrice,omitempty"`
+	Categories   []string            `json:"categories,omitempty"`
+	Grade        *IngredientGrade    `json:"grade,omitempty"`
+	Embedding    IngredientEmbedding `json:"embeddings,omitempty"`
 }
 
 func (ii InputIngredient) PercentOff() float32 {
@@ -209,7 +210,7 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	if err != nil {
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
-	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage))
+	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage, string(resp.ServiceTier)))
 
 	return parseIngredientGrades(ctx, resp.OutputText(), items)
 }

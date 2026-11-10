@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	ordertypes "careme/internal/orders/types"
+
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -39,6 +41,9 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if cfg.cfg == nil {
+		cfg.cfg = &config.Config{}
+	}
 	if cfg.imageCache == nil {
 		cfg.imageCache = cfg.cache
 	}
@@ -46,14 +51,17 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
 	if cfg.generator == nil {
-		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache))
+		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache), noopstatuswriter{})
 	}
 
 	if cfg.imagegen == nil {
 		cfg.imagegen = mock{}
 	}
 
-	s := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen)
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg.statuses != nil {
 		s.generationStatuses = cfg.statuses
 	}
@@ -111,10 +119,19 @@ func newFakeStatusStore() *fakeStatusStore {
 	return &fakeStatusStore{statuses: make(map[string]status.Status)}
 }
 
-func (s *fakeStatusStore) Start(_ context.Context, hash string) error {
+func (s *fakeStatusStore) Start(_ context.Context, hash, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.statuses[hash] = status.Status{}
+	s.statuses[hash] = status.Status{Message: message}
+	return nil
+}
+
+func (s *fakeStatusStore) Update(_ context.Context, hash, message string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	payload := s.statuses[hash]
+	payload.Message = message
+	s.statuses[hash] = payload
 	return nil
 }
 
@@ -161,9 +178,9 @@ func (s *fakeStatusStore) failure(hash string) error {
 	return nil
 }
 
-func (s *fakeStatusStore) started(hash string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, ok := s.statuses[hash]
-	return ok
+// orderViewBuilderFunc lets tests supply one operation while exercising the interface.
+type orderViewBuilderFunc func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error)
+
+func (f orderViewBuilderFunc) OrderView(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+	return f(input)
 }

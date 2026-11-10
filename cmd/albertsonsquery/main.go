@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"careme/internal/albertsons/query"
 	"careme/internal/brightdata"
+	"careme/internal/providers/albertsons/query"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )

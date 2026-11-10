@@ -21,8 +21,10 @@ import (
 	"careme/internal/ingredients"
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/producescore"
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
@@ -64,7 +66,6 @@ func runServer(cfg *config.Config, addr string) error {
 	infraRoutes := routing.Wrap(rootMux, baseMiddleware)
 
 	authClient.Register(appRoutes)
-	campaigns.Register(appRoutes) // could be infra routes?
 	static.Register(infraRoutes)
 	appredirect.Register(infraRoutes)
 
@@ -76,7 +77,12 @@ func runServer(cfg *config.Config, addr string) error {
 	grader := ingredientgrading.NewManager(cfg, cache, aiHTTPClient)
 
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cache, centroids)
+	providers := providerregistry.NewFactory(cfg)
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		return fmt.Errorf("failed to create location server: %w", err)
+	}
+	locationStorage, err := locations.New(cache, centroids, locationBackends)
 	if err != nil {
 		return fmt.Errorf("failed to create location server: %w", err)
 	}
@@ -84,25 +90,29 @@ func runServer(cfg *config.Config, addr string) error {
 	var generator recipes.ExtGenerator
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
+	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc)
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
+		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
 	} else {
 		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
 		ro.add(critiquer)
 
-		aiclient := ai.NewClient(cfg.AI.APIKey, cfg.AI.RecipeModel, aiHTTPClient, prompts.NewCacheRecorder(cache))
+		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
+		shoppingMerger = aiclient
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
-		staples, err := recipes.NewCachedStaplesService(cfg, cache, grader)
+		backends, err := providers.NewStaplesBackends()
 		if err != nil {
-			return fmt.Errorf("failed to create staples service: %w", err)
+			return fmt.Errorf("failed to create staples backends: %w", err)
 		}
+		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
@@ -116,7 +126,7 @@ func runServer(cfg *config.Config, addr string) error {
 	userHandler := users.NewHandler(userStorage, locationStorage, authClient, users.NewUnsubscribeTokenFactory(*cfg), cfg.ResolvedPublicOrigin())
 	userHandler.Register(appRoutes)
 
-	locationServer := locations.NewServer(locationStorage, centroids, userStorage, recipes.NewCachedProduceScorer(recipes.IO(cache)))
+	locationServer := locations.NewServer(locationStorage, centroids, userStorage, producescore.NewCachedProduceScorer(recipes.IO(cache)))
 	ro.add(locationServer)
 	locationServer.Register(appRoutes, authClient)
 
@@ -133,16 +143,22 @@ func runServer(cfg *config.Config, addr string) error {
 	sitemapHandler := sitemap.New(cache, cfg.ResolvedPublicOrigin(), locationStorage)
 	sitemapHandler.Register(infraRoutes)
 
-	recipeHandler := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen)
+	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
+		return fmt.Errorf("register ordering: %w", err)
+	}
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers)
+	if err != nil {
+		return fmt.Errorf("create recipe handler: %w", err)
+	}
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-	campaigns.RegisterAdvertisedRecipeGeneration(infraRoutes, locationStorage, recipeHandler)
 
 	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/{$}", admin.Page())
 	adminMux.Handle("/users", users.AdminUsersPage(userStorage))
+	adminMux.Handle("/users/{id}", users.AdminUserDetailPage(userStorage))
 	recipeIO := recipes.IO(cache)
 	adminMux.Handle("/params/{hash}", recipes.AdminParamsJSON(cache))
 	adminMux.Handle("/prompt/menu/{hash}", prompts.AdminMenuPromptJSON(cache))
@@ -177,6 +193,7 @@ func runServer(cfg *config.Config, addr string) error {
 			http.Error(w, "template error", http.StatusInternalServerError)
 		}
 	})
+	campaigns.Register(appRoutes, userStorage, authClient)
 	home{userStorage, locationStorage, authClient}.Register(appRoutes)
 
 	// no logging for readyiness too noisy.

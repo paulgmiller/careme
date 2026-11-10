@@ -11,11 +11,16 @@ import (
 	"github.com/samber/lo"
 )
 
+const InitialMessage = "Your meals are taking shape. You can add finished recipes as they arrive."
+
 func Sales(ings []ai.InputIngredient) []string {
 	sales := lo.Filter(ings, func(ing ai.InputIngredient, _ int) bool {
 		return ing.PercentOff() > 0
 	})
 	slices.SortFunc(sales, func(a, b ai.InputIngredient) int {
+		if grade := cmp.Compare(b.Grade.GetScore(), a.Grade.GetScore()); grade != 0 {
+			return grade
+		}
 		return cmp.Compare(b.PercentOff(), a.PercentOff()) // descending
 	})
 

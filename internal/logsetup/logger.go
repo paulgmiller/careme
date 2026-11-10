@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	otlplogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	logsdk "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -68,7 +67,7 @@ func Configure(ctx context.Context) (func(), error) {
 		_ = traceProvider.Shutdown(shutdownCtx)
 		return nil, fmt.Errorf("create logger provider: %w", err)
 	}
-	otlplogglobal.SetLoggerProvider(logProvider)
+	otel.SetLoggerProvider(logProvider)
 
 	slog.SetDefault(slog.New(slog.NewMultiHandler(
 		stdouthandler,

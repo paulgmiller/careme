@@ -18,6 +18,19 @@ Because evaluations can make paid model calls, running every suite requires an e
 ./task.sh evals EVAL=all
 ```
 
+## Image latency
+
+Check that the production photo and sketch image paths each finish within 11 seconds using the same recipe:
+
+```sh
+./task.sh evals EVAL=image-latency -- --no-cache
+```
+
+The eval passes `image_style` as either `photo` or `sketch` to the provider, making
+one paid image call per case. Each case passes when its latency is under 11,000 ms.
+Use Promptfoo's `--repeat 3` (or more) when assessing the result beyond a smoke
+check; each repeat makes two additional paid image calls. Only `AI_API_KEY` is required.
+
 Generate recipe test cases from a cached shopping-list hash:
 
 ```sh
@@ -30,6 +43,10 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe generation
 
+The [2026-09-29 GPT-6.1 Sol comparison](recipe-generation/gpt61-sol-comparison-2026-09-29.md) records fresh recipe and menu runs against GPT-6 Sol and the new shared default.
+
+The [2026-09-22 GPT-6 Sol rollout](recipe-generation/gpt6-sol-rollout-2026-09-22.md) records recipe and menu results and compares the eight shared recipe cases with the recorded Astra baseline. The [2026-09-07 model comparison](recipe-generation/README.md) records earlier Astra, GPT-5.6 Sol, and Luna results.
+
 Select the recipe model without editing the suite:
 
 ```sh
@@ -38,13 +55,25 @@ Select the recipe model without editing the suite:
 
 Omit `MODEL` to use the production default. Direct Promptfoo runs also accept `RECIPE_EVAL_MODEL`. For side-by-side columns in one report, duplicate the `file://provider.go` provider entry with a distinct label and `config.model` for each candidate. An explicit `config.model` takes precedence over the environment. Pass the actual API model ID; the provider does not translate display names or silently substitute unavailable models.
 
+Set recipe reasoning effort explicitly when comparing models:
+
+```sh
+./task.sh evals EVAL=recipe-generation MODEL=gpt-6-sol REASONING_EFFORT=high -- --no-cache --output /tmp/recipe-eval-sol-high.json
+```
+
+Direct Promptfoo runs accept `RECIPE_EVAL_REASONING_EFFORT`; provider `config.reasoning_effort` takes precedence over that environment variable. Omit effort or leave it empty to use the production default of `medium`. Supported option values are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; individual models support subsets, and the API rejects unsupported combinations. No effort is silently substituted. `metadata.requestedReasoningEffort` records the requested value (empty means unspecified), and the provider label includes it. The judge's reasoning is unchanged.
+
+Promptfoo's **cost** column reports estimated recipe-generation USD, matching its generation-only latency column. Exported JSON also includes `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD` for generation and judging together. The provider gets cost directly from `GenerateRecipeWithCost` and `CritiqueRecipeWithCost`; it does not intercept HTTP responses. Token counts, including reasoning and cache tokens, remain in the AI usage logs and are not exported in new eval results. Promptfoo token totals are therefore unavailable, not zero-cost usage.
+
+Generation cost uses the application's standard short-context price table, including cache reads and writes; GPT-6 Sol and GPT-6.1 Sol pricing are included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
+
 The suite requires `AI_API_KEY` and `OPENROUTER_API_KEY`, loaded through the existing configuration/kage path. Each case makes one generation call and one call to the production critiquer. `config.judge_model` pins Gemini for every candidate. The judge sees only the newly generated recipe, with response IDs and provenance removed. Its full critique, model, and timestamp are retained in response metadata. `critique-quality` reports the score divided by ten and passes at 8/10; judge errors fail the evaluation.
 
-`latencyMs` measures the generation call only, including SDK retries, excluding configuration, Go compilation, and judging. The latency assertion uses a 60-second budget. `metadata.judgeLatencyMs` records judging separately. Use `--no-cache` for latency comparisons, keep concurrency at one, and use `--repeat 3` for repeated samples. Promptfoo caching is disabled by that flag, but the production OpenAI prompt cache and retained menu context are still used; these are continuation timings, and API cache hits are not guaranteed.
+`latencyMs` measures the generation call only, including SDK retries, excluding configuration, Go compilation, and judging. The latency assertion uses a 60-second budget. Recipe generation defaults to concurrency eight; override it with `--max-concurrency`. Use `--no-cache` for latency comparisons and `--repeat 3` for repeated samples. Record concurrency and any observed rate limits or retries when comparing runs. Promptfoo caching is disabled by that flag, but the production OpenAI prompt cache and retained menu context are still used; these are continuation timings, and API cache hits are not guaranteed.
 
 A one-case integration smoke check on 2026-09-04 passed using the existing GPT-5.6 Sol default: generation 50.369 seconds, Gemini judging 25.366 seconds, quality 9/10. This verifies the harness, not a model comparison.
 
-The eight cases include the original chicken and tri-tip regressions plus six production saved-recipe examples selected on 2026-09-04:
+The original eight cases include chicken and tri-tip regressions plus six production saved-recipe examples selected on 2026-09-04:
 
 | Case | Historical score | Coverage |
 | --- | --- | --- |
@@ -55,13 +84,27 @@ The eight cases include the original chicken and tri-tip regressions plus six pr
 | Chilean pebre tri-tip | 7, Opus | Partial-roast quantities, seasoning, total time |
 | Sumac-pistachio coho | 7, Gemini | Salt allocation and mixture instructions |
 
-Each added case records source recipe/list hashes, historical judge/score/date, and its focus. Historical scores explain selection, not a baseline to subtract from new scores: judges and prompts have changed. Saved does not mean defect-free. The cases replay the associated original menu direction, not subsequent edits to the saved recipe. No user identities or saved recipe bodies are checked in. Serving-count and time-budget assertions complement the critiquer, which judges cookability but does not receive the original user request.
+Two additional pantry regression cases replay Southern Smothered Chicken (catalog garlic must have a product ID) and Lemon-Parmesan Coho with Summer Orzo (cooking water must not appear in ingredients). Water may still appear in instructions; purchased liquids such as coconut water remain valid ingredients.
+
+Run only these cases with:
+
+```sh
+./task.sh evals EVAL=recipe-generation -- --no-cache --filter-pattern 'pantry regression' --output /tmp/careme-pantry-eval.json
+```
+
+The 2026-09-10 baseline at `cef1c1a` with the then-current production prompt, default GPT-5.6 Sol, and concurrency one passed the garlic assertion and failed the water assertion, reproducing the water defect. Both quality checks passed (8/10 and 9/10); both generation latency checks failed (73.322s and 67.304s versus 60s). Evaluation ID: `eval-UQU-2026-09-10T17:14:57`. This is one sample per case, not a reliability estimate. Generated recipe bodies remain outside the repository.
+
+Each case above records source recipe/list hashes, historical judge/score/date, and its focus. Historical scores explain selection, not a baseline to subtract from new scores: judges and prompts have changed. Saved does not mean defect-free. The cases replay the associated original menu direction, not subsequent edits to the saved recipe. No user identities or saved recipe bodies are checked in. Serving-count and time-budget assertions complement the critiquer, which judges cookability but does not receive the original user request.
 
 These continuation cases depend on OpenAI retaining their menu response IDs and on access through the originating API project. An expired or inaccessible response fails explicitly; refresh affected cases using `cmd/evalcase`. They are not self-contained prompt replays.
 
 Provider options and critique metadata assertions follow Promptfoo's [Go provider interface](https://www.promptfoo.dev/docs/providers/go/) and [JavaScript assertion context](https://www.promptfoo.dev/docs/configuration/expected-outputs/javascript/).
 
 ## Recipe critique
+
+The [October 13 Argon comparison](recipe-critique/argon-comparison-2026-10-13.md)
+records fresh cost and latency results against Gemini 3.1, including assertion
+false positives found during review.
 
 `recipe-critique/promptfooconfig.yaml` runs the production recipe critique prompt and schema against hand-reviewed recipe fixtures. A case accepts either a complete `vars.recipe` object or a `vars.recipe_hash`, but not both. Hash cases read `recipe/<hash>` from the configured cache, so export the cache credentials before running Promptfoo when the recipe is not in the local file cache.
 
@@ -71,4 +114,157 @@ Run just this suite from the repository root:
 ./task.sh evals EVAL=recipe-critique
 ```
 
+Select a critique model using `OPENROUTER_CRITIQUE_MODEL`; omit it to use the
+production default, `google/gemini-4-argon`. For a fresh cost/latency comparison:
+
+```sh
+OPENROUTER_CRITIQUE_MODEL=google/gemini-3.1-pro-preview ./task.sh evals EVAL=recipe-critique -- --no-cache --repeat 3 --output /tmp/critique-gemini31.json
+OPENROUTER_CRITIQUE_MODEL=google/gemini-4-argon ./task.sh evals EVAL=recipe-critique -- --no-cache --repeat 3 --output /tmp/critique-argon.json
+```
+
+Promptfoo's `cost` column reports OpenRouter's successful-response `usage.cost`
+in USD. Missing or invalid provider cost fails explicitly. Failed calls and
+account billing adjustments are not included. The suite runs at concurrency one;
+three repeats over its two fixtures make six paid calls per model. Recipe and
+menu generation suites retain their pinned judges for comparable generation evals.
+
 The current suite evaluates critique structure, defect detection, suggested fixes, false positives, brined/salty ingredient context, and a 30-second model-call latency budget. The Go provider reports only the production critique call duration, excluding Promptfoo's provider startup and build time. The planned recipe-revision stage remains separate so it can later send both the recipe and critique to the recipe-generation model and measure whether the feedback is actionable.
+
+## Ingredient grading
+
+The [October 8 Decisions comparison](ingredient-grader/decisions-comparison-2026-10-08.md)
+compares live Decisions grading with the saved Luna baseline and a fresh Luna
+run, including accuracy, token-based API cost, and grading latency.
+
+Decisions grades include per-level `probabilities` in the exported grade metadata,
+preserving the API's zero-based level value, label, and probability for diagnosis.
+
+The [October 1 JEV comparison](ingredient-grader/jev-comparison-2026-10-01.md)
+records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
+
+The [September 29 Luna comparison](ingredient-grader/gpt6-luna-comparison-2026-09-29.md)
+records 23 batches and 92 ingredient scores per model, including remaining failures.
+
+Compare the old and new Luna graders on the checked-in ingredient batches:
+
+```sh
+INGREDIENT_GRADING_MODEL=gpt-5.6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt56-luna.json
+INGREDIENT_GRADING_MODEL=gpt-6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt6-luna.json
+```
+
+Use the existing `INGREDIENT_GRADING_MODEL` configuration variable for both task
+and direct Promptfoo runs. Leave it unset to use the production default, currently
+`gpt-6-luna`. The provider has no separate model selector; `MODEL` is for the recipe
+and menu suites.
+Both Responses graders use `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
+to evaluate the OpenAI Decisions grader that replaced the `jev` option. It sends
+one independent request per ingredient with up to 64 concurrent requests per
+grader instance, and converts the zero-based ten-level score to a 1–10 grade by rounding and adding one.
+OpenAI runs require `AI_API_KEY` through the existing configuration/kage path.
+
+Grading must be enabled (`INGREDIENT_GRADING_ENABLE` defaults to enabled); the eval
+rejects disabled grading. Configuration loading validates the OpenAI key for enabled
+OpenAI grading, including in mock mode. Each case uses the production grading
+manager with a fresh in-memory cache, so persistent grades cannot bypass live
+calls. Promptfoo caching still requires `--no-cache`. A batch passes only when every requested ingredient
+has a grade within its checked-in bounds. Incomplete, duplicate, or unexpected
+results fail explicitly. JSON exports retain grades, ingredient/pass counts, and
+`metadata.requestedModel` (empty means the production default); `latencyMs` measures
+grading including SDK retries, excluding configuration and Go startup. The suite
+defaults to concurrency sixteen and has no latency assertion. The eval captures billing
+metadata through its HTTP transport without retaining credentials or response
+outputs. Cost estimation supports the two Luna Responses models and GPT-6 Luna
+Decisions; unknown pricing or missing usage fails explicitly.
+
+Provider errors are returned as Go errors; Promptfoo's Go wrapper then exits
+nonzero. Score-bound failures remain completed evaluation results for assertions.
+
+## Menu planning
+
+The [GPT-6 Sol rollout report](recipe-generation/gpt6-sol-rollout-2026-09-22.md#menu-planning)
+records the three-case production-model result.
+
+Run `./task.sh evals EVAL=menu-plan -- --no-cache --output /tmp/menu-plan-eval.json`.
+Select either candidate with `MODEL=gpt-6-sol` or `MODEL=gpt-6.1-sol`; direct
+Promptfoo runs accept `RECIPE_EVAL_MODEL`, and provider `config.model` takes
+precedence. The selected model is recorded in `metadata.requestedModel`.
+
+The provider uses the production menu model (currently `gpt-6.1-sol`) with medium
+reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
+configuration path. Each case makes a menu generation call and a separate judge call.
+
+The suite checks requested plan count, catalog membership for every anchor and
+side, and no repeated ingredient across anchor/side slots (ignoring case and
+whitespace). Fixtures provide enough distinct ingredients to satisfy this rule;
+menus that explicitly request ingredient reuse need separate expectations.
+A format assertion requires every plan to use one of the canonical dish formats
+and requires three distinct formats for a three-dinner menu.
+A three-dinner case checks that a limited ingredient is assigned to exactly one
+recipe's `recipe_instructions`, while serving count reaches every recipe.
+Category override cases request three all-Fancy, all-Healthy, or all-Different
+meals and assert that every returned category matches, overriding category spread.
+The existing judge also checks whether the plans fit the requested direction.
+The `Protein anchors` cases require meat or seafood as the anchor of a strict
+majority of meals by default (one of one, two of three, three of four), including
+a vegetable-heavy healthy request. Vegetarian and vegan requests instead require
+zero meat or seafood anchors. Explicit fixture labels classify anchors; sides,
+broth, cheese, and incidental mentions do not count toward the majority. The
+existing judge checks the full dietary request, including vegan restrictions.
+When the TSV has no meat or seafood, two further cases check that common cuts
+and seafood outside the catalog can supply the majority, while vegetarian
+requests still use catalog ingredients without meat or seafood. The exception
+applies only to anchors; sides must still come from the catalog or user requests.
+Run these cases with `./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'Protein anchors'`.
+Check the assertion boundaries offline with `node --test evals/menu-plan/protein-anchors.test.cjs`.
+
+Run just these cases with repeated samples:
+
+```sh
+./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'Category override' --repeat 3 --output /tmp/careme-category-overrides.json
+```
+
+On 2026-10-13, `gpt-6.1-sol` with medium reasoning and concurrency four passed
+all nine category-override assertions (three samples per case, 27 meals total).
+The Gemini judge scored request fidelity 10/10 in every sample. Overall, five of
+nine samples passed every assertion: two Healthy samples failed quality because
+all three dishes repeated farro; one Fancy sample (21.014s) and one Different
+sample (20.426s) exceeded the 20-second latency budget. The other seven samples
+passed quality. Evaluation ID: `eval-dSy-2026-10-13T22:43:09`. This is evidence for
+initial-menu category overrides, not a reliability guarantee or a regeneration test.
+Generated menu bodies remain outside the repository.
+
+These keyword assertions check handoff coverage, not semantic correctness:
+a negated instruction could still match. The generated recipes are not evaluated
+by this suite.
+
+The latency budget is 20 seconds per menu call, including SDK retries and ingredient
+correction calls, excluding configuration, Go compilation, and JSON serialization.
+Use `--no-cache` for meaningful timing. The suite defaults to concurrency four.
+The suite pins `config.judge_model` to `google/gemini-3.1-pro-preview`. Its menu-specific
+rubric evaluates request fidelity, culinary coherence, and meaningful variety from
+the original request, catalog, location/date, recent recipe titles, and complete
+menu. Response IDs and cache keys are removed before judging. Each dimension must
+score at least 8/10, with no medium/high-severity issues, to pass `menu-quality`.
+Issues identify affected recipes using 1-based indexes and include evidence and a
+suggested fix. The judge assesses compact planning handoffs, not finished recipes;
+it does not demand steps, quantities, or cooking temperatures.
+
+Malformed responses and judge API errors fail explicitly. Full critique, returned
+judge model, timestamp, and separate `judgeLatencyMs` are retained in metadata.
+The 20-second latency assertion excludes judging. Judge scores can vary; calibrate
+against human-reviewed good/bad menus before treating them as a quality benchmark.
+This provider does not export cost or token usage; Promptfoo totals are not a
+billing estimate.
+
+## Shopping quantity merge
+
+Run `./task.sh evals EVAL=shopping-merge -- --no-cache --output /tmp/shopping-merge-eval.json`.
+This tiny suite calls the production `MergeShoppingQuantities` path for onion
+and olive oil from [shopping list p37vV7PPvys](https://careme.cooking/recipes?h=p37vV7PPvys).
+It checks merged needed amounts of 8 ounces onion and 4½ tablespoons oil.
+The onion buy value is numeric: 0.5 if sold by weight, otherwise 1. Pantry oil
+has buy=null. A third case checks needed="40 oz" and buy=3 for fixed 16 oz trays.
+A short allowlist accepts common equivalent needed quantity spellings; other
+formats need review. The onion fixture includes four catalog products, but only
+the recipe's exact product ID is sent to the model. Assertions are deterministic,
+with no judge call. Requires `AI_API_KEY` through the existing configuration.

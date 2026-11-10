@@ -1,0 +1,31 @@
+overlay: 1.0.0
+info:
+  title: Kroger OAuth client generation overlay
+  version: 0.0.0
+actions:
+  - target: $.paths["/v1/connect/oauth2/token"].post.requestBody.content["application/x-www-form-urlencoded"].schema.oneOf
+    description: Represent grant-specific form fields in one encodable form; callers select the grant and its required fields.
+    remove: true
+  - target: $.paths["/v1/connect/oauth2/token"].post.requestBody.content["application/x-www-form-urlencoded"].schema.discriminator
+    remove: true
+  - target: $.paths["/v1/connect/oauth2/token"].post.requestBody.content["application/x-www-form-urlencoded"].schema
+    update:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+        code:
+          type: string
+        redirect_uri:
+          type: string
+        refresh_token:
+          type: string
+        scope:
+          type: string
+  - target: $.paths["/v1/connect/oauth2/token"].post.responses["200"].content["application/json"].schema.oneOf
+    description: All three grants share access_token, expires_in, token_type, and optional refresh_token response fields.
+    remove: true
+  - target: $.paths["/v1/connect/oauth2/token"].post.responses["200"].content["application/json"].schema
+    update:
+      $ref: "#/components/schemas/authorization_code_response"

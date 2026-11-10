@@ -11,6 +11,7 @@ import (
 )
 
 func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
+	t.Parallel()
 	// Create a shopping list with multiple recipes
 	multiRecipeList := ai.ShoppingList{
 		Recipes: []ai.Recipe{
@@ -101,7 +102,35 @@ func TestFormatShoppingListHTML_ContainsAddHideAndDetailsButtons(t *testing.T) {
 	}
 }
 
+func TestShoppingRecipeDetailsRequireIngredientsOrInstructions(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		recipe  ai.Recipe
+		details bool
+	}{
+		{name: "empty", recipe: ai.Recipe{Title: "Bare recipe"}},
+		{name: "ingredients", recipe: ai.Recipe{Title: "Ingredient recipe", Ingredients: []ai.Ingredient{{Name: "Beans"}}}, details: true},
+		{name: "instructions", recipe: ai.Recipe{Title: "Instruction recipe", Instructions: []string{"Cook."}}, details: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: "70000001", Name: "Store"}, time.Now())
+			w := httptest.NewRecorder()
+			formatShoppingListHTMLForTest(t.Context(), p, ai.ShoppingList{Recipes: []ai.Recipe{tt.recipe}}, true, recipeSelection{}, w)
+			html := assertHTTPSuccess(t, w)
+			if got := strings.Contains(html, `onclick="var d=this.closest('article').querySelector('details');`); got != tt.details {
+				t.Errorf("Details button present = %t, want %t", got, tt.details)
+			}
+			if got := strings.Contains(html, `<details id="shopping-recipe-`); got != tt.details {
+				t.Errorf("Details panel present = %t, want %t", got, tt.details)
+			}
+		})
+	}
+}
+
 func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
+	t.Parallel()
 	listWithSavedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -153,20 +182,19 @@ func TestFormatShoppingListHTML_EnablesFinalizeWhenRecipeSaved(t *testing.T) {
 	if strings.Contains(html, `<details class="space-y-4" open`) {
 		t.Error("saved recipe details should start collapsed")
 	}
-	if !strings.Contains(html, `<details open>`) {
-		t.Error("shopping list should start expanded when a recipe is saved")
+	if strings.Contains(html, `id="shopping-list-section"`) {
+		t.Error("shopping list should stay hidden until Build")
 	}
 	if strings.Contains(html, `id="finalize-help"`) {
 		t.Error("HTML should not render finalize helper text when button is enabled")
 	}
-	finalizeIndex := strings.Index(html, `id="shopping-finalize-controls"`)
-	shoppingListIndex := strings.Index(html, `Shopping list`)
-	if finalizeIndex == -1 || shoppingListIndex == -1 || finalizeIndex > shoppingListIndex {
-		t.Error("build shopping list controls should render above the shopping list section")
+	if !strings.Contains(html, `id="shopping-finalize-controls"`) {
+		t.Error("build shopping list controls should render for saved recipes")
 	}
 }
 
 func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
+	t.Parallel()
 	listWithDismissedRecipe := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{
@@ -211,6 +239,7 @@ func TestFormatShoppingListHTML_ShowsRestoreOnlyWhenRecipeHidden(t *testing.T) {
 }
 
 func TestFormatShoppingListHTML_SignedOutShowsSaveAction(t *testing.T) {
+	t.Parallel()
 	list := ai.ShoppingList{
 		Recipes: []ai.Recipe{
 			{

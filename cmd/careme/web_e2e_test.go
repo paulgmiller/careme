@@ -15,11 +15,14 @@ import (
 
 	"careme/internal/auth"
 	"careme/internal/cache"
+	"careme/internal/campaigns"
 	"careme/internal/config"
 	"careme/internal/farmersmarket"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/templates"
 	"careme/internal/users"
@@ -54,7 +57,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	initialRecipesURL := mustStartRecipeGeneration(t, client, srv.URL+"/recipes", url.Values{
 		"location": {locationID},
 	})
-	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectSpinner*/)
+	_, recipesBody := followUntilRecipes(t, client, initialRecipesURL, true /*expectProgress*/)
 
 	// Step 3: select one recipe to save and two to dismiss.
 	recipesHash := extractRecipesHash(t, recipesBody)
@@ -82,7 +85,7 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 	if !strings.HasPrefix(finalizeRedirect, "/recipes?") {
 		t.Fatalf("expected finalize redirect to /recipes, got %q", finalizeRedirect)
 	}
-	_, finalizedBody := followUntilRecipes(t, client, srv.URL+finalizeRedirect, false /*expectSpinner*/)
+	_, finalizedBody := followUntilRecipes(t, client, srv.URL+finalizeRedirect, false /*expectProgress*/)
 	recipeHashes = extractRecipeHashes(t, finalizedBody)
 	if len(recipeHashes) != 1 {
 		t.Fatalf("expected finalized page to show 1 recipe, got %d", len(recipeHashes))
@@ -134,7 +137,42 @@ func TestWebEndToEndFlowWithMocks(t *testing.T) {
 		t.Fatalf("expected recipe page to persist stars value, got body: %s", recipeBody)
 	}
 
-	// TODO step 6 make sure recipes are saved to user page?
+	// Step 8: change cooking preferences, then regenerate from the finalized page.
+	// The redirect must use the same hash as the generation started with those preferences.
+	_ = mustPostFormBody(t, client, srv.URL+"/user", url.Values{
+		"directive": {"No shellfish"},
+	})
+	finalizedBody = mustGetBody(t, client, srv.URL+finalizeRedirect)
+	regenerateHash := extractRecipesHash(t, finalizedBody)
+	regenerateURL := srv.URL + "/recipes/" + url.PathEscape(regenerateHash) + "/regenerate"
+	regenerateRedirect := mustPostFormRedirectHTMX(t, client, regenerateURL, url.Values{
+		"instructions": {"make it vegetarian"},
+	})
+	redirectURL, err := url.Parse(regenerateRedirect)
+	if err != nil {
+		t.Fatalf("invalid regeneration redirect %q: %v", regenerateRedirect, err)
+	}
+	newHash := redirectURL.Query().Get("h")
+	if newHash == "" || newHash == regenerateHash {
+		t.Fatalf("expected regeneration redirect with a new hash, got %q", regenerateRedirect)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		body := mustGetBody(t, client, srv.URL+regenerateRedirect)
+		if strings.Contains(body, "Recipe generation did not start.") {
+			t.Fatalf("regeneration redirect %q has no generation status", regenerateRedirect)
+		}
+		if strings.Contains(body, `/recipes/`+newHash+`/regenerate`) {
+			if len(extractRecipeHashes(t, body)) < 2 {
+				t.Fatal("expected regenerated recipes alongside the saved recipe")
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for regenerated recipes at %q", regenerateRedirect)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func TestHomeShowsFavoriteStoreChefNotesEvenWhenNameLookupFails(t *testing.T) {
@@ -202,9 +240,13 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheDir := filepath.Join(t.TempDir(), "cache")
 	cacheStore := cache.NewFileCache(cacheDir)
 	userStorage := users.NewStorage(cacheStore)
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore))
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore))
 	centroids := locations.LoadCentroids()
-	locationStorage, err := locations.New(cfg, cacheStore, centroids)
+	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
+	if err != nil {
+		t.Fatalf("failed to create location server: %v", err)
+	}
+	locationStorage, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		t.Fatalf("failed to create location server: %v", err)
 	}
@@ -220,10 +262,15 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator).Register(appRoutes)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, recipes.SimpleShoppingQuantityMerger{}, providerregistry.NewFactory(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipeHandler.Register(appRoutes)
 	farmersMarketStore := farmersmarket.NewStore(cacheStore)
 	farmersMarketUploader := farmersmarket.NewUploader(farmersMarketStore)
 	farmersmarket.NewHandler(farmersMarketUploader, cacheStore, mockAuth, farmersmarket.MockExtractor{}).Register(appRoutes)
+	campaigns.Register(appRoutes, userStorage, mockAuth)
 	home{userStorage, locationStorage, mockAuth}.Register(appRoutes)
 
 	ro := &readyOnce{}
@@ -373,11 +420,11 @@ func mustPostFormRedirectHTMX(t *testing.T, client *http.Client, targetURL strin
 	return redirect
 }
 
-func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectSpinner bool) (string, string) {
+func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expectProgress bool) (string, string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	current := startURL
-	sawSpinner := false
+	sawProgress := false
 	for {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for recipes page starting at %s", startURL)
@@ -390,8 +437,8 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 			t.Fatalf("failed to close response body: %v", err)
 		}
 
-		if isSpinner(body) {
-			sawSpinner = true
+		if isGenerationProgress(body) {
+			sawProgress = true
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -400,16 +447,16 @@ func followUntilRecipes(t *testing.T, client *http.Client, startURL string, expe
 			t.Fatalf("expected recipes page 200, got %d: %s", resp.StatusCode, body)
 		}
 
-		if sawSpinner != expectSpinner {
-			t.Fatal("expected spinner but never got one")
+		if sawProgress != expectProgress {
+			t.Fatal("expected generation progress but never got it")
 		}
 
 		return current, body
 	}
 }
 
-func isSpinner(body string) bool {
-	return strings.Contains(body, "<title>Generating") || strings.Contains(body, "Please wait")
+func isGenerationProgress(body string) bool {
+	return strings.Contains(body, `hx-trigger="every 1s"`)
 }
 
 func extractLocationID(t *testing.T, body string) string {

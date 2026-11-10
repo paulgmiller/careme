@@ -90,7 +90,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 
 	gradedIngredients, err := c.grader.GradeIngredients(ctx, missingIngredients)
 
-	// might get partial results back save those.
+	// Cache successful results without making persistence failures fail grading.
 	var wg sync.WaitGroup
 	for _, gradedIngredient := range gradedIngredients {
 		results = append(results, gradedIngredient)
@@ -99,7 +99,6 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		}
 		wg.Go(func() {
 			ctx := context.WithoutCancel(ctx)
-			// could just save grade rather than whole ingredient
 			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
 			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
 				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
@@ -110,6 +109,5 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 	if err != nil {
 		return nil, err
 	}
-
 	return results, nil
 }

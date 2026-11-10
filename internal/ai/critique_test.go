@@ -237,9 +237,10 @@ func TestCritiqueRecipeUsesOpenRouterStructuredOutput(t *testing.T) {
 		}),
 	})
 
-	got, err := client.CritiqueRecipe(t.Context(), Recipe{Title: "Roast Chicken"})
+	got, cost, err := client.CritiqueRecipeWithCost(t.Context(), Recipe{Title: "Roast Chicken"})
 
 	require.NoError(t, err)
+	assert.Equal(t, 0.00125, cost)
 	assert.Equal(t, 8, got.OverallScore)
 	assert.Equal(t, "Ready to cook.", got.Summary)
 	assert.Equal(t, "anthropic/claude-sonnet-4.5", got.Model)

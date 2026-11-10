@@ -14,91 +14,10 @@ import (
 
 	cachepkg "careme/internal/cache"
 	"careme/internal/locations/geo"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type namedBackend struct {
-	id string
-}
-
-func (b namedBackend) GetLocationByID(context.Context, string) (*Location, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (b namedBackend) GetLocationsByCoordinates(context.Context, geo.Coordinate) ([]Location, error) {
-	return nil, nil
-}
-
-func (b namedBackend) IsID(string) bool {
-	return false
-}
-
-func (b namedBackend) HasInventory(string) bool {
-	return false
-}
-
-func TestInitializeLocationBackendsRunsFactoriesInParallelAndCollectsBackends(t *testing.T) {
-	started := make(chan string, 2)
-	release := make(chan struct{})
-
-	factories := []locationBackendFactory{
-		func(context.Context) (locationBackend, error) {
-			started <- "first"
-			<-release
-			return namedBackend{id: "first"}, nil
-		},
-		func(context.Context) (locationBackend, error) {
-			started <- "second"
-			<-release
-			return namedBackend{id: "second"}, nil
-		},
-	}
-
-	type result struct {
-		backends []locationBackend
-		err      error
-	}
-	done := make(chan result, 1)
-	go func() {
-		backends, err := initializeLocationBackends(context.Background(), factories)
-		done <- result{backends: backends, err: err}
-	}()
-
-	for range factories {
-		select {
-		case <-started:
-		case <-time.After(200 * time.Millisecond):
-			t.Fatal("expected all backend factories to start before any finished")
-		}
-	}
-
-	close(release)
-
-	select {
-	case result := <-done:
-		if result.err != nil {
-			t.Fatalf("initializeLocationBackends returned error: %v", result.err)
-		}
-		if len(result.backends) != 2 {
-			t.Fatalf("expected 2 backends, got %d", len(result.backends))
-		}
-
-		gotIDs := make(map[string]bool, len(result.backends))
-		for _, backend := range result.backends {
-			named, ok := backend.(namedBackend)
-			if !ok {
-				t.Fatalf("expected backend type namedBackend, got %T", backend)
-			}
-			gotIDs[named.id] = true
-		}
-		if !gotIDs["first"] || !gotIDs["second"] {
-			t.Fatalf("expected both backends to be returned, got %v", gotIDs)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("initializeLocationBackends did not finish")
-	}
-}
 
 func TestGetLocationByIDUsesCache(t *testing.T) {
 	client := newFakeLocationClient()
@@ -110,7 +29,7 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 		ZipCode: "10001",
 	})
 
-	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 
 	ctx := context.Background()
 	got, err := server.GetLocationByID(ctx, "12345")
@@ -126,14 +45,63 @@ func TestGetLocationByIDUsesCache(t *testing.T) {
 	if got.Lat == nil || got.Lon == nil {
 		t.Fatalf("expected coordinates to be backfilled: %+v", got)
 	}
-	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"12345")
 	// Remove backend value to prove the second read comes from persistent cache.
 	delete(client.details, "12345")
 	_, err = server.GetLocationByID(ctx, "12345")
 	if err != nil {
 		t.Fatalf("GetLocationByID second call returned error: %v", err)
 	}
-	requireEventuallyCached(t, fc, locationCachePrefix+"12345")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"12345")
+}
+
+type versionedLocationClient struct {
+	*fakeLocationClient
+}
+
+func (versionedLocationClient) CachePolicy() (version string, cacheable bool) {
+	return "kroger-v2", true
+}
+
+func TestGetLocationByIDIgnoresLegacyChainCache(t *testing.T) {
+	client := newFakeLocationClient()
+	fc := cachepkg.NewInMemoryCache()
+	legacy := Location{ID: "70500874", Name: "QFC Bellevue", Chain: "kroger", ZipCode: "00601"}
+	mustPutJSONInCache(t, fc, "location/70500874", legacy)
+	fresh := legacy
+	fresh.Chain = "QFC"
+	client.setDetailResponse(fresh.ID, fresh)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{versionedLocationClient{client}}, fc)
+	got, err := server.GetLocationByID(t.Context(), fresh.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
+	storedRaw := requireEventuallyCached(t, fc, "location/kroger-v2/70500874")
+	var stored Location
+	require.NoError(t, json.Unmarshal([]byte(storedRaw), &stored))
+	assert.Equal(t, "QFC", stored.Chain)
+	delete(client.details, fresh.ID)
+	got, err = server.GetLocationByID(t.Context(), fresh.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
+}
+
+func TestVersionedLocationSearchPopulatesLookupCache(t *testing.T) {
+	client := newFakeLocationClient()
+	fc := cachepkg.NewInMemoryCache()
+	coordinates := coordinatesForZIP(t, "00601")
+	location := Location{ID: "70500874", Name: "QFC Bellevue", Chain: "QFC", ZipCode: "00601", Lat: &coordinates.Lat, Lon: &coordinates.Lon}
+	client.setListResponse("00601", []Location{location})
+	legacy := location
+	legacy.Chain = "kroger"
+	mustPutJSONInCache(t, fc, "location/70500874", legacy)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{versionedLocationClient{client}}, fc)
+	found, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	requireEventuallyCached(t, fc, "location/kroger-v2/70500874")
+	got, err := server.GetLocationByID(t.Context(), location.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "QFC", got.Chain)
 }
 
 func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
@@ -164,7 +132,7 @@ func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
 		},
 	})
 
-	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 
 	ctx := context.Background()
 	locs, err := server.GetLocationsByCoordinates(ctx, coordinatesForZIP(t, "00601"))
@@ -187,8 +155,8 @@ func TestGetLocationsByCoordinatesCachesLocations(t *testing.T) {
 		t.Fatalf("unexpected second location zip code: %+v", locs[1])
 	}
 
-	requireEventuallyCached(t, fc, locationCachePrefix+"111")
-	requireEventuallyCached(t, fc, locationCachePrefix+"222")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"111")
+	requireEventuallyCached(t, fc, locationCachePrefix+"/"+"222")
 }
 
 func TestGetLocationsByCoordinatesSortsByDistance(t *testing.T) {
@@ -293,9 +261,9 @@ func TestGetLocationByIDLoadsFromPersistentCache(t *testing.T) {
 		ZipCode:  "00601",
 		CachedAt: cachedAt,
 	}
-	mustPutJSONInCache(t, fc, locationCachePrefix+"12345", preloaded)
+	mustPutJSONInCache(t, fc, locationCachePrefix+"/"+"12345", preloaded)
 
-	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	got, err := server.GetLocationByID(context.Background(), "12345")
 	if err != nil {
 		t.Fatalf("GetLocationByID returned error: %v", err)
@@ -314,7 +282,7 @@ func TestGetLocationsByCoordinatesStoresToPersistentCacheIfMissing(t *testing.T)
 	})
 
 	fc := cachepkg.NewInMemoryCache()
-	server := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	server := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err != nil {
 		t.Fatalf("GetLocationsByCoordinates returned error: %v", err)
@@ -323,7 +291,7 @@ func TestGetLocationsByCoordinatesStoresToPersistentCacheIfMissing(t *testing.T)
 		t.Fatalf("expected 1 location, got %d", len(locs))
 	}
 
-	storedRaw := requireEventuallyCached(t, fc, locationCachePrefix+"111")
+	storedRaw := requireEventuallyCached(t, fc, locationCachePrefix+"/"+"111")
 	var stored Location
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil {
 		t.Fatalf("failed to decode stored location: %v", err)
@@ -339,7 +307,7 @@ func TestGetLocationsByCoordinatesReturnsErrorWhenAllBackendsFail(t *testing.T) 
 	failB := newFakeLocationClient()
 	failB.err = fmt.Errorf("backend B down")
 
-	server := newTestLocationServerWithBackends([]locationBackend{failA, failB})
+	server := newTestLocationServerWithBackends([]LocationBackend{failA, failB})
 	_, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err == nil {
 		t.Fatalf("expected error when all backends fail")
@@ -357,7 +325,7 @@ func TestGetLocationsByCoordinatesIgnoresErrorsWhenAtLeastOneBackendSucceeds(t *
 		{ID: "ok", Name: "OK", ZipCode: "00601", Lat: &lat, Lon: &lon},
 	})
 
-	server := newTestLocationServerWithBackends([]locationBackend{fail, success})
+	server := newTestLocationServerWithBackends([]LocationBackend{fail, success})
 	locs, err := server.GetLocationsByCoordinates(context.Background(), coordinatesForZIP(t, "00601"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -377,7 +345,7 @@ func coordinatesForZIP(t *testing.T, zip string) geo.Coordinate {
 }
 
 func TestHasInventory(t *testing.T) {
-	server := newTestLocationServerWithBackends([]locationBackend{
+	server := newTestLocationServerWithBackends([]LocationBackend{
 		inventoryBackend{
 			supported: map[string]bool{
 				"70500874":       true,
@@ -424,7 +392,7 @@ func TestRequestStoreReturnsWriteErrors(t *testing.T) {
 
 func TestRequestedStoreIDsListsStoredRequests(t *testing.T) {
 	fc := cachepkg.NewInMemoryCache()
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{newFakeLocationClient()}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{newFakeLocationClient()}, fc)
 
 	mustPutJSONInCache(t, fc, storeRequestPrefix+"publix_123", locationRequest{StoreID: "publix_123"})
 	mustPutJSONInCache(t, fc, storeRequestPrefix+"walmart_456", locationRequest{StoreID: "walmart_456"})
@@ -460,7 +428,7 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 			failed.err = tt.backendErr
 			success := newFakeLocationClient()
 			success.setListResponse("00601", []Location{{ID: "ok", ZipCode: "00601"}})
-			storage := newTestLocationServerWithBackends([]locationBackend{failed, success})
+			storage := newTestLocationServerWithBackends([]LocationBackend{failed, success})
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if tt.canceled {
@@ -475,7 +443,7 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 				require.Len(t, got, 1)
 			}
 			found := false
-			for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+			for line := range strings.SplitSeq(strings.TrimSpace(logs.String()), "\n") {
 				var record map[string]any
 				require.NoError(t, json.Unmarshal([]byte(line), &record))
 				if record["msg"] == "error fetching locations from backend" {
@@ -484,6 +452,79 @@ func TestGetLocationsByCoordinatesCancellation(t *testing.T) {
 				}
 			}
 			assert.True(t, found, "backend failure should remain observable")
+		})
+	}
+}
+
+type cachePolicyBackend struct {
+	*fakeLocationClient
+	cacheable bool
+	version   string
+}
+
+func (b cachePolicyBackend) CachePolicy() (version string, cacheable bool) {
+	return b.version, b.cacheable
+}
+
+func TestLocationBackendCachePolicy(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		policy        *bool
+		wantCacheable bool
+		version       string
+	}{
+		{"default", nil, true, ""},
+		{"enabled", new(true), true, ""},
+		{"disabled", new(false), false, ""},
+		{"versioned", new(true), true, "v2"},
+		{"versioned disabled", new(false), false, "v2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fc := cachepkg.NewInMemoryCache()
+			client := newFakeLocationClient()
+			coordinates := coordinatesForZIP(t, "00601")
+			fresh := Location{ID: "fresh", Name: "Fresh backend location", Lat: &coordinates.Lat, Lon: &coordinates.Lon}
+			client.setDetailResponse("cached", Location{ID: "cached", Name: "Backend location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+			client.setDetailResponse("fresh", fresh)
+			client.setListResponse("00601", []Location{{ID: "search", Name: "Search result", Lat: &coordinates.Lat, Lon: &coordinates.Lon}})
+			var backend LocationBackend = client
+			if test.policy != nil {
+				backend = cachePolicyBackend{client, *test.policy, test.version}
+			}
+			server := newTestLocationServerWithBackendsAndCache([]LocationBackend{backend}, fc)
+			prefix := locationCachePrefix + "/"
+			if test.version != "" {
+				prefix += test.version + "/"
+			}
+			mustPutJSONInCache(t, fc, prefix+"cached", Location{ID: "cached", Name: "Cached location", Lat: &coordinates.Lat, Lon: &coordinates.Lon})
+
+			got, err := server.GetLocationByID(t.Context(), "cached")
+			require.NoError(t, err)
+			if test.wantCacheable {
+				assert.Equal(t, "Cached location", got.Name)
+			} else {
+				assert.Equal(t, "Backend location", got.Name)
+			}
+
+			got, err = server.GetLocationByID(t.Context(), "fresh")
+			require.NoError(t, err)
+			assert.Equal(t, fresh, *got)
+			locations, err := server.GetLocationsByCoordinates(t.Context(), coordinates)
+			require.NoError(t, err)
+			require.Len(t, locations, 1)
+			assert.Equal(t, "search", locations[0].ID)
+
+			for _, id := range []string{"fresh", "search"} {
+				if test.wantCacheable {
+					requireEventuallyCached(t, fc, prefix+id)
+				} else {
+					assert.Never(t, func() bool {
+						exists, err := fc.Exists(t.Context(), prefix+id)
+						require.NoError(t, err)
+						return exists
+					}, 50*time.Millisecond, time.Millisecond)
+				}
+			}
 		})
 	}
 }

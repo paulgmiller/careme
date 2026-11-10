@@ -19,6 +19,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/locations"
+	"careme/internal/providerregistry"
 )
 
 type zipStoreCount struct {
@@ -63,7 +64,11 @@ func main() {
 
 	centroids := locations.LoadCentroids()
 
-	client, err := locations.New(cfg, cacheStore, centroids)
+	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
+	}
+	client, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}

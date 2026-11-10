@@ -1,30 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>{{.Recipe.Title}} | Careme</title>
-  <meta name="description" content="{{.Recipe.Description}} Recipe for {{.Location.Name}} on {{.Date}}." />
-
-  {{if .Recipe.Title}}
-  <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
-  <meta property="og:title" content="{{.Recipe.Title}}" />
-  <meta property="og:description" content="{{.Recipe.Description}}" />
-  <meta property="og:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Careme" />
-
-  <!-- Twitter Card meta tags -->
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="{{.Recipe.Title}}" />
-  <meta name="twitter:description" content="{{.Recipe.Description}}" />
-  <meta name="twitter:image" content="{{if .RecipeImage.HasImage}}{{PublicOrigin}}/recipe/{{.RecipeImage.Hash}}/image{{else}}{{PublicOrigin}}/favicon.ico{{end}}" />
-  {{end}}
-
-  {{template "app_head" .Style}}
-
-  {{.ClarityScript}}
-  {{.GoogleTagScript}}
+  {{template "page_head" .Page}}
 </head>
 <body class="min-h-screen bg-gradient-to-b from-brand-50 to-white antialiased">
   {{GoogleTagNoScript}}
@@ -90,13 +67,17 @@
             {{end}}
             </div>
 
-            <div class="print-hidden">{{template "recipe_image_panel" .}}</div>
+            <div class="print-hidden">
+              <div id="recipe-image-panel" class="hidden has-[img]:block overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
+                {{template "recipe_image" .RecipeImage}}
+              </div>
+            </div>
 
             {{template "recipe_properties" .PropertyDisplay}}
 
-            <div class="grid gap-6 md:grid-cols-2">
+            <div class="grid gap-6 md:grid-cols-2 md:has-[.recipe-ingredients:not([open])]:grid-cols-1">
               <details id="recipe-ingredients"
-                       class="recipe-ingredients group"
+                       class="recipe-ingredients group cursor-pointer"
                        open>
                 <summary class="cursor-pointer list-none focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
                   <h3 class="flex items-center justify-between gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
@@ -107,42 +88,23 @@
                     </span>
                   </h3>
                 </summary>
-                <ul class="mt-3 space-y-2 text-gray-700">
-                  {{range .DisplayIngredients}}
-                  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
-                    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
-                      <span class="font-medium text-brand-700">{{.Name}}</span>
-                      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
-                        {{if .Quantity}}
-                        <span class="text-gray-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
-                        {{else}}
-                        <span class="hidden sm:block" aria-hidden="true"></span>
-                        {{end}}
-                        {{if .Price}}
-                        <span class="text-gray-500 sm:text-right sm:text-sm">{{.Price}}</span>
-                        {{else}}
-                        <span class="hidden sm:block" aria-hidden="true"></span>
-                        {{end}}
-                      </div>
-                    </div>
-                  </li>
-                  {{end}}
-                </ul>
+                {{template "recipe_ingredient_list" .DisplayIngredients}}
               </details>
               <div id="recipe-instructions" data-recipe-steps>
                 <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500">Instructions</h3>
                 <p class="print-hidden mt-1 text-xs text-gray-500" data-recipe-steps-hint hidden>Swipe a step aside or click its number when it’s done.</p>
                 <ol class="recipe-step-list mt-3 space-y-2 text-gray-700">
-                  {{range $index, $instruction := .InstructionsHTML}}
+                  {{range .Steps}}
                   <li class="recipe-step px-1 py-2 text-sm" data-recipe-step>
-                    <div class="flex items-start gap-3">
+                    <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
                       <button type="button"
                               class="w-5 shrink-0 cursor-pointer text-right transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2"
                               data-recipe-step-number
                               data-recipe-step-done
-                              aria-label="Mark step {{InstructionNumber $index}} done"
-                              title="Mark step done">{{InstructionNumber $index}}.</button>
-                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{$instruction}}</div>
+                              aria-label="Mark step {{.Number}} done"
+                              title="Mark step done">{{.Number}}.</button>
+                      <div class="min-w-0 flex-1 space-y-1 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ul]:text-gray-600">{{.HTML}}</div>
+                      {{template "step_image" .}}
                     </div>
                   </li>
                   {{end}}
@@ -183,11 +145,12 @@
                   hx-on::response-error="document.getElementById('question-error').classList.remove('hidden');"
                   class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask Careme</label>
-              <input id="question"
-                     type="text"
+              <textarea id="question"
+                     rows="1"
                      name="question"
                      placeholder="e.g. Can I swap the protein?"
-                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400" />
+                     style="field-sizing: content; min-height: 2.625rem; max-height: 12rem; overflow-y: auto;"
+                     class="w-full flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-400"></textarea>
               <input type="hidden" name="recipe_title" value="{{.Recipe.Title}}" />
               <input id="question-response-id" type="hidden" name="response_id" value="{{.ResponseID}}" />
               <input id="question-prompt-cache-key" type="hidden" name="prompt_cache_key" value="{{.PromptCacheKey}}" />
@@ -288,7 +251,7 @@
     </section>
   </main>
   <script src="{{AssetPath}}recipe.js"></script>
-  <script src="/static/htmx@2.0.8.js"></script>
+  <script src="/static/htmx@2.0.10.js"></script>
   <script src="{{AssetPath}}share.js"></script>
   {{template "clerk_refresh.html" .}}
 </body>
@@ -316,7 +279,7 @@
       </summary>
       <div class="mt-3 border-t border-brand-100 pt-3">
         <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Careme</p>
-        <p class="mt-1 whitespace-pre-line text-sm text-gray-700">{{$entry.Answer}}</p>
+        <div class="mt-1 space-y-1 text-sm text-gray-700 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5">{{$entry.AnswerHTML}}</div>
       </div>
     </details>
     {{end}}
@@ -392,15 +355,4 @@
   {{end}}
 </div>
 {{end}}
-{{end}}
-
-{{define "recipe_image_panel"}}
-<div id="recipe-image-panel" {{if .RecipeImage.OutOfBand}}hx-swap-oob="outerHTML" {{end}}class="{{if not .RecipeImage.HasImage}}hidden {{end}}overflow-hidden rounded-2xl border border-brand-100 bg-brand-50/60 shadow-sm">
-  {{if .RecipeImage.HasImage}}
-  <img src="/recipe/{{.RecipeImage.Hash}}/image"
-       alt="Generated image of the dish"
-       class="h-auto w-full object-cover"
-       loading="lazy" />
-  {{end}}
-</div>
 {{end}}

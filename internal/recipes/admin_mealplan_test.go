@@ -32,6 +32,9 @@ func TestAdminMealPlanPageRendersCurrentPlan(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Meal Plan Chain")
 	assert.Contains(t, rr.Body.String(), "Korean")
 	assert.Contains(t, rr.Body.String(), "tofu")
+	assert.Contains(t, rr.Body.String(), "<th>Category</th>")
+	assert.Contains(t, rr.Body.String(), "<td>local</td>")
+	assert.NotContains(t, rr.Body.String(), "<th>Fancy</th>")
 	assert.Contains(t, rr.Body.String(), "make it vegetarian")
 	assert.Contains(t, rr.Body.String(), "/admin/params/"+hash)
 	assert.Contains(t, rr.Body.String(), "/admin/ingredients/"+hash)
@@ -155,8 +158,9 @@ func testAdminMealPlanList(cuisine, anchorIngredient, originHash string) *ai.Sho
 			Plans: []ai.RecipePlan{{
 				Cuisine:            cuisine,
 				AnchorIngredient:   anchorIngredient,
-				Technique:          "stir-fry",
+				DishFormat:         "stir-fry",
 				SideVegetable:      "greens",
+				Category:           ai.MealCategoryLocal,
 				RecipeInstructions: []string{"use the good pan"},
 			}},
 		},

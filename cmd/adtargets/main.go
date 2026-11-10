@@ -18,6 +18,7 @@ import (
 	"careme/internal/googleads"
 	"careme/internal/locations"
 	locationtypes "careme/internal/locations/types"
+	"careme/internal/providerregistry"
 )
 
 const (
@@ -100,7 +101,12 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("create cache: %w", err)
 	}
-	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	centroids := locations.LoadCentroids()
+	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
+	if err != nil {
+		return err
+	}
+	locationStorage, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		return err
 	}

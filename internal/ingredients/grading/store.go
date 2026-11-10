@@ -11,19 +11,15 @@ import (
 
 const cachePrefix = "ingredient_grades/"
 
-func CachePrefix() string {
-	return cachePrefix
-}
-
 func cacheKey(ingredientHash string) string {
 	return cachePrefix + ingredientHash
 }
 
 type store struct {
-	cache cache.ListCache
+	cache cache.Cache
 }
 
-func NewStore(c cache.ListCache) store {
+func NewStore(c cache.Cache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
@@ -50,7 +46,9 @@ func (s store) Save(ctx context.Context, key string, ingredient *ai.InputIngredi
 	if ingredient == nil {
 		return fmt.Errorf("graded ingredient is required")
 	}
-	body, err := json.Marshal(ingredient)
+	snapshot := *ingredient
+	snapshot.Embedding = nil
+	body, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,7 +20,9 @@ import (
 	"careme/internal/locations/geo"
 	"careme/internal/logsetup"
 	"careme/internal/parallelism"
+	"careme/internal/providerregistry"
 	"careme/internal/recipes"
+	"careme/internal/recipes/producescore"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -73,22 +76,29 @@ func main() {
 		log.Fatalf("failed to create cache: %v", err)
 	}
 
-	locationStorage, err := locations.New(cfg, cacheStore, locations.LoadCentroids())
+	providers := providerregistry.NewFactory(cfg)
+	centroids := locations.LoadCentroids()
+	locationBackends, err := providers.NewLocationBackends(centroids)
+	if err != nil {
+		log.Fatalf("failed to create location storage: %v", err)
+	}
+	locationStorage, err := locations.New(cacheStore, centroids, locationBackends)
 	if err != nil {
 		log.Fatalf("failed to create location storage: %v", err)
 	}
 	grader := ingredientgrading.NewManager(cfg, cacheStore, &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)})
-	staples, err := recipes.NewCachedStaplesService(cfg, cacheStore, grader)
+	backends, err := providers.NewStaplesBackends()
 	if err != nil {
-		log.Fatalf("failed to create staples service: %v", err)
+		log.Fatalf("failed to create staples backends: %v", err)
 	}
+	staples := recipes.NewCachedStaplesService(backends, cacheStore, grader)
 
 	locs, err := locationsToScore(ctx, locationStorage, zip, useStaplesWatchdogLocations)
 	if err != nil {
 		log.Fatalf("failed to get locations %v", err)
 	}
 
-	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, recipes.NewCachedProduceScorer(recipes.IO(cacheStore)))
+	rows, err := scoreLocations(ctx, locs, limit, locationStorage.HasInventory, staples, producescore.NewCachedProduceScorer(recipes.IO(cacheStore)))
 	printRows(os.Stdout, rows)
 	if err != nil {
 		log.Fatalf("one or more locations failed: %v", err)
@@ -131,7 +141,7 @@ func scoreLocations(
 	limit int,
 	hasInventory inventoryLookup,
 	staples staplesFetcher,
-	scorer *recipes.CachedProduceScorer,
+	scorer *producescore.CachedProduceScorer,
 ) ([]scoreRow, error) {
 	selected := topLocations(locs, limit)
 	return parallelism.MapWithErrors(selected, func(loc locations.Location) (scoreRow, error) {
@@ -143,7 +153,7 @@ func scoreLocations(
 			return row, nil
 		}
 
-		date, err := recipes.StoreToDate(ctx, time.Now(), &loc)
+		date, err := locations.StoreToDate(ctx, time.Now(), &loc)
 		if err != nil {
 			return row, err
 		}
@@ -169,9 +179,9 @@ func topLocations(locs []locations.Location, limit int) []locations.Location {
 	return locs[:limit]
 }
 
-func printRows(out *os.File, rows []scoreRow) {
+func printRows(out io.Writer, rows []scoreRow) {
 	writer := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tDATE\tSTATUS")
+	_, _ = fmt.Fprintln(writer, "ID\tCHAIN\tNAME\tZIP\tINGREDIENTS\tPRODUCE_SCORE\tSTATUS")
 	for _, row := range rows {
 		score := ""
 		status := "ok"
@@ -181,7 +191,7 @@ func printRows(out *os.File, rows []scoreRow) {
 		case row.ProduceScore == nil:
 			status = "score unavailable"
 		default:
-			score = fmt.Sprintf("%d", row.ProduceScore)
+			score = fmt.Sprintf("%d", *row.ProduceScore)
 		}
 
 		_, _ = fmt.Fprintf(

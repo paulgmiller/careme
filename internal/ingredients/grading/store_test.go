@@ -23,6 +23,7 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 			Score:  8,
 			Reason: "Fresh produce with broad recipe use.",
 		},
+		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 
 	require.NoError(t, store.Save(t.Context(), key, ingredient))
@@ -32,6 +33,8 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	got, err := store.Load(t.Context(), key)
 	require.NoError(t, err)
 	require.NotNil(t, got.Grade)
+	assert.Nil(t, got.Embedding)
+	assert.NotNil(t, ingredient.Embedding)
 	assert.Equal(t, ingredient.Grade.Score, got.Grade.Score)
 	assert.Equal(t, ingredient.Grade.Reason, got.Grade.Reason)
 	assert.Equal(t, ingredient.Description, got.Description)

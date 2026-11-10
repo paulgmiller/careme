@@ -40,6 +40,7 @@ fi
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
 advertised_recipes_schedule="0 9 * * *"
+advertised_recipes_suspend="false"
 aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
 albertsons_reese84_schedule="0 */6 * * *"
@@ -54,6 +55,8 @@ if [[ "${namespace}" == "caremetest" ]]; then
             - name: WEGMANS_ENABLE
               value: "false"'
   advertised_recipes_schedule="0 9 1,15 * *"
+  # Keep the job available for manual runs while automatic test runs are paused.
+  advertised_recipes_suspend="true"
   aldi_scrape_schedule="45 6 1,15 * *"
   albertsons_scrape_schedule="0 6 1,15 * *"
   albertsons_reese84_schedule="0 */12 * * *"
@@ -93,6 +96,33 @@ export PUBLIX_SCRAPE_SCHEDULE="${publix_scrape_schedule}"
 export PUBLIX_ABCK_SCHEDULE="${publix_abck_schedule}"
 export WHOLEFOODS_SCRAPE_SCHEDULE="${wholefoods_scrape_schedule}"
 
+if ! deployed_image="$(kubectl get deployment/careme -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="careme")].image}')"; then
+  echo "error: could not get the image used by deployment/careme in namespace '${namespace}'" >&2
+  exit 1
+fi
+
+if [[ -z "${deployed_image}" || "${deployed_image}" != *:* ]]; then
+  echo "error: deployment/careme has an invalid careme container image: '${deployed_image}'" >&2
+  exit 1
+fi
+
+deployed_image_tag="${deployed_image##*:}"
+if deployed_commit="$(git rev-parse --verify "${deployed_image_tag}^{commit}" 2>/dev/null)"; then
+  echo "Commits from deployed image ${deployed_image_tag} to target image ${IMAGE_TAG}:"
+  if [[ "${deployed_commit}" == "${commit_hash}" ]]; then
+    echo "  (no commits; the target image is already deployed)"
+  else
+    git log --oneline "${deployed_commit}..${commit_hash}"
+  fi
+else
+  if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    echo "warning: deployed image tag '${deployed_image_tag}' is not available in the shallow Git checkout; skipping commit history" >&2
+  else
+    echo "error: deployed image tag '${deployed_image_tag}' does not resolve to a Git commit" >&2
+    exit 1
+  fi
+fi
+
 for manifest_path in "${manifest_paths[@]}"; do
   if ! git cat-file -e "${ref}:${manifest_path}" 2>/dev/null; then
     echo "error: deploy file not found in ref '${ref}': ${manifest_path}" >&2
@@ -125,7 +155,13 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | kubectl apply -f - -n "${namespace}"
+  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
+    if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
+      kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
+    else
+      cat
+    fi
+  } | kubectl apply -f - -n "${namespace}"
 done
 
 echo "Waiting for rollout of deployment/careme"

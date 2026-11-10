@@ -32,6 +32,7 @@ Thumbs.db
 .envtest
 .envprod
 secrets/**/*.env
+/secrets/bigcommerce
 
 tailwind/node_modules/
 node_modules/

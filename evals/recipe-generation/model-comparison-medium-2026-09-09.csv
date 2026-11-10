@@ -1,0 +1,17 @@
+model,case,reasoning_effort,quality,generation_ms,judge_ms,generation_cost_usd,recorded_generation_cost_usd,judge_cost_usd,total_cost_usd,input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,reasoning_tokens,passed,failed_metrics,eval_id
+gpt-6-astra,Yucatecan chicken,medium,9,37447,15703,0.325235,0.325235,0.027574,0.352809,19384,0,19058,1675,672,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Korean tri-tip,medium,10,35317,25199,0.3340475,0.3340475,0.043604,0.3776515,20570,0,18479,1643,516,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Moroccan lamb,medium,8,51442,27360,0.3670625,0.36706249999999996,0.049206,0.41626850000000004,20651,0,19981,2212,987,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Sichuan chicken,medium,6,32982,31214,0.107451,0.10745099999999999,0.052486,0.159937,20358,19981,0,1674,452,False,critique-quality,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Lemon-Parmesan coho,medium,10,39265,16246,0.319895,0.31989500000000004,0.02767,0.347565,18673,0,18386,1744,785,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Jicama cucumber side,medium,10,25101,21646,0.2697025,0.2697025,0.0364,0.3061025,17529,0,16725,1052,424,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Chilean tri-tip,medium,10,34385,44216,0.110045,0.110045,0.072934,0.182979,17912,16725,0,1629,516,True,,eval-CGW-2026-09-09T17:31:24
+gpt-6-astra,Sumac-pistachio coho,medium,10,35755,19220,0.31583,0.31583,0.032342,0.348172,19539,0,19276,1445,516,True,,eval-CGW-2026-09-09T17:31:24
+gpt-5.6-sol,Yucatecan chicken,medium,9,77795,39239,0.158798,0.2133325,0.06269,0.221488,20100,0,19058,2967,2237,False,generation-latency-under-60s,eval-pBf-2026-09-09T17:40:26
+gpt-5.6-sol,Korean tri-tip,medium,9,69401,26427,0.170779,0.22842875,0.043148,0.21392699999999998,23120,0,18479,2991,2286,False,generation-latency-under-60s,eval-pBf-2026-09-09T17:40:26
+gpt-5.6-sol,Moroccan lamb,medium,6,63431,39833,0.175133,0.23635625,0.06815,0.24328300000000003,21348,0,19981,3488,2489,False,generation-latency-under-60s;critique-quality,eval-pBf-2026-09-09T17:40:26
+gpt-5.6-sol,Sichuan chicken,medium,8,71129,28314,0.0876724,0.1288205,0.04443,0.1321024,20671,19981,0,3846,2859,False,generation-latency-under-60s,eval-pBf-2026-09-09T17:40:26
+gpt-5.6-sol,Lemon-Parmesan coho,medium,9,53785,18048,0.140674,0.1874025,0.033004,0.173678,19012,0,18386,2312,1550,True,,eval-Omr-2026-09-09T20:46:44
+gpt-5.6-sol,Jicama cucumber side,medium,9,42651,21739,0.135741,0.17983625,0.038066,0.173807,19594,0,16725,2032,1498,True,,eval-Omr-2026-09-09T20:46:44
+gpt-5.6-sol,Chilean tri-tip,medium,6,91907,39332,0.11589,0.1681725,0.071946,0.187836,20715,16725,0,4662,3780,False,generation-latency-under-60s;critique-quality,eval-Omr-2026-09-09T20:46:44
+gpt-5.6-sol,Sumac-pistachio coho,medium,9,63638,21894,0.170024,0.23016,0.039334,0.20935800000000002,20057,0,19276,3526,2707,False,generation-latency-under-60s,eval-Omr-2026-09-09T20:46:44

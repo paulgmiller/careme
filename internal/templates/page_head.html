@@ -1,0 +1,26 @@
+{{define "page_head"}}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>{{.Title}} | Careme</title>
+  <meta name="description" content="{{.Description}}" />
+
+  {{with .Social}}
+  <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
+  <meta property="og:title" content="{{.Title}}" />
+  <meta property="og:description" content="{{.Description}}" />
+  <meta property="og:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Careme" />
+
+  <!-- Twitter Card meta tags -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{.Title}}" />
+  <meta name="twitter:description" content="{{.Description}}" />
+  <meta name="twitter:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  {{end}}
+
+  {{template "app_head" .Style}}
+
+  {{.ClarityScript}}
+  {{.GoogleTagScript}}
+{{end}}

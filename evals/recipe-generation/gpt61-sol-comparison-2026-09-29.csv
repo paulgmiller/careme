@@ -1,0 +1,27 @@
+suite,model,case,quality_or_min_dimension,request_fidelity,culinary_coherence,meaningful_variety,generation_seconds,generation_cost_usd,passed
+recipe,gpt-6-sol,Yucatecan grilled chicken from cached menu plan,9,,,,35.961,0.0685655,True
+recipe,gpt-6-sol,Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside,9,,,,43.104,0.077632,True
+recipe,gpt-6-sol,saved — Moroccan Braised Lamb & Carrots,8,,,,53.097,0.082207,True
+recipe,gpt-6-sol,saved — Sichuan Chicken & Bok Choy Stir-Fry,9,,,,43.791,0.0322488,True
+recipe,gpt-6-sol,saved — Lemon-Parmesan Coho with Summer Orzo,10,,,,30.076,0.0639735,True
+recipe,gpt-6-sol,lower-scoring — Chile-Lime Jicama Cucumber Crunch,9,,,,22.668,0.018829600000000002,True
+recipe,gpt-6-sol,lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash,8,,,,41.782,0.071533,True
+recipe,gpt-6-sol,lower-scoring — Sumac-Pistachio Coho with Charred Corn,8,,,,44.925,0.0766025,True
+recipe,gpt-6-sol,pantry regression — Southern Smothered Chicken uses catalog garlic,8,,,,40.385,0.0296118,True
+recipe,gpt-6-sol,pantry regression — Summer Orzo omits cooking water from ingredients,8,,,,38.094,0.026969800000000002,True
+recipe,gpt-6.1-sol,Yucatecan grilled chicken from cached menu plan,9,,,,32.652,0.0630855,True
+recipe,gpt-6.1-sol,Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside,10,,,,33.998,0.066552,True
+recipe,gpt-6.1-sol,saved — Moroccan Braised Lamb & Carrots,8,,,,33.915,0.0205234,True
+recipe,gpt-6.1-sol,saved — Sichuan Chicken & Bok Choy Stir-Fry,8,,,,40.818,0.071041,True
+recipe,gpt-6.1-sol,saved — Lemon-Parmesan Coho with Summer Orzo,9,,,,36.9,0.0642435,True
+recipe,gpt-6.1-sol,lower-scoring — Chile-Lime Jicama Cucumber Crunch,9,,,,31.16,0.0144738,True
+recipe,gpt-6.1-sol,lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash,8,,,,40.945,0.060232999999999995,True
+recipe,gpt-6.1-sol,lower-scoring — Sumac-Pistachio Coho with Charred Corn,9,,,,35.961,0.0665125,True
+recipe,gpt-6.1-sol,pantry regression — Southern Smothered Chicken uses catalog garlic,8,,,,36.074,0.0196999,True
+recipe,gpt-6.1-sol,pantry regression — Summer Orzo omits cooking water from ingredients,9,,,,29.409,0.0169179,True
+menu,gpt-6-sol,One quick seasonal chicken dinner,10,10,10,10,6.113,,True
+menu,gpt-6-sol,Preserve long catalog names while honoring vegetarian and equipment constraints,10,10,10,10,5.194,,True
+menu,gpt-6-sol,Three distinct dinners preserve global directions and assign limited saffron once,10,10,10,10,8.708,,True
+menu,gpt-6.1-sol,One quick seasonal chicken dinner,10,10,10,10,7.999,,True
+menu,gpt-6.1-sol,Preserve long catalog names while honoring vegetarian and equipment constraints,10,10,10,10,9.322,,True
+menu,gpt-6.1-sol,Three distinct dinners preserve global directions and assign limited saffron once,10,10,10,10,16.114,,True

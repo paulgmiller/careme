@@ -1,6 +1,6 @@
 description: Menu plan generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 4
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
@@ -9,20 +9,65 @@ prompts:
 providers:
   - id: 'file://provider.go'
     label: menu-plan
+    config:
+      judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
   assert:
+    - type: javascript
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        const score = Math.min(critique.request_fidelity, critique.culinary_coherence, critique.meaningful_variety);
+        return {
+          pass: score >= 8 && critique.issues.every((issue) => issue.severity === 'low'),
+          score: score / 10,
+          reason: [critique.summary, ...critique.issues.map((issue) =>
+            `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
+        };
+      metric: menu-quality
+    - type: latency
+      threshold: 20000
+      metric: menu-plan-latency-under-20s
     - type: is-json
       metric: menu-plan-json
     - type: javascript
       value: |
         const plan = JSON.parse(output);
-        if (plan.plans?.length !== 1) return false;
+        if (plan.plans?.length !== (context.vars.count ?? 1)) return false;
         const available = new Set(context.vars.ingredients.map((ingredient) => ingredient.description.toLowerCase()));
-        const recipe = plan.plans[0];
-        return available.has(recipe.anchor_ingredient.toLowerCase())
-          && available.has(recipe.side_vegetable.toLowerCase());
+        const requested = new Set((context.vars.requested_ingredients ?? []).map((name) => name.toLowerCase()));
+        const anchorExceptions = new Set((context.vars.catalog_exceptions?.anchor_ingredients ?? []).map((name) => name.toLowerCase()));
+        return plan.plans.every((recipe) =>
+          (available.has(recipe.anchor_ingredient.toLowerCase()) || requested.has(recipe.anchor_ingredient.toLowerCase()) || anchorExceptions.has(recipe.anchor_ingredient.toLowerCase()))
+          && (available.has(recipe.side_vegetable.toLowerCase()) || requested.has(recipe.side_vegetable.toLowerCase())));
       metric: available-menu-ingredients
+    - type: javascript
+      value: |
+        const recipes = JSON.parse(output).plans;
+        const labels = recipes.flatMap((recipe) => [recipe.anchor_ingredient, recipe.side_vegetable])
+          .map((label) => label.trim().toLowerCase().replace(/\s+/g, ' '));
+        return new Set(labels).size === labels.length;
+      metric: distinct-menu-ingredients
+    - type: javascript
+      value: |
+        const plans = JSON.parse(output).plans;
+        const formats = new Set([
+          'pasta', 'soup/stew', 'grain bowl', 'noodle bowl', 'salad',
+          'wrap/taco', 'sandwich/burger', 'stir-fry', 'curry',
+          'flatbread/pizza', 'casserole/bake',
+          'sheet-pan/roast', 'stuffed vegetable', 'main with sides',
+        ]);
+        const planned = plans.map((recipe) => recipe.dish_format?.trim().toLowerCase());
+        if (planned.some((format) => !formats.has(format))) return false;
+        return plans.length < 3 || new Set(planned).size >= 3;
+      metric: canonical-dish-format-variety
+
+    - type: javascript
+      value: |
+        const plans = JSON.parse(output).plans;
+        const allowed = new Set(['healthy', 'fancy', 'local', 'different']);
+        return plans.every((recipe) => allowed.has(recipe.category) && !('fancy' in recipe));
+      metric: valid-meal-categories
 
 tests:
   - description: One quick seasonal chicken dinner
@@ -44,3 +89,444 @@ tests:
         - id: jasmine-rice
           description: Jasmine Rice
           size: 2 lb
+
+  - description: Preserve long catalog names while honoring vegetarian and equipment constraints
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-09'
+      count: 1
+      instructions: Make it vegetarian, stovetop only, and under 30 minutes.
+      ingredients:
+        - id: tofu
+          description: Simple Truth Organic Extra Firm Tofu Twin Pack
+          size: 16 oz
+        - id: broccoli
+          description: Simple Truth Organic Fresh Broccoli Florets Family Pack
+          size: 12 oz
+        - id: chicken
+          description: Boneless Skinless Chicken Thighs
+          size: 1.5 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Simple Truth Organic Extra Firm Tofu Twin Pack'
+            && recipe.side_vegetable === 'Simple Truth Organic Fresh Broccoli Florets Family Pack';
+        metric: vegetarian-exact-catalog-labels
+
+  - description: Three distinct dinners preserve global directions and assign limited saffron once
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-10'
+      count: 3
+      instructions: Plan three dinners. Every dinner must serve 6 people. I have one pinch of saffron; use it in exactly one dinner. Use different anchor ingredients and different side vegetables across the dinners.
+      ingredients:
+        - id: chicken
+          description: Boneless Skinless Chicken Thighs
+          size: 2 lb
+        - id: salmon
+          description: Atlantic Salmon Fillet
+          size: 2 lb
+        - id: tofu
+          description: Extra Firm Tofu
+          size: 16 oz
+        - id: broccoli
+          description: Broccoli Crowns
+          size: 1 lb
+        - id: zucchini
+          description: Zucchini
+          size: 1 lb
+        - id: carrots
+          description: Carrots
+          size: 1 lb
+        - id: rice
+          description: Basmati Rice
+          size: 2 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipes = JSON.parse(output).plans;
+          return recipes.filter((recipe) => recipe.recipe_instructions.some((instruction) =>
+            /\bsaffron\b/i.test(instruction))).length === 1;
+        metric: limited-ingredient-assigned-once
+      - type: javascript
+        value: |
+          return new Set(JSON.parse(output).plans.map((recipe) => recipe.category)).size === 3;
+        metric: three-distinct-meal-categories
+      - type: javascript
+        value: |
+          return JSON.parse(output).plans.every((recipe) =>
+            recipe.recipe_instructions.some((instruction) =>
+              /\b(?:6|six)\b/i.test(instruction) && /\b(?:serves?|servings?|people|persons?|portions?)\b/i.test(instruction)));
+        metric: servings-preserved-in-every-recipe
+
+  - description: Explicitly requested halloumi can anchor dinner outside the catalog
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Use halloumi as the main ingredient.
+      requested_ingredients: ["halloumi"]
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'halloumi'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]))
+            && recipe.recipe_instructions.some((instruction) => /halloumi/i.test(instruction));
+        metric: requested-anchor-outside-catalog
+
+  - description: Avoiding halloumi does not authorize an unavailable anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Make it vegetarian and do not use halloumi.
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Extra Firm Tofu'
+            && !recipe.recipe_instructions.some((instruction) => /^Use halloumi/i.test(instruction));
+        metric: unavailable-anchor-not-authorized-by-exclusion
+
+  - description: User-owned duroc pork retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have leftover duroc pork
+      requested_ingredients: ["duroc pork"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'duroc pork'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]));
+        metric: user-owned-ingredient-name
+
+  - description: User-owned dover sole retains only its ingredient name as the anchor
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I got dover sole at Costco
+      requested_ingredients: ["dover sole"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: broccoli
+          description: Broccoli
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'dover sole'
+            && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0]));
+        metric: user-owned-ingredient-name
+
+  - description: Extra broccoli outside the catalog can be an anchor or a side
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra broccoli.
+      requested_ingredients: ["broccoli"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: carrots
+          description: Carrots
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return (recipe.anchor_ingredient.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0])))
+            || (recipe.side_vegetable.toLowerCase() === 'broccoli'
+              && recipe.recipe_instructions.some((instruction) => instruction.toLowerCase().includes(context.vars.requested_ingredients[0])));
+        metric: user-owned-vegetable-either-role
+
+  - description: Correct a typo in user-owned strawberries outside the catalog
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra strawberies. Make a strawbery and spinach salad.
+      requested_ingredients: ["strawberries"]
+      ingredients:
+        - id: spinach
+          description: Baby Spinach
+        - id: cucumber
+          description: Cucumber
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient.toLowerCase() === 'strawberries'
+            && recipe.recipe_instructions.some((instruction) => /strawberr/i.test(instruction));
+        metric: corrected-user-owned-anchor
+
+  - description: Correct a typo in user-owned broccoli used as a side
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: I have extra brocoli. Roast chicken with brocoli on the side.
+      requested_ingredients: ["broccoli"]
+      ingredients:
+        - id: chicken
+          description: Chicken Thighs
+        - id: carrots
+          description: Carrots
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Chicken Thighs'
+            && recipe.side_vegetable.toLowerCase() === 'broccoli'
+            && recipe.recipe_instructions.some((instruction) => /broccoli/i.test(instruction));
+        metric: corrected-user-owned-side
+
+  - description: Four seasonal regional dinners cover every category
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 4
+      instructions: Plan four varied dinners.
+      ingredients:
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: chicken, description: Chicken Thighs, size: 1 lb}
+        - {id: tofu, description: Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+        - {id: beans, description: Green Beans, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          return new Set(JSON.parse(output).plans.map((recipe) => recipe.category)).size === 4;
+        metric: all-four-meal-categories
+
+  - description: Category override — all meals fancy
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner fancy: richer flavors, indulgent ingredients, and slower cooking are welcome. Every meal should feel like a special occasion."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'fancy');
+        metric: all-meals-fancy
+
+  - description: Category override — all meals healthy
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner healthy: emphasize ancient or whole grains, plenty of vegetables, and lighter proteins and preparations."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'healthy');
+        metric: all-meals-healthy
+
+  - description: Category override — all meals different
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: "Plan three dinners. Make every dinner different: explore lesser-known cuisines, regional dishes, and unfamiliar seasonings in every meal."
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs, size: 2 lb}
+        - {id: salmon, description: Salmon Fillet, size: 1 lb}
+        - {id: tofu, description: Extra Firm Tofu, size: 16 oz}
+        - {id: lentils, description: Lentils, size: 1 lb}
+        - {id: farro, description: Farro, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+        - {id: tomatoes, description: Tomatoes, size: 1 lb}
+        - {id: broccoli, description: Broccoli Crowns, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: corn, description: Sweet Corn, size: 1 lb}
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.length === 3 && plans.every((recipe) => recipe.category === 'different');
+        metric: all-meals-different
+
+  # Keep the default request neutral: the protein rule must come from the planner.
+  # Enough meat/seafood and meat-free choices exist for either dietary direction.
+  - description: Protein anchors — default single dinner
+    vars: &protein-anchor-vars
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-09-10'
+      count: 1
+      instructions: Plan dinner.
+      meat_free: false
+      protein_policy:
+        animal_anchors:
+          - Boneless Skinless Chicken Thighs
+          - Atlantic Salmon Fillet
+          - Ground Beef
+          - Raw Shrimp
+      ingredients:
+        - {id: chicken, description: Boneless Skinless Chicken Thighs}
+        - {id: salmon, description: Atlantic Salmon Fillet}
+        - {id: beef, description: Ground Beef}
+        - {id: shrimp, description: Raw Shrimp}
+        - {id: tofu, description: Extra Firm Tofu}
+        - {id: lentils, description: Lentils}
+        - {id: chickpeas, description: Chickpeas}
+        - {id: beans, description: Black Beans}
+        - {id: halloumi, description: Halloumi}
+        - {id: broccoli, description: Broccoli Crowns}
+        - {id: zucchini, description: Zucchini}
+        - {id: carrots, description: Carrots}
+        - {id: spinach, description: Baby Spinach}
+        - {id: rice, description: Brown Rice}
+    assert: &protein-anchor-assertions
+      - type: javascript
+        value: file://protein-anchors.cjs
+        metric: animal-seafood-anchor-policy
+
+  - description: Protein anchors — default majority of three dinners
+    vars:
+      <<: *protein-anchor-vars
+      count: 3
+      instructions: Plan three varied dinners.
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — healthy four dinners still need a strict majority
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four healthy dinners with plenty of vegetables.
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — explicit vegetarian overrides the default
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four varied dinners. Make it vegetarian.
+      meat_free: true
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — explicit vegan overrides the default
+    vars:
+      <<: *protein-anchor-vars
+      count: 4
+      instructions: Plan four varied vegan dinners.
+      meat_free: true
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat or seafood in TSV allows common cuts
+    vars: &no-meat-vars
+      <<: *protein-anchor-vars
+      count: 3
+      instructions: Plan three varied dinners.
+      protein_policy:
+        animal_anchors: &common-protein-anchors
+          - chicken thighs
+          - chicken breasts
+          - ground beef
+          - pork chops
+          - salmon fillets
+          - shrimp
+      catalog_exceptions:
+        anchor_ingredients: *common-protein-anchors
+      ingredients:
+        - {id: tofu, description: Extra Firm Tofu}
+        - {id: lentils, description: Lentils}
+        - {id: chickpeas, description: Chickpeas}
+        - {id: broccoli, description: Broccoli Crowns}
+        - {id: zucchini, description: Zucchini}
+        - {id: carrots, description: Carrots}
+        - {id: rice, description: Brown Rice}
+    assert: *protein-anchor-assertions
+
+  - description: Protein anchors — no meat in TSV still honors vegetarian
+    vars:
+      <<: *no-meat-vars
+      instructions: Plan three varied vegetarian dinners.
+      meat_free: true
+      catalog_exceptions:
+        anchor_ingredients: []
+    assert: *protein-anchor-assertions

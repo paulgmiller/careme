@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -115,9 +116,28 @@ func (c *critiquer) Ready(ctx context.Context) error {
 }
 
 func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, error) {
+	critique, _, err := c.critiqueRecipe(ctx, recipe)
+	return critique, err
+}
+
+// CritiqueRecipeWithCost returns a critique and the provider-reported USD cost.
+// A missing or invalid cost fails explicitly; token details remain in logs.
+func (c *critiquer) CritiqueRecipeWithCost(ctx context.Context, recipe Recipe) (*RecipeCritique, float64, error) {
+	critique, resp, err := c.critiqueRecipe(ctx, recipe)
+	if err != nil {
+		return nil, 0, err
+	}
+	cost, ok := openRouterResponseCost(resp.RawJSON())
+	if !ok || cost < 0 || math.IsNaN(cost) || math.IsInf(cost, 0) {
+		return nil, 0, fmt.Errorf("judge response omitted valid usage.cost required for eval cost")
+	}
+	return critique, cost, nil
+}
+
+func (c *critiquer) critiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeCritique, *openai.ChatCompletion, error) {
 	prompt, err := buildRecipeCritiquePrompt(recipe)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
+		return nil, nil, fmt.Errorf("failed to build recipe critique prompt: %w", err)
 	}
 
 	start := time.Now()
@@ -138,7 +158,7 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 		},
 	}, option.WithJSONSet("provider.require_parameters", true))
 	if err != nil {
-		return nil, fmt.Errorf("failed to critique recipe: %w", err)
+		return nil, nil, fmt.Errorf("failed to critique recipe: %w", err)
 	}
 	slog.InfoContext(ctx, "OpenRouter critique usage",
 		"ai_category", aiCategoryCritique,
@@ -150,18 +170,18 @@ func (c *critiquer) CritiqueRecipe(ctx context.Context, recipe Recipe) (*RecipeC
 	)
 
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("empty response from OpenRouter critique model")
+		return nil, nil, fmt.Errorf("empty response from OpenRouter critique model")
 	}
 	critique, err := parseRecipeCritique(resp.Choices[0].Message.Content)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	critique.Model = strings.TrimSpace(resp.Model)
 	if critique.Model == "" {
 		critique.Model = c.model
 	}
 	critique.CritiquedAt = time.Now().UTC()
-	return critique, nil
+	return critique, resp, nil
 }
 
 func openRouterUsageLogAttr(resp *openai.ChatCompletion) slog.Attr {

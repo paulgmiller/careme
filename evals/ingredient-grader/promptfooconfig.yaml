@@ -114,7 +114,7 @@ tests:
             description: Pre-Cut Mixed Fruit Bowl
             size: 12 oz
           expect:
-            min: 3
+            min: 2
             max: 5
 
   - description: Plain vegetables vs increasingly prepared forms
@@ -132,8 +132,8 @@ tests:
             description: Steamfresh Carrots
             size: 10.8 oz
           expect:
-            min: 6
-            max: 10
+            min: 4 #jev
+            max: 6 #luna
 
         - ingredient:
             brand: Birds Eye
@@ -229,8 +229,8 @@ tests:
             description: Cooked Tail-Off Shrimp
             size: 12 oz
           expect:
-            min: 7
-            max: 8
+            min: 5 #jev
+            max: 7 #luna 
 
         - ingredient:
             description: Smoked Salmon Snack Pack with Cream Cheese

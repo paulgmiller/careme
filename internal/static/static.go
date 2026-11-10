@@ -14,8 +14,13 @@ import (
 //go:embed tailwind.css
 var tailwindCSS []byte
 
+// drop next release
+//
 //go:embed htmx@2.0.8.js
 var htmx208JS []byte
+
+//go:embed htmx@2.0.10.js
+var htmx2010JS []byte
 
 //go:embed user-clerk-billing.js
 var userClerkBillingJS []byte
@@ -89,6 +94,7 @@ func Register(mux routing.Registrar) {
 
 	// Intentionally versioned so that we can cache aggressively.
 	mux.HandleFunc("/static/htmx@2.0.8.js", static(jsContentType, htmx208JS))
+	mux.HandleFunc("/static/htmx@2.0.10.js", static(jsContentType, htmx2010JS))
 
 	// bad form to redirect to assetpath so pages are simpler? Still have to do head requests
 	mux.HandleFunc(AssetPath+"user-clerk-billing.js", static(jsContentType, userClerkBillingJS))

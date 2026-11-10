@@ -3,12 +3,16 @@ package grading
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +42,7 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 			Score:  10,
 			Reason: "default",
 		}
+
 		// this should be closer to whats in actual grader.
 		out = append(out, ingredient)
 	}
@@ -232,4 +237,56 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
+}
+
+type embeddingTransport func(*http.Request) (*http.Response, error)
+
+func (f embeddingTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestManagerBackfillsEmbeddingWithoutRegrading(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	calls := 0
+	httpClient := &http.Client{Transport: embeddingTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		require.Equal(t, "/v1/embeddings", r.URL.Path)
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"data":[{"index":0,"embedding":[1,0]}]}`)), Request: r}, nil
+	})}
+	cfg := &config.Config{AI: config.AIConfig{APIKey: "test"}, IngredientGrading: config.IngredientGradingConfig{Enable: true}}
+	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli", Grade: &ai.IngredientGrade{Score: 8, Reason: "already graded"}}
+	got, err := NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, ingredient.Grade, got[0].Grade)
+	// A different grader still resolves the same embedding cache entry.
+	cfg.IngredientGrading.Model = "another-grader"
+	got, err = NewEnrichingGrader(cfg, c, httpClient).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+	require.NoError(t, err)
+	require.NotEmpty(t, got[0].Embedding)
+	assert.Equal(t, 1, calls)
+}
+
+func TestManagerUsesAndCachesDecisionGrades(t *testing.T) {
+	const answer = `{"type":"score","name":"ingredient_score","score":7.6,"confidence":0.9,"probabilities":[{"value":7,"label":"8","probability":0.4},{"value":8,"label":"9","probability":0.6}]}`
+	cacheBackend := cache.NewInMemoryCache()
+	cfg := &config.Config{AI: config.AIConfig{APIKey: "test-key"}, IngredientGrading: config.IngredientGradingConfig{Enable: true, Model: "decisions"}}
+	calls := 0
+	client := &http.Client{Transport: embeddingTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		assert.Equal(t, "/v1/decisions", req.URL.Path)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"model":"gpt-6-luna","answers":[` + answer + `],"usage":{"input_tokens":10,"total_tokens":10}}`)), Request: req}, nil
+	})}
+	ingredient := ai.InputIngredient{ProductID: "broccoli", Description: "Broccoli"}
+	for range 2 {
+		graded, err := NewManager(cfg, cacheBackend, client).GradeIngredients(t.Context(), []ai.InputIngredient{ingredient})
+		require.NoError(t, err)
+		require.Len(t, graded, 1)
+		assert.Equal(t, 9, graded[0].Grade.Score)
+		assert.Equal(t, answer, graded[0].Grade.Reason)
+	}
+	assert.Equal(t, 1, calls)
+	cached, err := NewStore(cacheBackend).Load(t.Context(), cacheKey(ai.NewDecisionGrader(cfg.AI.APIKey, client).CacheVersion()+"/"+ingredientHash(ingredient)))
+	require.NoError(t, err)
+	assert.Equal(t, 9, cached.Grade.Score)
+	assert.Equal(t, answer, cached.Grade.Reason)
 }

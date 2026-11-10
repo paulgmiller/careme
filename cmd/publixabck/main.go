@@ -13,7 +13,8 @@ import (
 	"careme/internal/brightdata"
 	"careme/internal/cache"
 	"careme/internal/logsetup"
-	"careme/internal/publix"
+	"careme/internal/providers/publix"
+
 	"github.com/paulgmiller/kage/pkg/kage"
 )
 

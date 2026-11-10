@@ -1,0 +1,23 @@
+{{define "recipe_ingredient_list"}}
+<ul class="mt-3 space-y-2 text-gray-700">
+  {{range .}}
+  <li class="rounded-lg bg-brand-50 px-3 py-2 text-sm">
+    <div class="flex flex-col gap-1 sm:grid sm:grid-cols-[minmax(0,1fr)_10rem_5rem] sm:items-start sm:gap-3">
+      <span class="font-medium text-brand-700">{{.Name}}</span>
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs sm:contents">
+        {{if .Quantity}}
+        <span class="text-gray-600 sm:text-right sm:text-sm">{{.Quantity}}</span>
+        {{else}}
+        <span class="hidden sm:block" aria-hidden="true"></span>
+        {{end}}
+        {{if .Price}}
+        <span class="text-gray-500 sm:text-right sm:text-sm">{{.Price}}</span>
+        {{else}}
+        <span class="hidden sm:block" aria-hidden="true"></span>
+        {{end}}
+      </div>
+    </div>
+  </li>
+  {{end}}
+</ul>
+{{end}}

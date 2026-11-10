@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadEnablesAdditionalStoresFromSharedEnv(t *testing.T) {
@@ -151,7 +152,39 @@ func TestLoadDefaultsAIModels(t *testing.T) {
 	}
 
 	assert.Equal(t, DefaultRecipeModel, cfg.AI.RecipeModel)
+	assert.Equal(t, DefaultImageModel, cfg.AI.ImageModel)
 	assert.Equal(t, DefaultCritiqueModel, cfg.OpenRouter.CritiqueModel)
+}
+
+func TestLoadValidatesIngredientGradingCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name, model, enabled, apiKey string
+		wantErr                      bool
+	}{
+		{"default grader without key", "", "1", "", true},
+		{"OpenAI grader without key", "gpt-6-luna", "1", "", true},
+		{"OpenAI grader with blank key", "gpt-6-luna", "1", " \t ", true},
+		{"OpenAI grader with key", "gpt-6-luna", "1", "test-key", false},
+		{"Decisions without OpenAI key", "decisions", "1", "", true},
+		{"Decisions with OpenAI key", "decisions", "1", "test-key", false},
+		{"disabled grader without key", "gpt-6-luna", "false", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetStoreEnvs(t)
+			t.Setenv("ENABLE_MOCKS", "1")
+			t.Setenv("INGREDIENT_GRADING_MODEL", tc.model)
+			t.Setenv("INGREDIENT_GRADING_ENABLE", tc.enabled)
+			t.Setenv("AI_API_KEY", tc.apiKey)
+
+			cfg, err := Load()
+			if tc.wantErr {
+				require.ErrorContains(t, err, "AI_API_KEY is required for ingredient grading")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.model, cfg.IngredientGrading.Model)
+		})
+	}
 }
 
 func TestResolvedPublicOriginDefaultsToLocalhostOutsideProd(t *testing.T) {
@@ -195,6 +228,8 @@ func resetStoreEnvs(t *testing.T) {
 	for _, name := range []string{
 		"ENABLE_MOCKS",
 		"PUBLIC_ORIGIN",
+		"MNFOODCLUB_API_PATH",
+		"MNFOODCLUB_ACCESS_TOKEN",
 		additionalStoresEnableEnv,
 		"ALDI_ENABLE",
 		"WHOLEFOODS_ENABLE",
@@ -213,8 +248,79 @@ func resetStoreEnvs(t *testing.T) {
 	} {
 		t.Setenv(name, "")
 	}
+	t.Setenv("AI_API_KEY", "")
+	t.Setenv("INGREDIENT_GRADING_MODEL", "")
+	t.Setenv("INGREDIENT_GRADING_ENABLE", "false")
 }
 
 func contains(got, want string) bool {
 	return strings.Contains(got, want)
+}
+
+func TestLoadMNFoodClubCredentials(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("MNFOODCLUB_API_PATH", "https://api.bigcommerce.com/stores/test/v3/")
+	t.Setenv("MNFOODCLUB_ACCESS_TOKEN", "test-token")
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.bigcommerce.com/stores/test/v3/", cfg.MNFoodClub.APIPath)
+	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
+}
+
+func TestLoadOnlyProvidersIgnoresAppConfiguration(t *testing.T) {
+	resetStoreEnvs(t)
+	t.Setenv("KROGER_CLIENT_ID", "test-client")
+	t.Setenv("KROGER_CLIENT_SECRET", "test-secret")
+	t.Setenv("CLERK_SECRET_KEY", "")
+	t.Setenv("CLERK_PUBLISHABLE_KEY", "")
+	t.Setenv("CLERK_DOMAIN", "")
+	t.Setenv("PUBLIC_ORIGIN", "://invalid")
+	t.Setenv("INGREDIENT_GRADING_ENABLE", "true")
+	t.Setenv("MNFOODCLUB_API_PATH", "https://provider.example.test")
+	t.Setenv("MNFOODCLUB_ACCESS_TOKEN", "test-token")
+	t.Setenv("WALMART_CONSUMER_ID", "test-consumer")
+	t.Setenv("WALMART_PRIVATE_KEY", "test-key")
+	t.Setenv("PUBLIX_ENABLE", "false")
+
+	cfg, err := LoadOnlyProviders()
+	require.NoError(t, err)
+	assert.Equal(t, "test-client", cfg.Kroger.ClientID)
+	assert.Equal(t, "test-secret", cfg.Kroger.ClientSecret)
+	assert.Equal(t, "test-token", cfg.MNFoodClub.AccessToken)
+	assert.Equal(t, "test-consumer", cfg.Walmart.ConsumerID)
+	assert.Equal(t, "test-key", cfg.Walmart.PrivateKey)
+	assert.False(t, cfg.Publix.Enable)
+	assert.True(t, cfg.Aldi.Enable)
+	assert.Zero(t, cfg.AI)
+	assert.Zero(t, cfg.IngredientGrading)
+	assert.Zero(t, cfg.Clerk)
+	assert.Empty(t, cfg.PublicOrigin)
+	_, err = Load()
+	require.Error(t, err, "full app configuration must still be validated")
+}
+
+func TestLoadOnlyProvidersRequiresKrogerUnlessMocked(t *testing.T) {
+	for _, tt := range []struct {
+		name, clientID, secret, mocks string
+		wantError                     bool
+	}{
+		{"missing credentials", "", "", "", true},
+		{"missing secret", "test-client", "", "", true},
+		{"missing client", "", "test-secret", "", true},
+		{"mocked", "", "", "1", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetStoreEnvs(t)
+			t.Setenv("KROGER_CLIENT_ID", tt.clientID)
+			t.Setenv("KROGER_CLIENT_SECRET", tt.secret)
+			t.Setenv("ENABLE_MOCKS", tt.mocks)
+			_, err := LoadOnlyProviders()
+			if tt.wantError {
+				require.ErrorContains(t, err, "kroger client ID and secret")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

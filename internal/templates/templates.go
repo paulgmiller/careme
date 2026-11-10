@@ -38,11 +38,13 @@ const (
 var htmlFiles embed.FS
 
 var Home,
+	CampaignLanding,
 	Spin,
 	AuthEstablish,
 	AccountRequired,
 	User,
 	ShoppingList,
+	MissingShoppingList,
 	Recipe,
 	Critique,
 	About,
@@ -81,11 +83,13 @@ func Init(config *config.Config) error {
 		return err
 	}
 	Home = ensure(tmpls, "home.html")
+	CampaignLanding = ensure(tmpls, "campaign_landing.html")
 	Spin = ensure(tmpls, "spinner.html")
 	AuthEstablish = ensure(tmpls, "auth_establish.html")
 	AccountRequired = ensure(tmpls, "account_required.html")
 	User = ensure(tmpls, "user.html")
 	ShoppingList = ensure(tmpls, "shoppinglist.html")
+	MissingShoppingList = ensure(tmpls, "shoppinglist_missing.html")
 	Recipe = ensure(tmpls, "recipe.html")
 	Critique = ensure(tmpls, "critique.html")
 	About = ensure(tmpls, "about.html")

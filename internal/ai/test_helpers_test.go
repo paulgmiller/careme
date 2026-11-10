@@ -5,7 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"careme/internal/config"
 )
+
+func testAIConfig(recipeModel string) config.AIConfig {
+	return config.AIConfig{
+		APIKey:      "test-key",
+		RecipeModel: recipeModel,
+		ImageModel:  config.DefaultImageModel,
+	}
+}
 
 type capturePromptRecorder struct {
 	record *PromptRecord

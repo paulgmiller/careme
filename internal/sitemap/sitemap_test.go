@@ -67,7 +67,7 @@ func TestHandleSitemapReturnsXMLWithFeedbackRecipeHashes(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedCount := len(hashes) + 1 // recipe URLs + static about page; advertised pages need cached params
+	expectedCount := len(hashes) + 6 // recipe URLs + about + five campaigns; advertised pages need cached params
 	if len(parsed.URLs) != expectedCount {
 		t.Fatalf("expected %d sitemap urls, got %d", expectedCount, len(parsed.URLs))
 	}
@@ -103,7 +103,16 @@ func TestHandleSitemapIncludesAdvertisedGeneratedRecipePages(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedURLs := append([]string{testPublicOrigin + "/about"}, expectedAdvertisedURLs...)
+	expectedURLs := []string{
+		testPublicOrigin + "/about",
+		testPublicOrigin + "/c/fancy",
+		testPublicOrigin + "/c/budget",
+		testPublicOrigin + "/c/vegetarian",
+		testPublicOrigin + "/c/mediterranean",
+		testPublicOrigin + "/c/low-carb",
+	}
+	expectedURLs = append(expectedURLs, expectedAdvertisedURLs...)
+
 	if len(parsed.URLs) != len(expectedURLs) {
 		t.Fatalf("expected %d sitemap urls, got %d: %s", len(expectedURLs), len(parsed.URLs), rr.Body.String())
 	}
@@ -123,7 +132,7 @@ func saveAdvertisedParams(t *testing.T, c cache.Cache) []string {
 	for _, campaign := range campaigns.AdvertisedRecipeLocations() {
 		loc, err := (sitemapLocationLookup{}).GetLocationByID(ctx, campaign.Location.ID)
 		require.NoError(t, err)
-		date, err := recipes.StoreToDate(ctx, time.Now(), loc)
+		date, err := locations.StoreToDate(ctx, time.Now(), loc)
 		require.NoError(t, err)
 		params := recipes.DefaultParams(loc, date)
 		require.NoError(t, rio.SaveParams(ctx, params))
@@ -185,9 +194,9 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
 
-	expectedCount := 2
+	expectedCount := 7
 	if len(parsed.URLs) != expectedCount {
-		t.Fatalf("expected %d URLs (about + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
+		t.Fatalf("expected %d URLs (about + five campaigns + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
 	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/recipe/"+recipeHash) {
 		t.Fatalf("missing feedback-backed recipe URL in sitemap body: %s", rr.Body.String())
@@ -219,9 +228,9 @@ func TestHandleSitemapIncludesFeedbackWithoutCachedRecipe(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	expectedCount := 2
+	expectedCount := 7
 	if len(parsed.URLs) != expectedCount {
-		t.Fatalf("expected %d URLs (about + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
+		t.Fatalf("expected %d URLs (about + five campaigns + feedback-backed recipe), got %d", expectedCount, len(parsed.URLs))
 	}
 	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
 		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())
@@ -255,9 +264,9 @@ func TestHandleSitemap_IgnoresNonFeedbackKeys(t *testing.T) {
 	if err := xml.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
 		t.Fatalf("expected valid XML sitemap, got error: %v\nbody: %s", err, rr.Body.String())
 	}
-	expectedCount := 1
+	expectedCount := 6
 	if len(parsed.URLs) != expectedCount {
-		t.Fatalf("expected %d URLs (about) with no feedback or advertised params, got %d", expectedCount, len(parsed.URLs))
+		t.Fatalf("expected %d URLs (about + five campaigns) with no feedback or advertised params, got %d", expectedCount, len(parsed.URLs))
 	}
 	if !containsSitemapURL(parsed.URLs, testPublicOrigin+"/about") {
 		t.Fatalf("missing expected static URL %q in sitemap body: %s", testPublicOrigin+"/about", rr.Body.String())

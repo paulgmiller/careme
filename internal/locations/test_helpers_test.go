@@ -122,15 +122,15 @@ func (f failingListCache) List(context.Context, string, string) ([]string, error
 	return nil, nil
 }
 
-func newTestLocationServer(client locationBackend) *locationStorage {
-	return newTestLocationServerWithBackends([]locationBackend{client})
+func newTestLocationServer(client LocationBackend) *locationStorage {
+	return newTestLocationServerWithBackends([]LocationBackend{client})
 }
 
-func newTestLocationServerWithBackends(backends []locationBackend) *locationStorage {
+func newTestLocationServerWithBackends(backends []LocationBackend) *locationStorage {
 	return newTestLocationServerWithBackendsAndCache(backends, cachepkg.NewInMemoryCache())
 }
 
-func newTestLocationServerWithBackendsAndCache(backends []locationBackend, c cachepkg.ListCache) *locationStorage {
+func newTestLocationServerWithBackendsAndCache(backends []LocationBackend, c cachepkg.ListCache) *locationStorage {
 	zipCentroids := LoadCentroids()
 	return &locationStorage{
 		clients:      backends,

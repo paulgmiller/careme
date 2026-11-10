@@ -1,6 +1,6 @@
 description: Recipe generation eval
 evaluateOptions:
-  maxConcurrency: 1
+  maxConcurrency: 8
 
 # The Go provider ignores the rendered prompt and reads the test variables.
 prompts:
@@ -8,10 +8,12 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }}'
+    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
     config:
       # model overrides RECIPE_EVAL_MODEL; empty uses the production default.
       model: '{{ env.RECIPE_EVAL_MODEL }}'
+      # Empty leaves reasoning effort unspecified, using the API default.
+      reasoning_effort: '{{ env.RECIPE_EVAL_REASONING_EFFORT }}'
       # Keep the judge fixed while comparing generation models.
       judge_model: google/gemini-3.1-pro-preview
 
@@ -63,9 +65,9 @@ tests:
         plans:
           - cuisine: Yucatecan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
-            technique: grill
+            dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
-            fancy: false
+            category: different
             recipe_instructions:
               - Keep total time under 1 hour.
               - Serve 2 people.
@@ -95,9 +97,9 @@ tests:
         plans:
           - cuisine: Korean
             anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
-            technique: marinate and grill
+            dish_format: main with sides
             side_vegetable: Cucumber
-            fancy: false
+            category: local
             recipe_instructions:
               - Use the grill; serve 2; finish within 1 hour.
               - Prioritize August WA produce.
@@ -136,9 +138,9 @@ tests:
         plans:
           - cuisine: Moroccan
             anchor_ingredient: Simple Truth® Natural Lamb Shoulder
-            technique: quick braise
+            dish_format: main with sides
             side_vegetable: Carrots
-            fancy: false
+            category: fancy
             recipe_instructions:
               - Scale to serve 6.
               - Keep total time under 1 hour.
@@ -169,9 +171,9 @@ tests:
         plans:
           - cuisine: Sichuan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
-            technique: stir-fry
+            dish_format: stir-fry
             side_vegetable: Bok Choy
-            fancy: false
+            category: different
             recipe_instructions:
               - Scale to serve 6.
               - Keep total time under 1 hour.
@@ -202,9 +204,9 @@ tests:
         plans:
           - cuisine: Italian
             anchor_ingredient: Fresh Coho Salmon Fillet
-            technique: oven-roast
+            dish_format: main with sides
             side_vegetable: Zucchini
-            fancy: false
+            category: local
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.
@@ -234,9 +236,9 @@ tests:
         plans:
           - cuisine: Tex-Mex
             anchor_ingredient: Jicama
-            technique: raw toss
+            dish_format: salad
             side_vegetable: Cucumber Long Hot House English
-            fancy: false
+            category: healthy
             recipe_instructions:
               - Serve 2 as a BBQ side.
         chef_note_suggestion: more make-ahead sides
@@ -267,9 +269,9 @@ tests:
         plans:
           - cuisine: Chilean
             anchor_ingredient: USDA Choice Beef Loin Tri Tip Roast - 2.5 Lb
-            technique: oven roast
+            dish_format: main with sides
             side_vegetable: Yellow Crookneck Squash
-            fancy: false
+            category: different
             recipe_instructions:
               - Serve 3.
               - Keep this meal gluten-light.
@@ -296,9 +298,9 @@ tests:
         plans:
           - cuisine: Turkish
             anchor_ingredient: Fresh Coho Salmon Fillet
-            technique: oven roast
+            dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
-            fancy: true
+            category: fancy
             recipe_instructions:
               - Serve 2 people.
               - Keep under 1 hour.
@@ -312,3 +314,60 @@ tests:
       - type: javascript
         value: JSON.parse(output).properties.total_minutes <= 60
         metric: requested-time-budget
+
+  # Pantry regressions from production recipes; preserve the original menu directions.
+  - description: pantry regression — Southern Smothered Chicken uses catalog garlic
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Southern American
+            anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
+            dish_format: main with sides
+            side_vegetable: Fresh Bagged Green Beans
+            category: fancy
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more Pacific seafood
+        response_id: resp_0a4308480e90d07c006a974d45a52887d081b22f10c6dbce07
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    metadata:
+      source_recipe_hash: NEdlIRcPP6-2-9bWSR8eFA==
+      source_shopping_list_hash: 5eHRKzVSOM0
+      focus: Garlic available with a store price must use a catalog ID, even if usually considered pantry.
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const garlic = recipe.ingredients.filter((ingredient) => /\bgarlic\b/i.test(ingredient.name));
+          return garlic.length > 0 && garlic.every((ingredient) =>
+            typeof ingredient.id === 'string' && ingredient.id.trim().length > 0);
+        metric: catalog-garlic-not-pantry
+  - description: pantry regression — Summer Orzo omits cooking water from ingredients
+    metadata:
+      source_recipe_hash: mygw4NootTrbFUz4GTEE_A==
+      source_shopping_list_hash: aQPOv1Y__fI
+      focus: Cooking water belongs in instructions, not the ingredient list; purchased liquids remain valid.
+    vars:
+      menu_plan:
+        plans:
+          - cuisine: Italian
+            anchor_ingredient: Fresh Coho Salmon Fillet
+            dish_format: main with sides
+            side_vegetable: Zucchini
+            category: local
+            recipe_instructions:
+              - Serve 2 people.
+              - Keep under 1 hour.
+        chef_note_suggestion: more budget meals
+        response_id: resp_0a4308480e90d07c006a96f69f1ac887d09ce9cbdefcf43779
+        prompt_cache_key: careme:store-day:v1:a3cf9476aa2c785fd1113fde
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          // Match cooking water, including reserved pasta water, without rejecting
+          // purchased ingredients such as coconut water or water chestnuts.
+          const cookingWater = /^(?:(?:plain|tap|fresh|cold|cool|warm|hot|boiling|filtered|salted|unsalted|reserved|starchy|pasta|cooking|drinking)\s+)*water\b(?!\s+chestnuts?\b)/i;
+          return recipe.ingredients.every((ingredient) => !cookingWater.test(ingredient.name.trim()));
+        metric: no-cooking-water-ingredient

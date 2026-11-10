@@ -18,7 +18,6 @@ import (
 	"careme/internal/templates"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type fakeProduceScoreLookup struct {
@@ -62,7 +61,7 @@ func TestRequestStoreWritesRequestBlob(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -104,7 +103,7 @@ func TestRequestStoreIsIdempotent(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", false)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -130,7 +129,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	client := newFakeLocationClient()
 	client.setDetailResponse("publix_123", testRequestedLocation())
 	client.setHasInventory("publix_123", true)
-	storage := newTestLocationServerWithBackendsAndCache([]locationBackend{client}, fc)
+	storage := newTestLocationServerWithBackendsAndCache([]LocationBackend{client}, fc)
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, fakeProduceScoreLookup{})
 
 	mux := http.NewServeMux()
@@ -147,7 +146,7 @@ func TestRequestStoreRejectsSupportedStore(t *testing.T) {
 	}
 }
 
-func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
+func TestLocationsPageDoesNotInitializeGuestShoppingListCookie(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
@@ -173,10 +172,7 @@ func TestLocationsPageSetsGuestShoppingListCookieWhenMissing(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Want your grocery chain supported?")
 	assert.Contains(t, rr.Body.String(), "Submit it here")
 	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
-	require.NotNil(t, cookie, "expected %s cookie to be set", guest.ShoppingListCookieName)
-	if cookie.Value != "0" {
-		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
-	}
+	assert.Nil(t, cookie)
 }
 
 func TestLocationsPageSearchesWithProvidedCoordinates(t *testing.T) {
@@ -306,7 +302,7 @@ func TestLocationsPagePreservesValidGuestShoppingListCookie(t *testing.T) {
 	}
 }
 
-func TestLocationsPageResetsInvalidGuestShoppingListCookie(t *testing.T) {
+func TestLocationsPageDoesNotResetInvalidGuestShoppingListCookie(t *testing.T) {
 	mustInitLocationTemplates(t)
 
 	client := newFakeLocationClient()
@@ -331,10 +327,7 @@ func TestLocationsPageResetsInvalidGuestShoppingListCookie(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
 	cookie := findResponseCookie(rr, guest.ShoppingListCookieName)
-	require.NotNil(t, cookie, "expected invalid %s cookie to be reset", guest.ShoppingListCookieName)
-	if cookie.Value != "0" {
-		t.Fatalf("guest cookie value = %q, want 0", cookie.Value)
-	}
+	assert.Nil(t, cookie)
 }
 
 func TestLocationsPageShowsCachedProduceScoreBadge(t *testing.T) {
@@ -464,7 +457,7 @@ func TestLocationsPageScoresOnlyTopTenSupportedStoresAndRendersAllLocations(t *t
 	client2.setListResponse("10001", locations)
 
 	scoreLookup := &recordingProduceScoreLookup{scores: scores}
-	storage := newTestLocationServerWithBackends([]locationBackend{client, client2})
+	storage := newTestLocationServerWithBackends([]LocationBackend{client, client2})
 	server := NewServer(storage, LoadCentroids(), fakeUserLookup{}, scoreLookup)
 
 	mux := http.NewServeMux()
