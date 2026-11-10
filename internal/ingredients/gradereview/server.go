@@ -11,6 +11,9 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes"
+
+	"github.com/samber/lo"
 )
 
 type server struct {
@@ -32,10 +35,32 @@ func NewHandler(store *store) http.Handler {
 
 func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	locationID := strings.TrimSpace(r.URL.Query().Get("location"))
+	ctx := r.Context()
 	if locationID == "" {
-		http.Error(w, "A location ID is required.", http.StatusBadRequest)
+
+		lo.Must(w.Write([]byte(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grade Stores</title>
+</head>
+<body>`)))
+
+		for _, locationID := range recipes.StaplesWatchdogLocationIDs() {
+			l, err := s.store.locations.GetLocationByID(ctx, locationID)
+			if err != nil {
+				slog.ErrorContext(ctx, "location lookup failed", "loc", locationID)
+				continue
+			}
+			locLine := `<a href="/grader?location=` + locationID + `">` + l.Name + `</a><br />`
+			lo.Must(w.Write([]byte(locLine)))
+		}
+		lo.Must(w.Write([]byte(`</body>
+	</html>`)))
 		return
 	}
+
 	location, candidate, err := s.store.Next(r.Context(), locationID)
 	if err != nil {
 		s.writeLoadError(w, r, err)

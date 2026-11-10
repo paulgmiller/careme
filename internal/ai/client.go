@@ -149,11 +149,11 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 }
 
-// These cache options and cache key are specific to GPT-5.6 and later OpenAI models. Stable prompt
+// These cache options and cache key are specific to the supported OpenAI models. Stable prompt
 // ordering is portable, but OpenRouter and other providers use different cache
 // controls (for example session_id and model-dependent cache_control blocks).
 // Introduce a provider/model-specific cache policy before routing recipe requests
-// anywhere other than the direct OpenAI GPT-5.6 client.
+// anywhere other than the direct OpenAI client.
 
 func storeDayPromptCacheKey(storeID, date string) string {
 	identity := strings.TrimSpace(storeID) + "\x00" + date

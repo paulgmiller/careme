@@ -36,7 +36,7 @@ The application is configured via environment variables:
 ### Optional 
 - `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
 - `INSTACART_API_KEY` - server-side Instacart Developer Platform key enabling shopping-list handoff for Albertsons family store IDs (including Safeway and Haggen).
-- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com` for nonlocal origins. A localhost or loopback `PUBLIC_ORIGIN` always selects `https://connect.dev.instacart.tools`, even if this setting specifies production. Use a development key locally.
+- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com` for nonlocal origins. `deploy/deploy.sh` explicitly selects `https://connect.dev.instacart.tools` for `caremetest` staging. A localhost or loopback `PUBLIC_ORIGIN` always selects the development endpoint, even if this setting specifies production. Use a development key locally and in staging.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
@@ -375,3 +375,42 @@ grade, and cosine similarity, ordered from closest to furthest. The first lookup
 may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
+
+See [Kroger staples diagnostics and query study](docs/kroger-staples-study.md) for catalog inspection and query optimization.
+
+### Local Yokels ingredients
+
+Local Yokels Market uses the public Local Food Marketplace storefront at
+<https://localyokels.localfoodmarketplace.com/Products>. The provider reads the
+public JSON catalog used by its JavaScript directly, without first fetching HTML.
+Local Yokels configures the observed defaults `subPeriodId=4` and `locId=5`.
+We have not established whether these represent recurring distribution days or
+changing shopping periods, or when either default changes; revisit them if the
+catalog stops matching the storefront. The shared reader supplies the fixed
+`ShowAll`, custom list `0`, empty category, and calling page `Products` values.
+It retains the full catalog, including featured
+products, for ingredient grading and caching, with the first available purchase
+unit per product and its producer, size, and regular/sale price. Unavailable
+products and sold-out units are excluded. Catalog errors fail the complete fetch.
+The former meat, vegetable, dairy/egg, fruit, and pasta selection IDs remain as
+commented-out constants in the provider for possible filtering later.
+
+Wine lookup uses the same full-catalog fetch and selects the full Beer, Wine, and
+Cider category (1220). It returns all beer, wine, and cider candidates for
+recipe pairing regardless of requested styles. Staples remain unfiltered.
+
+The Seattle storefront is available as `localfoodmarektplace_localyokels` at 8416 5th Ave NE;
+nearby searches use that fixed store location in Seattle, WA 98115 with the normal
+nearby-store radius. TODO: Widen discovery to cover Local Yokels' delivery area.
+No storefront credentials are needed. The staples registry uses the shared
+Bright Data proxy-aware HTTP client for Local Yokels catalog requests.
+Catalog snapshots use the normal daily store cache boundary at 9 AM.
+
+```bash
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location localfoodmarektplace_localyokels -verbose
+LOCALYOKELS_LIVE=1 go test ./internal/providers/localyokels -run TestLiveLocalYokels -v
+```
+
+The catalog reader lives in `internal/localfoodmarketplace` for reuse by other
+Local Food Marketplace storefronts. Farmstand Local Foods uses the same endpoint
+and request format; it is not registered as a provider yet.

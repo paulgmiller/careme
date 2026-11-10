@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -68,27 +69,38 @@ func TestBuildStepImagePromptFocusesOnSelectedInstruction(t *testing.T) {
 }
 
 func TestGenerateRecipeImageUsesConfiguredModel(t *testing.T) {
-	const imageModel = "gpt-image-2.5-sunburst"
-	aiConfig := testAIConfig(config.DefaultRecipeModel)
-	aiConfig.ImageModel = imageModel
-	client := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body, err := io.ReadAll(req.Body)
-		require.NoError(t, err)
-		assert.Contains(t, string(body), `"model":"`+imageModel+`"`)
+	for _, imageModel := range []string{config.DefaultImageModel, openai.ImageModelGPTImage2_6Sunburst} {
+		t.Run(imageModel, func(t *testing.T) {
+			aiConfig := testAIConfig(config.DefaultRecipeModel)
+			aiConfig.ImageModel = imageModel
+			client := NewClient(aiConfig, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body, err := io.ReadAll(req.Body)
+				require.NoError(t, err)
+				var request map[string]any
+				require.NoError(t, json.Unmarshal(body, &request))
+				assert.Equal(t, imageModel, request["model"])
+				assert.Equal(t, "/v1/images/generations", req.URL.Path)
+				assert.Equal(t, "webp", request["output_format"])
+				assert.Equal(t, "medium", request["quality"])
+				assert.Equal(t, "1024x1024", request["size"])
+				assert.Equal(t, float64(1), request["n"])
+				assert.Contains(t, request["prompt"], "Soup")
 
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
-			Request:    req,
-		}, nil
-	})}, nil)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"created":1,"data":[{"b64_json":"aW1hZ2U="}]}`)),
+					Request:    req,
+				}, nil
+			})}, nil)
 
-	image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"})
-	require.NoError(t, err)
-	imageBody, err := io.ReadAll(image.Body)
-	require.NoError(t, err)
-	assert.Equal(t, []byte("image"), imageBody)
+			image, err := client.GenerateRecipeImage(t.Context(), Recipe{Title: "Soup"})
+			require.NoError(t, err)
+			imageBody, err := io.ReadAll(image.Body)
+			require.NoError(t, err)
+			assert.Equal(t, []byte("image"), imageBody)
+		})
+	}
 }
 
 func TestImageUsageLogAttr(t *testing.T) {
@@ -137,8 +149,8 @@ func TestImageUsageLogAttr(t *testing.T) {
 	}
 }
 
-func TestEstimateOpenAIImageSpendSupportsGPTImage25Models(t *testing.T) {
-	for _, model := range []string{config.DefaultImageModel, "gpt-image-2.5-sunburst"} {
+func TestEstimateOpenAIImageSpendSupportsGPTImageModels(t *testing.T) {
+	for _, model := range []string{openai.ImageModelGPTImage2_6Flare, openai.ImageModelGPTImage2_6Sunburst, openai.ImageModelGPTImage2_5Flare, openai.ImageModelGPTImage2_5Sunburst, openai.ImageModelGPTImage2} {
 		t.Run(model, func(t *testing.T) {
 			spend := estimateOpenAIImageSpend(model, 40, 60, 200)
 

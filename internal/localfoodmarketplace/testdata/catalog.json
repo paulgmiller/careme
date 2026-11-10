@@ -1,0 +1,1733 @@
+{
+  "standard": [
+    {
+      "uniqueId": "699_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": " Potatoes, Purple Majesty",
+      "producerName": "Olsen Farms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246848,
+          "unitName": "lb",
+          "unitPrice": "$3.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 60,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "1070_94afa3e6-02e0-4cb3-8309-a3e11e1268e8",
+      "productName": "Albacore Tuna Loin",
+      "producerName": "St. Jude",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246674,
+          "unitName": "1.36lbs",
+          "unitPrice": "$29.99",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246675,
+          "unitName": "1.39lbs",
+          "unitPrice": "$30.65",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246676,
+          "unitName": "1.42lbs",
+          "unitPrice": "$31.31",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246677,
+          "unitName": "1.55lbs",
+          "unitPrice": "$34.18",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246678,
+          "unitName": "1.62lbs",
+          "unitPrice": "$35.72",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246679,
+          "unitName": "1.63lbs",
+          "unitPrice": "$35.94",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "748_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Beef Bones",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Beef",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246506,
+          "unitName": "weight varies",
+          "unitPrice": "$13.54",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1235
+    },
+    {
+      "uniqueId": "1125_c0565583-1528-42bc-83bd-c031bc397b2c",
+      "productName": "Bok Choy",
+      "producerName": "Foothills  Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245824,
+          "unitName": "bunch",
+          "unitPrice": "$3.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 48,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "1019_94afa3e6-02e0-4cb3-8309-a3e11e1268e8",
+      "productName": "Canned Tuna Fish 3.5oz",
+      "producerName": "St. Jude",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245475,
+          "unitName": "3.5 oz",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246680,
+          "unitName": "Dill",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 14,
+          "preOrder": false
+        },
+        {
+          "puId": 246681,
+          "unitName": "Jalape\u00f1o",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 7,
+          "preOrder": false
+        },
+        {
+          "puId": 246682,
+          "unitName": "Garlic",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 13,
+          "preOrder": false
+        },
+        {
+          "puId": 246683,
+          "unitName": "Olive Oil",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 14,
+          "preOrder": false
+        },
+        {
+          "puId": 246684,
+          "unitName": "Original",
+          "unitPrice": "$8.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "1020_94afa3e6-02e0-4cb3-8309-a3e11e1268e8",
+      "productName": "Canned Tuna Fish 6oz",
+      "producerName": "St. Jude",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246685,
+          "unitName": "Original",
+          "unitPrice": "$10.85",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246686,
+          "unitName": "Salt Free",
+          "unitPrice": "$10.85",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 6,
+          "preOrder": false
+        },
+        {
+          "puId": 246687,
+          "unitName": "Capers",
+          "unitPrice": "$11.70",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 4,
+          "preOrder": false
+        },
+        {
+          "puId": 246688,
+          "unitName": "Dill",
+          "unitPrice": "$11.70",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 7,
+          "preOrder": false
+        },
+        {
+          "puId": 246689,
+          "unitName": "Garlic",
+          "unitPrice": "$11.70",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 10,
+          "preOrder": false
+        },
+        {
+          "puId": 246690,
+          "unitName": "Olive Oil",
+          "unitPrice": "$11.70",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "142_103fec60-f56d-4f02-be96-3d262d413f36",
+      "productName": "Castelfranco Radicchio",
+      "producerName": "The Crows Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246063,
+          "unitName": "lb",
+          "unitPrice": "$4.33",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "732_6b5089ac-d0e9-4323-8fb0-58ea083cb6af",
+      "productName": "Chicken Leg Quarters",
+      "producerName": "Oak Meadows Farm",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Chicken",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246509,
+          "unitName": "weight varies",
+          "unitPrice": "$22.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 14,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1243
+    },
+    {
+      "uniqueId": "732_ccb09dc2-e5bd-43b5-a8e3-bb96d63c6d46",
+      "productName": "Chicken Leg Quarters",
+      "producerName": "Osprey Hill Farm",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Chicken",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246510,
+          "unitName": "weight varies 1.2-1.8lbs",
+          "unitPrice": "$29.19",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 6,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1243
+    },
+    {
+      "uniqueId": "435_c0565583-1528-42bc-83bd-c031bc397b2c",
+      "productName": "Collards",
+      "producerName": "Foothills  Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245708,
+          "unitName": "bunch",
+          "unitPrice": "$3.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 48,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "967_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Country Ham",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246527,
+          "unitName": "weight varies",
+          "unitPrice": "$38.69",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 8,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "647_103fec60-f56d-4f02-be96-3d262d413f36",
+      "productName": "Delicata Squash",
+      "producerName": "The Crows Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246280,
+          "unitName": "lb",
+          "unitPrice": "$3.19",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 20,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "610_c0565583-1528-42bc-83bd-c031bc397b2c",
+      "productName": "Dino Kale",
+      "producerName": "Foothills  Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245653,
+          "unitName": "bunch",
+          "unitPrice": "$3.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 36,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "70_660ae5ca-e811-41c8-a945-9ba7aec60c43",
+      "productName": "Dried Lobster Mushrooms",
+      "producerName": "Foraged and Found",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Dried",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246053,
+          "unitName": "2oz",
+          "unitPrice": "$12.10",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 7,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1257
+    },
+    {
+      "uniqueId": "891_660ae5ca-e811-41c8-a945-9ba7aec60c43",
+      "productName": "Dried Mushroom Mix",
+      "producerName": "Foraged and Found",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Dried",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246201,
+          "unitName": "2oz",
+          "unitPrice": "$14.20",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1257
+    },
+    {
+      "uniqueId": "64_660ae5ca-e811-41c8-a945-9ba7aec60c43",
+      "productName": "Dried Porcini Mushrooms",
+      "producerName": "Foraged and Found",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Dried",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246051,
+          "unitName": "2oz",
+          "unitPrice": "$12.10",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 8,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1257
+    },
+    {
+      "uniqueId": "4745_103fec60-f56d-4f02-be96-3d262d413f36",
+      "productName": "Fennel",
+      "producerName": "The Crows Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246850,
+          "unitName": "bunch",
+          "unitPrice": "$4.33",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 20,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "467_da572ce8-9b37-45e6-b203-57147bc5321e",
+      "productName": "Gold Beets",
+      "producerName": "Ralph's Greenhouse",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245642,
+          "unitName": "bunch",
+          "unitPrice": "$3.98",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 12,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "1089_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Ground Beef",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Beef",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246189,
+          "unitName": "lb",
+          "unitPrice": "$12.25",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 21,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1235
+    },
+    {
+      "uniqueId": "173_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Ground Lamb",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Lamb",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246066,
+          "unitName": "lb",
+          "unitPrice": "$29.25",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 6,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1282
+    },
+    {
+      "uniqueId": "1118_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Ground Pork",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246236,
+          "unitName": "lb",
+          "unitPrice": "$10.05",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 16,
+          "preOrder": false
+        },
+        {
+          "puId": 246236,
+          "unitName": "lb",
+          "unitPrice": "$16.80",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 16,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "369_1ce38e1a-d1c4-484e-a8ae-bf329a2ea2e4",
+      "productName": "Halibut",
+      "producerName": "Wilson Fish Markets ",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245543,
+          "unitName": "8 oz",
+          "unitPrice": "$24.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246692,
+          "unitName": "1lb",
+          "unitPrice": "$48.20",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "819_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Hot Italian Ground Pork Sausage",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246188,
+          "unitName": "lb",
+          "unitPrice": "$10.05",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 17,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "814_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Lamb Stew Meat",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Lamb",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246186,
+          "unitName": "lb",
+          "unitPrice": "$26.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 4,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1282
+    },
+    {
+      "uniqueId": "453_1ce38e1a-d1c4-484e-a8ae-bf329a2ea2e4",
+      "productName": "Markets Rockfish",
+      "producerName": "Wilson Fish Markets ",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245550,
+          "unitName": "8 oz",
+          "unitPrice": "$9.90",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246693,
+          "unitName": "1lb",
+          "unitPrice": "$16.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246694,
+          "unitName": "1.5lbs",
+          "unitPrice": "$24.75",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "1054_1ce38e1a-d1c4-484e-a8ae-bf329a2ea2e4",
+      "productName": "Markets Wild King Salmon",
+      "producerName": "Wilson Fish Markets ",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Seafood",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246695,
+          "unitName": "1/2lb",
+          "unitPrice": "$26.50",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 7,
+          "preOrder": false
+        },
+        {
+          "puId": 246696,
+          "unitName": "3/4lb",
+          "unitPrice": "$39.75",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246698,
+          "unitName": "2lbs",
+          "unitPrice": "$105.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1307
+    },
+    {
+      "uniqueId": "921_81476d52-c9d2-408c-a164-f8e96090dbd6",
+      "productName": "Mushroom Medley",
+      "producerName": "Cascadia Mushrooms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245529,
+          "unitName": "8 oz",
+          "unitPrice": "$7.43",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 12,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "929_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "New Red Lasoda Potatoes",
+      "producerName": "Olsen Farms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246219,
+          "unitName": "lb",
+          "unitPrice": "$3.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "4760_d7676d89-532e-4a3e-82f2-21388ea2a3ad",
+      "productName": "Onions, Yellow",
+      "producerName": "First Cut Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246863,
+          "unitName": "lb",
+          "unitPrice": "$2.81",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 200,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "43_da572ce8-9b37-45e6-b203-57147bc5321e",
+      "productName": "Orange Carrots",
+      "producerName": "Ralph's Greenhouse",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245664,
+          "unitName": "bunch",
+          "unitPrice": "$4.28",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 35,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "464_81476d52-c9d2-408c-a164-f8e96090dbd6",
+      "productName": "Oyster Mushrooms",
+      "producerName": "Cascadia Mushrooms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245569,
+          "unitName": "8 oz",
+          "unitPrice": "$7.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 12,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "573_da572ce8-9b37-45e6-b203-57147bc5321e",
+      "productName": "Parsnips",
+      "producerName": "Ralph's Greenhouse",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246297,
+          "unitName": "lb",
+          "unitPrice": "$3.02",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 14,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "620_81476d52-c9d2-408c-a164-f8e96090dbd6",
+      "productName": "Petite Shiitake Mushrooms",
+      "producerName": "Cascadia Mushrooms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245536,
+          "unitName": "8 oz",
+          "unitPrice": "$7.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 12,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "29_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Baby Back Ribs 2.70lbs",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246532,
+          "unitName": "weight varies",
+          "unitPrice": "$47.79",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1083_88c0d4e9-8885-4b7b-9bd6-98a38f49fd14",
+      "productName": "Pork Bacon",
+      "producerName": "Skagit River Ranch",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246298,
+          "unitName": "lb",
+          "unitPrice": "$26.75",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 7,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1083_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Bacon",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246519,
+          "unitName": "weight varies",
+          "unitPrice": "$17.64",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 10,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1076_88c0d4e9-8885-4b7b-9bd6-98a38f49fd14",
+      "productName": "Pork Breakfast Sausage Links",
+      "producerName": "Skagit River Ranch",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246248,
+          "unitName": "lb",
+          "unitPrice": "$17.81",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 6,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "902_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Loin Roast",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246802,
+          "unitName": "2.95lb",
+          "unitPrice": "$34.69",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246803,
+          "unitName": "2.65lb",
+          "unitPrice": "$31.16",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1114_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Rib Chops",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246502,
+          "unitName": "weight varies",
+          "unitPrice": "$23.29",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1014_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Sausages",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246619,
+          "unitName": "German Bratwurst",
+          "unitPrice": "$16.20",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246622,
+          "unitName": "Andouille",
+          "unitPrice": "$16.20",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 3,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "996_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Shoulder Butt Roast",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246521,
+          "unitName": "weight varies",
+          "unitPrice": "$28.69",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246522,
+          "unitName": "2.49lbs",
+          "unitPrice": "$33.62",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246624,
+          "unitName": "2.53lbs",
+          "unitPrice": "$34.16",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246625,
+          "unitName": "2.67lbs",
+          "unitPrice": "$36.05",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246627,
+          "unitName": "2.63lbs",
+          "unitPrice": "$35.51",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "947_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Spare Ribs",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246711,
+          "unitName": "1.05lbs",
+          "unitPrice": "$10.80",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 15,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1073_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Stir Fry Meat",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246211,
+          "unitName": "lb",
+          "unitPrice": "$14.55",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "1101_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Sweet Italian Sausage",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246222,
+          "unitName": "lb",
+          "unitPrice": "$10.05",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "915_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Pork Tenderloin",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246529,
+          "unitName": "weight varies",
+          "unitPrice": "$18.08",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        },
+        {
+          "puId": 246633,
+          "unitName": ".82lb",
+          "unitPrice": "$14.76",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246634,
+          "unitName": "1.06lbs",
+          "unitPrice": "$19.08",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "288_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Potatoes",
+      "producerName": "Olsen Farms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246267,
+          "unitName": "lb, assorted",
+          "unitPrice": "$4.20",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "589_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Potatoes, Masquerade ",
+      "producerName": "Olsen Farms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246281,
+          "unitName": "lb",
+          "unitPrice": "$2.52",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 193,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "588_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Potatoes, Viking Purple ",
+      "producerName": "Olsen Farms",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246109,
+          "unitName": "lb",
+          "unitPrice": "$3.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 9,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "278_103fec60-f56d-4f02-be96-3d262d413f36",
+      "productName": "Purple Sprouting Broccoli",
+      "producerName": "The Crows Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245727,
+          "unitName": "bunch",
+          "unitPrice": "$6.30",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 36,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "4761_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Rack of Lamb",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Lamb",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246900,
+          "unitName": "lb",
+          "unitPrice": "$51.45",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1282
+    },
+    {
+      "uniqueId": "37_da572ce8-9b37-45e6-b203-57147bc5321e",
+      "productName": "Red Beets",
+      "producerName": "Ralph's Greenhouse",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245755,
+          "unitName": "bunch",
+          "unitPrice": "$4.03",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 200,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "557_d7676d89-532e-4a3e-82f2-21388ea2a3ad",
+      "productName": "Red Onions",
+      "producerName": "First Cut Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246246,
+          "unitName": "lb",
+          "unitPrice": "$2.70",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 200,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "493_d7676d89-532e-4a3e-82f2-21388ea2a3ad",
+      "productName": "Shallots",
+      "producerName": "First Cut Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246099,
+          "unitName": "lb",
+          "unitPrice": "$5.41",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 11,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "818_b9e31582-53ba-4742-beee-dcd44938d5f9",
+      "productName": "Sweet Italian Ground Pork Sausage",
+      "producerName": "Olsen Farms",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Pork",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246187,
+          "unitName": "lb",
+          "unitPrice": "$10.05",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1296
+    },
+    {
+      "uniqueId": "655_c0565583-1528-42bc-83bd-c031bc397b2c",
+      "productName": "Tatsoi, Purple",
+      "producerName": "Foothills  Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246299,
+          "unitName": "each",
+          "unitPrice": "$3.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 36,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "733_6b5089ac-d0e9-4323-8fb0-58ea083cb6af",
+      "productName": "Whole Chickens",
+      "producerName": "Oak Meadows Farm",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Chicken",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246777,
+          "unitName": "weight varies 1.8-2.2lb average",
+          "unitPrice": "$32.08",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 14,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1243
+    },
+    {
+      "uniqueId": "791_6b5089ac-d0e9-4323-8fb0-58ea083cb6af",
+      "productName": "Whole Heirloom Breed Chicken",
+      "producerName": "Oak Meadows Farm",
+      "catId": 1230,
+      "parentCat": "Meats",
+      "mainCat": "Chicken",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246614,
+          "unitName": "2.22lbs",
+          "unitPrice": "$32.37",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246616,
+          "unitName": "3.785lbs",
+          "unitPrice": "$55.19",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1243
+    },
+    {
+      "uniqueId": "645_c0565583-1528-42bc-83bd-c031bc397b2c",
+      "productName": "Yukon Gold Potatoes",
+      "producerName": "Foothills  Farm",
+      "catId": 1232,
+      "parentCat": "Vegetables",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246902,
+          "unitName": "lb",
+          "unitPrice": "$3.36",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 128,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1263
+    },
+    {
+      "uniqueId": "88_06a6007c-fdf6-4640-a654-5dbb79c918fe",
+      "productName": "Sparkling Ros\u00e9 Wine",
+      "producerName": "Boujee Wines",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Wine",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245625,
+          "unitName": "8.5 oz can",
+          "unitPrice": "$5.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 5,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1317
+    },
+    {
+      "uniqueId": "93_df5b8d09-6e36-431d-abb0-cc58d201b92d",
+      "productName": "Honey Cinnamon Cream Stout",
+      "producerName": "Lucky Envelope Brewing",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Beer",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245497,
+          "unitName": "4 pack",
+          "unitPrice": "$18.75",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 2,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1236
+    },
+    {
+      "uniqueId": "4735_97a4e9e4-7666-4b17-bc24-0a0d391215c0",
+      "productName": "Black Currant Cider 500ml",
+      "producerName": "Finnriver Cidery",
+      "catId": 1220,
+      "parentCat": "Beer, Wine, and Cider",
+      "mainCat": "Cider",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246725,
+          "unitName": "Black Currant",
+          "unitPrice": "$12.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 13,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1246
+    }
+  ],
+  "featured": [
+    {
+      "uniqueId": "786_c7ec8fe0-f191-4377-a1db-b7dd6d22d4c8",
+      "productName": "Asiago Fresco Cheese",
+      "producerName": "Ferndale Farmstead",
+      "catId": 1222,
+      "parentCat": "Dairy & Eggs",
+      "mainCat": "Cheese",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245559,
+          "unitName": "8 oz",
+          "unitPrice": "$8.90",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 9,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1242
+    },
+    {
+      "uniqueId": "627_51bb028f-5704-4e71-bc91-b874f5326beb",
+      "productName": "Bosc Pears",
+      "producerName": "Collins Family Orchards",
+      "catId": 1225,
+      "parentCat": "Fruit",
+      "mainCat": "Fresh",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 246291,
+          "unitName": "lb",
+          "unitPrice": "$5.04",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 336,
+          "preOrder": false
+        },
+        {
+          "puId": 246845,
+          "unitName": ".5 lb",
+          "unitPrice": "$2.52",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 336,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1261
+    },
+    {
+      "uniqueId": "772_9f43ee2e-d18a-4de3-84f8-914a127ae58b",
+      "productName": "Campanelle,16oz",
+      "producerName": "La Pasta",
+      "catId": 1227,
+      "parentCat": "Grocery",
+      "mainCat": "Pasta",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245436,
+          "unitName": " Egg 16oz",
+          "unitPrice": "$9.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 1,
+          "preOrder": false
+        },
+        {
+          "puId": 246326,
+          "unitName": "Lemon Pepper 16oz",
+          "unitPrice": "$9.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 100,
+          "preOrder": false
+        },
+        {
+          "puId": 246448,
+          "unitName": "Roasted Bell Pepper 16oz",
+          "unitPrice": "$9.00",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 103,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1289
+    },
+    {
+      "uniqueId": "227_668ec510-02e2-4480-bf7f-ecffa98f4e02",
+      "productName": "Alo Tama Bodi Soup",
+      "producerName": "Kathmandu MoMoCha",
+      "catId": 1227,
+      "parentCat": "Grocery",
+      "mainCat": "Heat & Eat",
+      "unavailable": false,
+      "hidePrices": false,
+      "units": [
+        {
+          "puId": 245456,
+          "unitName": "16 oz",
+          "unitPrice": "$15.25",
+          "unitRegPrice": null,
+          "unitOnSale": false,
+          "remaining": 8,
+          "preOrder": false
+        }
+      ],
+      "subCatId": 1272
+    }
+  ]
+}

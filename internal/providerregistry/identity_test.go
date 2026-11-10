@@ -11,6 +11,7 @@ import (
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
 	"careme/internal/providers/fullcircle"
+	"careme/internal/providers/imperfectfoods"
 	"careme/internal/providers/kroger"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/smithbrothersfarms"
@@ -27,6 +28,7 @@ func TestRegisteredProvidersOwnHashPolicy(t *testing.T) {
 		provider cachekey.StoreHasher
 	}{
 		{"70500874", kroger.NewIdentityProvider()},
+		{"imperfectfoods_demo", imperfectfoods.NewIdentityProvider()},
 		{"safeway_1142", albertsons.NewIdentityProvider()},
 		{"aldi_F100", aldi.NewIdentityProvider()},
 		{"mnfoodclub_delivery", mnfoodclub.NewIdentityProvider()},

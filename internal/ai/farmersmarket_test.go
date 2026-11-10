@@ -109,7 +109,7 @@ func farmersMarketResponseClient(t *testing.T, output string) *http.Client {
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), "price")
-		assert.Contains(t, string(body), `"model":"`+gpt56Terra+`"`)
+		assert.Contains(t, string(body), `"model":"gpt-6.1-terra"`)
 		assert.Contains(t, string(body), `"size"`)
 		assert.Contains(t, string(body), "Do not infer weight from appearance")
 		assert.NotContains(t, string(body), `"categories"`)

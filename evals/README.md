@@ -20,6 +20,9 @@ Because evaluations can make paid model calls, running every suite requires an e
 
 ## Image latency
 
+The [November 5 latency comparison](latency-comparison-2026-11-05.md) records
+GPT-Image 2.5 Flare versus 2.6 Flare, alongside the shopping merge comparison.
+
 Check that the production photo and sketch image paths each finish within 11 seconds using the same recipe:
 
 ```sh
@@ -28,6 +31,11 @@ Check that the production photo and sketch image paths each finish within 11 sec
 
 The eval passes `image_style` as either `photo` or `sketch` to the provider, making
 one paid image call per case. Each case passes when its latency is under 11,000 ms.
+Latency covers the production generation call and consumption of the decoded image
+body, excluding configuration and Go wrapper startup/compilation. The provider
+returns `latencyMs` so the 11-second assertion uses that measured interval.
+Earlier runs without this field may include wrapper overhead.
+
 Use Promptfoo's `--repeat 3` (or more) when assessing the result beyond a smoke
 check; each repeat makes two additional paid image calls. Only `AI_API_KEY` is required.
 
@@ -145,10 +153,9 @@ records fresh GPT-6 Luna and JEV results using `INGREDIENT_GRADING_MODEL`.
 The [September 29 Luna comparison](ingredient-grader/gpt6-luna-comparison-2026-09-29.md)
 records 23 batches and 92 ingredient scores per model, including remaining failures.
 
-Compare the old and new Luna graders on the checked-in ingredient batches:
+Evaluate the Luna grader on the checked-in ingredient batches:
 
 ```sh
-INGREDIENT_GRADING_MODEL=gpt-5.6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt56-luna.json
 INGREDIENT_GRADING_MODEL=gpt-6-luna ./task.sh evals EVAL=ingredient-grader -- --no-cache --output /tmp/ingredients-gpt6-luna.json
 ```
 
@@ -156,7 +163,7 @@ Use the existing `INGREDIENT_GRADING_MODEL` configuration variable for both task
 and direct Promptfoo runs. Leave it unset to use the production default, currently
 `gpt-6-luna`. The provider has no separate model selector; `MODEL` is for the recipe
 and menu suites.
-Both Responses graders use `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
+The Responses grader uses `none` reasoning. Use `INGREDIENT_GRADING_MODEL=decisions`
 to evaluate the OpenAI Decisions grader that replaced the `jev` option. It sends
 one independent request per ingredient with up to 64 concurrent requests per
 grader instance, and converts the zero-based ten-level score to a 1–10 grade by rounding and adding one.
@@ -258,6 +265,12 @@ billing estimate.
 
 ## Shopping quantity merge
 
+The [November 5 latency comparison](latency-comparison-2026-11-05.md) records
+fresh GPT-5.6 Luna versus GPT-6 Luna runs.
+
+The [November 5 model rollout results](model-rollout-2026-11-05.md) record repeated
+shopping merge and farmers market regression runs.
+
 Run `./task.sh evals EVAL=shopping-merge -- --no-cache --output /tmp/shopping-merge-eval.json`.
 This tiny suite calls the production `MergeShoppingQuantities` path for onion
 and olive oil from [shopping list p37vV7PPvys](https://careme.cooking/recipes?h=p37vV7PPvys).
@@ -268,3 +281,26 @@ A short allowlist accepts common equivalent needed quantity spellings; other
 formats need review. The onion fixture includes four catalog products, but only
 the recipe's exact product ID is sent to the model. Assertions are deterministic,
 with no judge call. Requires `AI_API_KEY` through the existing configuration.
+
+## Farmers market extraction
+
+Run the production image extraction path on three synthetic market scenes:
+
+```sh
+./task.sh evals EVAL=farmers-market -- --no-cache --repeat 3 --output /tmp/farmers-market-eval.json
+```
+
+The checked-in PNG fixtures cover a visible farm, egg price and carton size;
+tomatoes without a visible price or size; and nonfood soap that must be excluded.
+Assertions check extracted names, brands, prices, sizes, generated product IDs,
+and exclusion of nonfood items without an AI judge. The fixtures are illustrations
+with clear printed signs, not photographs. Passing this suite does not establish
+accuracy on crowded stalls, handwriting, occlusion, or real market photos.
+Regenerate the fixtures with `python3 evals/farmers-market/testdata/generate.py`
+(requires Pillow and the DejaVu Sans font at the path in that script).
+
+Requires `AI_API_KEY` through the existing config/kage path (`secrets/envtest`).
+The provider records extraction latency, including response decoding and SDK
+retries, excluding configuration and Go compilation. It does not export API cost
+or tokens. `--no-cache` disables Promptfoo caching; OpenAI prompt caching remains
+active. The production model and its reasoning settings are used unchanged.
