@@ -24,8 +24,8 @@ import (
 
 const (
 	Container        = "farmersmarket"
-	LocationIDPrefix = "farmersmarket_"
-	ChainName        = "Farmers Market"
+	locationIDPrefix = "farmersmarket_"
+	chainName        = "Farmers Market"
 
 	locationPrefix  = "locations/"
 	inventoryPrefix = "inventory/"
@@ -37,7 +37,7 @@ type store struct {
 	cache cache.ListCache
 }
 
-type Market struct {
+type marketRecord struct {
 	ID    string   `json:"id"`
 	Names []string `json:"names"`
 	geo.Coordinate
@@ -54,7 +54,7 @@ func NewStore(c cache.ListCache) *store {
 	return &store{cache: c}
 }
 
-func NewContainerStore() (*store, error) {
+func newContainerStore() (*store, error) {
 	cacheStore, err := cache.EnsureCache(Container)
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market cache: %w", err)
@@ -78,7 +78,7 @@ func (s *store) freshInventory(ctx context.Context, locationID string) ([]ai.Inp
 	return s.loadInventoryByDate(ctx, locationID, date)
 }
 
-func (m Market) Location() locationtypes.Location {
+func (m marketRecord) location() locationtypes.Location {
 	name := "Farmers Market"
 	if len(m.Names) > 0 {
 		name = m.Names[0]
@@ -90,11 +90,11 @@ func (m Market) Location() locationtypes.Location {
 		Lat:      &m.Lat,
 		Lon:      &m.Lon,
 		CachedAt: m.UpdatedAt,
-		Chain:    ChainName,
+		Chain:    chainName,
 	}
 }
 
-func (m *Market) merge(name string, coordinates geo.Coordinate, photoCount int, now time.Time) {
+func (m *marketRecord) merge(name string, coordinates geo.Coordinate, photoCount int, now time.Time) {
 	total := m.PhotoCount + photoCount
 	if total > 0 {
 		m.Lat = ((m.Lat * float64(m.PhotoCount)) + (coordinates.Lat * float64(photoCount))) / float64(total)
@@ -109,12 +109,12 @@ func (m *Market) merge(name string, coordinates geo.Coordinate, photoCount int, 
 	m.UpdatedAt = now
 }
 
-func (s *store) findNearbyMarket(ctx context.Context, coordinates geo.Coordinate) (*Market, error) {
+func (s *store) findNearbyMarket(ctx context.Context, coordinates geo.Coordinate) (*marketRecord, error) {
 	markets, err := s.listMarkets(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var nearest *Market
+	var nearest *marketRecord
 	nearestDistance := math.MaxFloat64
 	for i := range markets {
 		market := markets[i]
@@ -129,12 +129,12 @@ func (s *store) findNearbyMarket(ctx context.Context, coordinates geo.Coordinate
 }
 
 // this won't scale long term but maybe doesn't matter if we only ever have a dozen markets?
-func (s *store) listMarkets(ctx context.Context) ([]Market, error) {
+func (s *store) listMarkets(ctx context.Context) ([]marketRecord, error) {
 	keys, err := s.cache.List(ctx, locationPrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("list farmers markets: %w", err)
 	}
-	markets := make([]Market, 0, len(keys))
+	markets := make([]marketRecord, 0, len(keys))
 	for _, key := range keys {
 		market, err := s.loadMarketByKey(ctx, locationPrefix+key)
 		if err != nil {
@@ -146,32 +146,32 @@ func (s *store) listMarkets(ctx context.Context) ([]Market, error) {
 	return markets, nil
 }
 
-func (s *store) loadMarket(ctx context.Context, locationID string) (Market, error) {
+func (s *store) loadMarket(ctx context.Context, locationID string) (marketRecord, error) {
 	if !isID(locationID) {
-		return Market{}, fmt.Errorf("invalid farmers market location id %q", locationID)
+		return marketRecord{}, fmt.Errorf("invalid farmers market location id %q", locationID)
 	}
 	return s.loadMarketByKey(ctx, locationKey(locationID))
 }
 
-func (s *store) loadMarketByKey(ctx context.Context, key string) (Market, error) {
+func (s *store) loadMarketByKey(ctx context.Context, key string) (marketRecord, error) {
 	reader, err := s.cache.Get(ctx, key)
 	if err != nil {
-		return Market{}, err
+		return marketRecord{}, err
 	}
 	defer func() {
 		_ = reader.Close()
 	}()
-	var market Market
+	var market marketRecord
 	if err := json.NewDecoder(reader).Decode(&market); err != nil {
-		return Market{}, fmt.Errorf("decode farmers market: %w", err)
+		return marketRecord{}, fmt.Errorf("decode farmers market: %w", err)
 	}
 	if err := market.Valid(); err != nil {
-		return Market{}, fmt.Errorf("load farmers market %q: invalid coordinates: %w", market.ID, err)
+		return marketRecord{}, fmt.Errorf("load farmers market %q: invalid coordinates: %w", market.ID, err)
 	}
 	return market, nil
 }
 
-func (s *store) saveMarket(ctx context.Context, market Market) error {
+func (s *store) saveMarket(ctx context.Context, market marketRecord) error {
 	raw, err := json.Marshal(market)
 	if err != nil {
 		return fmt.Errorf("marshal farmers market: %w", err)
@@ -234,5 +234,5 @@ func inventoryKey(locationID string, date time.Time) string {
 func marketID(coordinates geo.Coordinate) string {
 	h := fnv.New64a()
 	_, _ = io.WriteString(h, fmt.Sprintf("%.4f|%.4f", coordinates.Lat, coordinates.Lon))
-	return LocationIDPrefix + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+	return locationIDPrefix + base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }

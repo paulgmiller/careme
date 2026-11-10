@@ -1,0 +1,20 @@
+[
+  {
+    "ProductListingId": 2574,
+    "ProductName": "Golden Couscous",
+    "ProductSubTitle": "24oz",
+    "VendorName": "Bob's Red Mill",
+    "Price": 6.49,
+    "RegularPrice": null,
+    "SoldOut": null
+  },
+  {
+    "ProductListingId": 6656,
+    "ProductName": "White Basmati Rice",
+    "ProductSubTitle": "2lb",
+    "VendorName": "True Origin Foods ",
+    "Price": 8.99,
+    "RegularPrice": null,
+    "SoldOut": null
+  }
+]

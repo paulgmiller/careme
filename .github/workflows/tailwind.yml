@@ -14,11 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: tools/tool.sum
+      - uses: ./.github/actions/setup-go
 
       - name: Check Tailwind CSS
         run: ./task.sh tailwind-check

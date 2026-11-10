@@ -2,9 +2,14 @@
 
 This is a proposed contract for partner review, not a deployed partner endpoint. The
 [OpenAPI document](mnfoodclub-ordering.openapi.yaml) is the machine-readable
-handoff for MN Food Club and the basis for a later Careme client. A separate
+handoff for MN Food Club and the contract used by the opt-in Careme adapter. A separate
 [mock API and test-site walkthrough](mnfoodclub-mock.md) demonstrates the flow
-with fictional data; production Careme ordering is not enabled.
+with fictional data. The adapter is disabled until its dedicated partner endpoint
+and token are configured; this does not imply that the partner API is deployed.
+
+Careme serves the generated [HTML documentation](mnfoodclub-ordering.html) publicly
+at `/mnfoodclub/orderdocs`. The HTML is embedded in the server binary; regenerate
+it and redeploy Careme to publish documentation updates.
 
 ## Request and customer matching
 
@@ -41,6 +46,13 @@ Use opaque strings for both IDs. If that variant does not belong to the product
 or cannot be purchased, reject the item's quantity without substituting another
 variant. Each transfer may request only one variant per product, consistent
 with the duplicate-product rule.
+
+Careme selects the purchasable catalog variant with the highest inventory level,
+keeping the first eligible variant in catalog order on ties. Its ID is saved as
+`variant_id` on the cached input ingredient, alongside the parent product `id`
+and the selected variant's prices. Careme preserves the variant in the finalized
+shopping snapshot and sends it as `variant_id` with `product_id`. Older catalog
+and shopping snapshots omit `variant_id` until refreshed or rebuilt.
 
 All identity hints are optional. Emails can identify a customer without a prior
 connection. MN Food Club owns matching, including conflicts between a saved ID
@@ -91,6 +103,122 @@ links use opaque tokens rather than emails or customer IDs in their URLs.
 MN Food Club owns link lifetime and the expired-link experience, while ensuring
 replayed successful responses remain usable during the retry window. Use
 `Cache-Control: no-store` for responses containing identifiers and handoff links.
+
+### Example: matched customer
+
+Careme sends the following request with its partner bearer token and
+`Idempotency-Key: example-matched-1` to `POST /v1/cart-transfers`. These are
+fictional products and customer details; the token stays on Careme's server.
+
+```json
+{
+  "items": [
+    {"product_id": "101", "variant_id": "1005", "quantity": 3},
+    {"product_id": "202"}
+  ],
+  "identity_hints": {
+    "emails": ["chef@example.com"]
+  }
+}
+```
+
+MN Food Club resolves the email to `customer-42` and adds the available
+quantities to that customer's existing cart. In this example only two packages
+of variant `1005` are available, and product `202` is unavailable. It returns
+HTTP 200 with `Cache-Control: no-store`:
+
+```json
+{
+  "transfer_id": "transfer-1002",
+  "status": "applied",
+  "cart_url": "https://shop.mnfoodclub.example/cart",
+  "user_id": "customer-42",
+  "items": [
+    {
+      "product_id": "101",
+      "accepted_quantity": 2,
+      "rejected_quantity": 1,
+      "rejection_reason": "insufficient_stock"
+    },
+    {
+      "product_id": "202",
+      "accepted_quantity": 0,
+      "rejected_quantity": 1,
+      "rejection_reason": "product_unavailable"
+    }
+  ]
+}
+```
+
+Careme can show the item results and link the shopper to `cart_url`. The shopper
+still passes MN Food Club's normal browser access checks. Existing cart contents
+remain; these accepted quantities describe only this transfer.
+
+### Example: unmatched customer, then login
+
+For a different shopper, Careme sends this request to the same endpoint with
+its partner bearer token and a new key, `Idempotency-Key: example-unmatched-1`:
+
+```json
+{
+  "items": [
+    {"product_id": "101", "variant_id": "1005", "quantity": 3},
+    {"product_id": "202"}
+  ],
+  "identity_hints": {
+    "emails": ["new-shopper@example.com"]
+  }
+}
+```
+
+MN Food Club cannot resolve this customer. It preserves the list without
+changing a cart or assessing products and returns HTTP 200 with
+`Cache-Control: no-store`:
+
+```json
+{
+  "transfer_id": "transfer-1004",
+  "status": "pending_login",
+  "cart_url": "https://shop.mnfoodclub.example/handoff/opaque-transfer-token"
+}
+```
+
+Careme links the shopper to `cart_url`. The shopper reviews the preserved list
+on MN Food Club and logs in. MN Food Club then assesses the products, applies
+accepted quantities to the signed-in customer's cart at most once, and shows
+the results. Revisiting the handoff link does not add the products again.
+
+Careme sends `GET /v1/cart-transfers/transfer-1004` with its partner bearer
+token and no idempotency key. Before login and application finish, this returns
+the `pending_login` response above. Afterward, an example HTTP 200 response is:
+
+```json
+{
+  "transfer_id": "transfer-1004",
+  "status": "applied",
+  "cart_url": "https://shop.mnfoodclub.example/cart",
+  "user_id": "customer-84",
+  "items": [
+    {
+      "product_id": "101",
+      "accepted_quantity": 3,
+      "rejected_quantity": 0
+    },
+    {
+      "product_id": "202",
+      "accepted_quantity": 0,
+      "rejected_quantity": 1,
+      "rejection_reason": "product_unavailable"
+    }
+  ]
+}
+```
+
+This example assumes three packages of variant `1005` are available when the
+shopper finishes login; acceptance is assessed then. The resolved customer ID
+comes from that login. Careme can retrieve it through GET for future matching.
+Replaying the original POST with `example-unmatched-1` still returns its original
+`pending_login` response; use GET to observe the completed transfer.
 
 ## Retrieve transfer status after login
 

@@ -46,7 +46,7 @@ func (c *cachingCritiquer) CritiqueRecipe(ctx context.Context, recipe ai.Recipe)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.store.Save(ctx, hash, critique); err != nil {
+	if err := c.store.save(ctx, hash, critique); err != nil {
 		slog.ErrorContext(ctx, "failed to cache recipe critique", "recipe", recipe.Title, "hash", hash, "error", err)
 	}
 	return critique, nil

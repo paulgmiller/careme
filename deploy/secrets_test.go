@@ -16,8 +16,9 @@ import (
 
 // Keep these lists in sync with config.LoadOnlyProviders and config.Load.
 // Include the workloads' shared storage and telemetry requirements as well.
+// Albertsons inventory searches use ALBERTSONS_SEARCH_SUBSCRIPTION_KEY.
 var providerSecrets = []string{
-	"brightdata-proxy", "kroger", "mnfoodclub", "storage", "walmart",
+	"albertsons", "brightdata-proxy", "kroger", "mnfoodclub", "storage", "walmart",
 }
 
 var fullSecrets = append(append([]string{}, providerSecrets...), "ai", "auth", "grafana")
@@ -84,13 +85,15 @@ func TestRequiredSecrets(t *testing.T) {
 				for _, c := range template.Spec.Containers {
 					// These are the deployed binaries calling config.Load*.
 					// Scraper images use their own configuration.
-					image := strings.Split(strings.Split(path.Base(c.Image), "@")[0], ":")[0]
+					image, _, _ := strings.Cut(strings.Split(path.Base(c.Image), "@")[0], ":")
 					var secrets []string
 					switch image {
 					case "careme":
 						secrets = fullSecrets
 					case "careme-ingredientreview":
 						secrets = providerSecrets
+					case "mnfoodclubstub":
+						secrets = []string{"roachkey"}
 					default:
 						continue
 					}
@@ -108,6 +111,7 @@ func TestRequiredSecrets(t *testing.T) {
 			}
 		})
 	}
+	assert.Positive(t, checked["mnfoodclubstub"], "no Food Club stub workloads checked")
 	assert.Positive(t, checked["careme"], "no full-config workloads checked")
 	assert.Positive(t, checked["careme-ingredientreview"], "no provider-config workloads checked")
 }

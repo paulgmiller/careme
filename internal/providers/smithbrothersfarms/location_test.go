@@ -37,11 +37,13 @@ func TestDeliveryLocations(t *testing.T) {
 		assert.Equal(t, "Smith Brothers Farms delivery", got[0].Name)
 		assert.Equal(t, "Smith Brothers Farms", got[0].Chain)
 		assert.Equal(t, "Home delivery", got[0].Address)
+		assert.Equal(t, "https://www.smithbrothersfarms.com/", got[0].URL)
 		assert.Equal(t, point, got[0].Coordinate())
 		assert.True(t, backend.HasInventory(got[0].ID))
 	}
 	location, err := backend.GetLocationByID(t.Context(), "smithbrothersfarms_delivery")
 	require.NoError(t, err)
+	assert.Equal(t, "https://www.smithbrothersfarms.com/", location.URL)
 	assert.Equal(t, geo.Coordinate{Lat: 47.365, Lon: -122.233}, location.Coordinate())
 	for _, id := range []string{"other_delivery", "smithbrothersfarms_", "smithbrothersfarms_47_-122"} {
 		got, err := backend.GetLocationByID(t.Context(), id)

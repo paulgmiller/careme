@@ -1,22 +1,20 @@
 package query
 
-// PathwaySearchPayload matches the Albertsons/Safeway pathway search response.
-type PathwaySearchPayload struct {
-	Response PathwaySearchResponse `json:"response"`
+// pathwaySearchPayload matches the Albertsons/Safeway pathway search response.
+type pathwaySearchPayload struct {
+	Response pathwaySearchResponse `json:"response"`
 }
 
-type PathwayDynamicFilter struct{}
-
-type PathwaySearchResponse struct {
+type pathwaySearchResponse struct {
 	NumFound        int                    `json:"numFound"`
 	DisableTracking bool                   `json:"disableTracking"`
 	Start           int                    `json:"start"`
-	MiscInfo        PathwaySearchMiscInfo  `json:"miscInfo"`
+	MiscInfo        pathwaySearchMiscInfo  `json:"miscInfo"`
 	IsExactMatch    bool                   `json:"isExactMatch"`
 	Docs            []PathwaySearchProduct `json:"docs"`
 }
 
-type PathwaySearchMiscInfo struct {
+type pathwaySearchMiscInfo struct {
 	AttributionToken string `json:"attributionToken"`
 	Query            string `json:"query"`
 	Sort             string `json:"sort"`
@@ -89,40 +87,40 @@ type PathwaySearchProduct struct {
 	IDOfAisle                 string                    `json:"idOfAisle"`
 	IDOfShelf                 string                    `json:"idOfShelf"`
 	IDOfDepartment            string                    `json:"idOfDepartment"`
-	Warnings                  []PathwaySearchWarning    `json:"warnings"`
+	Warnings                  []pathwaySearchWarning    `json:"warnings"`
 	RequiresReturn            bool                      `json:"requiresReturn"`
-	ChannelEligibility        PathwayChannelEligibility `json:"channelEligibility"`
-	ChannelInventory          PathwayChannelInventory   `json:"channelInventory"`
-	ProductReview             PathwayProductReview      `json:"productReview"`
+	ChannelEligibility        pathwayChannelEligibility `json:"channelEligibility"`
+	ChannelInventory          pathwayChannelInventory   `json:"channelInventory"`
+	ProductReview             pathwayProductReview      `json:"productReview"`
 	ItemSizeQty               string                    `json:"itemSizeQty"`
 	ItemPackageQty            string                    `json:"itemPackageQty"`
 	BestSellerRank            *int                      `json:"bestSellerRank"`
 	ItemRetailSect            string                    `json:"itemRetailSect"`
-	Badges                    []PathwaySearchBadge      `json:"badges"`
-	Labels                    []PathwaySearchLabel      `json:"labels"`
+	Badges                    []pathwaySearchBadge      `json:"badges"`
+	Labels                    []pathwaySearchLabel      `json:"labels"`
 }
 
-type PathwaySearchWarning struct {
+type pathwaySearchWarning struct {
 	FoodIndicator   string `json:"foodIndicator"`
 	WarnMsgTxt      string `json:"warnMsgTxt"`
 	WarningSourceNm string `json:"warningSourceNm"`
 }
 
-type PathwayChannelEligibility struct {
+type pathwayChannelEligibility struct {
 	PickUp   bool `json:"pickUp"`
 	Delivery bool `json:"delivery"`
 	InStore  bool `json:"inStore"`
 	Shipping bool `json:"shipping"`
 }
 
-type PathwayChannelInventory struct {
+type pathwayChannelInventory struct {
 	Delivery string `json:"delivery"`
 	Pickup   string `json:"pickup"`
 	Instore  string `json:"instore"`
 	Shipping string `json:"shipping"`
 }
 
-type PathwayProductReview struct {
+type pathwayProductReview struct {
 	AvgRating               string `json:"avgRating"`
 	ReviewCount             string `json:"reviewCount"`
 	IsReviewWriteEligible   string `json:"isReviewWriteEligible"`
@@ -131,7 +129,7 @@ type PathwayProductReview struct {
 	ReviewTemplateType      string `json:"reviewTemplateType"`
 }
 
-type PathwaySearchBadge struct {
+type pathwaySearchBadge struct {
 	BadgeName       string `json:"badgeName"`
 	Color           string `json:"color"`
 	IsStrikethrough bool   `json:"isStrikethrough"`
@@ -139,6 +137,6 @@ type PathwaySearchBadge struct {
 	Icon            string `json:"icon"`
 }
 
-type PathwaySearchLabel struct {
+type pathwaySearchLabel struct {
 	LabelName string `json:"labelName"`
 }

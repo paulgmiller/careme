@@ -29,6 +29,7 @@ Run tasks from the repository root; `./task.sh --list` lists development command
 ## Coding Conventions
 
 - Prefer small functions and the standard library; justify new dependencies in PRs. Use `CamelCase` for exported identifiers and `lowerCamel` otherwise; template names mirror filenames.
+- Keep identifiers unexported unless they are used outside the package. This includes interfaces; callers can satisfy an unexported interface without naming it. Do not export identifiers solely for tests. Check with `./task.sh unexport` (the pinned `unloved` tool, also run by `verify-go`); use `./task.sh unexport-fix` to apply fixes, then review the diff and run `./task.sh verify-go`.
 - Prefer simple HTML and culinary UI copy: “Try again, chef” and “make it vegetarian.”
 - Check callers before removing methods; exported methods used only by tests need no external compatibility protection.
 - Pass constructor dependencies explicitly or use an options struct; do not fake optional arguments with variadic parameters.

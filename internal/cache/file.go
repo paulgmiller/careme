@@ -15,16 +15,16 @@ var (
 	ErrAlreadyExists = errors.New("cache entry already exists")
 )
 
-type PutCondition uint8
+type putCondition uint8
 
 const (
-	PutUnconditional PutCondition = iota
+	PutUnconditional putCondition = iota
 	PutIfNoneMatch
 	// PutIfMatch
 )
 
 type PutOptions struct {
-	Condition PutCondition
+	Condition putCondition
 	// IfMatch updates the entry only if the current ETag matches this value.
 	// IfMatch string
 }

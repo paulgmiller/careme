@@ -21,18 +21,10 @@ func NewUploader(store *store) *uploader {
 	return &uploader{store: store}
 }
 
-func NewContainerUploader() (*uploader, error) {
-	store, err := NewContainerStore()
-	if err != nil {
-		return nil, err
-	}
-	return NewUploader(store), nil
-}
-
 // saveUpload creates or updates a market and merges its inventory into the cache.
 func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordinate,
 	photoCount int, date time.Time, ingredients []ai.InputIngredient,
-) (*Market, error) {
+) (*marketRecord, error) {
 	if photoCount <= 0 {
 		return nil, fmt.Errorf("at least one market photo is required")
 	}
@@ -46,7 +38,7 @@ func (u *uploader) saveUpload(ctx context.Context, name string, coor geo.Coordin
 
 	now := time.Now().UTC()
 	if market == nil {
-		market = &Market{
+		market = &marketRecord{
 			Coordinate: coor,
 			ID:         marketID(coor),
 			Names:      []string{name},

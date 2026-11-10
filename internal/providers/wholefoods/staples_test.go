@@ -11,24 +11,23 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"careme/internal/ingredients/cachekey"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityProviderSignature_UsesJSONStaples(t *testing.T) {
-	got := NewIdentityProvider().Signature()
-	want, err := json.Marshal(defaultStaples())
-	if err != nil {
-		t.Fatalf("marshal default staples: %v", err)
-	}
-	if got != string(want) {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
-
-	if got != string(want) {
-		t.Fatalf("unexpected signature: got %q want %q", got, want)
-	}
+func TestIdentityProviderHashForStoreIncludesStapleDefinitions(t *testing.T) {
+	t.Parallel()
+	date := time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC)
+	const locationID = "wholefoods_10216"
+	raw, err := json.Marshal(defaultStaples())
+	require.NoError(t, err)
+	signature := string(raw)
+	want := cachekey.NewHash(locationID, date, signature).Sum(nil)
+	assert.Equal(t, want, NewIdentityProvider().HashForStore(locationID, date).Sum(nil))
 }
 
 func TestProductSizes(t *testing.T) {

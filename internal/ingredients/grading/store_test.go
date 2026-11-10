@@ -14,7 +14,7 @@ import (
 
 func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 	tmpDir := t.TempDir()
-	store := NewStore(cache.NewFileCache(tmpDir))
+	store := newStore(cache.NewFileCache(tmpDir))
 	key := cacheKey("ingredient-hash")
 	ingredient := &ai.InputIngredient{
 		ProductID:   "ingredient-123",
@@ -26,11 +26,11 @@ func TestStoreSaveLoadUsesPrefixedKey(t *testing.T) {
 		Embedding: ai.IngredientEmbedding([]float64{1, 0}),
 	}
 
-	require.NoError(t, store.Save(t.Context(), key, ingredient))
+	require.NoError(t, store.save(t.Context(), key, ingredient))
 	_, err := os.Stat(filepath.Join(tmpDir, cachePrefix, "ingredient-hash"))
 	require.NoError(t, err)
 
-	got, err := store.Load(t.Context(), key)
+	got, err := store.load(t.Context(), key)
 	require.NoError(t, err)
 	require.NotNil(t, got.Grade)
 	assert.Nil(t, got.Embedding)

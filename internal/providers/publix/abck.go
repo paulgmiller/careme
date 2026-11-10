@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	AbckLatestCacheKey      = "publix/abck/latest.json"
-	AbckHistoryPrefix       = "publix/abck/history/"
+	abckLatestCacheKey      = "publix/abck/latest.json"
+	abckHistoryPrefix       = "publix/abck/history/"
 	brightDataBrowserSource = "brightdata-browser-api"
 )
 
-type AbckRecord struct {
+type abckRecord struct {
 	Cookie    string     `json:"cookie"`
 	FetchedAt time.Time  `json:"fetched_at"`
 	SourceURL string     `json:"source_url"`
@@ -36,29 +36,29 @@ type AbckParams struct {
 	WaitAfterNavigation time.Duration
 }
 
-func FetchAbck(ctx context.Context, browser abckBrowser, params AbckParams) (AbckRecord, error) {
+func FetchAbck(ctx context.Context, browser abckBrowser, params AbckParams) (abckRecord, error) {
 	if browser == nil {
-		return AbckRecord{}, errors.New("browser is required")
+		return abckRecord{}, errors.New("browser is required")
 	}
 
 	params.TargetURL = strings.TrimSpace(params.TargetURL)
 	if params.TargetURL == "" {
-		return AbckRecord{}, errors.New("target URL is required")
+		return abckRecord{}, errors.New("target URL is required")
 	}
 
 	cookies, err := browser.Cookies(ctx, params.TargetURL, brightdata.BrowserOptions{
 		WaitAfterNavigation: params.WaitAfterNavigation,
 	})
 	if err != nil {
-		return AbckRecord{}, fmt.Errorf("browser cookie fetch: %w", err)
+		return abckRecord{}, fmt.Errorf("browser cookie fetch: %w", err)
 	}
 
 	cookie, ok := brightdata.CookieNamed(cookies, "_abck")
 	if !ok {
-		return AbckRecord{}, fmt.Errorf("cookie %q not found in browser session", "_abck")
+		return abckRecord{}, fmt.Errorf("cookie %q not found in browser session", "_abck")
 	}
 
-	record := AbckRecord{
+	record := abckRecord{
 		Cookie:    cookie.Value,
 		FetchedAt: time.Now().UTC(),
 		SourceURL: params.TargetURL,
@@ -71,7 +71,7 @@ func FetchAbck(ctx context.Context, browser abckBrowser, params AbckParams) (Abc
 	return record, nil
 }
 
-func SaveAbckRecord(ctx context.Context, c cache.Cache, record AbckRecord) error {
+func SaveAbckRecord(ctx context.Context, c cache.Cache, record abckRecord) error {
 	if c == nil {
 		return errors.New("cache is required")
 	}
@@ -86,22 +86,22 @@ func SaveAbckRecord(ctx context.Context, c cache.Cache, record AbckRecord) error
 		return fmt.Errorf("marshal abck record: %w", err)
 	}
 
-	historyKey := path.Join(AbckHistoryPrefix, record.FetchedAt.Format(time.RFC3339Nano)+".json")
+	historyKey := path.Join(abckHistoryPrefix, record.FetchedAt.Format(time.RFC3339Nano)+".json")
 	if err := c.Put(ctx, historyKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write abck history: %w", err)
 	}
-	if err := c.Put(ctx, AbckLatestCacheKey, string(body), cache.Unconditional()); err != nil {
+	if err := c.Put(ctx, abckLatestCacheKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write abck latest: %w", err)
 	}
 	return nil
 }
 
-func LoadLatestAbck(ctx context.Context, c cache.Cache) (*AbckRecord, error) {
+func loadLatestAbck(ctx context.Context, c cache.Cache) (*abckRecord, error) {
 	if c == nil {
 		return nil, errors.New("cache is required")
 	}
 
-	reader, err := c.Get(ctx, AbckLatestCacheKey)
+	reader, err := c.Get(ctx, abckLatestCacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func LoadLatestAbck(ctx context.Context, c cache.Cache) (*AbckRecord, error) {
 		_ = reader.Close()
 	}()
 
-	var record AbckRecord
+	var record abckRecord
 	if err := json.NewDecoder(reader).Decode(&record); err != nil {
 		return nil, fmt.Errorf("decode abck record: %w", err)
 	}

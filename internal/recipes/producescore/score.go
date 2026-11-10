@@ -30,15 +30,15 @@ func NewCachedProduceScorer(c ingredientCache) *CachedProduceScorer {
 }
 
 func (s *CachedProduceScorer) ProduceScore(ctx context.Context, loc locationtypes.Location) *int {
-	date, err := locations.StoreToDate(ctx, nowFn(), &loc)
+	date, err := locations.StoreTime(ctx, nowFn(), &loc)
 	if err != nil {
 		slog.WarnContext(ctx, "bad store date", "zip", loc.ZipCode)
 		return nil
 	}
 
 	for _, candidate := range []time.Time{date, date.AddDate(0, 0, -1)} {
-		// sublte dependency on providerregistry for StaplesSignature here.
-		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate, cachekey.StaplesSignature(loc.ID)))
+		// Provider identities are registered during application initialization.
+		ingredients, err := s.cache.IngredientsFromCache(ctx, cachekey.ForStore(loc.ID, candidate))
 		if err == nil {
 			score := sumIngredientGradesAboveCutoff(ingredients)
 			return &score

@@ -11,15 +11,18 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/locations"
+	"careme/internal/recipes"
+
+	"github.com/samber/lo"
 )
 
-type Server struct {
-	store *Store
+type server struct {
+	store *store
 	now   func() time.Time
 }
 
-func NewHandler(store *Store) http.Handler {
-	server := &Server{store: store, now: time.Now}
+func NewHandler(store *store) http.Handler {
+	server := &server{store: store, now: time.Now}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -30,12 +33,34 @@ func NewHandler(store *Store) http.Handler {
 	return mux
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	locationID := strings.TrimSpace(r.URL.Query().Get("location"))
+	ctx := r.Context()
 	if locationID == "" {
-		http.Error(w, "A location ID is required.", http.StatusBadRequest)
+
+		lo.Must(w.Write([]byte(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grade Stores</title>
+</head>
+<body>`)))
+
+		for _, locationID := range recipes.StaplesWatchdogLocationIDs() {
+			l, err := s.store.locations.GetLocationByID(ctx, locationID)
+			if err != nil {
+				slog.ErrorContext(ctx, "location lookup failed", "loc", locationID)
+				continue
+			}
+			locLine := `<a href="/grader?location=` + locationID + `">` + l.Name + `</a><br />`
+			lo.Must(w.Write([]byte(locLine)))
+		}
+		lo.Must(w.Write([]byte(`</body>
+	</html>`)))
 		return
 	}
+
 	location, candidate, err := s.store.Next(r.Context(), locationID)
 	if err != nil {
 		s.writeLoadError(w, r, err)
@@ -44,14 +69,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pageTemplate.Execute(w, struct {
-		*Candidate
+		*CatalogCandidate
 		Location *locations.Location
 	}{candidate, location}); err != nil {
 		slog.ErrorContext(r.Context(), "failed to render ingredient grade review", "error", err)
 	}
 }
 
-func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleReview(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid review.", http.StatusBadRequest)
@@ -59,8 +84,8 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gradeKey := strings.TrimSpace(r.PostFormValue("grade_key"))
-	verdict := Verdict(r.PostFormValue("verdict"))
-	if gradeKey == "" || !verdict.Valid() {
+	verdict := verdict(r.PostFormValue("verdict"))
+	if gradeKey == "" || !verdict.valid() {
 		http.Error(w, "Choose too high, correct, or too low.", http.StatusBadRequest)
 		return
 	}
@@ -70,14 +95,14 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "A location ID is required.", http.StatusBadRequest)
 		return
 	}
-	err := s.store.Save(r.Context(), locationID, gradeKey, verdict, s.now())
+	err := s.store.save(r.Context(), locationID, gradeKey, verdict, s.now())
 	switch {
 	case err == nil, errors.Is(err, cache.ErrAlreadyExists):
 		target := "/grader?" + url.Values{"location": {locationID}}.Encode()
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	case errors.Is(err, cache.ErrNotFound):
 		http.Error(w, "Ingredient grade not found.", http.StatusNotFound)
-	case errors.Is(err, ErrInvalidVerdict):
+	case errors.Is(err, errInvalidVerdict):
 		http.Error(w, "Choose too high, correct, or too low.", http.StatusBadRequest)
 	default:
 		slog.ErrorContext(r.Context(), "failed to save ingredient grade review", "error", err)
@@ -85,7 +110,7 @@ func (s *Server) handleReview(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) writeLoadError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *server) writeLoadError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, cache.ErrNotFound) {
 		http.Error(w, "No cached ingredients found for this store.", http.StatusNotFound)
 		return

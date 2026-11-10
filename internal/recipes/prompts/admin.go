@@ -103,7 +103,7 @@ func promptRecordWithParentInputsFromCache(ctx context.Context, c cache.Cache, r
 }
 
 func promptRecordFromCache(ctx context.Context, c cache.Cache, responseID string) (*ai.PromptRecord, error) {
-	promptReader, err := c.Get(ctx, CachePrefix+responseID)
+	promptReader, err := c.Get(ctx, cachePrefix+responseID)
 	if err != nil {
 		return nil, err
 	}

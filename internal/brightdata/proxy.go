@@ -58,7 +58,7 @@ func LoadConfig() ProxyConfig {
 	}
 }
 
-func (c ProxyConfig) Enabled() bool {
+func (c ProxyConfig) enabled() bool {
 	return c.Host != "" && c.Port != "" && c.Username != "" && c.Password != ""
 }
 
@@ -72,7 +72,7 @@ func (c ProxyConfig) proxyURL() *url.URL {
 
 func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 	transport := http.DefaultTransport
-	if cfg.Enabled() {
+	if cfg.enabled() {
 		var err error
 		transport, err = newProxyTransport(cfg)
 		if err != nil {

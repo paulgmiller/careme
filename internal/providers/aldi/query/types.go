@@ -1,61 +1,61 @@
 package query
 
-// CollectionProductsPayload matches the useful parts of ALDI's collection
+// collectionProductsPayload matches the useful parts of ALDI's collection
 // products GraphQL response.
-type CollectionProductsPayload struct {
-	Data   CollectionProductsData `json:"data"`
-	Errors []GraphQLError         `json:"errors"`
+type collectionProductsPayload struct {
+	Data   collectionProductsData `json:"data"`
+	Errors []graphQLError         `json:"errors"`
 }
 
-type CollectionProductsData struct {
-	CollectionProducts                   CollectionProducts                   `json:"collectionProducts"`
-	CollectionProductsBasedSearchResults CollectionProductsBasedSearchResults `json:"collectionProductsBasedSearchResults"`
+type collectionProductsData struct {
+	CollectionProducts                   collectionProducts                   `json:"collectionProducts"`
+	CollectionProductsBasedSearchResults collectionProductsBasedSearchResults `json:"collectionProductsBasedSearchResults"`
 }
 
-type CollectionProducts struct {
+type collectionProducts struct {
 	ItemIDs []string `json:"itemIds"`
 	Items   []Item   `json:"items"`
 }
 
-type CollectionProductsBasedSearchResults struct {
-	ItemResultList SearchItemResultList `json:"itemResultList"`
+type collectionProductsBasedSearchResults struct {
+	ItemResultList searchItemResultList `json:"itemResultList"`
 	SearchID       string               `json:"searchId"`
-	ViewSection    CollectionView       `json:"viewSection"`
+	ViewSection    collectionView       `json:"viewSection"`
 }
 
-type SearchItemResultList struct {
+type searchItemResultList struct {
 	FeaturedProducts []Item   `json:"featuredProducts"`
 	ItemIDs          []string `json:"itemIds"`
 }
 
-type CollectionView struct {
+type collectionView struct {
 	HeaderString string `json:"headerString"`
 }
 
-func (data CollectionProductsData) Items() []Item {
+func (data collectionProductsData) items() []Item {
 	if len(data.CollectionProducts.Items) > 0 {
 		return data.CollectionProducts.Items
 	}
 	return data.CollectionProductsBasedSearchResults.ItemResultList.FeaturedProducts
 }
 
-func (data CollectionProductsData) ItemIDs() []string {
+func (data collectionProductsData) itemIDs() []string {
 	if len(data.CollectionProducts.ItemIDs) > 0 {
 		return data.CollectionProducts.ItemIDs
 	}
 	return data.CollectionProductsBasedSearchResults.ItemResultList.ItemIDs
 }
 
-type ItemsPayload struct {
-	Data   ItemsData      `json:"data"`
-	Errors []GraphQLError `json:"errors"`
+type itemsPayload struct {
+	Data   itemsData      `json:"data"`
+	Errors []graphQLError `json:"errors"`
 }
 
-type ItemsData struct {
+type itemsData struct {
 	Items []Item `json:"items"`
 }
 
-type GraphQLError struct {
+type graphQLError struct {
 	Message string `json:"message"`
 	Path    []any  `json:"path"`
 }
@@ -69,28 +69,28 @@ type Item struct {
 	BrandName    string       `json:"brandName"`
 	BrandID      string       `json:"brandId"`
 	EvergreenURL string       `json:"evergreenUrl"`
-	Availability Availability `json:"availability"`
-	ViewSection  ItemView     `json:"viewSection"`
+	Availability availability `json:"availability"`
+	ViewSection  itemView     `json:"viewSection"`
 	Price        ItemPrice    `json:"price"`
 }
 
-type Availability struct {
+type availability struct {
 	Available  bool   `json:"available"`
 	StockLevel string `json:"stockLevel"`
 }
 
-type ItemView struct {
-	ItemImage          Image              `json:"itemImage"`
-	TrackingProperties TrackingProperties `json:"trackingProperties"`
+type itemView struct {
+	ItemImage          image              `json:"itemImage"`
+	TrackingProperties trackingProperties `json:"trackingProperties"`
 }
 
-type Image struct {
+type image struct {
 	URL         string `json:"url"`
 	TemplateURL string `json:"templateUrl"`
 	AltText     string `json:"altText"`
 }
 
-type TrackingProperties struct {
+type trackingProperties struct {
 	ProductID           string `json:"product_id"`
 	ItemID              string `json:"item_id"`
 	StockLevel          string `json:"stock_level"`
@@ -101,7 +101,7 @@ type TrackingProperties struct {
 
 type ItemPrice struct {
 	ViewSection            ItemPriceView          `json:"viewSection"`
-	ParWeightTotalEstimate ParWeightTotalEstimate `json:"parWeightTotalEstimate"`
+	ParWeightTotalEstimate parWeightTotalEstimate `json:"parWeightTotalEstimate"`
 }
 
 type ItemPriceView struct {
@@ -121,10 +121,10 @@ type PriceDisplay struct {
 	FullPriceString            string `json:"fullPriceString"`
 }
 
-type ParWeightTotalEstimate struct {
-	ViewSection ParWeightTotalEstimateView `json:"viewSection"`
+type parWeightTotalEstimate struct {
+	ViewSection parWeightTotalEstimateView `json:"viewSection"`
 }
 
-type ParWeightTotalEstimateView struct {
+type parWeightTotalEstimateView struct {
 	ParWeightString string `json:"parWeightString"`
 }

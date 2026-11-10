@@ -26,7 +26,7 @@ func (c *Client) GetLocationsByCoordinates(ctx context.Context, coordinates geo.
 	return locations, nil
 }
 
-func storeToLocation(store Store) locationtypes.Location {
+func storeToLocation(store storeRecord) locationtypes.Location {
 	lat := store.Coordinates.Latitude
 	lon := store.Coordinates.Longitude
 	return locationtypes.Location{

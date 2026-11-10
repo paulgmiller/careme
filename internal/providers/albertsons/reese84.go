@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	Reese84LatestCacheKey   = "albertsons/reese84/latest.json"
+	reese84LatestCacheKey   = "albertsons/reese84/latest.json"
 	Reese84HistoryPrefix    = "albertsons/reese84/history/"
 	brightDataBrowserSource = "brightdata-browser-api"
 )
 
-type CookieRecord struct {
+type cookieRecord struct {
 	Cookie    string     `json:"cookie"`
 	FetchedAt time.Time  `json:"fetched_at"`
 	SourceURL string     `json:"source_url"`
@@ -26,7 +26,7 @@ type CookieRecord struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-func SaveReese84Record(ctx context.Context, c cache.Cache, record CookieRecord) error {
+func saveReese84Record(ctx context.Context, c cache.Cache, record cookieRecord) error {
 	if c == nil {
 		return errors.New("cache is required")
 	}
@@ -47,18 +47,18 @@ func SaveReese84Record(ctx context.Context, c cache.Cache, record CookieRecord) 
 	if err := c.Put(ctx, historyKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write reese84 history: %w", err)
 	}
-	if err := c.Put(ctx, Reese84LatestCacheKey, string(body), cache.Unconditional()); err != nil {
+	if err := c.Put(ctx, reese84LatestCacheKey, string(body), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write reese84 latest: %w", err)
 	}
 	return nil
 }
 
-func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error) {
+func LoadLatestReese84(ctx context.Context, c cache.Cache) (*cookieRecord, error) {
 	if c == nil {
 		return nil, errors.New("cache is required")
 	}
 
-	reader, err := c.Get(ctx, Reese84LatestCacheKey)
+	reader, err := c.Get(ctx, reese84LatestCacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func LoadLatestReese84(ctx context.Context, c cache.Cache) (*CookieRecord, error
 		_ = reader.Close()
 	}()
 
-	var record CookieRecord
+	var record cookieRecord
 	if err := json.NewDecoder(reader).Decode(&record); err != nil {
 		return nil, fmt.Errorf("decode reese84 record: %w", err)
 	}

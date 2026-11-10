@@ -16,13 +16,13 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 )
 
-type BlobCache struct {
+type blobCache struct {
 	container *container.Client
 }
 
-var _ ListCache = (*BlobCache)(nil)
+var _ ListCache = (*blobCache)(nil)
 
-func NewBlobCache(container string, transport http.RoundTripper) (*BlobCache, error) {
+func newBlobCache(container string, transport http.RoundTripper) (*blobCache, error) {
 	// Should come from config
 	accountName, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_NAME")
 	if !ok {
@@ -52,13 +52,13 @@ func NewBlobCache(container string, transport http.RoundTripper) (*BlobCache, er
 
 	containerClient := client.ServiceClient().NewContainerClient(container)
 
-	return &BlobCache{
+	return &blobCache{
 		container: containerClient,
 	}, nil
 }
 
 // come back and use iterators or a queue?
-func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]string, error) {
+func (fc *blobCache) List(ctx context.Context, prefix string, _ string) ([]string, error) {
 	var keys []string
 	pager := fc.container.NewListBlobsFlatPager(&azblob.ListBlobsFlatOptions{
 		Prefix: &prefix,
@@ -78,7 +78,7 @@ func (fc *BlobCache) List(ctx context.Context, prefix string, _ string) ([]strin
 	return keys, nil
 }
 
-func (fc *BlobCache) Exists(ctx context.Context, key string) (bool, error) {
+func (fc *blobCache) Exists(ctx context.Context, key string) (bool, error) {
 	_, err := fc.container.NewBlockBlobClient(key).GetProperties(ctx, &blob.GetPropertiesOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
@@ -89,7 +89,7 @@ func (fc *BlobCache) Exists(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
-func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+func (fc *blobCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	stream, err := fc.container.NewBlockBlobClient(key).DownloadStream(ctx, &azblob.DownloadStreamOptions{})
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
@@ -101,11 +101,11 @@ func (fc *BlobCache) Get(ctx context.Context, key string) (io.ReadCloser, error)
 	return stream.Body, nil
 }
 
-func (fc *BlobCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
+func (fc *blobCache) Put(ctx context.Context, key, value string, opts PutOptions) error {
 	return fc.PutReader(ctx, key, strings.NewReader(value), opts)
 }
 
-func (fc *BlobCache) PutReader(ctx context.Context, key string, reader io.Reader, opts PutOptions) error {
+func (fc *blobCache) PutReader(ctx context.Context, key string, reader io.Reader, opts PutOptions) error {
 	var access *blob.AccessConditions
 	if opts.Condition == PutIfNoneMatch {
 		access = &blob.AccessConditions{}
@@ -130,7 +130,7 @@ func (fc *BlobCache) PutReader(ctx context.Context, key string, reader io.Reader
 	return nil
 }
 
-func (fc *BlobCache) Delete(ctx context.Context, key string) error {
+func (fc *blobCache) Delete(ctx context.Context, key string) error {
 	_, err := fc.container.NewBlockBlobClient(key).Delete(ctx, nil)
 	if err != nil {
 		if bloberror.HasCode(err, bloberror.BlobNotFound) {
@@ -152,7 +152,7 @@ func EnsureCache(container string) (ListCache, error) {
 	if ok {
 		slog.Debug("Using Azure Blob Storage for cache", "container", container)
 		// can pas in  otelhttp.NewTransport(http.DefaultTransport) but it creates a lot of noise
-		return NewBlobCache(container, http.DefaultTransport)
+		return newBlobCache(container, http.DefaultTransport)
 	}
 	return NewFileCache(container), nil
 }

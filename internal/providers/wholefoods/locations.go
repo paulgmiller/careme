@@ -19,13 +19,13 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-type LocationBackend struct {
+type locationBackend struct {
 	zipLookup centroidByZip
 	spatial   []locationtypes.Location
 	hydrator  *hydrator.LazyHydrator
 }
 
-func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*locationBackend, error) {
 	if !cfg.WholeFoods.IsEnabled() {
 		return nil, locationtypes.DisabledBackendError("Whole Foods")
 	}
@@ -42,8 +42,8 @@ func NewLocationBackendFromConfig(ctx context.Context, cfg *config.Config, zipLo
 	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
-	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
+func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*locationBackend, error) {
+	entries, err := storeindex.Load(ctx, c, locationIndexCacheKey)
 	if err != nil {
 		return nil, fmt.Errorf("load wholefoods locations index: %w", err)
 	}
@@ -53,23 +53,23 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		spatial = append(spatial, entry.ToLocation())
 	}
 
-	return &LocationBackend{
+	return &locationBackend{
 		zipLookup: zipLookup,
 		spatial:   spatial,
 		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
-func (b *LocationBackend) IsID(locationID string) bool {
+func (b *locationBackend) IsID(locationID string) bool {
 	_, ok := parseLocationID(locationID)
 	return ok
 }
 
-func (*LocationBackend) HasInventory(locationID string) bool {
+func (*locationBackend) HasInventory(locationID string) bool {
 	return true
 }
 
-func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	normalized, ok := parseLocationID(locationID)
 	if !ok {
 		return nil, fmt.Errorf("whole foods location id %q is invalid", locationID)
@@ -84,16 +84,16 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &copy, nil
 }
 
-func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	candidates := nearby.FilterAndSortByCoordinates(coordinates, b.spatial, nearby.MaxLocationDistanceMiles)
 	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }
 
 func parseLocationID(locationID string) (string, bool) {
-	if !strings.HasPrefix(locationID, LocationIDPrefix) {
+	if !strings.HasPrefix(locationID, locationIDPrefix) {
 		return "", false
 	}
 
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
-	return LocationIDPrefix + storeID, true
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
+	return locationIDPrefix + storeID, true
 }

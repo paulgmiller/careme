@@ -268,7 +268,7 @@ func makeStoreMenuPlans(ctx context.Context, service planService, stores []locat
 	for i, store := range stores {
 		go func() {
 			defer wg.Done()
-			date, err := locations.StoreToDate(ctx, now, &store)
+			date, err := locations.StoreTime(ctx, now, &store)
 			if err != nil {
 				slog.Warn("go error on store to date %s", "error", err)
 				return

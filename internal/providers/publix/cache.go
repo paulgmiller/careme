@@ -17,9 +17,9 @@ import (
 const (
 	Container               = "publix"
 	StoreCachePrefix        = "publix/stores/"
-	StoreURLMapCacheKey     = "publix/store_url_map.json"
-	MissingStoreIDsCacheKey = "publix/missing_store_ids.json"
-	LocationIDPrefix        = "publix_"
+	storeURLMapCacheKey     = "publix/store_url_map.json"
+	missingStoreIDsCacheKey = "publix/missing_store_ids.json"
+	locationIDPrefix        = "publix_"
 	LocationIndexCacheKey   = "publix/store_locations.json"
 )
 
@@ -37,14 +37,14 @@ func SaveMissingStoreIDs(ctx context.Context, c cache.Cache, ids map[string]stru
 	if err != nil {
 		return fmt.Errorf("marshal missing store ids: %w", err)
 	}
-	if err := c.Put(ctx, MissingStoreIDsCacheKey, string(raw), cache.Unconditional()); err != nil {
+	if err := c.Put(ctx, missingStoreIDsCacheKey, string(raw), cache.Unconditional()); err != nil {
 		return fmt.Errorf("write missing store ids cache: %w", err)
 	}
 	return nil
 }
 
 func LoadMissingStoreIDs(ctx context.Context, c cache.Cache) (map[string]struct{}, error) {
-	reader, err := c.Get(ctx, MissingStoreIDsCacheKey)
+	reader, err := c.Get(ctx, missingStoreIDsCacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ type loader struct {
 }
 
 func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
-	storeID := strings.TrimPrefix(strings.TrimSpace(locationID), LocationIDPrefix)
+	storeID := strings.TrimPrefix(strings.TrimSpace(locationID), locationIDPrefix)
 	if storeID == "" {
 		return locationtypes.Location{}, fmt.Errorf("publix location %q not found", locationID)
 	}

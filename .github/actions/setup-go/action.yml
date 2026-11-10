@@ -1,0 +1,39 @@
+name: Set up Go with job-specific caches
+description: Cache downloaded modules separately from rolling build and test results.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Locate Go caches
+      id: cache
+      shell: bash
+      env:
+        DEPENDENCY_HASH: ${{ hashFiles('go.mod', 'go.sum', 'tools/tool.mod', 'tools/tool.sum') }}
+      run: |
+        {
+          echo "modules=$(go env GOMODCACHE)"
+          echo "build=$(go env GOCACHE)"
+          echo "prefix=go-v2-${RUNNER_OS}-${ImageOS:-$RUNNER_OS}-${RUNNER_ARCH}-$(go env GOVERSION)-${GITHUB_JOB}-${DEPENDENCY_HASH}"
+        } >> "$GITHUB_OUTPUT"
+
+    # Each job saves the modules it actually uses, without racing other jobs
+    # to populate an immutable entry with a different subset of dependencies.
+    - name: Cache Go modules
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.cache.outputs.modules }}
+        key: ${{ steps.cache.outputs.prefix }}-modules
+
+    # A new commit restores the latest compatible snapshot and saves its own
+    # updated build/test results in the post step, only after the job succeeds.
+    - name: Cache Go builds and test results
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.cache.outputs.build }}
+        key: ${{ steps.cache.outputs.prefix }}-build-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.cache.outputs.prefix }}-build-

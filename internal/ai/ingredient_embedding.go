@@ -14,9 +14,9 @@ import (
 	"github.com/tphakala/simd/f64"
 )
 
-const IngredientEmbeddingModel = openai.EmbeddingModelTextEmbedding3Small
+const ingredientEmbeddingModel = openai.EmbeddingModelTextEmbedding3Small
 
-const IngredientEmbeddingDimensions = 256
+const ingredientEmbeddingDimensions = 256
 
 type IngredientEmbedding []float64
 
@@ -31,7 +31,7 @@ func NewIngredientEmbedder(apiKey string, httpClient *http.Client) *ingredientEm
 }
 
 func (g *ingredientEmbedder) CacheVersion() string {
-	return fmt.Sprintf("%s/%d/description-v1", IngredientEmbeddingModel, IngredientEmbeddingDimensions)
+	return fmt.Sprintf("%s/%d/description-v1", ingredientEmbeddingModel, ingredientEmbeddingDimensions)
 }
 
 // EmbedIngredients embeds descriptions, excluding prices, IDs, and grades.
@@ -45,10 +45,10 @@ func (g *ingredientEmbedder) EmbedIngredients(ctx context.Context, descriptions 
 		}
 	}
 	resp, err := g.oai.Embeddings.New(ctx, openai.EmbeddingNewParams{
-		Model:          IngredientEmbeddingModel,
+		Model:          ingredientEmbeddingModel,
 		Input:          openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: descriptions},
 		EncodingFormat: openai.EmbeddingNewParamsEncodingFormatFloat,
-		Dimensions:     openai.Int(IngredientEmbeddingDimensions), // https://chatgpt.com/share/6aa863fa-5a50-83e8-8c88-177fe8d257c2
+		Dimensions:     openai.Int(ingredientEmbeddingDimensions), // https://chatgpt.com/share/6aa863fa-5a50-83e8-8c88-177fe8d257c2
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create ingredient embeddings: %w", err)

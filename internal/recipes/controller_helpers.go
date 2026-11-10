@@ -104,12 +104,13 @@ func renderGenerationRetry(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 }
 
-func renderMissingShoppingList(ctx context.Context, w http.ResponseWriter, p *generatorParams, help string) {
+func renderMissingShoppingList(ctx context.Context, w http.ResponseWriter, p *generatorParams, help string, signedIn bool) {
 	data := struct {
 		templates.Page
-		Params *generatorParams
-		Help   string
-	}{templates.NewPage(ctx), p, help}
+		Params         *generatorParams
+		Help           string
+		ServerSignedIn bool
+	}{templates.NewPage(ctx), p, help, signedIn}
 	data.Title = "Let's get cooking"
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")

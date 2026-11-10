@@ -53,7 +53,7 @@ type loader struct {
 }
 
 func (l *loader) Load(ctx context.Context, locationID string) (locationtypes.Location, error) {
-	storeNumber := strings.TrimPrefix(strings.TrimSpace(locationID), LocationIDPrefix)
+	storeNumber := strings.TrimPrefix(strings.TrimSpace(locationID), locationIDPrefix)
 	if storeNumber == "" {
 		return locationtypes.Location{}, fmt.Errorf("wegmans location %q not found", locationID)
 	}

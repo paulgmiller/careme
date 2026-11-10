@@ -135,6 +135,8 @@ func TestDeliveryCampaignRedirects(t *testing.T) {
 	}{
 		{"smithbrothersfarms", "smithbrothersfarms_delivery"},
 		{"mnfoodclub", "mnfoodclub_delivery"},
+		{"tcfarm", "tcfarm_delivery"},
+		{"nelsongrassfarm", "nelsongrassfarm_delivery"},
 	} {
 		t.Run(campaign.slug, func(t *testing.T) {
 			for _, query := range []string{"", "?location=other&utm_source=facebook&utm_campaign=delivery"} {

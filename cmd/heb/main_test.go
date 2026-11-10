@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"careme/internal/cache"
-	"careme/internal/heb"
+	"careme/internal/providers/heb"
 )
 
 func TestSyncFromSitemapSkipsKnownURLs(t *testing.T) {

@@ -81,7 +81,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		feedback = *existing
 	})
 	loadWG.Go(func() {
-		existing, err := s.ThreadFromCache(ctx, hash)
+		existing, err := s.threadFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
@@ -91,7 +91,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 		thread = existing
 	})
 	loadWG.Go(func() {
-		selection, err := s.WineFromCache(ctx, hash)
+		selection, err := s.wineFromCache(ctx, hash)
 		if err != nil {
 			if !errors.Is(err, cache.ErrNotFound) {
 				slog.ErrorContext(ctx, "failed to load cached wine recommendation", "hash", hash, "error", err)
@@ -182,6 +182,7 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 
 // A 204 leaves the polling placeholder intact; the ready image replaces it.
 func (s *server) handleRecipeImagePanel(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	hash := r.PathValue("hash")
 	exists, err := s.images.Exists(r.Context(), hash)
 	if err != nil {
@@ -255,8 +256,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	_, err := s.clerk.GetUserIDFromRequest(r)
-	if errors.Is(err, auth.ErrNoSession) {
+	_, ok := s.clerk.GetUserIDFromRequest(r)
+	if !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
@@ -293,7 +294,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thread, err := s.ThreadFromCache(ctx, hash)
+	thread, err := s.threadFromCache(ctx, hash)
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		slog.ErrorContext(ctx, "failed to load recipe thread", "hash", hash, "error", err)
 		http.Error(w, "failed to load recipe thread", http.StatusInternalServerError)
@@ -305,7 +306,7 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 		ResponseID: answer.ResponseID,
 		CreatedAt:  time.Now(),
 	})
-	if err := s.SaveThread(ctx, hash, thread); err != nil {
+	if err := s.saveThread(ctx, hash, thread); err != nil {
 		http.Error(w, "failed to save question", http.StatusInternalServerError)
 		return
 	}
@@ -346,7 +347,7 @@ func (s *server) handleRegenerateSingleRecipe(w http.ResponseWriter, r *http.Req
 		recipe, recipeErr = s.SingleFromCache(ctx, hash)
 	})
 	loadWG.Go(func() {
-		thread, threadErr = s.ThreadFromCache(ctx, hash)
+		thread, threadErr = s.threadFromCache(ctx, hash)
 	})
 	loadWG.Go(func() {
 		c, err := s.critiques.Load(ctx, hash)
@@ -484,7 +485,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing recipe hash", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.clerk.GetUserIDFromRequest(r); errors.Is(err, auth.ErrNoSession) {
+	if _, ok := s.clerk.GetUserIDFromRequest(r); !ok {
 		redirectToSignIn(w, r, http.StatusUnauthorized)
 		return
 	}
@@ -545,7 +546,7 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.SetHTMLContentType(w)
-	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span>Saved</span>`)
+	_, err = fmt.Fprint(w, `<span class="inline-flex items-center gap-1 text-sm font-medium text-green-700"><span aria-hidden="true">✓</span><span class="sr-only">Saved</span></span>`)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write feedback response", "hash", hash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)

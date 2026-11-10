@@ -24,6 +24,15 @@ func main() {
 	var verbose bool
 	var ingredient string
 	var limit int
+	var searches []string
+	flag.Func("kroger-search", "Inspect a raw Kroger search and compare with staples; repeat for multiple terms (no grading)", func(term string) error {
+		term = strings.TrimSpace(term)
+		if term == "" {
+			return fmt.Errorf("search term must not be blank")
+		}
+		searches = append(searches, term)
+		return nil
+	})
 	flag.StringVar(&location, "location", "", "Location for recipe sourcing (e.g., 70100023)")
 	flag.StringVar(&location, "l", "", "Location for recipe sourcing (short form)")
 	flag.BoolVar(&verbose, "verbose", false, "dump all ingredients and grades")
@@ -37,6 +46,13 @@ func main() {
 		log.Fatal("-limit must be positive")
 	}
 	ctx := context.Background()
+
+	if len(searches) > 0 {
+		if err := inspectKroger(ctx, location, searches); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

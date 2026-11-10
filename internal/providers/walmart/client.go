@@ -81,46 +81,9 @@ func NewClient(cfg config.WalmartConfig) (*Client, error) {
 	}, nil
 }
 
-// docshttps://walmart.io/docs/affiliates/v1/taxonomy
-// example https://developer.api.walmart.com/api-proxy/service/affil/product/v2/taxonomy
-func (c *Client) Taxonomy(ctx context.Context) (json.RawMessage, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/taxonomy", nil)
-	if err != nil {
-		return nil, fmt.Errorf("build taxonomy request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	if err := c.applyAuthHeaders(req); err != nil {
-		return nil, fmt.Errorf("apply walmart auth headers: %w", err)
-	}
-
-	slog.InfoContext(ctx, "searching Walmart taxonomy", "url", req.URL.String())
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request taxonomy: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
-	if err != nil {
-		return nil, fmt.Errorf("read taxonomy response: %w", err)
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("taxonomy request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	if !json.Valid(body) {
-		return nil, fmt.Errorf("taxonomy request succeeded but response was not valid JSON: %s", strings.TrimSpace(string(body)))
-	}
-
-	return body, nil
-}
-
 // docs https://walmart.io/docs/affiliates/v1/stores
 // SearchStores returns stores near the provided coordinates.
-func (c *Client) SearchStores(ctx context.Context, coordinates geo.Coordinate) ([]Store, error) {
+func (c *Client) SearchStores(ctx context.Context, coordinates geo.Coordinate) ([]storeRecord, error) {
 	if err := coordinates.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid Walmart store coordinates: %w", err)
 	}
@@ -132,7 +95,7 @@ func (c *Client) SearchStores(ctx context.Context, coordinates geo.Coordinate) (
 	if err != nil {
 		return nil, err
 	}
-	stores, err := ParseStores(raw)
+	stores, err := parseStores(raw)
 	if err != nil {
 		return nil, fmt.Errorf("parse stores response: %w", err)
 	}

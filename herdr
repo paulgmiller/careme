@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 || -z "$1" ]]; then
+  echo "Usage: ${0##*/} <branch-name>" >&2
+  exit 1
+fi
+
+name="$1"
+src="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+dest="$(dirname -- "$src")/careme_$name"
+
+if [[ "${HERDR_ENV:-}" != 1 ]]; then
+  echo "error: run this script from a terminal inside Herdr" >&2
+  exit 1
+fi
+
+if ! command -v herdr >/dev/null 2>&1; then
+  echo "error: herdr is not installed or is not on PATH" >&2
+  exit 1
+fi
+
+git -C "$src" check-ref-format "refs/heads/$name"
+
+if [[ -e "$dest" || -L "$dest" ]]; then
+  echo "error: destination already exists: $dest" >&2
+  exit 1
+fi
+
+if git -C "$src" show-ref --verify --quiet "refs/heads/$name"; then
+  echo "error: branch already exists: $name" >&2
+  exit 1
+fi
+
+git -C "$src" fetch origin master
+# Create the checkout directly so Herdr opens an independent top-level workspace.
+git -C "$src" worktree add -b "$name" "$dest" origin/master
+exec herdr workspace create \
+  --cwd "$dest" \
+  --label "$name" \
+  --focus

@@ -40,7 +40,7 @@ func (s store) Load(ctx context.Context, hash string) (*ai.RecipeCritique, error
 	return &critique, err
 }
 
-func (s store) Save(ctx context.Context, hash string, critique *ai.RecipeCritique) error {
+func (s store) save(ctx context.Context, hash string, critique *ai.RecipeCritique) error {
 	if critique == nil {
 		return fmt.Errorf("recipe critique is required")
 	}
@@ -51,6 +51,6 @@ func (s store) Save(ctx context.Context, hash string, critique *ai.RecipeCritiqu
 	return s.cache.Put(ctx, cacheKey(hash), string(body), cache.Unconditional())
 }
 
-func (s store) ListHashes(ctx context.Context) ([]string, error) {
+func (s store) listHashes(ctx context.Context) ([]string, error) {
 	return s.cache.List(ctx, cachePrefix, "")
 }

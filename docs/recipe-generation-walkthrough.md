@@ -7,8 +7,8 @@ This document covers the first-time generation path inside `generatorService.Gen
 ```mermaid
 flowchart TD
     subgraph Legend["Model color"]
-        MiniLegend["gpt-5.6-luna<br/>Grading"]
-        GPT5Legend["gpt-5.6-sol<br/>Menu planning + recipe generation + retry"]
+        MiniLegend["gpt-6-luna<br/>Grading"]
+        RecipeModelLegend["gpt-6.1-sol<br/>Menu planning + recipe generation + retry"]
         OpenRouterLegend["OpenRouter<br/>Recipe critique"]
     end
 
@@ -59,11 +59,11 @@ flowchart TD
     W --> X["Return ai.ShoppingList with menu plan"]
 
     classDef mini fill:#e0f2fe,stroke:#0284c7,color:#0f172a,stroke-width:2px
-    classDef gpt5 fill:#dcfce7,stroke:#16a34a,color:#0f172a,stroke-width:2px
+    classDef recipeModel fill:#dcfce7,stroke:#16a34a,color:#0f172a,stroke-width:2px
     classDef openrouter fill:#f3e8ff,stroke:#7e22ce,color:#0f172a,stroke-width:2px
 
     class MiniLegend,J,N mini
-    class GPT5Legend,P1,P2,P3,U1,U2,U3 gpt5
+    class RecipeModelLegend,P1,P2,P3,U1,U2,U3 recipeModel
     class OpenRouterLegend,R1,R2,R3 openrouter
 ```
 
@@ -81,13 +81,13 @@ Ingredient grading uses the cache in `internal/ingredients/grading/cache.go`:
 
 Back in `GenerateRecipes`, ingredients with `Grade.Score <= 6` are removed. Ungraded ingredients are still allowed through.
 
-The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-5.6-luna`.
+The model boundary in this section is ingredient grading. Fetching staples is store data retrieval; grading missing ingredients uses the configured ingredient grading model, defaulting to `gpt-6-luna`.
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-5.6-sol`.
+After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-6.1-sol`.
 
-The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-5.6-sol` recipe model call:
+The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-6.1-sol` recipe model call:
 
 - append the plan instructions to the base instructions
 - call `GenerateRecipe`
@@ -98,7 +98,7 @@ The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Ea
 
 Recipe generation uses the Responses API with `store: true` and continues model state through `previous_response_id`. Conversation state and prompt caching are separate: the response ID selects the conversation history, while `prompt_cache_key` helps route requests to the cache containing an exact prompt prefix. Careme carries both values together as an `ai.ResponseRef`.
 
-The initial menu-plan request has two explicit GPT-5.6 cache breakpoints:
+The initial menu-plan request has two explicit OpenAI cache breakpoints:
 
 1. Immediately after the ingredient TSV. This preserves the large ingredient prefix when later menu instructions differ.
 2. At the end of the complete initial menu-plan prompt. Descendant recipe calls can reuse the longest matching initial-menu prefix.
@@ -107,15 +107,15 @@ Menu and recipe regeneration requests add no new breakpoint markers. Breakpoints
 
 The prompt cache key hashes the store ID and store-local sale date. Users generating from the same ingredient set can therefore share the ingredient breakpoint. The complete-menu breakpoint remains isolated by exact prefix matching: it is reused only when all content through that breakpoint also matches. Generated recipes retain the hashed key as server-owned metadata so later questions and rewrites can use the same cache namespace in a separate HTTP request. When a continuation has no cache key, Careme omits `prompt_cache_key` and lets OpenAI use its normal cache routing.
 
-These request controls are specific to direct OpenAI GPT-5.6 and later models. Stable prefix ordering is portable, but OpenRouter and other providers use different controls, including provider-specific `cache_control` blocks and sticky `session_id` routing. Introduce a provider/model-specific cache policy before routing recipe requests through another provider or an incompatible model. See the [OpenAI prompt cache key guidance](https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key).
+These request controls are specific to the supported models accessed directly through OpenAI. Stable prefix ordering is portable, but OpenRouter and other providers use different controls, including provider-specific `cache_control` blocks and sticky `session_id` routing. Introduce a provider/model-specific cache policy before routing recipe requests through another provider or an incompatible model. See the [OpenAI prompt cache key guidance](https://developers.openai.com/api/docs/guides/prompt-caching#improve-cache-hit-rates-with-a-prompt-cache-key).
 
-Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputTokensDetails_cacheWriteTokens`. Spend logging prices cache writes separately as `usage_spend_cacheWriteInputUSD`, using the GPT-5.6 cache-write rate rather than treating them as ordinary input. The first request for a prefix should generally report a cache write; later requests in the same response chain should report cached-token reads. A zero read is expected when the exact prefix changed or no prior write is available.
+Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputTokensDetails_cacheWriteTokens`. Spend logging prices cache writes separately as `usage_spend_cacheWriteInputUSD`, using the model's cache-write rate rather than treating them as ordinary input. The first request for a prefix should generally report a cache write; later requests in the same response chain should report cached-token reads. A zero read is expected when the exact prefix changed or no prior write is available.
 
 ## Critique And Fan-In
 
 `critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `google/gemini-4-argon`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-When a Gemini critique score is at least `8`, the recipe is kept. Opus-family models use their calibrated cutoff of `7` when selected explicitly. Scores below the model-specific cutoff cause one more `gpt-5.6-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
+When a Gemini critique score is at least `8`, the recipe is kept. Opus-family models use their calibrated cutoff of `7` when selected explicitly. Scores below the model-specific cutoff cause one more `gpt-6.1-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 

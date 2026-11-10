@@ -27,16 +27,29 @@ func TestLocationsWithinDeliveryBox(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := backend.GetLocationsByCoordinates(t.Context(), test.coordinates)
 			require.NoError(t, err)
-			require.Len(t, got, 1)
-			assert.Equal(t, "MNFoodClub delivery", got[0].Name)
-			assert.Equal(t, "Home delivery", got[0].Address)
-			assert.Equal(t, test.coordinates, got[0].Coordinate())
-			assert.True(t, backend.HasInventory(got[0].ID))
-			assert.True(t, NewIdentityProvider().IsID(got[0].ID))
-			lookup, err := backend.GetLocationByID(t.Context(), got[0].ID)
-			require.NoError(t, err)
-			assert.Equal(t, got[0].ID, lookup.ID)
-			assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, lookup.Coordinate())
+			require.Len(t, got, 3)
+			for i, want := range []struct{ id, name, url string }{
+				{"mnfoodclub_delivery", "MN Food Club", "https://mnfood.club/"},
+				{"tcfarm_delivery", "TC Farm", "https://tc.farm/"},
+				{"nelsongrassfarm_delivery", "Nelson Grass Farm", "https://nelsongrassfarm.com/"},
+			} {
+				location := got[i]
+				assert.Equal(t, want.id, location.ID)
+				assert.Equal(t, want.name+" delivery", location.Name)
+				assert.Equal(t, want.name, location.Chain)
+				assert.Equal(t, want.url, location.URL)
+				assert.Equal(t, "Home delivery", location.Address)
+				assert.Equal(t, test.coordinates, location.Coordinate())
+				assert.True(t, backend.HasInventory(location.ID))
+				assert.True(t, NewIdentityProvider().IsID(location.ID))
+				lookup, err := backend.GetLocationByID(t.Context(), location.ID)
+				require.NoError(t, err)
+				assert.Equal(t, location.ID, lookup.ID)
+				assert.Equal(t, location.Name, lookup.Name)
+				assert.Equal(t, location.URL, lookup.URL)
+				assert.Equal(t, location.Chain, lookup.Chain)
+				assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, lookup.Coordinate())
+			}
 		})
 	}
 }
@@ -67,12 +80,13 @@ func TestDeliveryLocationIDsRemainStable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "mnfoodclub_delivery", first[0].ID)
 	assert.Equal(t, first, repeated)
-	assert.Equal(t, first[0].ID, other[0].ID)
-	assert.Equal(t, coordinates, first[0].Coordinate())
-	assert.Equal(t, geo.Coordinate{Lat: 44.01, Lon: -92.48}, other[0].Coordinate())
-	lookup, err := backend.GetLocationByID(t.Context(), first[0].ID)
-	require.NoError(t, err)
-	assert.Equal(t, geo.Coordinate{Lat: 45.152458660615245, Lon: -93.19369341504489}, lookup.Coordinate())
+	require.Len(t, first, 3)
+	require.Len(t, other, 3)
+	for i, location := range first {
+		assert.Equal(t, location.ID, other[i].ID)
+		assert.Equal(t, coordinates, location.Coordinate())
+		assert.Equal(t, geo.Coordinate{Lat: 44.01, Lon: -92.48}, other[i].Coordinate())
+	}
 }
 
 func TestDeliveryAlias(t *testing.T) {

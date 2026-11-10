@@ -22,7 +22,7 @@ import (
 
 var testReviewTime = time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 
-func newTestStore(c cache.Cache, items map[string][]ai.InputIngredient) *Store {
+func newTestStore(c cache.Cache, items map[string][]ai.InputIngredient) *store {
 	store := NewStore(c, fakeLocationLookup{err: cache.ErrNotFound}, &failingIngredientCache{err: assert.AnError})
 	for id, ingredients := range items {
 		store.entries[id] = &catalogEntry{location: &locations.Location{ID: id, Name: "Store " + id}, ingredients: slices.Clone(ingredients)}
@@ -63,18 +63,18 @@ func TestStoreReviewFlow(t *testing.T) {
 	defer func() { require.NoError(t, reader.Close()) }()
 	body, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	var review Review
+	var review reviewRecord
 	require.NoError(t, json.Unmarshal(body, &review))
 	assert.NotContains(t, string(body), "location_id")
 	assert.Equal(t, ingredient, review.Ingredient)
-	assert.Equal(t, VerdictTooHigh, review.Verdict)
+	assert.Equal(t, verdictTooHigh, review.Verdict)
 	require.Equal(t, http.StatusNotFound, post("a", key, "too_low").Code)
 	savedReader, err := c.Get(t.Context(), reviewCachePrefix+key)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, savedReader.Close()) }()
-	var saved Review
+	var saved reviewRecord
 	require.NoError(t, json.NewDecoder(savedReader).Decode(&saved))
-	assert.Equal(t, VerdictTooHigh, saved.Verdict, "first review wins")
+	assert.Equal(t, verdictTooHigh, saved.Verdict, "first review wins")
 	response = httptest.NewRecorder()
 	h.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/grader?location=a", nil))
 	assert.Equal(t, http.StatusOK, response.Code)
@@ -104,7 +104,7 @@ func TestSharedIngredientReviewSkippedAcrossStores(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	ingredient := ai.InputIngredient{ProductID: "shared", Grade: &ai.IngredientGrade{Score: 8, Reason: "Flexible"}}
 	s := newTestStore(c, map[string][]ai.InputIngredient{"a": {ingredient}, "b": {ingredient}})
-	require.NoError(t, s.Save(t.Context(), "a", catalogGradeKey(ingredient), VerdictCorrect, testReviewTime))
+	require.NoError(t, s.save(t.Context(), "a", catalogGradeKey(ingredient), verdictCorrect, testReviewTime))
 	_, candidate, err := s.Next(t.Context(), "b")
 	require.NoError(t, err)
 	assert.Empty(t, candidate.GradeKey)

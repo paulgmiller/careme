@@ -27,7 +27,7 @@ func TestStoreSaveUsesPrefixedKey(t *testing.T) {
 
 	s := NewStore(cacheStore)
 
-	if err := s.Save(t.Context(), hash, want); err != nil {
+	if err := s.save(t.Context(), hash, want); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
@@ -50,7 +50,7 @@ func TestStoreListHashes(t *testing.T) {
 	cacheStore := cache.NewFileCache(t.TempDir())
 	s := NewStore(cacheStore)
 	for _, hash := range []string{"b", "a"} {
-		if err := s.Save(t.Context(), hash, &ai.RecipeCritique{
+		if err := s.save(t.Context(), hash, &ai.RecipeCritique{
 			SchemaVersion: "recipe-critique-v1",
 			OverallScore:  7,
 			Summary:       hash,
@@ -59,7 +59,7 @@ func TestStoreListHashes(t *testing.T) {
 		}
 	}
 
-	hashes, err := s.ListHashes(t.Context())
+	hashes, err := s.listHashes(t.Context())
 	if err != nil {
 		t.Fatalf("ListHashes failed: %v", err)
 	}

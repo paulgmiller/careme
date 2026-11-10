@@ -209,6 +209,14 @@ func TestFormatRecipeHTML_NoFinalizeOrRegenerate(t *testing.T) {
 	if !strings.Contains(html, `name="feedback"`) {
 		t.Error("recipe HTML should contain text feedback control")
 	}
+	assert.Contains(t, html, `hx-trigger="submit, input delay:1s from:#feedback"`)
+	assert.Contains(t, html, `hx-sync="#feedback-panel:queue last"`)
+	assert.Contains(t, html, `Could not save. Try again, chef.`)
+	assert.NotContains(t, html, `Save feedback`)
+	assert.NotContains(t, html, `feedback-retry`)
+	assert.Contains(t, html, `event.detail.shouldSwap=false`)
+	assert.Contains(t, html, `<span class="animate-pulse" aria-hidden="true">•••</span>`)
+	assert.Contains(t, html, `<span class="sr-only">Saving</span>`)
 	if strings.Contains(html, "Recipe score:") {
 		t.Error("recipe HTML should hide recipe score when no critique exists")
 	}
@@ -546,6 +554,45 @@ func TestRecipeAnswersRenderLimitedMarkdown(t *testing.T) {
 			assert.Contains(t, body, "![image](https://example.test/pixel)")
 			assert.Contains(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;")
 			assert.NotContains(t, body, `<a href="https://example.test"`)
+		})
+	}
+}
+
+func TestStoreDetailsInRecipeAndShoppingListHeaders(t *testing.T) {
+	for _, test := range []struct {
+		name, url, address string
+	}{
+		{name: "MN Food Club", url: "https://mnfood.club/", address: "Home delivery"},
+		{name: "TC Farm", url: "https://tc.farm/", address: "Home delivery"},
+		{name: "Nelson Grass Farm", url: "https://nelsongrassfarm.com/", address: "Home delivery"},
+		{name: "Smith Brothers Farms", url: "https://www.smithbrothersfarms.com/", address: "Home delivery"},
+		{name: "Physical store", address: "1 Main St"},
+		{name: "No store details"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			params := DefaultParams(&locations.Location{
+				ID: "70000001", Name: test.name, URL: test.url, Address: test.address,
+			}, time.Date(2026, time.October, 20, 0, 0, 0, 0, time.UTC))
+			recipe := ai.Recipe{Title: "Soup", Description: "A simple soup.", Instructions: []string{"Simmer."}}
+			for _, shopping := range []bool{false, true} {
+				w := httptest.NewRecorder()
+				if shopping {
+					formatShoppingListHTMLForTest(t.Context(), params, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, false, recipeSelection{}, w)
+				} else {
+					writeRecipePage(t.Context(), w, recipeViewInput{params: params, recipe: recipe})
+				}
+				html := assertHTTPSuccess(t, w)
+				isValidHTML(t, html)
+				assert.Contains(t, html, test.name)
+				if test.url != "" {
+					assert.Contains(t, html, `<a href="`+test.url+`" class="break-all hover:underline">`+test.url+`</a>`)
+					assert.NotContains(t, html, test.address)
+				} else if test.address != "" {
+					assert.Contains(t, html, "("+test.address+")")
+				} else {
+					assert.NotContains(t, html, ">()</span>")
+				}
+			}
 		})
 	}
 }

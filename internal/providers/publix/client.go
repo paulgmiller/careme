@@ -24,7 +24,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
-type ProbeResult struct {
+type probeResult struct {
 	StoreID string
 	Exists  bool
 	URL     string
@@ -58,7 +58,7 @@ type storeAddress struct {
 	Zip           string `json:"zip"`
 }
 
-func NewClient(httpClient *http.Client) *Client {
+func newClient(httpClient *http.Client) *Client {
 	return NewClientWithBaseURL(DefaultBaseURL, httpClient)
 }
 
@@ -82,7 +82,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) ResolveStore(ctx context.Context, storeID string) (*ProbeResult, error) {
+func (c *Client) ResolveStore(ctx context.Context, storeID string) (*probeResult, error) {
 	storeID = strings.TrimSpace(storeID)
 	if storeID == "" {
 		return nil, errors.New("store id is required")
@@ -123,16 +123,16 @@ func (c *Client) ResolveStore(ctx context.Context, storeID string) (*ProbeResult
 			return nil, fmt.Errorf("parse redirect location %q: %w", location, err)
 		}
 		if isMissingStoreRedirect(resolved) {
-			return &ProbeResult{StoreID: storeID, Exists: false}, nil
+			return &probeResult{StoreID: storeID, Exists: false}, nil
 		}
 		if strings.HasPrefix(resolved.Path, "/locations/") {
-			return &ProbeResult{StoreID: storeID, Exists: true, URL: resolved.String()}, nil
+			return &probeResult{StoreID: storeID, Exists: true, URL: resolved.String()}, nil
 		}
 		return nil, fmt.Errorf("unexpected redirect target %q for store %s", resolved.String(), storeID)
 	case resp.StatusCode == http.StatusOK:
-		return &ProbeResult{StoreID: storeID, Exists: true, URL: endpoint}, nil
+		return &probeResult{StoreID: storeID, Exists: true, URL: endpoint}, nil
 	case resp.StatusCode == http.StatusNotFound:
-		return &ProbeResult{StoreID: storeID, Exists: false}, nil
+		return &probeResult{StoreID: storeID, Exists: false}, nil
 	default:
 		return nil, fmt.Errorf("request %q: unexpected status %d", endpoint, resp.StatusCode)
 	}
@@ -165,10 +165,10 @@ func (c *Client) StoreSummary(ctx context.Context, pageURL string) (*StoreSummar
 		return nil, fmt.Errorf("request failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	return ExtractStoreSummary(pageURL, body)
+	return extractStoreSummary(pageURL, body)
 }
 
-func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
+func extractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
 	payload, err := extractStorePayload(body)
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func ExtractStoreSummary(pageURL string, body []byte) (*StoreSummary, error) {
 	storeID := strconv.Itoa(payload.StoreNumber)
 
 	return &StoreSummary{
-		ID:      LocationIDPrefix + storeID,
+		ID:      locationIDPrefix + storeID,
 		StoreID: storeID,
 		Name:    strings.TrimSpace(payload.Name),
 		Address: strings.TrimSpace(payload.Address.StreetAddress),

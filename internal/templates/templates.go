@@ -31,7 +31,7 @@ type ConversionEvent string
 const (
 	SignupCompletedConversion  ConversionEvent = "signup_completed"
 	RecipeGenerationConversion ConversionEvent = "recipe_generation"
-	RecipeSaveConversion       ConversionEvent = "recipe_save"
+	recipeSaveConversion       ConversionEvent = "recipe_save"
 )
 
 //go:embed *.html
@@ -67,11 +67,11 @@ func Init(config *config.Config) error {
 			}
 			return "https://" + domain + "/npm/@clerk/ui@1/dist/ui.browser.js"
 		},
-		"GoogleTagNoScript":         GoogleTagNoScript,
+		"GoogleTagNoScript":         googleTagNoScript,
 		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return publicOrigin },
-		"RecipeSaveConversion":      func() ConversionEvent { return RecipeSaveConversion },
+		"RecipeSaveConversion":      func() ConversionEvent { return recipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
 		"ShoppingRecipeImageURL":    func(hash string) string { return shoppingRecipeImageURL(publicOrigin, hash) },
@@ -219,8 +219,8 @@ func GoogleTagScript() template.HTML {
 	return template.HTML(script)
 }
 
-// GoogleTagNoScript generates the Google Tag Manager noscript fallback HTML.
-func GoogleTagNoScript() template.HTML {
+// googleTagNoScript generates the Google Tag Manager noscript fallback HTML.
+func googleTagNoScript() template.HTML {
 	if GoogleTagManagerID == "" {
 		return ""
 	}

@@ -17,7 +17,7 @@
               </h1>
               <p class="mt-2 text-ink-600">
                 Location: <span class="font-semibold text-brand-700">{{.Location.Name}}</span>
-                <span class="text-sm text-ink-500">({{.Location.Address}})</span>
+                <span class="text-sm text-ink-500">{{template "location_details" .Location}}</span>
               </p>
             </div>
             {{template "account_widget" .}}
@@ -37,14 +37,24 @@
 </html>
 
 {{define "shopping_finalize_controls"}}
-<div id="shopping-finalize-controls" class="mt-10 flex flex-wrap items-center gap-4">
+<div id="shopping-finalize-controls" {{template "shopping_finalize_refresh" .}} class="mt-10 flex flex-wrap items-center gap-4">
   {{template "shopping_finalize_controls_content" .}}
 </div>
 {{end}}
 
+{{define "shopping_finalize_refresh"}}
+hx-get="/recipes?h={{.Hash}}"
+hx-trigger="focus from:window, visibilitychange[document.visibilityState === 'visible'] from:document, pageshow[event.persisted] from:window"
+hx-select="#shopping-finalize-controls"
+hx-swap="outerHTML"
+hx-sync="this:drop"
+{{end}}
+
 {{define "shopping_finalize_controls_content"}}
-  {{with .Order}}
-  {{template "shopping_order_form" .}}
+  {{if .Order}}
+  {{template "shopping_order_form" .Order}}
+  {{else if .Finalized}}
+  <p class="text-sm text-ink-600">Shopping list ready.</p>
   {{else}}
   <span class="inline-flex" {{if not .HasSavedRecipes}}title="Add at least one recipe to assemble your shopping list."{{end}}>
     <button type="button"
@@ -64,7 +74,7 @@
   {{if .HasSavedRecipes}}
   <span id="shopping-finalize-status" class="htmx-indicator inline-flex items-center gap-2 text-sm text-ink-600" role="status">
     <span class="h-4 w-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true"></span>
-    Building shopping list…
+    <span class="sr-only">Building shopping list</span>
   </span>
   <p id="shopping-finalize-error" hidden role="alert" class="text-sm text-action-red-700">
     Could not build your shopping list. Try again, chef.
@@ -72,10 +82,7 @@
   {{end}}
   {{end}}
   {{template "shopping_list_share_button" .}}
-  {{with .Order}}
-  {{if .Description}}<p class="basis-full text-xs text-ink-600">{{.Description}}</p>{{end}}
-  {{end}}
-  {{if not .HasSavedRecipes}}
+  {{if and (not .HasSavedRecipes) (not .Finalized)}}
   <p id="finalize-help" class="text-sm text-ink-600">
     Add at least one recipe to assemble your shopping list.
   </p>
@@ -83,7 +90,7 @@
 {{end}}
 
 {{define "shopping_finalize_controls_response"}}
-<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" class="mt-10 flex flex-wrap items-center gap-4">
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" {{template "shopping_finalize_refresh" .}} class="mt-10 flex flex-wrap items-center gap-4">
   {{template "shopping_finalize_controls_content" .}}
 </div>
 {{end}}
@@ -362,10 +369,6 @@
 {{define "shopping_purchase_section"}}
 <section id="shopping-list-section" class="rounded-2xl border border-brand-100 bg-white/95 p-6 shadow-md">
   <h2 class="text-lg font-semibold text-brand-700">Shopping list</h2>
-  {{with .Order}}
-  {{if .Notice}}<p role="status" class="mt-4 text-sm text-ink-700">{{.Notice}}</p>{{end}}
-  {{if .ReviewURL}}<a href="{{.ReviewURL}}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">{{.ReviewLabel}}</a>{{end}}
-  {{end}}
   <div class="mt-4 space-y-5 text-ink-700">
     {{range .Purchases}}
     <section>
@@ -391,13 +394,28 @@
 {{end}}
 
 {{define "shopping_order_form"}}
-  {{if .ActionURL}}
-  <form method="POST" action="{{.ActionURL}}">
-    <input type="hidden" name="items" value="{{.Fields.Items}}">
-    <input type="hidden" name="location" value="{{.Fields.Location}}">
-    <input type="hidden" name="list_key" value="{{.Fields.ListKey}}">
-    <input type="hidden" name="return_url" value="{{.Fields.ReturnURL}}">
-    <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.ActionLabel}}</button>
-  </form>
+{{if .TransferFailed}}
+<p role="alert" class="text-sm text-action-red-700">Add to cart failed.</p>
+{{else if .ReviewCartURL}}
+{{if .Instacart}}
+<a href="{{.ReviewCartURL}}" target="_blank" rel="noopener noreferrer" class="instacart-cta">{{template "instacart_cta_content"}}</a>
+{{else}}
+<a href="{{.ReviewCartURL}}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white">Review cart</a>
+{{end}}
+{{else if .TransferURL}}
+<form method="POST" action="{{.TransferURL}}" target="_blank" rel="noopener noreferrer" hx-boost="false">
+  <input type="hidden" name="idempotency_key" value="{{.IdempotencyKey}}">
+  <input type="hidden" name="transfer_request" value="{{.TransferRequestJSON}}">
+  {{if .Instacart}}
+  <button type="submit" class="instacart-cta">{{template "instacart_cta_content"}}</button>
+  {{else}}
+  <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-action-green-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-action-green-600 focus:outline-none focus:ring-2 focus:ring-action-green-300">{{.TransferLabel}}</button>
   {{end}}
+</form>
+{{end}}
+{{end}}
+
+{{define "instacart_cta_content"}}
+<img src="{{AssetPath}}instacart-logo.svg" width="22" height="22" alt="" aria-hidden="true">
+<span>Shop on Instacart</span>
 {{end}}

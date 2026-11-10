@@ -15,42 +15,42 @@ import (
 )
 
 const (
-	DefaultBaseURL      = "https://api.brightdata.com"
+	defaultBaseURL      = "https://api.brightdata.com"
 	defaultPollInterval = 2 * time.Second
 )
 
-type Format string
+type format string
 
 const (
-	FormatJSON   Format = "json"
-	FormatNDJSON Format = "ndjson"
-	FormatCSV    Format = "csv"
+	formatJSON   format = "json"
+	formatNDJSON format = "ndjson"
+	formatCSV    format = "csv"
 )
 
-type SnapshotStatus string
+type snapshotStatus string
 
 const (
-	SnapshotStatusStarting SnapshotStatus = "starting"
-	SnapshotStatusRunning  SnapshotStatus = "running"
-	SnapshotStatusBuilding SnapshotStatus = "building"
-	SnapshotStatusReady    SnapshotStatus = "ready"
-	SnapshotStatusFailed   SnapshotStatus = "failed"
+	snapshotStatusStarting snapshotStatus = "starting"
+	snapshotStatusRunning  snapshotStatus = "running"
+	snapshotStatusBuilding snapshotStatus = "building"
+	snapshotStatusReady    snapshotStatus = "ready"
+	snapshotStatusFailed   snapshotStatus = "failed"
 )
 
-// Client calls the Bright Data scraper API.
-type Client struct {
+// client calls the Bright Data scraper API.
+type client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
 }
 
-// APIError captures a non-success Bright Data response.
-type APIError struct {
+// apiError captures a non-success Bright Data response.
+type apiError struct {
 	StatusCode int
 	Body       string
 }
 
-func (e *APIError) Error() string {
+func (e *apiError) Error() string {
 	body := strings.TrimSpace(e.Body)
 	if body == "" {
 		return fmt.Sprintf("bright data request failed: status %d", e.StatusCode)
@@ -58,25 +58,25 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("bright data request failed: status %d: %s", e.StatusCode, body)
 }
 
-type ScrapeOptions struct {
+type scrapeOptions struct {
 	Notify             bool
 	IncludeErrors      bool
-	Format             Format
+	Format             format
 	CustomOutputFields string
 }
 
-type TriggerOptions struct {
+type triggerOptions struct {
 	Notify             bool
 	IncludeErrors      bool
-	Format             Format
+	Format             format
 	CustomOutputFields string
 }
 
-type DownloadOptions struct {
-	Format Format
+type downloadOptions struct {
+	Format format
 }
 
-type ScrapeResponse struct {
+type scrapeResponse struct {
 	StatusCode  int
 	ContentType string
 	Header      http.Header
@@ -85,88 +85,62 @@ type ScrapeResponse struct {
 	Message     string
 }
 
-func (r *ScrapeResponse) DecodeJSON(dest any) error {
-	if len(r.Body) == 0 {
-		return errors.New("response body is empty")
-	}
-	if err := json.Unmarshal(r.Body, dest); err != nil {
-		return fmt.Errorf("decode json response: %w", err)
-	}
-	return nil
-}
-
-type TriggerResponse struct {
+type triggerResponse struct {
 	SnapshotID string `json:"snapshot_id"`
 }
 
-type ProgressResponse struct {
+type progressResponse struct {
 	SnapshotID   string         `json:"snapshot_id"`
 	DatasetID    string         `json:"dataset_id"`
-	Status       SnapshotStatus `json:"status"`
+	Status       snapshotStatus `json:"status"`
 	ErrorMessage string         `json:"error_message,omitempty"`
 }
 
-func (r *ProgressResponse) Ready() bool {
-	return r != nil && r.Status == SnapshotStatusReady
+func (r *progressResponse) ready() bool {
+	return r != nil && r.Status == snapshotStatusReady
 }
 
-func (r *ProgressResponse) Failed() bool {
-	return r != nil && r.Status == SnapshotStatusFailed
+func (r *progressResponse) failed() bool {
+	return r != nil && r.Status == snapshotStatusFailed
 }
 
-type DownloadResponse struct {
+type downloadResponse struct {
 	StatusCode  int
 	ContentType string
 	Header      http.Header
 	Body        []byte
 	Ready       bool
-	Status      SnapshotStatus
+	Status      snapshotStatus
 	Message     string
 }
 
-func (r *DownloadResponse) DecodeJSON(dest any) error {
-	if len(r.Body) == 0 {
-		return errors.New("response body is empty")
-	}
-	if err := json.Unmarshal(r.Body, dest); err != nil {
-		return fmt.Errorf("decode json response: %w", err)
-	}
-	return nil
-}
-
-type DeliveryExtension string
+type deliveryExtension string
 
 const (
-	DeliveryExtensionJSON   DeliveryExtension = "json"
-	DeliveryExtensionNDJSON DeliveryExtension = "ndjson"
-	DeliveryExtensionCSV    DeliveryExtension = "csv"
+	deliveryExtensionJSON   deliveryExtension = "json"
+	deliveryExtensionNDJSON deliveryExtension = "ndjson"
+	deliveryExtensionCSV    deliveryExtension = "csv"
 )
 
-type AzureDeliveryOptions struct {
+type azureDeliveryOptions struct {
 	Container        string
 	Account          string
 	Key              string
 	SASToken         string
 	Directory        string
 	FilenameTemplate string
-	Extension        DeliveryExtension
+	Extension        deliveryExtension
 	Compress         bool
 	BatchSize        int
 }
 
-type DeliveryResponse struct {
+type deliveryResponse struct {
 	DeliveryID string `json:"delivery_id"`
-}
-
-type DeliveryStatus struct {
-	DeliveryID string `json:"delivery_id"`
-	Status     string `json:"status"`
-	Message    string `json:"message,omitempty"`
 }
 
 type asyncResponse struct {
 	SnapshotID string         `json:"snapshot_id"`
-	Status     SnapshotStatus `json:"status,omitempty"`
+	Status     snapshotStatus `json:"status,omitempty"`
 	Message    string         `json:"message,omitempty"`
 }
 
@@ -200,16 +174,16 @@ type azureCredentialsPayload struct {
 	SASToken string `json:"sas_token,omitempty"`
 }
 
-// NewClient creates a Bright Data client with the default API base URL.
-func NewClient(apiKey string, httpClient *http.Client) (*Client, error) {
-	return NewClientWithBaseURL(DefaultBaseURL, apiKey, httpClient)
+// newClient creates a Bright Data client with the default API base URL.
+func newClient(apiKey string, httpClient *http.Client) (*client, error) {
+	return newClientWithBaseURL(defaultBaseURL, apiKey, httpClient)
 }
 
-// NewClientWithBaseURL creates a Bright Data client for the provided base URL.
-func NewClientWithBaseURL(baseURL, apiKey string, httpClient *http.Client) (*Client, error) {
+// newClientWithBaseURL creates a Bright Data client for the provided base URL.
+func newClientWithBaseURL(baseURL, apiKey string, httpClient *http.Client) (*client, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
-		baseURL = DefaultBaseURL
+		baseURL = defaultBaseURL
 	}
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
@@ -219,16 +193,16 @@ func NewClientWithBaseURL(baseURL, apiKey string, httpClient *http.Client) (*Cli
 		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
 
-	return &Client{
+	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		apiKey:     apiKey,
 		httpClient: httpClient,
 	}, nil
 }
 
-// Scrape sends a synchronous scrape request. When Bright Data cannot finish
+// scrape sends a synchronous scrape request. When Bright Data cannot finish
 // within the sync timeout, it returns a snapshot ID that can be polled later.
-func (c *Client) Scrape(ctx context.Context, datasetID string, input any, opts ScrapeOptions) (*ScrapeResponse, error) {
+func (c *client) scrape(ctx context.Context, datasetID string, input any, opts scrapeOptions) (*scrapeResponse, error) {
 	if err := validateDatasetAndInput(datasetID, input); err != nil {
 		return nil, err
 	}
@@ -259,7 +233,7 @@ func (c *Client) Scrape(ctx context.Context, datasetID string, input any, opts S
 		if err := json.Unmarshal(body, &async); err != nil {
 			return nil, fmt.Errorf("decode async scrape response: %w", err)
 		}
-		return &ScrapeResponse{
+		return &scrapeResponse{
 			StatusCode:  resp.StatusCode,
 			ContentType: resp.Header.Get("Content-Type"),
 			Header:      resp.Header.Clone(),
@@ -270,10 +244,10 @@ func (c *Client) Scrape(ctx context.Context, datasetID string, input any, opts S
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, &apiError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	return &ScrapeResponse{
+	return &scrapeResponse{
 		StatusCode:  resp.StatusCode,
 		ContentType: resp.Header.Get("Content-Type"),
 		Header:      resp.Header.Clone(),
@@ -281,8 +255,8 @@ func (c *Client) Scrape(ctx context.Context, datasetID string, input any, opts S
 	}, nil
 }
 
-// Trigger starts an asynchronous scrape and returns the snapshot ID.
-func (c *Client) Trigger(ctx context.Context, datasetID string, input any, opts TriggerOptions) (*TriggerResponse, error) {
+// trigger starts an asynchronous scrape and returns the snapshot ID.
+func (c *client) trigger(ctx context.Context, datasetID string, input any, opts triggerOptions) (*triggerResponse, error) {
 	if err := validateDatasetAndInput(datasetID, input); err != nil {
 		return nil, err
 	}
@@ -305,10 +279,10 @@ func (c *Client) Trigger(ctx context.Context, datasetID string, input any, opts 
 		return nil, fmt.Errorf("read trigger response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, &apiError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	var out TriggerResponse
+	var out triggerResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode trigger response: %w", err)
 	}
@@ -318,8 +292,8 @@ func (c *Client) Trigger(ctx context.Context, datasetID string, input any, opts 
 	return &out, nil
 }
 
-// Progress fetches the status of an asynchronous snapshot.
-func (c *Client) Progress(ctx context.Context, snapshotID string) (*ProgressResponse, error) {
+// progress fetches the status of an asynchronous snapshot.
+func (c *client) progress(ctx context.Context, snapshotID string) (*progressResponse, error) {
 	snapshotID = strings.TrimSpace(snapshotID)
 	if snapshotID == "" {
 		return nil, errors.New("snapshot ID is required")
@@ -343,31 +317,31 @@ func (c *Client) Progress(ctx context.Context, snapshotID string) (*ProgressResp
 		return nil, fmt.Errorf("read progress response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, &apiError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	var out ProgressResponse
+	var out progressResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode progress response: %w", err)
 	}
 	return &out, nil
 }
 
-// WaitForSnapshot polls progress until the snapshot is ready or failed.
-func (c *Client) WaitForSnapshot(ctx context.Context, snapshotID string, pollInterval time.Duration) (*ProgressResponse, error) {
+// waitForSnapshot polls progress until the snapshot is ready or failed.
+func (c *client) waitForSnapshot(ctx context.Context, snapshotID string, pollInterval time.Duration) (*progressResponse, error) {
 	if pollInterval <= 0 {
 		pollInterval = defaultPollInterval
 	}
 
 	for {
-		progress, err := c.Progress(ctx, snapshotID)
+		progress, err := c.progress(ctx, snapshotID)
 		if err != nil {
 			return nil, err
 		}
-		if progress.Ready() {
+		if progress.ready() {
 			return progress, nil
 		}
-		if progress.Failed() {
+		if progress.failed() {
 			if progress.ErrorMessage == "" {
 				return progress, fmt.Errorf("snapshot %s failed", snapshotID)
 			}
@@ -384,9 +358,9 @@ func (c *Client) WaitForSnapshot(ctx context.Context, snapshotID string, pollInt
 	}
 }
 
-// DownloadSnapshot retrieves a completed snapshot body. If the snapshot is not
+// downloadSnapshot retrieves a completed snapshot body. If the snapshot is not
 // ready yet, Bright Data responds with HTTP 202 and a status message.
-func (c *Client) DownloadSnapshot(ctx context.Context, snapshotID string, opts DownloadOptions) (*DownloadResponse, error) {
+func (c *client) downloadSnapshot(ctx context.Context, snapshotID string, opts downloadOptions) (*downloadResponse, error) {
 	snapshotID = strings.TrimSpace(snapshotID)
 	if snapshotID == "" {
 		return nil, errors.New("snapshot ID is required")
@@ -420,7 +394,7 @@ func (c *Client) DownloadSnapshot(ctx context.Context, snapshotID string, opts D
 		if err := json.Unmarshal(body, &pending); err != nil {
 			return nil, fmt.Errorf("decode pending snapshot response: %w", err)
 		}
-		return &DownloadResponse{
+		return &downloadResponse{
 			StatusCode:  resp.StatusCode,
 			ContentType: resp.Header.Get("Content-Type"),
 			Header:      resp.Header.Clone(),
@@ -431,10 +405,10 @@ func (c *Client) DownloadSnapshot(ctx context.Context, snapshotID string, opts D
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, &apiError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	return &DownloadResponse{
+	return &downloadResponse{
 		StatusCode:  resp.StatusCode,
 		ContentType: resp.Header.Get("Content-Type"),
 		Header:      resp.Header.Clone(),
@@ -443,17 +417,17 @@ func (c *Client) DownloadSnapshot(ctx context.Context, snapshotID string, opts D
 	}, nil
 }
 
-// WaitAndDownload waits for a snapshot and then downloads the results.
-func (c *Client) WaitAndDownload(ctx context.Context, snapshotID string, pollInterval time.Duration, opts DownloadOptions) (*DownloadResponse, error) {
-	if _, err := c.WaitForSnapshot(ctx, snapshotID, pollInterval); err != nil {
+// waitAndDownload waits for a snapshot and then downloads the results.
+func (c *client) waitAndDownload(ctx context.Context, snapshotID string, pollInterval time.Duration, opts downloadOptions) (*downloadResponse, error) {
+	if _, err := c.waitForSnapshot(ctx, snapshotID, pollInterval); err != nil {
 		return nil, err
 	}
-	return c.DownloadSnapshot(ctx, snapshotID, opts)
+	return c.downloadSnapshot(ctx, snapshotID, opts)
 }
 
-// DeliverToAzure asks Bright Data to deliver a completed snapshot directly to
+// deliverToAzure asks Bright Data to deliver a completed snapshot directly to
 // Azure Blob Storage.
-func (c *Client) DeliverToAzure(ctx context.Context, snapshotID string, opts AzureDeliveryOptions) (*DeliveryResponse, error) {
+func (c *client) deliverToAzure(ctx context.Context, snapshotID string, opts azureDeliveryOptions) (*deliveryResponse, error) {
 	snapshotID = strings.TrimSpace(snapshotID)
 	if snapshotID == "" {
 		return nil, errors.New("snapshot ID is required")
@@ -468,7 +442,7 @@ func (c *Client) DeliverToAzure(ctx context.Context, snapshotID string, opts Azu
 	}
 	extension := opts.Extension
 	if extension == "" {
-		extension = DeliveryExtensionJSON
+		extension = deliveryExtensionJSON
 	}
 
 	payload := deliverSnapshotPayload{
@@ -505,10 +479,10 @@ func (c *Client) DeliverToAzure(ctx context.Context, snapshotID string, opts Azu
 		return nil, fmt.Errorf("read deliver response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
+		return nil, &apiError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	var out DeliveryResponse
+	var out deliveryResponse
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("decode deliver response: %w", err)
 	}
@@ -518,42 +492,7 @@ func (c *Client) DeliverToAzure(ctx context.Context, snapshotID string, opts Azu
 	return &out, nil
 }
 
-// DeliveryStatus fetches the current state of a snapshot delivery request.
-func (c *Client) DeliveryStatus(ctx context.Context, deliveryID string) (*DeliveryStatus, error) {
-	deliveryID = strings.TrimSpace(deliveryID)
-	if deliveryID == "" {
-		return nil, errors.New("delivery ID is required")
-	}
-
-	req, err := c.newJSONRequest(ctx, http.MethodGet, "/datasets/v3/delivery/"+url.PathEscape(deliveryID), nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("delivery status request: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read delivery status response: %w", err)
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(body)}
-	}
-
-	var out DeliveryStatus
-	if err := json.Unmarshal(body, &out); err != nil {
-		return nil, fmt.Errorf("decode delivery status response: %w", err)
-	}
-	return &out, nil
-}
-
-func (o AzureDeliveryOptions) validate() error {
+func (o azureDeliveryOptions) validate() error {
 	if strings.TrimSpace(o.Container) == "" {
 		return errors.New("container is required")
 	}
@@ -576,7 +515,7 @@ func validateDatasetAndInput(datasetID string, input any) error {
 	return nil
 }
 
-func queryForRequest(datasetID string, notify, includeErrors bool, format Format, customOutputFields string) url.Values {
+func queryForRequest(datasetID string, notify, includeErrors bool, format format, customOutputFields string) url.Values {
 	query := url.Values{}
 	query.Set("dataset_id", datasetID)
 	query.Set("notify", strconv.FormatBool(notify))
@@ -590,7 +529,7 @@ func queryForRequest(datasetID string, notify, includeErrors bool, format Format
 	return query
 }
 
-func (c *Client) newJSONRequest(ctx context.Context, method, path string, query url.Values, payload any) (*http.Request, error) {
+func (c *client) newJSONRequest(ctx context.Context, method, path string, query url.Values, payload any) (*http.Request, error) {
 	endpoint := c.baseURL + path
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()

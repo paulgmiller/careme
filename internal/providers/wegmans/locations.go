@@ -19,13 +19,13 @@ type centroidByZip interface {
 	ZipCentroidByZIP(zip string) (locationtypes.ZipCentroid, bool)
 }
 
-type LocationBackend struct {
+type locationBackend struct {
 	zipLookup centroidByZip
 	spatial   []locationtypes.Location
 	hydrator  *hydrator.LazyHydrator
 }
 
-func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*LocationBackend, error) {
+func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centroidByZip) (*locationBackend, error) {
 	// check enabled
 	if !cfg.Wegmans.IsEnabled() {
 		return nil, locationtypes.DisabledBackendError("Wegmans")
@@ -43,7 +43,7 @@ func NewLocationBackend(ctx context.Context, cfg *config.Config, zipLookup centr
 	return newLocationBackend(ctx, listCache, zipLookup)
 }
 
-func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*LocationBackend, error) {
+func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidByZip) (*locationBackend, error) {
 	entries, err := storeindex.Load(ctx, c, LocationIndexCacheKey)
 	if err != nil {
 		return nil, fmt.Errorf("load wegmans locations index: %w", err)
@@ -54,24 +54,24 @@ func newLocationBackend(ctx context.Context, c cache.Cache, zipLookup centroidBy
 		spatial = append(spatial, entry.ToLocation())
 	}
 
-	return &LocationBackend{
+	return &locationBackend{
 		zipLookup: zipLookup,
 		spatial:   spatial,
 		hydrator:  hydrator.NewLazyHydrator(&loader{c}),
 	}, nil
 }
 
-func (b *LocationBackend) IsID(locationID string) bool {
-	return IsID(locationID)
+func (b *locationBackend) IsID(locationID string) bool {
+	return isID(locationID)
 }
 
-func (*LocationBackend) HasInventory(string) bool {
+func (*locationBackend) HasInventory(string) bool {
 	return false
 }
 
-func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
+func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string) (*locationtypes.Location, error) {
 	locationID = strings.TrimSpace(locationID)
-	if !IsID(locationID) {
+	if !isID(locationID) {
 		return nil, fmt.Errorf("wegmans location id %q is invalid", locationID)
 	}
 
@@ -83,12 +83,12 @@ func (b *LocationBackend) GetLocationByID(ctx context.Context, locationID string
 	return &copy, nil
 }
 
-func (b *LocationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
+func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordinates geo.Coordinate) ([]locationtypes.Location, error) {
 	candidates := nearby.FilterAndSortByCoordinates(coordinates, b.spatial, nearby.MaxLocationDistanceMiles)
 	return storeindex.HydrateLocations(ctx, candidates, b.hydrator.Hydrate)
 }
 
-func IsID(locationID string) bool {
+func isID(locationID string) bool {
 	locationID = strings.TrimSpace(locationID)
-	return strings.HasPrefix(locationID, LocationIDPrefix) && len(locationID) > len(LocationIDPrefix)
+	return strings.HasPrefix(locationID, locationIDPrefix) && len(locationID) > len(locationIDPrefix)
 }

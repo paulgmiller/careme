@@ -15,8 +15,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-// Parse extracts catalog cards, omitting the whole boxes expanded by FetchStaples.
-func Parse(r io.Reader) ([]ai.InputIngredient, error) {
+// parse extracts catalog cards, omitting the whole boxes expanded by FetchStaples.
+func parse(r io.Reader) ([]ai.InputIngredient, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("read category HTML: %w", err)
@@ -123,8 +123,8 @@ func parsePrice(text string) (float32, error) {
 	return float32(price), nil
 }
 
-// ParseHarvestBox reads only the seasonal list inside the product description.
-func ParseHarvestBox(r io.Reader, boxURL, name string) ([]ai.InputIngredient, error) {
+// parseHarvestBox reads only the seasonal list inside the product description.
+func parseHarvestBox(r io.Reader, boxURL, name string) ([]ai.InputIngredient, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
 		return nil, fmt.Errorf("read harvest box HTML: %w", err)
@@ -147,7 +147,7 @@ func ParseHarvestBox(r io.Reader, boxURL, name string) ([]ai.InputIngredient, er
 			return nil, fmt.Errorf("harvest box contains an empty ingredient")
 		}
 		items = append(items, ai.InputIngredient{
-			ProductID:   fmt.Sprintf("%s%s_%x", LocationIDPrefix, path.Base(boxURL), sha256.Sum256([]byte(text))),
+			ProductID:   fmt.Sprintf("%s%s_%x", locationIDPrefix, path.Base(boxURL), sha256.Sum256([]byte(text))),
 			Description: name + " — " + text, Brand: "Smith Brothers Farms", AisleNumber: "Produce",
 			Categories: []string{"Produce", name},
 			Grade:      &ai.IngredientGrade{Score: 10, Reason: "Fresh produce from the Smith Brothers Farms harvest box list."},

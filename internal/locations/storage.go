@@ -58,7 +58,6 @@ func locationCacheSettings(backend LocationBackend) (prefix string, cacheable bo
 type locationStore interface {
 	locationGetter
 	RequestStore(ctx context.Context, locationID string) error
-	RequestedStoreIDs(ctx context.Context) ([]string, error)
 }
 
 // Location is kept as an alias for compatibility with existing imports.
@@ -269,14 +268,6 @@ func (l *locationStorage) RequestStore(ctx context.Context, storeID string) erro
 		return fmt.Errorf("store request put: %w", err)
 	}
 	return nil
-}
-
-func (l *locationStorage) RequestedStoreIDs(ctx context.Context) ([]string, error) {
-	storeIDs, err := l.cache.List(ctx, storeRequestPrefix, "")
-	if err != nil {
-		return nil, fmt.Errorf("list requested stores: %w", err)
-	}
-	return storeIDs, nil
 }
 
 func sortLocationsByDistanceFromCoordinates(locations []Location, coordinates geo.Coordinate) {

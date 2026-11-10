@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"careme/internal/config"
 
@@ -60,6 +62,11 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
+	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
+		// Allow capacity to recover while keeping retries inside the job deadline.
+		opts = append(opts, option.WithMaxRetries(10), option.WithMaxRetryDelay(time.Minute))
+	}
+	opts = append(opts, option.WithMiddleware(logOpenAIRetry))
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
@@ -142,11 +149,11 @@ func userWithCacheBreakpoint(msg string) responses.ResponseInputItemUnionParam {
 	return responses.ResponseInputItemParamOfMessage(content, responses.EasyInputMessageRoleUser)
 }
 
-// These cache options and cache key are specific to GPT-5.6 and later OpenAI models. Stable prompt
+// These cache options and cache key are specific to the supported OpenAI models. Stable prompt
 // ordering is portable, but OpenRouter and other providers use different cache
 // controls (for example session_id and model-dependent cache_control blocks).
 // Introduce a provider/model-specific cache policy before routing recipe requests
-// anywhere other than the direct OpenAI GPT-5.6 client.
+// anywhere other than the direct OpenAI client.
 
 func storeDayPromptCacheKey(storeID, date string) string {
 	identity := strings.TrimSpace(storeID) + "\x00" + date
@@ -191,4 +198,12 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
 		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
 	}
+}
+
+func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	attempt, _ := strconv.Atoi(req.Header.Get("X-Stainless-Retry-Count"))
+	if attempt > 0 {
+		slog.InfoContext(req.Context(), "Retrying HTTP request", "source", "openai", "url", req.URL.String(), "attempt", attempt+1)
+	}
+	return next(req)
 }

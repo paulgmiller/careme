@@ -21,6 +21,8 @@ short_len=7
 public_origin="${PUBLIC_ORIGIN:-}"
 ingress_host="${INGRESS_HOST:-}"
 store_disable_env_yaml=""
+order_stub_env_yaml=""
+instacart_env_yaml=""
 
 if [[ -z "${ingress_host}" ]]; then
   case "${namespace}" in
@@ -39,7 +41,8 @@ fi
 
 public_origin="${public_origin:-https://${ingress_host}}"
 manifest_paths=("${app_manifest_path}" "${mail_manifest_path}" "${cron_manifest_paths[@]}")
-advertised_recipes_schedule="0 9 * * *"
+# 9 AM Eastern through Pacific, plus one hour afterward (Pacific time).
+advertised_recipes_schedule="0 6-10 * * *"
 advertised_recipes_suspend="false"
 aldi_scrape_schedule="45 6 * * 0"
 albertsons_scrape_schedule="0 6 * * 0"
@@ -51,10 +54,18 @@ wholefoods_scrape_schedule="0 6 * * 0"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
+  instacart_env_yaml='
+            - name: INSTACART_BASE_URL
+              value: "https://connect.dev.instacart.tools"'
+  order_stub_env_yaml='
+            - name: MNFOODCLUB_ORDER_API_URL
+              value: "https://test.careme.cooking/mnfoodclub-stub"
+            - name: MNFOODCLUB_ORDER_ACCESS_TOKEN
+              value: "caremetest-mnfoodclub-stub"'
   store_disable_env_yaml='
             - name: WEGMANS_ENABLE
               value: "false"'
-  advertised_recipes_schedule="0 9 1,15 * *"
+  advertised_recipes_schedule="0 6-10 1,15 * *"
   # Keep the job available for manual runs while automatic test runs are paused.
   advertised_recipes_suspend="true"
   aldi_scrape_schedule="45 6 1,15 * *"
@@ -86,6 +97,8 @@ fi
 export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
+export ORDER_STUB_ENV_YAML="${order_stub_env_yaml}"
+export INSTACART_ENV_YAML="${instacart_env_yaml}"
 export STORE_DISABLE_ENV_YAML="${store_disable_env_yaml}"
 export ADVERTISED_RECIPES_SCHEDULE="${advertised_recipes_schedule}"
 export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
@@ -141,6 +154,11 @@ if [[ "${namespace}" == "caremetest" ]]; then
     echo "hint: deploy a ref that includes the deploy/deploy.yaml store disable placeholder change" >&2
     exit 1
   fi
+  if ! git show "${ref}:deploy/deploy.yaml" | grep -q '\${INSTACART_ENV_YAML}'; then
+    echo "error: ref '${ref}' does not contain caremetest Instacart env rendering" >&2
+    echo "hint: deploy a ref that includes the deploy/deploy.yaml Instacart placeholder change" >&2
+    exit 1
+  fi
   for cron_manifest_path in "${cron_manifest_paths[@]}"; do
     if ! git show "${ref}:${cron_manifest_path}" | grep -q '_SCHEDULE}'; then
       echo "error: ref '${ref}' does not contain schedule placeholders in ${cron_manifest_path}" >&2
@@ -155,7 +173,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
+  git show "${ref}:${manifest_path}" | envsubst '${INSTACART_ENV_YAML} ${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
     if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
       kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
     else

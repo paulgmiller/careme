@@ -9,8 +9,6 @@ import (
 	"careme/internal/locations/geo"
 )
 
-const storeDayStartHour = 9
-
 func resolveStoreTimeLocation(ctx context.Context, l *Location) (*time.Location, error) {
 	if l == nil {
 		return nil, fmt.Errorf("nil location")
@@ -31,18 +29,11 @@ func resolveStoreTimeLocation(ctx context.Context, l *Location) (*time.Location,
 	return storeLoc, nil
 }
 
-func StoreToDate(ctx context.Context, now time.Time, l *Location) (time.Time, error) {
+// StoreTime converts an instant to the store timezone without changing the instant.
+func StoreTime(ctx context.Context, now time.Time, l *Location) (time.Time, error) {
 	tz, err := resolveStoreTimeLocation(ctx, l)
 	if err != nil {
 		return now, err
 	}
-	return defaultRecipeDate(now, tz), nil
-}
-
-func defaultRecipeDate(now time.Time, storeLoc *time.Location) time.Time {
-	localNow := now.In(storeLoc)
-	if localNow.Hour() < storeDayStartHour {
-		localNow = localNow.AddDate(0, 0, -1)
-	}
-	return time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, storeLoc)
+	return now.In(tz), nil
 }

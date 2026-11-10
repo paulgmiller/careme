@@ -7,8 +7,8 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/config"
-	"careme/internal/heb"
 	"careme/internal/locations"
+	"careme/internal/providers/heb"
 )
 
 func TestNewAddsHEBBackendWhenEnabled(t *testing.T) {

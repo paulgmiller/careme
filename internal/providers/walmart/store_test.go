@@ -74,7 +74,7 @@ func TestParseStore_SampleJSON(t *testing.T) {
 
 	payload := []byte(`{"no":3098,"name":"Bellevue Neighborhood Market","country":"US","coordinates":[-122.139487,47.609036],"streetAddress":"15063 MAIN ST","city":"Bellevue","stateProvCode":"WA","zip":"98007","phoneNumber":"425-643-9054","sundayOpen":true,"timezone":"PST"}`)
 
-	store, err := ParseStore(payload)
+	store, err := parseStore(payload)
 	if err != nil {
 		t.Fatalf("parse store: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestParseStores_WrappedResults(t *testing.T) {
 
 	payload := []byte(`{"results":[{"no":3098,"name":"Bellevue Neighborhood Market","country":"US","coordinates":[-122.139487,47.609036],"streetAddress":"15063 MAIN ST","city":"Bellevue","stateProvCode":"WA","zip":"98007","phoneNumber":"425-643-9054","sundayOpen":true,"timezone":"PST"}]}`)
 
-	stores, err := ParseStores(payload)
+	stores, err := parseStores(payload)
 	if err != nil {
 		t.Fatalf("parse stores: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestParseStores_WrappedResults(t *testing.T) {
 func TestCoordinates_UnmarshalJSON_RequiresLonLatPair(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseStore([]byte(`{"coordinates":[-122.139487]}`))
+	_, err := parseStore([]byte(`{"coordinates":[-122.139487]}`))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -128,13 +128,13 @@ func TestCoordinates_UnmarshalJSON_RequiresLonLatPair(t *testing.T) {
 func TestStoreToLocation_UsesWalmartPrefixWithUnderscore(t *testing.T) {
 	t.Parallel()
 
-	location := storeToLocation(Store{
+	location := storeToLocation(storeRecord{
 		No:            3098,
 		Name:          "Test",
 		StreetAddress: "123 Main",
 		StateProvCode: "WA",
 		Zip:           "98007",
-		Coordinates: Coordinates{
+		Coordinates: coordinates{
 			Longitude: -122.139487,
 			Latitude:  47.609036,
 		},

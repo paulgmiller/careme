@@ -34,6 +34,9 @@ The application is configured via environment variables:
   - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
+- `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
+- `INSTACART_API_KEY` - server-side Instacart Developer Platform key enabling shopping-list handoff for Albertsons family store IDs (including Safeway and Haggen).
+- `INSTACART_BASE_URL` - optional; defaults to `https://connect.instacart.com` for nonlocal origins. `deploy/deploy.sh` explicitly selects `https://connect.dev.instacart.tools` for `caremetest` staging. A localhost or loopback `PUBLIC_ORIGIN` always selects the development endpoint, even if this setting specifies production. Use a development key locally and in staging.
 - `KROGER_CART_TOKEN_KEY` - base64-encoded 32-byte encryption key enabling Kroger cart transfer. Register `${PUBLIC_ORIGIN}/kroger/callback` as a redirect URI with Kroger and grant `cart.basic:write`; keep this key stable so existing connections remain usable.
 - `OPENROUTER_API_KEY` - OpenRouter API key for cached recipe critique generation
 - `OPENROUTER_CRITIQUE_MODEL` - OpenRouter model slug for recipe critique (defaults to `google/gemini-4-argon`)
@@ -50,7 +53,7 @@ The application is configured via environment variables:
 For Grafana Cloud, the direct OTLP setup uses standard upstream OpenTelemetry env vars. Grafana's docs provide generated values for `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`.
 
 if you're
-- `ENABLE_MOCKS` - For testing if you have none of the above
+- `ENABLE_MOCKS` - For local testing without external credentials. Includes a mock order provider for every location: Add to mock cart redirects back to the shopping list, then Review cart opens the saved mock result.
 
 ## Adding a provider
 
@@ -94,19 +97,27 @@ Update [cache layout](docs/cache-layout.md) if cache keys or prefixes change.
 
 ### 3. Optionally add ordering
 
-Give each destination its own HTTP workflow, such as `POST /kroger/order`.
-The shopping list submits its displayed items, store hints, stable list key,
-and return URL. The destination owns authentication, matching, cart writes,
-duplicate prevention, and the redirect back with a review link and brief status.
-Register its routes independently of the recipe handler in `cmd/careme/web.go`.
-Add its location-ID match and form builder to `providerregistry.Factory.OrderView`;
-the recipe page renders the returned action, fields, and copy generically.
+Implement `POST /<destination>/order-transfers` as a browser navigation using
+`orders/types.TransferRequest`. The shopping list submits the serialized request
+and a stable idempotency key in hidden form fields. The destination owns
+authentication, matching, cart writes, duplicate prevention, redirects, and error
+pages. It redirects directly to account connection when needed and to the
+shopping list when the addition completes.
 
-Kroger is currently the only ordering destination. Future destinations can own
-routes such as `/instacart/order` or `/bigcommerce/order` without implementing
-a shared Go provider interface. Users review and complete checkout with the
-provider. See [Ordering handoffs](docs/ordering.md) for the current form contract
-and OAuth continuation behavior.
+Register routes in `providerregistry.Factory.RegisterOrders`, then add the
+location match and view builder through `Factory.NewOrderViewBuilder(cache)`.
+The shopping-list UI
+asks the provider for the current viewer's saved handoff during server rendering.
+Confirmed or possibly applied writes show a cart link instead of the form;
+transfer-read failures fail the page. There is no browser status fetch.
+Kroger, the opt-in MN Food Club adapter, and Instacart use this browser handoff.
+Configured Kroger and MN Food Club destinations use their native providers;
+Instacart is currently offered only for Albertsons family store IDs, including Safeway and Haggen. Mock mode uses only the mock provider.
+Instacart creates a shoppable list; users choose their retailer and add products
+to their cart there. Food Club’s
+partner API remains a proposal; configure it only against an agreed endpoint. Users review amounts and complete
+checkout with the provider. See [Cart transfers](docs/ordering.md) for browser
+navigation and OAuth details.
 
 ### Verify the integration
 
@@ -125,6 +136,23 @@ in `deploy/secrets_test.go` when configuration or deployed binaries change.
 Secrets remain separate; the check reads manifests without accessing credentials
 or Kubernetes. It also runs in `k8s-lint`, which gates publishing and deployment
 in CI. It checks secret references, not the keys or values stored in the cluster.
+
+## Export checks and statement diffs
+
+`./task.sh lint` includes `./task.sh unexport`, which rejects types, functions,
+constants, and variables that can be private to their package. Struct fields
+retain their visibility. Run `./task.sh unexport-fix`, review the diff,
+and run `./task.sh verify-go` to apply the cleanup. The check uses a pinned version of
+[unloved](https://github.com/paulgmiller/unloved) through `tools/tool.mod`.
+Its README documents dynamic entry point exceptions and build configuration
+limits. The tool is maintained and tested in its own repository.
+
+`./task.sh statement-diff` reports Go statement debt changes from `origin/master`
+to the working tree. The `statement-diff` job in Build and Publish reports
+`$BASE_SHA...HEAD`, using the PR base SHA, the previous branch HEAD for pushes,
+or `HEAD^` for manual runs. It uses `paulgmiller/go-statement@latest` and writes
+the report to the job summary. Publishing depends on this job. No debt threshold
+is configured yet; add `--max-debt <limit>` to its diff command to enforce one.
 
 ## Mail placement tests
 
@@ -167,9 +195,11 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 ### Advertised recipe cronjob
 
-Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true` once. Smith Brothers Farms and MNFoodClub generation is disabled for now while we consider a weekly schedule; their campaign redirects remain active. The job creates its own flex AI client and exits with an error if any enabled store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true`, processing one campaign at a time through recipe and image generation. Ingredient grading and recipe images within each campaign remain concurrent. MN Food Club, TC Farm, and Nelson Grass Farm use weekly recipe hashes anchored to Monday in their local timezone (`America/Chicago`); other enabled stores use daily hashes. There is no hour or weekday restriction on generation; cached lists and images prevent repeated work for the same recipe hash. Smith Brothers Farms generation remains disabled, with its campaign redirect active. The job creates its own flex AI client and exits with an error if any due store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
 
-`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, with the same store, AI, auth, storage, and telemetry credentials used by the mail job. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping runs and allows one job retry.
+For the three MNFoodClub storefronts and Smith Brothers Farms, recipe requests throughout the week resolve to Monday's list, including explicit dates within that week. The week switches on Monday at the existing 9 AM local store-day boundary. Previously shared hash links keep their original lists.
+
+`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, at the top of each hour from 6–10 AM Pacific in production (`0 6-10 * * *`, `America/Los_Angeles`), with the same store, AI, auth, storage, and telemetry credentials used by the mail job. These five daily starts cover the store-day boundary across US timezones, plus one hour afterward. Cached output prevents duplicate generation within the same store day or week, and retries can finish incomplete work after 9 AM. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping scheduled runs and allows four job retries (five attempts total).
 
 Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run generation-enabled advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
 
@@ -181,11 +211,20 @@ Manual Jobs do not change the suspension and are not protected by the CronJob's 
 
 ### MNFoodClub ingredients
 
-Nearby location search includes MNFoodClub home delivery within an approximate
+Nearby location search includes three home-delivery storefronts sharing the
+MNFoodClub catalog: MN Food Club (`mnfood.club`), TC Farm (`tc.farm`), and
+Nelson Grass Farm (`nelsongrassfarm.com`). All three appear within an approximate
 rectangle from the supplied coverage map: latitude 43.90–45.65 and longitude
 -94.30–-92.35. This is a rough discovery area, not the exact delivery boundary.
-Search results use `mnfoodclub_<latitude>_<longitude>` IDs, with the delivery
-coordinates retained for distance filtering and store dates.
+Search results use stable IDs `mnfoodclub_delivery`, `tcfarm_delivery`,
+and `nelsongrassfarm_delivery`, respectively. Each result retains the
+search coordinates for distance filtering; lookup by ID uses the shared Blaine
+coordinates for store dates. Location results are not cached.
+
+Online delivery locations include their storefront URL, displayed instead of
+the address in location search and as a link in shopping list and recipe headers.
+Smith Brothers Farms uses the same display behavior. Previously saved recipe
+parameters retain their original location details.
 
 Fetch all visible, available, in-stock catalog products across every category,
 plus the static weekly produce-share contents, and display their prices:
@@ -228,12 +267,23 @@ export MNFOODCLUB_ACCESS_TOKEN="$(sed -n 's/^ACCESS TOKEN[:=][[:space:]]*//p' se
 
 Any store ID starting with `mnfoodclub_` routes to the same BigCommerce catalog.
 The provider fetches every page (up to 250 products per request), resolves brands
-and category names, and uses the lowest-priced purchasable variant for each
-product. Zero stock excludes items only when inventory tracking is enabled.
+and category names, and uses the purchasable variant with the highest inventory
+level for each product. Ties keep the first eligible variant in catalog order.
+Zero stock excludes items only when inventory tracking is enabled. The selected
+variant's prices and `variant_id` are saved alongside the parent product `id` in
+cached ingredient data; the TSV includes only the parent product ID. Older
+cached catalogs need refreshing to populate `variant_id`. The saved IDs are carried through finalized shopping lists to
+the proposed [MN Food Club ordering API](docs/mnfoodclub-ordering.md).
 
 For a test-site cart handoff walkthrough and standalone mock API, see
 [MN Food Club mock walkthrough](docs/mnfoodclub-mock.md). The embedded demo is
 available at `/mnfoodclub-demo/` only when `ENABLE_MOCKS` is enabled.
+
+For the standalone API service wired into `caremetest`, see the
+[Food Club test stub](docs/mnfoodclub-stub.md). The standalone stub runs in
+namespace `mnfoodclub-stub` and persists transfers in the CockroachDB database
+provided by that namespace's `roachkey` secret (`DATABASE_URL`).
+
 Prices are standard catalog prices, without custom membership discounts. Sizes
 come from product names, not shipping weights or unverified custom fields.
 Missing credentials fail client construction when the staples backends are
@@ -244,6 +294,45 @@ grading with `INGREDIENT_GRADING_ENABLE=true` and configure `AI_API_KEY` to use
 the existing grading and nearest-ingredient lookup. Wine candidates include every
 page of the Wine & Wine Alternatives category (BigCommerce category 178), using
 the same stock and pricing rules. Requested wine styles do not restrict this list.
+
+### Full Circle ingredients
+
+Full Circle staples are available under `fullcircle_delivery`:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location fullcircle_delivery -verbose
+```
+
+The provider imports Dairy, Meat, and Grains & Rice using the public JSON
+requests behind [Full Circle's grocery catalog](https://www.fullcircle.com/product/farm-product-list).
+It retains listing IDs, brands, package sizes, and published prices, merges
+products listed in multiple categories, and excludes explicitly sold-out products.
+The anonymous catalog does not confirm stock or pricing for a particular delivery.
+No credentials or new environment configuration are required. Nearby discovery
+uses an approximate Seattle metro box including Bellevue and Issaquah.
+
+The provider also appends a temporary, user-supplied produce box: 2 Valencia
+oranges, 1 lb Murcott mandarins, 1 Hass avocado, 1 bunch broccoli, 1 head red leaf
+lettuce, 1 bunch red chard, 1 bunch red radishes, 1 fennel bulb with fronds,
+1 lb yellow potatoes, and 1 red onion. These entries retain the supplied quantities,
+have no individual prices, and carry the same preassigned 10/10 grade as other
+providers' produce shares. This fixed list is not live account inventory; update
+`internal/providers/fullcircle/produce_box.go` when the contents change. Changes
+to box contents invalidate ingredient and recipe cache hashes. Fetching ingredients
+through recipe generation populates the catalog snapshot used by location scores;
+`cmd/ingredients` only caches individual grades.
+
+The [Traditional CSA page](https://www.fullcircle.com/product/detail/2#comparesizes)
+has a “Show Sample Box Content For Each Size” link. Those are sample contents,
+so this provider does not import them as current produce inventory.
+[Actual delivery contents](https://www.fullcircle.com/how-it-works/customize-your-box)
+are available in the customer's account during the customization window. Full
+Circle sends a reminder on Thursday afternoon before the delivery week; the
+window usually closes 48–72 hours before delivery, depending on the area.
+
+Run the optional public catalog check with
+`FULLCIRCLE_LIVE_TEST=1 go test ./internal/providers/fullcircle -run TestLiveCatalog -v`.
+The default tests use small catalog fixtures and do not access Full Circle.
 
 ### Smith Brothers Farms ingredients
 
@@ -260,13 +349,15 @@ uses the Kent headquarters coordinates.
 INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location smithbrothersfarms_delivery -verbose
 ```
 
-The provider fetches the public produce and meat/poultry pages through the existing
-Bright Data client. The organic and standard produce-box products are replaced
-with individual ingredients from the live bullet lists on their product pages.
+The provider fetches the public produce, meat/poultry, dairy/eggs, and yogurt pages
+through the existing Bright Data client. The organic and standard produce-box products
+are replaced with individual ingredients from the live bullet lists on their
+product pages.
 Each box ingredient includes its box name and a preassigned 10/10 produce-share
 grade; individual quantities and prices are unspecified. Seasonal contents update
-on the next uncached store-day ingredient fetch. No Smith Brothers Farms account
-credentials are required. Wine lookup is unsupported.
+on the next uncached weekly ingredient fetch. Ingredient and recipe hashes use
+Monday's date, switching weeks at 9 AM local time on Monday. No Smith Brothers
+Farms account credentials are required. Wine lookup is unsupported.
 
 ### Ingredient embedding lookup
 
@@ -295,3 +386,42 @@ grade, and cosine similarity, ordered from closest to furthest. The first lookup
 may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
+
+See [Kroger staples diagnostics and query study](docs/kroger-staples-study.md) for catalog inspection and query optimization.
+
+### Local Yokels ingredients
+
+Local Yokels Market uses the public Local Food Marketplace storefront at
+<https://localyokels.localfoodmarketplace.com/Products>. The provider reads the
+public JSON catalog used by its JavaScript directly, without first fetching HTML.
+Local Yokels configures the observed defaults `subPeriodId=4` and `locId=5`.
+We have not established whether these represent recurring distribution days or
+changing shopping periods, or when either default changes; revisit them if the
+catalog stops matching the storefront. The shared reader supplies the fixed
+`ShowAll`, custom list `0`, empty category, and calling page `Products` values.
+It retains the full catalog, including featured
+products, for ingredient grading and caching, with the first available purchase
+unit per product and its producer, size, and regular/sale price. Unavailable
+products and sold-out units are excluded. Catalog errors fail the complete fetch.
+The former meat, vegetable, dairy/egg, fruit, and pasta selection IDs remain as
+commented-out constants in the provider for possible filtering later.
+
+Wine lookup uses the same full-catalog fetch and selects the full Beer, Wine, and
+Cider category (1220). It returns all beer, wine, and cider candidates for
+recipe pairing regardless of requested styles. Staples remain unfiltered.
+
+The Seattle storefront is available as `localfoodmarektplace_localyokels` at 8416 5th Ave NE;
+nearby searches use that fixed store location in Seattle, WA 98115 with the normal
+nearby-store radius. TODO: Widen discovery to cover Local Yokels' delivery area.
+No storefront credentials are needed. The staples registry uses the shared
+Bright Data proxy-aware HTTP client for Local Yokels catalog requests.
+Catalog snapshots use the normal daily store cache boundary at 9 AM.
+
+```bash
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location localfoodmarektplace_localyokels -verbose
+LOCALYOKELS_LIVE=1 go test ./internal/providers/localyokels -run TestLiveLocalYokels -v
+```
+
+The catalog reader lives in `internal/localfoodmarketplace` for reuse by other
+Local Food Marketplace storefronts. Farmstand Local Foods uses the same endpoint
+and request format; it is not registered as a provider yet.

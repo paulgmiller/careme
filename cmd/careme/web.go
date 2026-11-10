@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"careme/internal/actowiz"
 	"careme/internal/admin"
 	"careme/internal/ai"
 	"careme/internal/appredirect"
@@ -146,14 +145,12 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers)
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}
 	recipeHandler.Register(appRoutes)
 	waiters = append([]waiter{recipeHandler}, waiters...)
-
-	actowiz.NewServer(locationStorage).Register(infraRoutes)
 
 	adminMux := http.NewServeMux()
 	adminMux.Handle("/{$}", admin.Page())
@@ -194,7 +191,7 @@ func runServer(cfg *config.Config, addr string) error {
 		}
 	})
 	campaigns.Register(appRoutes, userStorage, authClient)
-	home{userStorage, locationStorage, authClient}.Register(appRoutes)
+	home{userStorage, locationStorage, authClient}.register(appRoutes)
 
 	// no logging for readyiness too noisy.
 	rootMux.Handle("/ready", &recoverer{ro})

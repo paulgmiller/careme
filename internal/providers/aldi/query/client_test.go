@@ -246,9 +246,9 @@ func TestCollectionProductsParsesItems(t *testing.T) {
 
 	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "rc-other-fish-18102", "page-view-id", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
-	require.Len(t, payload.Data.Items(), 1)
+	require.Len(t, payload.Data.items(), 1)
 
-	item := payload.Data.Items()[0]
+	item := payload.Data.items()[0]
 	assert.Equal(t, "Sea Queen Fresh Atlantic Salmon Portions", item.Name)
 	assert.Equal(t, "17771058", item.ProductID)
 	assert.Equal(t, "sea queen", item.BrandName)
@@ -291,8 +291,8 @@ func TestCollectionProductsParsesSearchResultItemIDs(t *testing.T) {
 	payload, err := client.collectionProducts(context.Background(), "29998", "60174", "page-view-id", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
-	assert.Empty(t, payload.Data.Items())
-	assert.Equal(t, []string{"items_29998-17771058", "items_29998-123"}, payload.Data.ItemIDs())
+	assert.Empty(t, payload.Data.items())
+	assert.Equal(t, []string{"items_29998-17771058", "items_29998-123"}, payload.Data.itemIDs())
 	assert.Equal(t, "Beef", payload.Data.CollectionProductsBasedSearchResults.ViewSection.HeaderString)
 }
 
@@ -321,7 +321,7 @@ func TestCollectionProductsParsesCollectionProductItemIDs(t *testing.T) {
 	payload, err := client.collectionProducts(context.Background(), "516286", "40222", "page-view-id", "n-beef-67693", SearchOptions{}, testInitCookies())
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"items_516286-19115479", "items_516286-20112308"}, payload.Data.ItemIDs())
+	assert.Equal(t, []string{"items_516286-19115479", "items_516286-20112308"}, payload.Data.itemIDs())
 }
 
 func TestProductsHydratesItemIDsUpToLimit(t *testing.T) {
@@ -480,7 +480,7 @@ func TestCollectionProductsValidatesRequiredFields(t *testing.T) {
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func newTestClient(cfg ClientConfig) *Client {
+func newTestClient(cfg ClientConfig) *client {
 	client := NewClient(cfg)
 	client.pageViewIDFunc = func() string { return "page-view-id" }
 	return client

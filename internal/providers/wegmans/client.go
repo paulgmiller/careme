@@ -17,18 +17,18 @@ import (
 const (
 	Container        = "wegmans"
 	StoreCachePrefix = "wegmans/stores/"
-	LocationIDPrefix = "wegmans_"
+	locationIDPrefix = "wegmans_"
 	DefaultBaseURL   = "https://www.wegmans.com"
 )
 
 var ErrStoreNotFound = errors.New("wegmans store not found")
 
-type Client struct {
+type client struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-type StoreResponse struct {
+type storeResponse struct {
 	ID                int     `json:"id"`
 	StoreNumber       int     `json:"storeNumber"`
 	Name              string  `json:"name"`
@@ -52,11 +52,7 @@ type StoreSummary struct {
 	Lon         *float64 `json:"lon,omitempty"`
 }
 
-func NewClient(httpClient *http.Client) *Client {
-	return NewClientWithBaseURL(DefaultBaseURL, httpClient)
-}
-
-func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
+func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -65,13 +61,13 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *Client {
 		httpClient = &http.Client{Timeout: 20 * time.Second}
 	}
 
-	return &Client{
+	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 	}
 }
 
-func (c *Client) StoreSummary(ctx context.Context, storeNumber int) (*StoreSummary, error) {
+func (c *client) StoreSummary(ctx context.Context, storeNumber int) (*StoreSummary, error) {
 	if storeNumber < 0 {
 		return nil, fmt.Errorf("store number %d must be non-negative", storeNumber)
 	}
@@ -105,7 +101,7 @@ func (c *Client) StoreSummary(ctx context.Context, storeNumber int) (*StoreSumma
 		return nil, fmt.Errorf("fetch %s: status %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	var payload StoreResponse
+	var payload storeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", endpoint, err)
 	}
@@ -117,7 +113,7 @@ func (c *Client) StoreSummary(ctx context.Context, storeNumber int) (*StoreSumma
 	return summary, nil
 }
 
-func normalizeStore(payload StoreResponse) (*StoreSummary, error) {
+func normalizeStore(payload storeResponse) (*StoreSummary, error) {
 	storeNumber := payload.StoreNumber
 	if storeNumber == 0 {
 		storeNumber = payload.ID
@@ -147,7 +143,7 @@ func normalizeStore(payload StoreResponse) (*StoreSummary, error) {
 	}
 
 	summary := &StoreSummary{
-		ID:          LocationIDPrefix + strconv.Itoa(storeNumber),
+		ID:          locationIDPrefix + strconv.Itoa(storeNumber),
 		StoreNumber: storeNumber,
 		Name:        normalizeName(name),
 		Address:     address,

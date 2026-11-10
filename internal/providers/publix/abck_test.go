@@ -32,7 +32,7 @@ func TestSaveAbckRecordWritesLatestAndHistory(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	fetchedAt := time.Date(2026, time.May, 29, 12, 0, 0, 0, time.UTC)
 
-	err := SaveAbckRecord(t.Context(), cacheStore, AbckRecord{
+	err := SaveAbckRecord(t.Context(), cacheStore, abckRecord{
 		Cookie:    "cookie-value",
 		FetchedAt: fetchedAt,
 		SourceURL: "https://www.publix.com/c/beef/163c7c04-5495-404e-81fc-34f71b241093",
@@ -42,7 +42,7 @@ func TestSaveAbckRecordWritesLatestAndHistory(t *testing.T) {
 		t.Fatalf("SaveAbckRecord returned error: %v", err)
 	}
 
-	record, err := LoadLatestAbck(t.Context(), cacheStore)
+	record, err := loadLatestAbck(t.Context(), cacheStore)
 	if err != nil {
 		t.Fatalf("LoadLatestAbck returned error: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSaveAbckRecordWritesLatestAndHistory(t *testing.T) {
 		t.Fatalf("unexpected cookie: %q", record.Cookie)
 	}
 
-	keys, err := cacheStore.List(t.Context(), AbckHistoryPrefix, "")
+	keys, err := cacheStore.List(t.Context(), abckHistoryPrefix, "")
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}

@@ -2,9 +2,15 @@
 {{if .HasImage}}
 <img src="{{if .Thumbnail}}{{ShoppingRecipeImageURL .Hash}}{{else}}/recipe/{{.Hash}}/image{{end}}"
      alt="Generated image of the dish" class="h-auto w-full object-cover" loading="lazy" />
-{{else}}
+{{else if .Poll}}
 <!-- 204 keeps polling; a ready image replaces this placeholder and stops polling. -->
 <span hidden hx-get="/recipe/{{.Hash}}/image-panel{{if .Thumbnail}}?view=shopping{{end}}"
       hx-trigger="every 5s" hx-swap="outerHTML"></span>
 {{end}}
+{{end}}
+
+{{define "recipe_image_response"}}
+<div hx-swap-oob="innerHTML:#recipe-image-panel">
+  {{template "recipe_image" .}}
+</div>
 {{end}}

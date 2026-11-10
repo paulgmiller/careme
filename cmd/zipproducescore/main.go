@@ -153,7 +153,7 @@ func scoreLocations(
 			return row, nil
 		}
 
-		date, err := locations.StoreToDate(ctx, time.Now(), &loc)
+		date, err := locations.StoreTime(ctx, time.Now(), &loc)
 		if err != nil {
 			return row, err
 		}

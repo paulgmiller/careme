@@ -23,7 +23,7 @@ func (m *fakeMerger) MergeShoppingQuantities(_ context.Context, needs []ai.Ingre
 }
 
 func TestRunEval(t *testing.T) {
-	ctx := map[string]interface{}{"vars": map[string]interface{}{"catalog": []ai.InputIngredient{{ProductID: "onion", Size: "1 lb"}}, "ingredients": []ai.Ingredient{{Name: "Jumbo Yellow Onion", Quantity: "4 ounces"}, {Name: "Jumbo Yellow Onions", Quantity: "4 ounces, about ½ medium onion"}}}}
+	ctx := map[string]any{"vars": map[string]any{"catalog": []ai.InputIngredient{{ProductID: "onion", Size: "1 lb"}}, "ingredients": []ai.Ingredient{{Name: "Jumbo Yellow Onion", Quantity: "4 ounces"}, {Name: "Jumbo Yellow Onions", Quantity: "4 ounces, about ½ medium onion"}}}}
 	m := &fakeMerger{}
 	result, err := runEval(ctx, m)
 	require.NoError(t, err)
@@ -38,6 +38,6 @@ func TestRunEval(t *testing.T) {
 }
 
 func TestRunEvalRequiresIngredients(t *testing.T) {
-	_, err := runEval(map[string]interface{}{}, &fakeMerger{})
+	_, err := runEval(map[string]any{}, &fakeMerger{})
 	require.ErrorContains(t, err, "ingredients are required")
 }

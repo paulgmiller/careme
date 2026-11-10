@@ -9,12 +9,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/config"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
@@ -196,11 +198,11 @@ func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes
 
 func shoppingDayForStore(t *testing.T, location *locations.Location) string {
 	t.Helper()
-	date, err := locations.StoreToDate(context.Background(), time.Now(), location)
+	date, err := locations.StoreTime(context.Background(), time.Now(), location)
 	if err != nil {
 		t.Fatalf("failed to resolve store date: %v", err)
 	}
-	return date.Weekday().String()
+	return cachekey.StoreDay(date).Weekday().String()
 }
 
 func testMailLocation() *locations.Location {
@@ -333,7 +335,7 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 	})
 
 	location := testMailLocation()
-	today, err := locations.StoreToDate(context.Background(), time.Now(), location)
+	today, err := locations.StoreTime(context.Background(), time.Now(), location)
 	if err != nil {
 		t.Fatalf("failed to resolve store date: %v", err)
 	}
@@ -351,7 +353,7 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 			MailOptIn:     true,
 			Email:         []string{"u1@example.com"},
 			FavoriteStore: "123",
-			ShoppingDay:   today.AddDate(0, 0, 1).Weekday().String(),
+			ShoppingDay:   cachekey.StoreDay(today).AddDate(0, 0, 1).Weekday().String(),
 		})
 
 		if client.last != nil {
@@ -377,7 +379,7 @@ func TestSendEmailSkipsUsersWhoAreNotEligible(t *testing.T) {
 			MailOptIn:     true,
 			Email:         []string{"u1@example.com"},
 			FavoriteStore: "123",
-			ShoppingDay:   today.Weekday().String(),
+			ShoppingDay:   cachekey.StoreDay(today).Weekday().String(),
 		})
 
 		if client.last != nil {
@@ -673,4 +675,34 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
 	assert.Contains(t, g.params.Directive, "Always meat")
+}
+
+func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		after   time.Duration
+		weekday time.Weekday
+	}{
+		{"before 9 AM", 16*time.Hour + 59*time.Minute, time.Friday},
+		{"at 9 AM", 17 * time.Hour, time.Saturday},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				// The synthetic clock starts at midnight UTC on Saturday January 1, 2000.
+				time.Sleep(tt.after)
+				location := testMailLocation()
+				c := newFakeMailCache(t)
+				client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+				m := &mailer{cache: c, locServer: &fakeMailLocServer{location: location}, client: client, unsubscribeFactory: users.FakeUnsubscribeTokenFactory()}
+				configureFakeMailImages(m)
+				p, err := m.emailParams(t.Context(), utypes.User{ID: "user-1", FavoriteStore: location.ID, Email: []string{"chef@example.com"}})
+				require.NoError(t, err)
+				assert.True(t, time.Now().Equal(p.Date))
+				assert.Equal(t, "America/Los_Angeles", p.Date.Location().String())
+				m.sendEmail(t.Context(), utypes.User{ID: "user-1", MailOptIn: true, Email: []string{"chef@example.com"}, FavoriteStore: location.ID, ShoppingDay: tt.weekday.String()})
+				require.NotNil(t, client.last)
+				assert.Contains(t, c.data, sentMailKey("user-1", p.Hash()))
+			})
+		})
+	}
 }

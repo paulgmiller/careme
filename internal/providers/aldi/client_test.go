@@ -19,7 +19,7 @@ func TestStoreSummariesBuildsRequestAndNormalizesResponse(t *testing.T) {
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"status": "SUCCESS",
 			"response": map[string]any{
-				"locations": []SourceLocation{
+				"locations": []sourceLocation{
 					{
 						ID:              5757831,
 						Identifier:      "F100",
@@ -52,10 +52,10 @@ func TestStoreSummariesBuildsRequestAndNormalizesResponse(t *testing.T) {
 	if capturedReq.URL.Path != "/api/locators/test-key/locations/all" {
 		t.Fatalf("unexpected path: %s", capturedReq.URL.Path)
 	}
-	if got := capturedReq.URL.Query().Get("language"); got != DefaultLanguage {
+	if got := capturedReq.URL.Query().Get("language"); got != defaultLanguage {
 		t.Fatalf("unexpected language query value: %q", got)
 	}
-	if got := capturedReq.URL.Query().Get("country"); got != DefaultCountry {
+	if got := capturedReq.URL.Query().Get("country"); got != defaultCountry {
 		t.Fatalf("unexpected country query value: %q", got)
 	}
 	if got := capturedReq.URL.Query().Get("fieldMask"); got != "" {
@@ -83,7 +83,7 @@ func TestStoreSummariesIncludesAddressExtra(t *testing.T) {
 	t.Parallel()
 
 	extra := "Ste 300"
-	summary, err := normalizeLocation(SourceLocation{
+	summary, err := normalizeLocation(sourceLocation{
 		ID:              5757831,
 		Identifier:      "F216",
 		Name:            "ALDI",
@@ -105,7 +105,7 @@ func TestStoreSummariesIncludesAddressExtra(t *testing.T) {
 func TestStoreSummariesRequiresIdentifier(t *testing.T) {
 	t.Parallel()
 
-	_, err := normalizeLocation(SourceLocation{
+	_, err := normalizeLocation(sourceLocation{
 		Name:            "ALDI",
 		StreetAndNumber: "201 W Division St",
 		Province:        "IL",
@@ -140,12 +140,12 @@ func TestInStoreShopIDInitializesSessionAndMatchesStoreAddress(t *testing.T) {
 				t.Fatalf("unexpected postal_code: %q", got)
 			}
 			if err := json.NewEncoder(w).Encode(map[string]any{
-				"shops": []Shop{
+				"shops": []shop{
 					{
 						ID:                "38764",
 						RetailerKey:       "aldi",
 						FulfillmentOption: "delivery",
-						Address: ShopAddress{
+						Address: shopAddress{
 							StreetAddress: "825 S. Hurstbourne Pkwy",
 							City:          "Louisville",
 							State:         "KY",
@@ -157,7 +157,7 @@ func TestInStoreShopIDInitializesSessionAndMatchesStoreAddress(t *testing.T) {
 						ID:                "516286",
 						RetailerKey:       "aldi",
 						FulfillmentOption: "instore",
-						Address: ShopAddress{
+						Address: shopAddress{
 							StreetAddress: "825 S Hurstbourne Pkwy",
 							City:          "Louisville",
 							State:         "KY",
@@ -209,12 +209,12 @@ func TestInStoreShopIDFallsBackWhenNoInstoreMatch(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case "/idp/v1/shops":
 			if err := json.NewEncoder(w).Encode(map[string]any{
-				"shops": []Shop{
+				"shops": []shop{
 					{
 						ID:                "38764",
 						RetailerKey:       "aldi",
 						FulfillmentOption: "delivery",
-						Address: ShopAddress{
+						Address: shopAddress{
 							StreetAddress: "825 S. Hurstbourne Pkwy",
 							City:          "Louisville",
 							State:         "KY",
@@ -258,12 +258,12 @@ func TestFindInStoreShopPrefersAddressWordMatchBeforeFulfillment(t *testing.T) {
 		City:    "Louisville",
 		State:   "KY",
 		ZipCode: "40222",
-	}, []Shop{
+	}, []shop{
 		{
 			ID:                "wrong",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "instore",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "4301 Bardstown Rd",
 				City:          "Louisville",
 				State:         "KY",
@@ -274,7 +274,7 @@ func TestFindInStoreShopPrefersAddressWordMatchBeforeFulfillment(t *testing.T) {
 			ID:                "right",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "instore",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 South Hurstbourne Parkway",
 				City:          "Louisville",
 				State:         "KY",
@@ -285,7 +285,7 @@ func TestFindInStoreShopPrefersAddressWordMatchBeforeFulfillment(t *testing.T) {
 			ID:                "delivery",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "delivery",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S. Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -310,12 +310,12 @@ func TestFindInStoreShopReturnsFalseWhenBestMatchTiesSameFulfillment(t *testing.
 		City:    "Louisville",
 		State:   "KY",
 		ZipCode: "40222",
-	}, []Shop{
+	}, []shop{
 		{
 			ID:                "first",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "instore",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -326,7 +326,7 @@ func TestFindInStoreShopReturnsFalseWhenBestMatchTiesSameFulfillment(t *testing.
 			ID:                "second",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "instore",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -337,7 +337,7 @@ func TestFindInStoreShopReturnsFalseWhenBestMatchTiesSameFulfillment(t *testing.
 			ID:                "delivery",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "delivery",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S. Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -359,12 +359,12 @@ func TestFindInStoreShopFulfillmentBreaksAddressScoreTie(t *testing.T) {
 		City:    "Louisville",
 		State:   "KY",
 		ZipCode: "40222",
-	}, []Shop{
+	}, []shop{
 		{
 			ID:                "delivery-one",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "delivery",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -375,7 +375,7 @@ func TestFindInStoreShopFulfillmentBreaksAddressScoreTie(t *testing.T) {
 			ID:                "delivery-two",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "delivery",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S. Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",
@@ -386,7 +386,7 @@ func TestFindInStoreShopFulfillmentBreaksAddressScoreTie(t *testing.T) {
 			ID:                "instore",
 			RetailerKey:       "aldi",
 			FulfillmentOption: "instore",
-			Address: ShopAddress{
+			Address: shopAddress{
 				StreetAddress: "825 S Hurstbourne Pkwy",
 				City:          "Louisville",
 				State:         "KY",

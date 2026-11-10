@@ -6,11 +6,11 @@ import (
 )
 
 // Store represents a Walmart store location returned by the stores API.
-type Store struct {
+type storeRecord struct {
 	No            int         `json:"no"`
 	Name          string      `json:"name"`
 	Country       string      `json:"country"`
-	Coordinates   Coordinates `json:"coordinates"`
+	Coordinates   coordinates `json:"coordinates"`
 	StreetAddress string      `json:"streetAddress"`
 	City          string      `json:"city"`
 	StateProvCode string      `json:"stateProvCode"`
@@ -20,13 +20,13 @@ type Store struct {
 	Timezone      string      `json:"timezone"`
 }
 
-// Coordinates stores Walmart's [longitude, latitude] coordinate tuple.
-type Coordinates struct {
+// coordinates stores Walmart's [longitude, latitude] coordinate tuple.
+type coordinates struct {
 	Longitude float64
 	Latitude  float64
 }
 
-func (c *Coordinates) UnmarshalJSON(data []byte) error {
+func (c *coordinates) UnmarshalJSON(data []byte) error {
 	var tuple []float64
 	if err := json.Unmarshal(data, &tuple); err != nil {
 		return fmt.Errorf("unmarshal coordinates: %w", err)
@@ -40,22 +40,22 @@ func (c *Coordinates) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (c Coordinates) MarshalJSON() ([]byte, error) {
+func (c coordinates) MarshalJSON() ([]byte, error) {
 	return json.Marshal([]float64{c.Longitude, c.Latitude})
 }
 
-// ParseStore unmarshals a single store JSON object.
-func ParseStore(data []byte) (Store, error) {
-	var store Store
+// parseStore unmarshals a single store JSON object.
+func parseStore(data []byte) (storeRecord, error) {
+	var store storeRecord
 	if err := json.Unmarshal(data, &store); err != nil {
-		return Store{}, fmt.Errorf("unmarshal store: %w", err)
+		return storeRecord{}, fmt.Errorf("unmarshal store: %w", err)
 	}
 	return store, nil
 }
 
-// ParseStores unmarshals store payloads from array, wrapped, or single-object shapes.
-func ParseStores(data []byte) ([]Store, error) {
-	var stores []Store
+// parseStores unmarshals store payloads from array, wrapped, or single-object shapes.
+func parseStores(data []byte) ([]storeRecord, error) {
+	var stores []storeRecord
 	if err := json.Unmarshal(data, &stores); err == nil {
 		return stores, nil
 	}
@@ -66,14 +66,14 @@ func ParseStores(data []byte) ([]Store, error) {
 	}
 	if err := json.Unmarshal(data, &wrapped); err == nil {
 		if len(wrapped.Results) > 0 {
-			var results []Store
+			var results []storeRecord
 			if err := json.Unmarshal(wrapped.Results, &results); err != nil {
 				return nil, fmt.Errorf("unmarshal results stores: %w", err)
 			}
 			return results, nil
 		}
 		if len(wrapped.Stores) > 0 {
-			var nestedStores []Store
+			var nestedStores []storeRecord
 			if err := json.Unmarshal(wrapped.Stores, &nestedStores); err != nil {
 				return nil, fmt.Errorf("unmarshal stores field: %w", err)
 			}
@@ -81,9 +81,9 @@ func ParseStores(data []byte) ([]Store, error) {
 		}
 	}
 
-	store, err := ParseStore(data)
+	store, err := parseStore(data)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal stores payload: %w", err)
 	}
-	return []Store{store}, nil
+	return []storeRecord{store}, nil
 }

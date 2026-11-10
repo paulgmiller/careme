@@ -50,11 +50,11 @@ func NewManager(cfg *config.Config, c cache.Cache, httpClient *http.Client) grad
 	}
 
 	if cfg.IngredientGrading.Model == ai.DecisionsIngredientGrader {
-		return newCachingGrader(ai.NewDecisionGrader(cfg.AI.APIKey, httpClient), NewStore(c))
+		return newCachingGrader(ai.NewDecisionGrader(cfg.AI.APIKey, httpClient), newStore(c))
 	}
 
 	base := ai.NewIngredientGrader(cfg.AI.APIKey, cfg.IngredientGrading.Model, httpClient)
-	return newCachingGrader(&multiGrader{grader: base}, NewStore(c))
+	return newCachingGrader(&multiGrader{grader: base}, newStore(c))
 }
 
 // NewEnrichingGrader returns the grade manager with independent embedding

@@ -5,11 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"log/slog"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 
 	"github.com/samber/lo"
@@ -17,27 +20,28 @@ import (
 
 var defaultStaplesSignature = lo.Must(json.Marshal(defaultStaples()))
 
-type CategoryClient interface {
+type categoryClient interface {
 	Category(ctx context.Context, queryterm, store string) ([]product, error)
 }
 
 type identityProvider struct{}
 
-type StaplesProvider struct {
-	identityProvider
-	client CategoryClient
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	return cachekey.NewHash(locationID, date, string(defaultStaplesSignature))
 }
 
-func NewStaplesProvider(client CategoryClient) StaplesProvider {
-	return StaplesProvider{client: client}
+type staplesProvider struct {
+	identityProvider
+	client categoryClient
+}
+
+func NewStaplesProvider(client categoryClient) staplesProvider {
+	return staplesProvider{client: client}
 }
 
 func NewIdentityProvider() identityProvider {
 	return identityProvider{}
-}
-
-func (p identityProvider) Signature() string {
-	return string(defaultStaplesSignature)
 }
 
 func (p identityProvider) IsID(locationID string) bool {
@@ -45,13 +49,13 @@ func (p identityProvider) IsID(locationID string) bool {
 	return ok
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
 	// should identity provider do this?
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}
@@ -72,12 +76,12 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
-func (p StaplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if p.client == nil {
 		return nil, fmt.Errorf("whole foods client is required")
 	}
 
-	storeID := strings.TrimPrefix(locationID, LocationIDPrefix)
+	storeID := strings.TrimPrefix(locationID, locationIDPrefix)
 	if storeID == locationID || storeID == "" {
 		return nil, fmt.Errorf("invalid whole foods location id %q", locationID)
 	}

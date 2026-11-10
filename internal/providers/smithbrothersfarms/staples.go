@@ -5,18 +5,24 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
+	"careme/internal/ingredients/cachekey"
 )
 
+// restockDay anchors weekly ingredient and recipe cache keys.
+const restockDay = time.Monday
+
 const (
-	LocationIDPrefix = "smithbrothersfarms_"
+	locationIDPrefix = "smithbrothersfarms_"
 	baseURL          = "https://www.smithbrothersfarms.com"
 	parserVersion    = "v1"
 )
 
-var stapleURLs = []string{baseURL + "/produce", baseURL + "/meat-poultry"}
+var stapleURLs = []string{baseURL + "/produce", baseURL + "/meat-poultry", baseURL + "/dairy-eggs", baseURL + "/yogurt"}
 
 var harvestBoxes = []struct {
 	slug string
@@ -28,34 +34,37 @@ var harvestBoxes = []struct {
 
 type identityProvider struct{}
 
-func NewIdentityProvider() identityProvider { return identityProvider{} }
-
-func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, LocationIDPrefix) }
-
-func (identityProvider) Signature() string {
+func (p identityProvider) HashForStore(locationID string, date time.Time) hash.Hash {
+	date = cachekey.StoreDay(date)
+	date = date.AddDate(0, 0, -int((date.Weekday()-restockDay+7)%7))
 	parts := append([]string{}, stapleURLs...)
 	for _, box := range harvestBoxes {
 		parts = append(parts, baseURL+"/"+box.slug)
 	}
 	parts = append(parts, parserVersion)
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
+	return cachekey.NewHash(locationID, date, signature)
 }
+
+func NewIdentityProvider() identityProvider { return identityProvider{} }
+
+func (identityProvider) IsID(id string) bool { return strings.HasPrefix(id, locationIDPrefix) }
 
 type ingredientClient interface {
 	Fetch(context.Context, string) ([]ai.InputIngredient, error)
 	FetchHarvestBox(context.Context, string, string) ([]ai.InputIngredient, error)
 }
 
-type StaplesProvider struct {
+type staplesProvider struct {
 	identityProvider
 	client ingredientClient
 }
 
-func NewStaplesProvider(client ingredientClient) StaplesProvider {
-	return StaplesProvider{client: client}
+func NewStaplesProvider(client ingredientClient) staplesProvider {
+	return staplesProvider{client: client}
 }
 
-func (p StaplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.InputIngredient, error) {
 	if !p.IsID(id) {
 		return nil, fmt.Errorf("invalid Smith Brothers Farms location ID %q", id)
 	}
@@ -78,7 +87,7 @@ func (p StaplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.Inpu
 	return ingredients, nil
 }
 
-func (p StaplesProvider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(id) {
 		return nil, fmt.Errorf("invalid Smith Brothers Farms location ID %q", id)
 	}

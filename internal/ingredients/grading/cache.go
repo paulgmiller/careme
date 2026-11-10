@@ -52,7 +52,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		}
 
 		key := cacheKey(c.cacheVersion + "/" + ingredientHash(ingredient))
-		gradedIngredient, err := c.store.Load(ctx, key)
+		gradedIngredient, err := c.store.load(ctx, key)
 		if err == nil {
 			if gradedIngredient.Grade == nil {
 				return lookupResult{missing: &ingredient}, nil
@@ -100,7 +100,7 @@ func (c *cachingGrader) GradeIngredients(ctx context.Context, ingredients []ai.I
 		wg.Go(func() {
 			ctx := context.WithoutCancel(ctx)
 			key := cacheKey(c.cacheVersion + "/" + ingredientHash(gradedIngredient))
-			if err := c.store.Save(ctx, key, &gradedIngredient); err != nil {
+			if err := c.store.save(ctx, key, &gradedIngredient); err != nil {
 				slog.ErrorContext(ctx, "failed to cache ingredient grade", "key", key, "ingredient", ingredientLabel(gradedIngredient), "error", err)
 			}
 		})

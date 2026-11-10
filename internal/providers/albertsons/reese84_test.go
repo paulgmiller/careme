@@ -13,7 +13,7 @@ func TestSaveReese84RecordWritesLatestAndHistory(t *testing.T) {
 	cacheStore := cache.NewInMemoryCache()
 	fetchedAt := time.Date(2026, time.March, 28, 12, 0, 0, 0, time.UTC)
 
-	err := SaveReese84Record(t.Context(), cacheStore, CookieRecord{
+	err := saveReese84Record(t.Context(), cacheStore, cookieRecord{
 		Cookie:    "cookie-value",
 		FetchedAt: fetchedAt,
 		SourceURL: "https://www.acmemarkets.com/aisle-vs/meat-seafood/seafood-favorites.html",

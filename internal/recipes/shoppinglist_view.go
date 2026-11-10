@@ -42,12 +42,16 @@ type shoppingRecipeView struct {
 }
 
 // DOMID is a CSS-safe identifier; recipe URLs and cache keys keep their full hash.
+//
+//unexport:ignore called by html/template
 func (v shoppingRecipeView) DOMID() string {
 	return "shopping-recipe-" + strings.TrimRight(v.Hash, "=")
 }
 
+//unexport:ignore called by html/template
 func (v shoppingRecipeView) Image() recipeImageView {
-	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true}
+	// Unsaved suggestions do not start image generation.
+	return recipeImageView{Hash: v.Hash, HasImage: v.HasImage, Thumbnail: true, Poll: v.Saved}
 }
 
 type shoppingProgress struct {
@@ -132,7 +136,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		Recipes:              recipeViews,
 		HasSavedRecipes:      hasSavedRecipes,
 		Finalized:            input.purchases != nil,
-		Purchases:            shoppingPurchasesWithWine(input.purchases, input.params.Saved, input.wineRecommendations),
+		Purchases:            shoppingPurchaseGroupsForDisplay(input.purchases),
 		ServerSignedIn:       serverSignedIn,
 		User:                 input.currentUser,
 		AuthReturnTo:         "/recipes?h=" + input.hash,
@@ -171,8 +175,8 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 		view, err := newShoppingRecipeView(recipe, shoppingRecipeInput{
 			ShoppingListHash:   listHash,
 			ServerSignedIn:     signedIn,
-			Saved:              selection.IsSaved(hash),
-			Dismissed:          selection.IsDismissed(hash),
+			Saved:              selection.isSaved(hash),
+			Dismissed:          selection.isDismissed(hash),
 			HasImage:           images[hash],
 			WineRecommendation: wines[hash],
 			Ready:              ready,
@@ -221,6 +225,7 @@ type shoppingFinalizeView struct {
 	Order           *ordertypes.OrderView
 	Hash            string
 	HasSavedRecipes bool
+	Finalized       bool
 }
 
 func newShoppingFinalizeView(hash string) shoppingFinalizeView {

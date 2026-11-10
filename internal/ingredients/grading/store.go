@@ -19,14 +19,14 @@ type store struct {
 	cache cache.Cache
 }
 
-func NewStore(c cache.Cache) store {
+func newStore(c cache.Cache) store {
 	if c == nil {
 		panic("cache must not be nil")
 	}
 	return store{cache: c}
 }
 
-func (s store) Load(ctx context.Context, key string) (*ai.InputIngredient, error) {
+func (s store) load(ctx context.Context, key string) (*ai.InputIngredient, error) {
 	reader, err := s.cache.Get(ctx, key)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (s store) Load(ctx context.Context, key string) (*ai.InputIngredient, error
 	return &ingredient, nil
 }
 
-func (s store) Save(ctx context.Context, key string, ingredient *ai.InputIngredient) error {
+func (s store) save(ctx context.Context, key string, ingredient *ai.InputIngredient) error {
 	if ingredient == nil {
 		return fmt.Errorf("graded ingredient is required")
 	}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/config"
@@ -27,6 +28,7 @@ type imageGenerator interface {
 
 type latencyMeasurer func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, _ map[string]any, ctx map[string]any) (map[string]any, error) {
 	body, err := json.Marshal(ctx)
 	if err != nil {
@@ -65,12 +67,15 @@ func runEval(body []byte, generator imageGenerator, measure latencyMeasurer) (ma
 		return nil, fmt.Errorf("eval image_style must be photo or sketch")
 	}
 
+	start := time.Now()
 	err := measure(context.Background(), generator, pf.Vars.Recipe, pf.Vars.ImageStyle)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("measure %s latency: %w", pf.Vars.ImageStyle, err)
 	}
 	return map[string]any{
-		"output": string(pf.Vars.ImageStyle),
+		"output":    string(pf.Vars.ImageStyle),
+		"latencyMs": latency.Milliseconds(),
 	}, nil
 }
 

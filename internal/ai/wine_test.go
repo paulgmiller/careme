@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,10 @@ import (
 	"testing"
 
 	"careme/internal/config"
+
+	openai "github.com/openai/openai-go/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizeWineStyle(t *testing.T) {
@@ -91,12 +96,28 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read request body: %v", err)
 		}
-		if !strings.Contains(string(body), `"model":"`+gpt6Luna+`"`) {
+		if !strings.Contains(string(body), `"model":"`+openai.ChatModelGPT6Luna+`"`) {
 			t.Fatalf("expected Luna model in request: %s", body)
 		}
 		if !strings.Contains(string(body), `"reasoning":{"effort":"none"}`) {
 			t.Fatalf("expected no-reasoning request: %s", body)
 		}
+		var request struct {
+			Text struct {
+				Format map[string]any `json:"format"`
+			} `json:"text"`
+		}
+		require.NoError(t, json.Unmarshal(body, &request))
+		assert.Equal(t, "json_schema", request.Text.Format["type"])
+		assert.Equal(t, "wine_selection", request.Text.Format["name"])
+		assert.Equal(t, true, request.Text.Format["strict"])
+		schema := request.Text.Format["schema"].(map[string]any)
+		assert.ElementsMatch(t, []string{"wines", "commentary"}, schemaRequired(t, schema))
+		assert.Equal(t, false, schema["additionalProperties"])
+		properties := schema["properties"].(map[string]any)
+		wineItems := properties["wines"].(map[string]any)["items"].(map[string]any)
+		assert.ElementsMatch(t, []string{"id", "name", "quantity"}, schemaRequired(t, wineItems))
+		assert.Equal(t, false, wineItems["additionalProperties"])
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
@@ -124,7 +145,7 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, gpt6Luna))),
+			}`, openai.ChatModelGPT6Luna))),
 			Request: req,
 		}, nil
 	})}, nil)
@@ -140,5 +161,30 @@ func TestPickWineUsesLunaWithoutReasoning(t *testing.T) {
 	}
 	if len(selection.Wines) != 1 || selection.Wines[0].ProductID != "pinot-noir-1" {
 		t.Fatalf("unexpected wine selection: %#v", selection)
+	}
+}
+
+func TestPickWineRejectsUnusableResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  string
+		reason  string
+		content string
+		wantErr string
+	}{
+		{name: "non-JSON text", status: "completed", content: `{"type":"output_text","text":"These wines pair well."}`, wantErr: `failed to parse wine selection response "resp-wine-error"`},
+		{name: "refusal", status: "completed", content: `{"type":"refusal","refusal":"Cannot fulfill this request."}`, wantErr: `wine selection response "resp-wine-error" was refused`},
+		{name: "truncated JSON", status: "incomplete", reason: "max_output_tokens", content: `{"type":"output_text","text":"{\"wines\":["}`, wantErr: `has status "incomplete" (incomplete reason: "max_output_tokens")`},
+		{name: "empty output", status: "completed", content: `{"type":"output_text","text":""}`, wantErr: `failed to parse wine selection response "resp-wine-error"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewClient(testAIConfig(config.DefaultRecipeModel), &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body := fmt.Sprintf(`{"id":"resp-wine-error","status":%q,"incomplete_details":{"reason":%q},"output":[{"type":"message","role":"assistant","content":[%s]}]}`, tc.status, tc.reason, tc.content)
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+			})}, nil)
+			selection, err := client.PickWine(t.Context(), Recipe{Title: "Roast Chicken"}, []InputIngredient{{ProductID: "pinot", Description: "Pinot Noir"}})
+			require.ErrorContains(t, err, tc.wantErr)
+			assert.Nil(t, selection)
+		})
 	}
 }

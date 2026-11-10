@@ -15,7 +15,7 @@ type locationBackend struct {
 	store *store
 }
 
-func NewLocationBackend(store *store) *locationBackend {
+func newLocationBackend(store *store) *locationBackend {
 	if store == nil {
 		panic("nil store given to location backend")
 	}
@@ -23,11 +23,11 @@ func NewLocationBackend(store *store) *locationBackend {
 }
 
 func NewContainerLocationBackend() (*locationBackend, error) {
-	store, err := NewContainerStore()
+	store, err := newContainerStore()
 	if err != nil {
 		return nil, err
 	}
-	return NewLocationBackend(store), nil
+	return newLocationBackend(store), nil
 }
 
 func (b *locationBackend) HasInventory(locationID string) bool {
@@ -39,7 +39,7 @@ func (b *locationBackend) GetLocationByID(ctx context.Context, locationID string
 	if err != nil {
 		return nil, err
 	}
-	loc := market.Location()
+	loc := market.location()
 	return &loc, nil
 }
 
@@ -49,8 +49,8 @@ func (b *locationBackend) GetLocationsByCoordinates(ctx context.Context, coordin
 		return nil, err
 	}
 
-	locations := lo.Map(markets, func(market Market, _ int) locationtypes.Location {
-		return market.Location()
+	locations := lo.Map(markets, func(market marketRecord, _ int) locationtypes.Location {
+		return market.location()
 	})
 	return nearby.FilterAndSortByCoordinates(coordinates, locations, nearby.MaxLocationDistanceMiles), nil
 }

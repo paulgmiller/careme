@@ -15,7 +15,7 @@ func TestPathwaySearchPayloadUnmarshalFixture(t *testing.T) {
 	raw, err := os.ReadFile("acmeresp.json")
 	require.NoError(t, err)
 
-	var payload PathwaySearchPayload
+	var payload pathwaySearchPayload
 	require.NoError(t, json.Unmarshal(raw, &payload))
 
 	assert.Equal(t, 194, payload.Response.NumFound)

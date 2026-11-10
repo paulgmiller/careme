@@ -18,8 +18,8 @@ import (
 
 //go:generate go generate ./products ./locations ./oauth ./cart
 
-// KrogerTokenManager manages the bearer token and refreshes it if needed
-type KrogerTokenManager struct {
+// krogerTokenManager manages the bearer token and refreshes it if needed
+type krogerTokenManager struct {
 	token        string
 	expiresAt    time.Time
 	clientID     string
@@ -28,19 +28,19 @@ type KrogerTokenManager struct {
 	mu           sync.Mutex
 }
 
-func NewKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *KrogerTokenManager {
+func newKrogerTokenManager(clientID, clientSecret string, httpClient *http.Client) *krogerTokenManager {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &KrogerTokenManager{
+	return &krogerTokenManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		httpClient:   httpClient,
 	}
 }
 
-// GetToken returns a valid token, refreshing if close to expiration
-func (m *KrogerTokenManager) GetToken(ctx context.Context) (string, error) {
+// getToken returns a valid token, refreshing if close to expiration
+func (m *krogerTokenManager) getToken(ctx context.Context) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := time.Now()
@@ -72,10 +72,10 @@ func withRetries(baseClient *http.Client) *http.Client {
 }
 
 func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) func(context.Context, *http.Request) error {
-	tokenManager := NewKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
+	tokenManager := newKrogerTokenManager(cfg.Kroger.ClientID, cfg.Kroger.ClientSecret, httpClient)
 
 	return func(editorCtx context.Context, req *http.Request) error {
-		token, err := tokenManager.GetToken(editorCtx)
+		token, err := tokenManager.getToken(editorCtx)
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ func newBearerTokenRequestEditor(cfg *config.Config, httpClient *http.Client) fu
 	}
 }
 
-func NewProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
+func newProductsClientFromConfig(cfg *config.Config, httpClient *http.Client) (*products.ClientWithResponses, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}

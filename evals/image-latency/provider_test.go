@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 	"testing/iotest"
+	"testing/synctest"
+	"time"
 
 	"careme/internal/ai"
 
@@ -38,7 +40,8 @@ func TestRunEvalReportsImageStyle(t *testing.T) {
 			result, err := runEval(body, nil, measure)
 			require.NoError(t, err)
 			assert.Equal(t, 1, calls)
-			assert.Equal(t, map[string]any{"output": string(style)}, result)
+			assert.Equal(t, string(style), result["output"])
+			assert.GreaterOrEqual(t, result["latencyMs"].(int64), int64(0))
 		})
 	}
 }
@@ -61,6 +64,18 @@ func TestRunEvalRejectsIncompleteRecipe(t *testing.T) {
 			require.ErrorContains(t, err, test.want)
 		})
 	}
+}
+
+func TestRunEvalMeasuresImageLatency(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		measure := func(context.Context, imageGenerator, ai.Recipe, ai.RecipeImageStyle) error {
+			time.Sleep(250 * time.Millisecond)
+			return nil
+		}
+		result, err := runEval([]byte(validImageLatencyContext), nil, measure)
+		require.NoError(t, err)
+		assert.Equal(t, int64(250), result["latencyMs"])
+	})
 }
 
 func TestRunEvalReturnsStyleSpecificError(t *testing.T) {

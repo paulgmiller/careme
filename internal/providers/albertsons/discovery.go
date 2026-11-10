@@ -133,7 +133,7 @@ var defaultChains = []Chain{
 	},
 }
 
-type StorePage struct {
+type storePage struct {
 	Chain       Chain
 	URL         string
 	State       string
@@ -184,7 +184,7 @@ func DefaultChains() []Chain {
 	return slices.Clone(defaultChains)
 }
 
-func IsID(locationID string) bool {
+func isID(locationID string) bool {
 	locationID = strings.TrimSpace(locationID)
 	for _, chain := range defaultChains {
 		storeID := strings.TrimPrefix(locationID, chain.IDPrefix)
@@ -199,11 +199,11 @@ func FetchSitemap(ctx context.Context, client *http.Client, sitemapURL string) (
 	return sitemapfetch.FetchURLs(ctx, client, sitemapURL)
 }
 
-func FilterStorePages(urls []string, chain Chain) []StorePage {
-	pages := make([]StorePage, 0, len(urls))
+func FilterStorePages(urls []string, chain Chain) []storePage {
+	pages := make([]storePage, 0, len(urls))
 	seen := make(map[string]struct{}, len(urls))
 	for _, rawURL := range urls {
-		page, ok := ParseStorePageURL(rawURL, chain)
+		page, ok := parseStorePageURL(rawURL, chain)
 		if !ok {
 			continue
 		}
@@ -216,7 +216,7 @@ func FilterStorePages(urls []string, chain Chain) []StorePage {
 	return pages
 }
 
-// ParseStorePageURL accepts only store landing pages.
+// parseStorePageURL accepts only store landing pages.
 // Expected path shapes are:
 //
 //	/<state>/<city>/<address>.html
@@ -224,43 +224,43 @@ func FilterStorePages(urls []string, chain Chain) []StorePage {
 //
 // The final segment must be the store address page; category/service pages like
 // /produce.html or /bakery.html add an extra segment and are rejected.
-func ParseStorePageURL(rawURL string, chain Chain) (StorePage, bool) {
+func parseStorePageURL(rawURL string, chain Chain) (storePage, bool) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	if !strings.EqualFold(u.Host, chain.Domain) {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(segments) == 1 && segments[0] == "" {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	offset := 0
 	if chain.PathPrefix != "" {
 		if len(segments) != 4 || !strings.EqualFold(segments[0], chain.PathPrefix) {
-			return StorePage{}, false
+			return storePage{}, false
 		}
 		offset = 1
 	} else if len(segments) != 3 {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	address := strings.TrimSuffix(segments[offset+2], ".html")
 	if address == segments[offset+2] || address == "" {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
 	state := strings.TrimSpace(segments[offset])
 	city := strings.TrimSpace(segments[offset+1])
 	if state == "" || city == "" {
-		return StorePage{}, false
+		return storePage{}, false
 	}
 
-	return StorePage{
+	return storePage{
 		Chain:       chain,
 		URL:         rawURL,
 		State:       strings.ToUpper(state),
@@ -293,11 +293,11 @@ func FetchStoreSummary(ctx context.Context, client *http.Client, pageURL string,
 		return nil, fmt.Errorf("read store page: %w", err)
 	}
 
-	return ExtractStoreSummary(pageURL, body, chain)
+	return extractStoreSummary(pageURL, body, chain)
 }
 
-func ExtractStoreSummary(pageURL string, body []byte, chain Chain) (*StoreSummary, error) {
-	page, ok := ParseStorePageURL(pageURL, chain)
+func extractStoreSummary(pageURL string, body []byte, chain Chain) (*StoreSummary, error) {
+	page, ok := parseStorePageURL(pageURL, chain)
 	if !ok {
 		return nil, fmt.Errorf("store page URL %q is invalid", pageURL)
 	}

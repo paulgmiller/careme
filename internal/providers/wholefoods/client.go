@@ -111,13 +111,13 @@ type StoreSummaryResponse struct {
 	BU                       int               `json:"bu"`
 	Folder                   string            `json:"folder"`
 	OpenedAt                 string            `json:"openedAt"`
-	Links                    StoreSummaryLinks `json:"links"`
+	Links                    storeSummaryLinks `json:"links"`
 	PrimaryLocation          StoreLocation     `json:"primaryLocation"`
 	Hours                    map[string]string `json:"hours"`
 	Holidays                 map[string]any    `json:"holidays"`
 }
 
-type StoreSummaryLinks struct {
+type storeSummaryLinks struct {
 	Details                   string `json:"Details"`
 	Directions                string `json:"Directions"`
 	Sales                     string `json:"Sales"`

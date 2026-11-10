@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	openai "github.com/openai/openai-go/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,7 @@ func TestDecisionGraderRequestAndScores(t *testing.T) {
 				if err := json.NewDecoder(req.Body).Decode(&body); !assert.NoError(t, err) {
 					return nil, err
 				}
-				assert.Equal(t, gpt6Luna, body["model"])
+				assert.Equal(t, openai.ChatModelGPT6Luna, body["model"])
 				assert.NotContains(t, body, "reasoning")
 				assert.NotContains(t, body, "text")
 				var input map[string]any
@@ -254,11 +255,11 @@ func TestDecisionGraderSkipsEmptyAndRejectsAlreadyGraded(t *testing.T) {
 func TestDecisionGradeCacheVersion(t *testing.T) {
 	grader := NewDecisionGrader("test-key", http.DefaultClient)
 	assert.Equal(t, ingredientDecisionCacheVersion(), grader.CacheVersion())
-	assert.NotEqual(t, IngredientGradeCacheVersion("gpt-6-luna"), grader.CacheVersion())
+	assert.NotEqual(t, ingredientGradeCacheVersion("gpt-6-luna"), grader.CacheVersion())
 	before := grader.CacheVersion()
 	rubric, err := json.Marshal(ingredientGradeCriteria)
 	require.NoError(t, err)
-	previous := ingredientGradeCacheVersion("decisions/v1/"+gpt6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
+	previous := hashIngredientGradeVersion("decisions/v1/"+openai.ChatModelGPT6Luna, ingredientDecisionInstruction+string(rubric)+"/round-score-plus-one")
 	assert.NotEqual(t, previous, before, "cached grades without the full decision answer in reason must be refreshed")
 	original := ingredientGradeCriteria[0]
 	t.Cleanup(func() { ingredientGradeCriteria[0] = original })

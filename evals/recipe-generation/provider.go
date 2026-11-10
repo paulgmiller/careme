@@ -39,6 +39,7 @@ type providerOptions struct {
 	} `json:"config"`
 }
 
+//unexport:ignore Promptfoo loads the CallApi symbol dynamically
 func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]any, error) {
 	result, err := callAPI(options, ctx)
 	if err != nil {

@@ -8,5 +8,5 @@ func NewFromConfig(cfg *config.Config) (AuthClient, error) {
 		return Mock(cfg), nil
 	}
 
-	return NewClient(cfg)
+	return newClient(cfg)
 }

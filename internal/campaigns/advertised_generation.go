@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"careme/internal/locations"
+	"careme/internal/providers/mnfoodclub"
 )
 
 // Campaign is a promoted store plus campaign-specific page context.
@@ -36,14 +37,22 @@ func AdvertisedRecipeLocations() map[string]campaign {
 			HelpMessage: genericLocationHelp("Westlake Whole Foods"),
 			Generate:    true,
 		},
-		// These delivery campaigns should probably only generate weekly.
+		// Smith Brothers Farms generation remains disabled.
 		"smithbrothersfarms": {
 			Location: locations.Location{ID: "smithbrothersfarms_delivery"},
 			Generate: false,
 		},
 		"mnfoodclub": {
-			Location: locations.Location{ID: "mnfoodclub_delivery"},
-			Generate: false,
+			Location: locations.Location{ID: mnfoodclub.MNFoodClubLocationID},
+			Generate: true,
+		},
+		"tcfarm": {
+			Location: locations.Location{ID: mnfoodclub.TCFarmLocationID},
+			Generate: true,
+		},
+		"nelsongrassfarm": {
+			Location: locations.Location{ID: mnfoodclub.NelsonGrassFarmLocationID},
+			Generate: true,
 		},
 		/* Too close to fred meyers
 		bellevue_wf": {

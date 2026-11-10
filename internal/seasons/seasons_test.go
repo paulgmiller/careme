@@ -76,7 +76,7 @@ func TestGetSeason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetSeason(tt.date)
+			result := getSeason(tt.date)
 			if result != tt.expected {
 				t.Errorf("GetSeason(%v) = %v, want %v", tt.date, result, tt.expected)
 			}
@@ -97,7 +97,7 @@ func TestGetColorScheme(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			colors := GetColorScheme(tt.season)
+			colors := getColorScheme(tt.season)
 			// Just verify we got non-empty colors
 			if colors.C50 == "" || colors.C500 == "" || colors.C900 == "" {
 				t.Errorf("GetColorScheme(%v) returned empty colors", tt.season)
@@ -149,7 +149,7 @@ func TestParseSeason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := ParseSeason(tt.value)
+			got, ok := parseSeason(tt.value)
 			if ok != tt.ok {
 				t.Fatalf("ParseSeason(%q) ok = %v, want %v", tt.value, ok, tt.ok)
 			}
