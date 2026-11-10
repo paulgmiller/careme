@@ -308,8 +308,19 @@ requests behind [Full Circle's grocery catalog](https://www.fullcircle.com/produ
 It retains listing IDs, brands, package sizes, and published prices, merges
 products listed in multiple categories, and excludes explicitly sold-out products.
 The anonymous catalog does not confirm stock or pricing for a particular delivery.
-No credentials or new environment configuration are required. Full Circle is not
-yet included in nearby location discovery; use the ID above for catalog imports.
+No credentials or new environment configuration are required. Nearby discovery
+uses an approximate Seattle metro box including Bellevue and Issaquah.
+
+The provider also appends a temporary, user-supplied produce box: 2 Valencia
+oranges, 1 lb Murcott mandarins, 1 Hass avocado, 1 bunch broccoli, 1 head red leaf
+lettuce, 1 bunch red chard, 1 bunch red radishes, 1 fennel bulb with fronds,
+1 lb yellow potatoes, and 1 red onion. These entries retain the supplied quantities,
+have no individual prices, and carry the same preassigned 10/10 grade as other
+providers' produce shares. This fixed list is not live account inventory; update
+`internal/providers/fullcircle/produce_box.go` when the contents change. Changes
+to box contents invalidate ingredient and recipe cache hashes. Fetching ingredients
+through recipe generation populates the catalog snapshot used by location scores;
+`cmd/ingredients` only caches individual grades.
 
 The [Traditional CSA page](https://www.fullcircle.com/product/detail/2#comparesizes)
 has a “Show Sample Box Content For Each Size” link. Those are sample contents,

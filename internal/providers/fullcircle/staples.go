@@ -30,9 +30,12 @@ func (identityProvider) IsID(id string) bool { return id == locationID }
 func (identityProvider) HashForStore(id string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
 	date = date.AddDate(0, 0, -int((date.Weekday()-time.Monday+7)%7))
-	parts := []string{"fullcircle-public-catalog-v1"}
+	parts := []string{"fullcircle-public-catalog-v2"}
 	for _, category := range stapleCategories {
 		parts = append(parts, baseURL+category.path, category.name)
+	}
+	for _, ingredient := range produceBoxIngredients() {
+		parts = append(parts, ingredient.ProductID, ingredient.Description, ingredient.Size)
 	}
 	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
 	return cachekey.NewHash(id, date, signature)
@@ -76,7 +79,7 @@ func (p staplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.Inpu
 			ingredients = append(ingredients, item)
 		}
 	}
-	return ingredients, nil
+	return append(ingredients, produceBoxIngredients()...), nil
 }
 
 func (p staplesProvider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {

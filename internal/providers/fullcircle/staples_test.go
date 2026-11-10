@@ -44,7 +44,7 @@ func TestCatalogRouting(t *testing.T) {
 	provider := recipes.NewStaplesProvider([]recipes.StaplesBackend{backend})
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	require.Len(t, items, 6)
+	require.Len(t, items, 16)
 	assert.Equal(t, []string{"dairy", "meat", "grains"}, requested)
 	assert.Equal(t, ai.InputIngredient{ProductID: "fullcircle_14798", Description: "Purple Moon Cheddar Cheese", Brand: "Fiscalini Cheese Company", Size: "6oz", PriceRegular: floatPointer(7.29), Categories: []string{"Dairy"}}, items[0])
 	assert.Equal(t, "Organic Canned Chicken Breast", items[2].Description)
@@ -54,6 +54,8 @@ func TestCatalogRouting(t *testing.T) {
 	require.NoError(t, ai.InputIngredientsToTSV(items, &rendered))
 	assert.Contains(t, rendered.String(), "Purple Moon Cheddar Cheese")
 	assert.Contains(t, rendered.String(), "White Basmati Rice")
+	assert.Contains(t, rendered.String(), "Produce box Valencia Oranges")
+	assert.Contains(t, rendered.String(), "Produce box Fennel Bulb with Fronds")
 	assert.NotContains(t, rendered.String(), "Traditional CSA")
 }
 
@@ -63,7 +65,7 @@ func TestPricesSoldOutAndDuplicateCategories(t *testing.T) {
 	provider := fullcircle.NewStaplesProvider(fullcircle.NewClient(&http.Client{Transport: transport(func(*http.Request) (*http.Response, error) { return response(200, productJSON), nil })}))
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	require.Len(t, items, 1)
+	require.Len(t, items, 11)
 	assert.Equal(t, ai.InputIngredient{ProductID: "fullcircle_123", Description: "Milk & Cream", Brand: "Farmer's Dairy", Size: "16oz", PriceRegular: floatPointer(6), PriceSale: floatPointer(4.5), Categories: []string{"Dairy", "Meat", "Grains & Rice"}}, items[0])
 }
 
@@ -118,7 +120,7 @@ func TestRetryRecoversAndInvalidIDsDoNotFetch(t *testing.T) {
 	assert.Zero(t, attempts)
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	assert.Len(t, items, 1)
+	assert.Len(t, items, 11)
 	assert.Equal(t, 4, attempts)
 	_, err = provider.FetchWines(t.Context(), "fullcircle_delivery", []string{"red"})
 	require.ErrorContains(t, err, "not supported")
@@ -156,12 +158,14 @@ func TestLiveCatalog(t *testing.T) {
 	for _, item := range items {
 		assert.NotEmpty(t, item.ProductID)
 		assert.NotEmpty(t, item.Description)
-		require.NotNil(t, item.PriceRegular)
+		if !strings.HasPrefix(item.ProductID, "fullcircle_produce_box_") {
+			require.NotNil(t, item.PriceRegular)
+		}
 		for _, category := range item.Categories {
 			counts[category]++
 		}
 	}
-	for _, category := range []string{"Dairy", "Meat", "Grains & Rice"} {
+	for _, category := range []string{"Dairy", "Meat", "Grains & Rice", "Produce"} {
 		assert.Positive(t, counts[category], category)
 	}
 	t.Logf("fetched %d products: %v", len(items), counts)

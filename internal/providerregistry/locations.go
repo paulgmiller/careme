@@ -15,6 +15,7 @@ import (
 	"careme/internal/parallelism"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/fullcircle"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/imperfectfoods"
 	"careme/internal/providers/kroger"
@@ -40,6 +41,7 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	factories := []locationBackendFactory{
+		func(context.Context) (locations.LocationBackend, error) { return fullcircle.NewLocationBackend(), nil },
 		func(context.Context) (locations.LocationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
 		func(context.Context) (locations.LocationBackend, error) {
 			return smithbrothersfarms.NewLocationBackend(), nil
