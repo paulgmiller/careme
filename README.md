@@ -295,6 +295,45 @@ the existing grading and nearest-ingredient lookup. Wine candidates include ever
 page of the Wine & Wine Alternatives category (BigCommerce category 178), using
 the same stock and pricing rules. Requested wine styles do not restrict this list.
 
+### Full Circle ingredients
+
+Full Circle staples are available under `fullcircle_delivery`:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location fullcircle_delivery -verbose
+```
+
+The provider imports Dairy, Meat, and Grains & Rice using the public JSON
+requests behind [Full Circle's grocery catalog](https://www.fullcircle.com/product/farm-product-list).
+It retains listing IDs, brands, package sizes, and published prices, merges
+products listed in multiple categories, and excludes explicitly sold-out products.
+The anonymous catalog does not confirm stock or pricing for a particular delivery.
+No credentials or new environment configuration are required. Nearby discovery
+uses an approximate Seattle metro box including Bellevue and Issaquah.
+
+The provider also appends a temporary, user-supplied produce box: 2 Valencia
+oranges, 1 lb Murcott mandarins, 1 Hass avocado, 1 bunch broccoli, 1 head red leaf
+lettuce, 1 bunch red chard, 1 bunch red radishes, 1 fennel bulb with fronds,
+1 lb yellow potatoes, and 1 red onion. These entries retain the supplied quantities,
+have no individual prices, and carry the same preassigned 10/10 grade as other
+providers' produce shares. This fixed list is not live account inventory; update
+`internal/providers/fullcircle/produce_box.go` when the contents change. Changes
+to box contents invalidate ingredient and recipe cache hashes. Fetching ingredients
+through recipe generation populates the catalog snapshot used by location scores;
+`cmd/ingredients` only caches individual grades.
+
+The [Traditional CSA page](https://www.fullcircle.com/product/detail/2#comparesizes)
+has a “Show Sample Box Content For Each Size” link. Those are sample contents,
+so this provider does not import them as current produce inventory.
+[Actual delivery contents](https://www.fullcircle.com/how-it-works/customize-your-box)
+are available in the customer's account during the customization window. Full
+Circle sends a reminder on Thursday afternoon before the delivery week; the
+window usually closes 48–72 hours before delivery, depending on the area.
+
+Run the optional public catalog check with
+`FULLCIRCLE_LIVE_TEST=1 go test ./internal/providers/fullcircle -run TestLiveCatalog -v`.
+The default tests use small catalog fixtures and do not access Full Circle.
+
 ### Smith Brothers Farms ingredients
 
 Nearby search includes Smith Brothers Farms home delivery in two approximate
