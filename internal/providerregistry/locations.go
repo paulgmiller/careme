@@ -41,7 +41,6 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 	}
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	factories := []locationBackendFactory{
-		func(context.Context) (locations.LocationBackend, error) { return fullcircle.NewLocationBackend(), nil },
 		func(context.Context) (locations.LocationBackend, error) { return mnfoodclub.NewLocationBackend(), nil },
 		func(context.Context) (locations.LocationBackend, error) {
 			return smithbrothersfarms.NewLocationBackend(), nil
@@ -80,6 +79,9 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 			},
 			func(context.Context) (locations.LocationBackend, error) {
 				return localyokels.NewLocationBackend(), nil
+			},
+			func(context.Context) (locations.LocationBackend, error) {
+				return fullcircle.NewLocationBackend(), nil
 			},
 		}, factories...)
 	}

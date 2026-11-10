@@ -74,7 +74,6 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		publixProvider,
 		farmersMarketProvider,
 		mnfoodclub.NewStaplesProvider(mnfoodclubClient),
-		fullcircle.NewStaplesProvider(fullcircle.NewClient(http.DefaultClient)),
 		smithbrothersfarms.NewStaplesProvider(smithbrothersfarms.NewClient(brightdataClient)),
 		walmart.NewStaplesProvider(),
 		wholefoods.NewStaplesProvider(wholefoods.NewClient(brightdataClient)),
@@ -84,6 +83,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		backends = append([]recipes.StaplesBackend{
 			imperfectfoods.NewStaplesProvider(),
 			localyokels.NewStaplesProvider(localyokels.NewClient(brightdataClient)),
+			fullcircle.NewStaplesProvider(fullcircle.NewClient(brightdataClient)),
 		}, backends...)
 	}
 	return backends, nil
