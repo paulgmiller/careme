@@ -91,5 +91,7 @@ func (p staplesProvider) FetchWines(_ context.Context, id string, _ []string) ([
 	if !p.IsID(id) {
 		return nil, fmt.Errorf("invalid Smith Brothers Farms location ID %q", id)
 	}
-	return nil, fmt.Errorf("wine lookup is not supported for location %q", id)
+	// This catalog has no wine candidates. An empty result completes the optional
+	// wine selection without turning every saved recipe into a provider failure.
+	return nil, nil
 }
