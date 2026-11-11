@@ -15,8 +15,11 @@ import (
 	"careme/internal/parallelism"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/fullcircle"
 	"careme/internal/providers/heb"
+	"careme/internal/providers/imperfectfoods"
 	"careme/internal/providers/kroger"
+	"careme/internal/providers/localyokels"
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"
 	"careme/internal/providers/smithbrothersfarms"
@@ -67,6 +70,20 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 		func(context.Context) (locations.LocationBackend, error) {
 			return farmersmarket.NewContainerLocationBackend()
 		},
+	}
+	// TODO: Replace this temporary production gate with provider configuration.
+	if cfg.ResolvedPublicOrigin() != "https://careme.cooking" {
+		factories = append([]locationBackendFactory{
+			func(context.Context) (locations.LocationBackend, error) {
+				return imperfectfoods.NewLocationBackend(), nil
+			},
+			func(context.Context) (locations.LocationBackend, error) {
+				return localyokels.NewLocationBackend(), nil
+			},
+			func(context.Context) (locations.LocationBackend, error) {
+				return fullcircle.NewLocationBackend(), nil
+			},
+		}, factories...)
 	}
 	return initializeLocationBackends(factories, locationInitializationTimeout)
 }

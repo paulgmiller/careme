@@ -1,5 +1,44 @@
 # Cache Layout
 
+## GitHub Actions Go caches
+
+Both workflows use `.github/actions/setup-go` with `setup-go`'s built-in cache
+disabled. Each job has two independent caches, using the prefix
+`go-v2-<OS>-<runner image OS>-<architecture>-<resolved Go version>-<job ID>-<dependency hash>`.
+The dependency hash covers `go.mod`, `go.sum`, `tools/tool.mod`, and `tools/tool.sum`.
+
+- `<prefix>-modules` stores `go env GOMODCACHE`. Each job downloads and saves
+  only its own required modules, so unrelated jobs cannot win a shared cache key
+  with an incomplete dependency set. Manifest changes create a new entry.
+- `<prefix>-build-<commit SHA>` stores `go env GOCACHE`, including compiled tools,
+  packages, and successful test results. New commits restore the latest entry
+  matching `<prefix>-build-`, then save updated results after the job succeeds.
+  Exact hits reuse the existing entry; failed or cancelled jobs do not save.
+
+GitHub's branch scoping applies: default-branch entries can seed PR jobs, while
+PR entries are scoped to that PR's merge ref. All checks still run on cache hits;
+Go decides whether compiled packages and test results can be reused. The `go-v2`
+namespace bypasses the older shared `setup-go-*` snapshots; those expire normally.
+No warm-up job or dependency-based check filtering is required.
+
+To verify reuse, first let a PR run finish successfully and populate both caches.
+Rerun the same workflow: both cache steps should report exact hits, with no new
+Go module downloads. Then push a documentation-only commit to the same PR:
+modules should still hit exactly, while builds restore the previous commit's
+snapshot through the prefix and save a new snapshot after success. Compare the
+check step and total job times, including cache restore/save overhead. Go may
+still rerun tests whose tracked file or environment inputs differ.
+
+## Application caches
+
+Imperfect Foods uses the explicit demo location `imperfectfoods_demo` and the
+daily 9 AM store-day boundary. Its signature is
+`imperfectfoods-snapshot-v1/<SHA-256 of embedded snapshot.json>`, so replacing the
+static product catalog invalidates ingredient and recipe hashes. Catalogs use
+the existing `ingredients/` prefix; no credentials, raw API responses, or new
+cache containers are needed. Wine candidates retain the existing
+location/date/style wine cache policy.
+
 MNFoodClub, HEB, and Whole Foods keep their existing signature schemes for size
 mapping changes. Size fields may be empty in older cached catalogs or when the
 source does not provide a size; cached catalogs gain size data when fetched again.
@@ -189,6 +228,7 @@ Compatibility implications:
 - MNFoodClub delivery searches return three storefronts with stable IDs: `mnfoodclub_delivery` (MN Food Club), `tcfarm_delivery` (TC Farm), and `nelsongrassfarm_delivery` (Nelson Grass Farm), each with coordinates from the current search and the same delivery coverage. All three delivery IDs and other `mnfoodclub_*` IDs bypass reads and writes in the `location/` cache, including any previously cached search points. Lookup by ID resolves directly through the backend to its Blaine coordinates. Ingredient and recipe caches use each storefront’s own ID, Monday shopping-week date, and backend staple signature. The storefronts retain separate ingredient, recipe, and parameter cache entries. Renaming TC Farm and Nelson Grass Farm leaves these canonical hashes unchanged; wine candidate keys include the storefront ID and are fetched again under the new IDs.
 - Live `smithbrothersfarms_*` store IDs use the lowercase hexadecimal SHA-256 hash of the ordered produce, meat/poultry, dairy/eggs, yogurt, organic harvest-box, and standard harvest-box URLs followed by the parser version (`v1`), joined with newlines with no trailing newline. They use the existing `ingredients/` layout with the store-local shopping date anchored to Monday after applying the 9 AM boundary, matching MN Food Club’s weekly policy. Ingredient and recipe hashes are shared throughout that shopping week; non-Monday daily hashes are no longer used for new requests, while existing shared hash links retain their saved lists. No new cache container or key prefix is added. Box contents are fetched live on a cache miss and replace whole-box products. Synthetic ingredient IDs use `smithbrothersfarms_<box-slug>_<SHA-256 of bullet text>`, keeping the two boxes distinct and IDs stable across list reordering. Each box ingredient includes its box name and a preassigned 10/10 produce-share grade, with no individual price or quantity.
 - Smith Brothers Farms searches use the stable `smithbrothersfarms_delivery` ID with the current search coordinates in either approximate delivery box. All `smithbrothersfarms_*` IDs bypass reads and writes in `location/`. Lookup by the stable ID resolves to the Kent headquarters coordinates. Ingredient and recipe caches use the stable ID and backend signature; seasonal contents refresh on the next uncached weekly fetch.
+- Full Circle's `fullcircle_delivery` catalog uses the existing `ingredients/` layout, with the store-local shopping date anchored to Monday after the 9 AM boundary. The signature is lowercase hexadecimal SHA-256 of `fullcircle-public-catalog-v2` followed by each ordered category URL and name (Dairy, Meat, Grains & Rice), then each temporary produce-box ingredient's product ID, description, and size, joined with newlines and no trailing newline. This invalidates catalog-only snapshots and automatically invalidates ingredient and recipe hashes when box contents or quantities change. No new cache prefix or container is added. Live product IDs use `fullcircle_<ProductListingId>`; the ten user-supplied box items use `fullcircle_produce_box_<lowercase_name_with_underscores>`, retain quantities in `Size`, have no individual prices, and carry preassigned 10/10 produce-share grades. Public sample CSA contents remain excluded; the temporary box is supplied by the user rather than fetched from an account.
 - Staple `ingredients/` cache keys derive from location ID, date, and a versioned backend staple signature (for example `kroger-staples-v1` or `wholefoods-staples-v1`), so Kroger and Whole Foods locations do not share staple caches and staple-definition changes can invalidate caches intentionally.
 - Recipe image cache keys are stable per recipe hash, so prompt or model changes do not orphan previously generated images.
 - Recipe records store `instructions` as a string array. Each string may contain the constrained Markdown supported by the instruction renderer: plain paragraphs and `- ` bullet lists.
@@ -245,6 +285,13 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - The same record is saved as `pending` before a cart write and overwritten with the result afterward. Repeated submissions reuse that result without retrying failed transfers. TODO: implement cache ETag reads and `IfMatch` updates to protect state transitions. Updates are currently unconditional, so racing submissions or OAuth callbacks may overwrite newer results or submit products twice. No separate submission or lifecycle subrecords are written.
 - Recipes asks a provider-owned view builder for the authenticated viewer’s saved handoff; it never reads provider cache keys or OAuth records directly. Its shopping-list form uses a native POST to the destination's [cart-transfer route](ordering.md). The provider handler redirects directly into OAuth when needed, redirects completed additions back to the shopping list, and returns HTTP errors when no outcome can be saved. The shopping list renders a cart link for completed or possibly applied writes, shows a failure label for failed transfers, retains its form for missing records, and fails on transfer-read errors. It has no browser transfer-status URL, polling, or connect-account control. The handler reads the single saved transfer. A failed final save leaves it pending; concurrent overwrites are not protected until ETag support is implemented.
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger uses the provider-specific transfer layout above.
+
+Kroger query changes (#927): the original search terms now accept all brands,
+with additional meat/seafood and dairy/eggs searches. The existing JSON
+staple-definition signature changes automatically, refreshing store catalogs
+and dependent recipe hashes with the updated frozen-product selection. The
+`ingredients/` prefix and `item-upc-v1/` marker stay unchanged, as do finalized
+shopping snapshots.
 
 Kroger selected item identity (#1045): store catalog signatures include
 `item-upc-v1/` before the staple definitions, refreshing staples and pantry
@@ -315,3 +362,17 @@ original POST response in `post_response`. Browser login atomically resolves
 pending transfers without changing the idempotent POST result. Older applied
 rows with no `post_response` use their original `response`. These records
 survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
+
+- Local Yokels uses the exact store ID `localfoodmarektplace_localyokels` and the daily 9 AM
+  store-day boundary. Renaming the location from `localyokels_market` changes
+  location, ingredient, and recipe cache identities; previous snapshots are not
+  reused for the new ID. Its signature is
+  `https://localyokels.localfoodmarketplace.com/all-products/v3`, covering the host,
+  full-catalog policy, and parser version. This bypasses earlier category-filtered
+  snapshots. The complete available catalog is graded and cached using the
+  existing `ingredients/` prefix; no cache container is added. Product IDs retain
+  the storefront's `uniqueId` (product ID plus producer GUID), and selected
+  variant IDs retain the purchase unit's numeric `puId`.
+  Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
+  location/date/style wine cache keys under `ingredients/`; staples remain
+  unfiltered.

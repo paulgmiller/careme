@@ -11,7 +11,7 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 )
 
-const defaultWineModel = gpt6Luna
+const defaultWineModel = openai.ChatModelGPT6Luna
 
 type WineSelection struct {
 	Wines      []Ingredient `json:"wines"`
