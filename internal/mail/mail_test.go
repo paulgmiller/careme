@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -280,7 +281,7 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 		ID:            "user-1",
 		Email:         []string{"u1@example.com"},
 		FavoriteStore: "123",
-	}, recipes.DefaultParams(location, time.Now()))
+	}, recipes.DefaultParams(location, time.Now()), SendOptions{})
 	if err == nil {
 		t.Fatal("expected empty shopping list error")
 	}
@@ -306,7 +307,7 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 
 	err := m.deliverEmail(context.Background(), utypes.User{
 		ID: "user-1",
-	}, recipes.DefaultParams(location, time.Now()))
+	}, recipes.DefaultParams(location, time.Now()), SendOptions{})
 	if !errors.Is(err, generationErr) {
 		t.Fatalf("expected generation error, got %v", err)
 	}
@@ -568,7 +569,7 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 	}
 	configureFakeMailImages(m)
 
-	err := m.ForceSendToEmail(context.Background(), "Paul <u1@example.com>")
+	err := m.ForceSendToEmail(context.Background(), "Paul <u1@example.com>", SendOptions{})
 	if err != nil {
 		t.Fatalf("ForceSendToEmail() error = %v", err)
 	}
@@ -639,7 +640,7 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 				Title: "salad",
 			},
 		},
-	}, recipes.DefaultParams(location, time.Now()))
+	}, recipes.DefaultParams(location, time.Now()), SendOptions{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
 	assert.Contains(t, g.params.Directive, "Always meat")
@@ -671,6 +672,50 @@ func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
 				require.NotNil(t, client.last)
 				assert.Contains(t, c.data, sentMailKey("user-1", p.Hash()))
 			})
+		})
+	}
+}
+
+func TestPlainTextDeliveryPreservesContentAndSkipsImages(t *testing.T) {
+	for _, plainTextOnly := range []bool{false, true} {
+		t.Run(fmt.Sprintf("plain-text=%t", plainTextOnly), func(t *testing.T) {
+			fc := newFakeMailCache(t)
+			location := testMailLocation()
+			client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+			imageErr := errors.New("images unavailable")
+			m := &mailer{
+				cache:              fc,
+				client:             client,
+				locServer:          &fakeMailLocServer{location: location},
+				userStorage:        &fakeMailUserStore{user: &utypes.User{ID: "user-1", FavoriteStore: location.ID, Email: []string{"chef@example.com", "household@example.com"}}},
+				publicOrigin:       "https://test.careme.cooking",
+				wait:               func() {},
+				unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+			}
+			configureFakeMailImages(m)
+			m.imageGenerator = fakeMailImageGenerator{err: imageErr}
+			err := m.ForceSendToEmail(t.Context(), "chef@example.com", SendOptions{PlainTextOnly: plainTextOnly})
+			if !plainTextOnly {
+				require.ErrorIs(t, err, imageErr)
+				assert.Nil(t, client.last)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, client.last)
+			require.Len(t, client.last.Content, 1)
+			assert.Equal(t, "text/plain", client.last.Content[0].Type)
+			assert.Contains(t, client.last.Content[0].Value, "Test Recipe")
+			assert.Contains(t, client.last.Content[0].Value, "https://test.careme.cooking/recipes?h=")
+			assert.Contains(t, client.last.Content[0].Value, "Unsubscribe from these emails: https://test.careme.cooking/user/unsubscribe?")
+			assert.Equal(t, "List-Unsubscribe=One-Click", client.last.Headers["List-Unsubscribe-Post"])
+			assert.NotEmpty(t, client.last.Headers["List-Unsubscribe"])
+			assert.Equal(t, "Careme", client.last.From.Name)
+			require.Len(t, client.last.Personalizations, 1)
+			require.Len(t, client.last.Personalizations[0].To, 1)
+			assert.Equal(t, "chef@example.com", client.last.Personalizations[0].To[0].Address)
+			for key := range fc.data {
+				assert.False(t, strings.HasPrefix(key, mailSentPrefix))
+			}
 		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 
 func main() {
 	to := flag.String("to", "", "Careme user email that should receive today's recipes")
+	plainText := flag.Bool("plain-text", false, "Send only the text/plain body for a placement test")
 	flag.Parse()
 
 	if *to == "" {
@@ -32,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := sender.ForceSendToEmail(context.Background(), *to); err != nil {
+	if err := sender.ForceSendToEmail(context.Background(), *to, caremail.SendOptions{PlainTextOnly: *plainText}); err != nil {
 		log.Fatal(err)
 	}
 

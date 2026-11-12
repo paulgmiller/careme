@@ -215,7 +215,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		return
 	}
 
-	if err := m.deliverEmail(ctx, user, p); err != nil {
+	if err := m.deliverEmail(ctx, user, p, SendOptions{}); err != nil {
 		slog.ErrorContext(ctx, "failed to send user email", "user", user.ID, "error", err)
 		return
 	}
@@ -224,10 +224,15 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 	}
 }
 
+// SendOptions controls presentation for an explicit test delivery.
+type SendOptions struct {
+	PlainTextOnly bool
+}
+
 // ForceSendToEmail sends today's recipe email to an existing Careme user,
 // regardless of their opt-in, shopping day, or sent-mail claim. It targets only
 // the requested address and does not record a sent-mail claim.
-func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
+func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string, options SendOptions) error {
 	defer m.wait()
 	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
 	defer cancel()
@@ -247,7 +252,7 @@ func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	if err != nil {
 		return err
 	}
-	return m.deliverEmail(ctx, forcedUser, p)
+	return m.deliverEmail(ctx, forcedUser, p, options)
 }
 
 func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.GeneratorParams, error) {
@@ -270,7 +275,7 @@ func (m *mailer) emailParams(ctx context.Context, user utypes.User) (*recipes.Ge
 	return recipes.DefaultParams(l, date), nil
 }
 
-func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams) error {
+func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.GeneratorParams, sendOptions SendOptions) error {
 	ctx, span := otel.Tracer("careme/mail").Start(ctx, "send_email")
 	defer span.End()
 	ctx = logsetup.WithSessionID(ctx, "mail")
@@ -316,10 +321,6 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		return fmt.Errorf("shopping list %q contains no recipes", paramsHash)
 	}
 
-	if err := m.prepareRecipeImages(ctx, shoppingList.Recipes); err != nil {
-		return fmt.Errorf("prepare recipe images: %w", err)
-	}
-
 	var buf bytes.Buffer
 	unsubscribeParams := url.Values{
 		"user":  []string{user.ID},
@@ -327,8 +328,13 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
 	options := recipes.MailOptions{UnsubscribeURL: unsubscribeURL, SavedRecipes: user.LastRecipes}
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, options, &buf); err != nil {
-		return fmt.Errorf("format recipe email: %w", err)
+	if !sendOptions.PlainTextOnly {
+		if err := m.prepareRecipeImages(ctx, shoppingList.Recipes); err != nil {
+			return fmt.Errorf("prepare recipe images: %w", err)
+		}
+		if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, options, &buf); err != nil {
+			return fmt.Errorf("format recipe email: %w", err)
+		}
 	}
 
 	from := mail.NewEmail("Careme", "chef@careme.cooking")
