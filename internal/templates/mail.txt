@@ -13,8 +13,7 @@ Open your meal plan and shopping list:
 How did your saved recipes turn out? If you cooked one this past week, open it and choose “I cooked it!” to leave a rating:
 {{range .RecentRecipes}}- {{.Title}}: {{$.Domain}}/recipe/{{.Hash}}
 {{end}}{{end}}
-Is there an ingredient you’d like to cook more of? Add it to your cooking preferences for your next meal plan:
-{{.Domain}}/user#directive
+What ingredient would you like to cook next week? Hit reply and tell me.
 
 Happy cooking,
 Careme

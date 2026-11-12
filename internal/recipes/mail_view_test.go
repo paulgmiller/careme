@@ -59,7 +59,7 @@ func TestMailPromptsForRecentlySavedRecipes(t *testing.T) {
 				var buf bytes.Buffer
 				require.NoError(t, format.render(p, list, "https://careme.cooking", options, &buf))
 				body := buf.String()
-				for _, want := range []string{"Your Careme meal plan", "November 12, 2026", "My Store", "Test Recipe", "A simple quail recipe", "35 min", "$21", "540 cal", "https://careme.cooking/recipe/" + list.Recipes[0].ComputeHash(), "https://careme.cooking/recipes?h=" + p.Hash(), "https://careme.cooking/user#directive", "Unsubscribe"} {
+				for _, want := range []string{"Your Careme meal plan", "November 12, 2026", "My Store", "Test Recipe", "A simple quail recipe", "35 min", "$21", "540 cal", "https://careme.cooking/recipe/" + list.Recipes[0].ComputeHash(), "https://careme.cooking/recipes?h=" + p.Hash(), "What ingredient would you like to cook next week? Hit reply and tell me.", "Unsubscribe"} {
 					assert.Contains(t, body, want)
 				}
 				if hasSaved {
