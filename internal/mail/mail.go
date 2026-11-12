@@ -14,9 +14,7 @@ import (
 	netmail "net/mail"
 	"net/url"
 	"os"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -328,18 +326,21 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		"token": []string{m.unsubscribeFactory.UnsubscribeToken(user.ID)},
 	}.Encode()
 	unsubscribeURL := m.publicOrigin + "/user/unsubscribe?" + unsubscribeParams
-	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, unsubscribeURL, &buf); err != nil {
+	options := recipes.MailOptions{UnsubscribeURL: unsubscribeURL, SavedRecipes: user.LastRecipes}
+	if err := recipes.FormatMail(p, *shoppingList, m.publicOrigin, options, &buf); err != nil {
 		return fmt.Errorf("format recipe email: %w", err)
 	}
 
-	from := mail.NewEmail("Chef", "chef@careme.cooking")
-	subject := recipeEmailSubject(*shoppingList)
+	from := mail.NewEmail("Careme", "chef@careme.cooking")
+	subject := recipeEmailSubject(p.Date)
 
-	plainTextContent := "Check out your new recipes at " + m.publicOrigin + "/recipes?h=" + paramsHash +
-		"\n\n Unsubscribe from these emails: " + unsubscribeURL
+	var plainText bytes.Buffer
+	if err := recipes.FormatMailText(p, *shoppingList, m.publicOrigin, options, &plainText); err != nil {
+		return fmt.Errorf("format plain-text recipe email: %w", err)
+	}
 
 	to := mail.NewEmail(user.Email[0], user.Email[0])
-	message := mail.NewSingleEmail(from, subject, to, plainTextContent, buf.String())
+	message := mail.NewSingleEmail(from, subject, to, plainText.String(), buf.String())
 	message.SetHeader("List-Unsubscribe", "<"+unsubscribeURL+">")
 	message.SetHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 	for _, e := range user.Email[1:] {
@@ -412,22 +413,7 @@ func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error
 	return nil
 }
 
-// recipeEmailSubject formats a subject for a validated, non-empty shopping list.
-func recipeEmailSubject(shoppingList ai.ShoppingList) string {
-	const maxSubjectRunes = 60
-	title := strings.TrimSpace(shoppingList.Recipes[0].Title)
-	if title == "" {
-		title = "Your recipes"
-	}
-	suffix := ""
-	if remaining := len(shoppingList.Recipes) - 1; remaining > 0 {
-		suffix = fmt.Sprintf(" +%d", remaining)
-	}
-	available := maxSubjectRunes - utf8.RuneCountInString(suffix)
-	if utf8.RuneCountInString(title) > available {
-		titleRunes := []rune(title)
-		title = string(titleRunes[:available-1]) + "…"
-	}
-
-	return title + suffix
+// recipeEmailSubject uses the recipient's store-local meal-plan date.
+func recipeEmailSubject(date time.Time) string {
+	return "Your Careme meal plan for " + date.Format("January 2, 2006")
 }
