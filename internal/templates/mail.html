@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>This Week's Careme Recipes</title>
+  <title>Your Careme meal plan</title>
 </head>
 <body style="margin:0; padding:0; background-color:{{.Style.Colors.C50}}; -webkit-text-size-adjust:100%; font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827;">
   <main style="padding:40px 16px;">
@@ -11,7 +11,7 @@
       <div style="border-radius:16px; border:1px solid {{.Style.Colors.C100}}; background-color:rgba(255,255,255,0.9); box-shadow:0 10px 25px rgba(15,23,42,0.08);">
         <div style="border-bottom:1px solid {{.Style.Colors.C100}}; padding:32px 32px 24px 32px;">
           <h1 style="margin:0; font-size:32px; line-height:1.1; font-weight:800; letter-spacing:-0.02em; color:{{.Style.Colors.C700}};">
-            <a href="{{.Domain}}/recipes?h={{.Hash}}" style="text-decoration:none; color:{{.Style.Colors.C700}};"> This Week's Careme Recipes</a>
+            <a href="{{.Domain}}/recipes?h={{.Hash}}" style="text-decoration:none; color:{{.Style.Colors.C700}};"> Your Careme meal plan</a>
           </h1>
           <p style="margin:8px 0 0 0; font-size:14px; color:#4b5563;">
               Location:
@@ -20,12 +20,14 @@
           </p>
           {{if .Date}}
           <p style="margin:4px 0 0 0; font-size:12px; color:#6b7280;">
-            Week of <span style="font-weight:600; color:{{.Style.Colors.C700}};">{{.Date}}</span>
+            For <span style="font-weight:600; color:{{.Style.Colors.C700}};">{{.Date}}</span>
           </p>
           {{end}}
         </div>
 
         <div style="padding:24px 32px 32px 32px;">
+          <p style="margin:0 0 16px; line-height:1.6;">Hi chef, your meal plan for {{.Location.Name}} is ready. Here’s what’s cooking:</p>
+          <p style="margin:0 0 16px; line-height:1.6;"><a href="{{.Domain}}/recipes?h={{.Hash}}" style="color:{{.Style.Colors.C700}};">Open your meal plan and shopping list</a>.</p>
           <div style="margin-top:16px;">
             {{range .Recipes}}
             <article style="margin-bottom:24px; border-radius:16px; border:1px solid {{$.Style.Colors.C100}}; background-color:rgba(255,255,255,0.95); padding:24px; box-shadow:0 6px 16px rgba(15,23,42,0.05);">
@@ -50,6 +52,16 @@
             </article>
             {{end}}
           </div>
+          {{if .RecentRecipes}}
+          <p style="margin:16px 0 8px; line-height:1.6;">How did your saved recipes turn out? If you cooked one this past week, open it and choose “I cooked it!” to leave a rating:</p>
+          <ul style="padding-left:20px; line-height:1.6;">
+            {{range .RecentRecipes}}
+            <li><a href="{{$.Domain}}/recipe/{{.Hash}}" style="color:{{$.Style.Colors.C700}};">{{.Title}}</a></li>
+            {{end}}
+          </ul>
+          {{end}}
+          <p style="margin:16px 0 0; line-height:1.6;">What ingredient would you like to cook next week? Hit reply and tell me.</p>
+          <p style="margin:16px 0 0; line-height:1.6;">Happy cooking,<br />Careme</p>
         </div>
       </div>
 

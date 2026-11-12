@@ -1,0 +1,22 @@
+Your Careme meal plan for {{.Date}}
+
+Hi chef, your meal plan for {{.Location.Name}} is ready. Here’s what’s cooking:
+{{range .Recipes}}
+{{.Title}}
+{{.Description}}
+{{.PropertyDisplay.Time}} · Serves {{.PropertyDisplay.Servings}} · {{.PropertyDisplay.Cost}} · {{.PropertyDisplay.Calories}}
+{{$.Domain}}/recipe/{{.Hash}}
+{{end}}
+Open your meal plan and shopping list:
+{{.Domain}}/recipes?h={{.Hash}}
+{{if .RecentRecipes}}
+How did your saved recipes turn out? If you cooked one this past week, open it and choose “I cooked it!” to leave a rating:
+{{range .RecentRecipes}}- {{.Title}}: {{$.Domain}}/recipe/{{.Hash}}
+{{end}}{{end}}
+What ingredient would you like to cook next week? Hit reply and tell me.
+
+Happy cooking,
+Careme
+{{if .UnsubscribeURL}}
+Unsubscribe from these emails: {{.UnsubscribeURL}}
+{{end}}

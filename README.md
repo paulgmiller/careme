@@ -159,7 +159,7 @@ is configured yet; add `--max-debt <limit>` to its diff command to enforce one.
 Send today's real recipe email through the production sender to test Gmail placement:
 
 ```sh
-go run ./cmd/mailtest -to you@gmail.com
+PUBLIC_ORIGIN=https://careme.cooking go run ./cmd/mailtest -to you@gmail.com
 ```
 
 This requires `SENDGRID_API_KEY` and an existing Careme profile for the address with a favorite store. It sends only to the requested address, ignoring the profile's opt-in, shopping day, and previous-send record without changing the next scheduled send.
