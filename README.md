@@ -311,10 +311,15 @@ The anonymous catalog does not confirm stock or pricing for a particular deliver
 No credentials or new environment configuration are required. Nearby discovery
 uses an approximate Seattle metro box including Bellevue and Issaquah.
 
-The provider also appends a temporary, user-supplied produce box: 2 Valencia
-oranges, 1 lb Murcott mandarins, 1 Hass avocado, 1 bunch broccoli, 1 head red leaf
-lettuce, 1 bunch red chard, 1 bunch red radishes, 1 fennel bulb with fronds,
-1 lb yellow potatoes, and 1 red onion. These entries retain the supplied quantities,
+The Full Circle cache rolls over weekly on Wednesday at 9 AM store-local time.
+The provider also appends a temporary, user-supplied produce box for the
+November 17, 2026 delivery: 0.5 lb crimini mushrooms, 1 package maitake mushrooms
+(4 oz), 1 package chef's sampler mushrooms (8 oz), 1 bunch King Richard leeks,
+1 package small dill, 1 bunch rainbow chard, 1 lb gold topped beets, 1 bunch baby
+broccoli, 1 spaghetti winter squash, 2 Ambrosia apples, 1 celery, 1 bunch flat leaf
+parsley, 1 bunch green kale, 2 kiwi, 1 red grapefruit, 1 red onion, 1 lb red
+potatoes, and 1 lb red topped beets. Market specials are not included in the box.
+These entries retain the supplied quantities,
 have no individual prices, and carry the same preassigned 10/10 grade as other
 providers' produce shares. This fixed list is not live account inventory; update
 `internal/providers/fullcircle/produce_box.go` when the contents change. Changes

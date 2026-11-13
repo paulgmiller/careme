@@ -29,7 +29,7 @@ func (identityProvider) IsID(id string) bool { return id == locationID }
 
 func (identityProvider) HashForStore(id string, date time.Time) hash.Hash {
 	date = cachekey.StoreDay(date)
-	date = date.AddDate(0, 0, -int((date.Weekday()-time.Monday+7)%7))
+	date = date.AddDate(0, 0, -int((date.Weekday()-time.Wednesday+7)%7))
 	parts := []string{"fullcircle-public-catalog-v2"}
 	for _, category := range stapleCategories {
 		parts = append(parts, baseURL+category.path, category.name)

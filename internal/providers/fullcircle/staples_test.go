@@ -44,7 +44,7 @@ func TestCatalogRouting(t *testing.T) {
 	provider := recipes.NewStaplesProvider([]recipes.StaplesBackend{backend})
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	require.Len(t, items, 16)
+	require.Len(t, items, 24)
 	assert.Equal(t, []string{"dairy", "meat", "grains"}, requested)
 	assert.Equal(t, ai.InputIngredient{ProductID: "fullcircle_14798", Description: "Purple Moon Cheddar Cheese", Brand: "Fiscalini Cheese Company", Size: "6oz", PriceRegular: floatPointer(7.29), Categories: []string{"Dairy"}}, items[0])
 	assert.Equal(t, "Organic Canned Chicken Breast", items[2].Description)
@@ -54,8 +54,13 @@ func TestCatalogRouting(t *testing.T) {
 	require.NoError(t, ai.InputIngredientsToTSV(items, &rendered))
 	assert.Contains(t, rendered.String(), "Purple Moon Cheddar Cheese")
 	assert.Contains(t, rendered.String(), "White Basmati Rice")
-	assert.Contains(t, rendered.String(), "Produce box Valencia Oranges")
-	assert.Contains(t, rendered.String(), "Produce box Fennel Bulb with Fronds")
+	assert.Contains(t, rendered.String(), "Produce box Crimini Mushroom")
+	assert.Contains(t, rendered.String(), "Produce box King Richard Leek")
+	assert.Contains(t, rendered.String(), "Produce box Maitake Mushroom")
+	assert.Contains(t, rendered.String(), "1 package (4 oz)")
+	assert.Contains(t, rendered.String(), "0.5 lb")
+	assert.NotContains(t, rendered.String(), "Produce box Orange Sweet Potatoes")
+	assert.NotContains(t, rendered.String(), "Produce box Valencia Oranges")
 	assert.NotContains(t, rendered.String(), "Traditional CSA")
 }
 
@@ -65,7 +70,7 @@ func TestPricesSoldOutAndDuplicateCategories(t *testing.T) {
 	provider := fullcircle.NewStaplesProvider(fullcircle.NewClient(&http.Client{Transport: transport(func(*http.Request) (*http.Response, error) { return response(200, productJSON), nil })}))
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	require.Len(t, items, 11)
+	require.Len(t, items, 19)
 	assert.Equal(t, ai.InputIngredient{ProductID: "fullcircle_123", Description: "Milk & Cream", Brand: "Farmer's Dairy", Size: "16oz", PriceRegular: floatPointer(6), PriceSale: floatPointer(4.5), Categories: []string{"Dairy", "Meat", "Grains & Rice"}}, items[0])
 }
 
@@ -120,7 +125,7 @@ func TestRetryRecoversAndInvalidIDsDoNotFetch(t *testing.T) {
 	assert.Zero(t, attempts)
 	items, err := provider.FetchStaples(t.Context(), "fullcircle_delivery")
 	require.NoError(t, err)
-	assert.Len(t, items, 11)
+	assert.Len(t, items, 19)
 	assert.Equal(t, 4, attempts)
 	_, err = provider.FetchWines(t.Context(), "fullcircle_delivery", []string{"red"})
 	require.ErrorContains(t, err, "not supported")
@@ -134,14 +139,14 @@ func TestRetryRecoversAndInvalidIDsDoNotFetch(t *testing.T) {
 
 func TestWeeklyCacheIdentity(t *testing.T) {
 	provider := fullcircle.NewIdentityProvider()
-	monday := time.Date(2026, 11, 2, 9, 0, 0, 0, time.FixedZone("Pacific", -8*60*60))
+	wednesday := time.Date(2026, 11, 4, 9, 0, 0, 0, time.FixedZone("Pacific", -8*60*60))
 	hash := func(date time.Time) []byte { return provider.HashForStore("fullcircle_delivery", date).Sum(nil) }
 	for day := range 7 {
-		assert.Equal(t, hash(monday), hash(monday.AddDate(0, 0, day)))
+		assert.Equal(t, hash(wednesday), hash(wednesday.AddDate(0, 0, day)))
 	}
-	assert.NotEqual(t, hash(monday), hash(monday.AddDate(0, 0, 7)))
-	assert.NotEqual(t, hash(monday), hash(monday.Add(-time.Minute)))
-	assert.NotEqual(t, hash(monday), provider.HashForStore("smithbrothersfarms_delivery", monday).Sum(nil))
+	assert.NotEqual(t, hash(wednesday), hash(wednesday.AddDate(0, 0, 7)))
+	assert.NotEqual(t, hash(wednesday), hash(wednesday.Add(-time.Minute)))
+	assert.NotEqual(t, hash(wednesday), provider.HashForStore("smithbrothersfarms_delivery", wednesday).Sum(nil))
 }
 
 func TestLiveCatalog(t *testing.T) {

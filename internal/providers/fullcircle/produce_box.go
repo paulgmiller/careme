@@ -7,19 +7,28 @@ import (
 )
 
 // produceBoxIngredients is the temporary box supplied by the user, not live
-// account inventory. Replace this list when the box contents change.
+// account inventory. Contents are for the November 17, 2026 delivery.
+// Replace this list when the box contents change.
 func produceBoxIngredients() []ai.InputIngredient {
 	items := []struct{ name, size string }{
-		{"Valencia Oranges", "2"},
-		{"Murcott Mandarins", "1 lb"},
-		{"Hass Avocado", "1"},
-		{"Broccoli", "1 bunch"},
-		{"Red Leaf Lettuce", "1 head"},
-		{"Red Chard", "1 bunch"},
-		{"Red Radishes", "1 bunch"},
-		{"Fennel Bulb with Fronds", "1"},
-		{"Yellow Potatoes", "1 lb"},
+		{"Crimini Mushroom", "0.5 lb"},
+		{"Maitake Mushroom", "1 package (4 oz)"},
+		{"Chef's Sampler Mushroom", "1 package (8 oz)"},
+		{"King Richard Leek", "1 bunch"},
+		{"Dill, Small", "1 package"},
+		{"Rainbow Chard", "1 bunch"},
+		{"Gold Topped Beets", "1 lb"},
+		{"Baby Broccoli", "1 bunch"},
+		{"Spaghetti Winter Squash", "1"},
+		{"Ambrosia Apple", "2"},
+		{"Celery", "1"},
+		{"Flat Leaf Parsley", "1 bunch"},
+		{"Green Kale", "1 bunch"},
+		{"Kiwi", "2"},
+		{"Red Grapefruit", "1"},
 		{"Red Onion", "1"},
+		{"Red Potatoes", "1 lb"},
+		{"Red Topped Beets", "1 lb"},
 	}
 	ingredients := make([]ai.InputIngredient, 0, len(items))
 	for _, item := range items {

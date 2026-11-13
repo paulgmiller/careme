@@ -15,18 +15,26 @@ import (
 
 func TestProduceBoxIngredients(t *testing.T) {
 	items := produceBoxIngredients()
-	require.Len(t, items, 10)
+	require.Len(t, items, 18)
 	want := []struct{ name, size string }{
-		{"Valencia Oranges", "2"},
-		{"Murcott Mandarins", "1 lb"},
-		{"Hass Avocado", "1"},
-		{"Broccoli", "1 bunch"},
-		{"Red Leaf Lettuce", "1 head"},
-		{"Red Chard", "1 bunch"},
-		{"Red Radishes", "1 bunch"},
-		{"Fennel Bulb with Fronds", "1"},
-		{"Yellow Potatoes", "1 lb"},
+		{"Crimini Mushroom", "0.5 lb"},
+		{"Maitake Mushroom", "1 package (4 oz)"},
+		{"Chef's Sampler Mushroom", "1 package (8 oz)"},
+		{"King Richard Leek", "1 bunch"},
+		{"Dill, Small", "1 package"},
+		{"Rainbow Chard", "1 bunch"},
+		{"Gold Topped Beets", "1 lb"},
+		{"Baby Broccoli", "1 bunch"},
+		{"Spaghetti Winter Squash", "1"},
+		{"Ambrosia Apple", "2"},
+		{"Celery", "1"},
+		{"Flat Leaf Parsley", "1 bunch"},
+		{"Green Kale", "1 bunch"},
+		{"Kiwi", "2"},
+		{"Red Grapefruit", "1"},
 		{"Red Onion", "1"},
+		{"Red Potatoes", "1 lb"},
+		{"Red Topped Beets", "1 lb"},
 	}
 	ids := map[string]bool{}
 	for i, item := range items {
