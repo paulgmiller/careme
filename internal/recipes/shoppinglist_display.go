@@ -55,7 +55,8 @@ type shoppingPurchaseGroup struct {
 	Items []shoppingPurchaseItem
 }
 
-// Regroup on display so saved snapshots also separate ingredients without purchase quantities.
+// Regroup saved snapshots too: an unknown purchase quantity does not make a
+// catalog product a pantry item.
 func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shoppingPurchaseGroup {
 	if groups == nil {
 		return nil
@@ -65,7 +66,7 @@ func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shopping
 	for _, group := range groups {
 		var toBuy []shoppingPurchaseItem
 		for _, item := range group.Items {
-			if item.Buy == nil {
+			if item.Buy == nil && item.ProductID == "" {
 				withoutBuy = append(withoutBuy, item)
 			} else {
 				toBuy = append(toBuy, item)
@@ -73,7 +74,7 @@ func shoppingPurchaseGroupsForDisplay(groups []shoppingPurchaseGroup) []shopping
 		}
 		if len(toBuy) > 0 {
 			heading := group.Aisle
-			if heading == "" || heading == "Other items" {
+			if heading == "" || heading == "Other items" || heading == "Have at home" {
 				heading = "To buy"
 			}
 			result = append(result, shoppingPurchaseGroup{Aisle: heading, Items: toBuy})
