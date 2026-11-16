@@ -226,7 +226,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to regenerate recipes: %w", err)
 	}
@@ -280,7 +280,7 @@ func (c *client) generateRecipe(ctx context.Context, instructions []string, menu
 	if c.recipeReasoningEffort != "" {
 		params.Reasoning = responses.ReasoningParam{Effort: c.recipeReasoningEffort}
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate recipe from menu response: %w", err)
 	}
@@ -309,7 +309,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 		PromptCacheKey:     openai.String(previous.PromptCacheKey),
 		PromptCacheOptions: defaultCacheOptions(),
 	}
-	resp, err := c.oai.Responses.New(ctx, params)
+	resp, err := c.newResponse(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}

@@ -44,7 +44,7 @@ import (
 
 const (
 	mailSentPrefix       = "mail/sent/"
-	emailDeliveryTimeout = 10 * time.Minute
+	emailDeliveryTimeout = 70 * time.Minute
 )
 
 type mailSentClaim struct {

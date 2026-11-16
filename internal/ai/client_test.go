@@ -79,14 +79,12 @@ func TestFlexRetries(t *testing.T) {
 		retryAfter string
 		wantCalls  int
 		wantWait   time.Duration
-		wantError  bool
 	}{
 		{name: "capacity recovers", failures: 1, wantCalls: 2},
 		{name: "capacity recovers on last attempt", failures: 10, wantCalls: 11},
-		{name: "capacity remains unavailable", failures: 11, wantCalls: 11, wantError: true},
 		{name: "short retry after", failures: 1, retryAfter: "1", wantCalls: 2, wantWait: time.Second},
 		{name: "minute retry after", failures: 1, retryAfter: "60", wantCalls: 2, wantWait: time.Minute},
-		{name: "retry after exceeds cap", failures: 1, retryAfter: "120", wantCalls: 1, wantError: true},
+		{name: "long retry after", failures: 1, retryAfter: "120", wantCalls: 2, wantWait: 2 * time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -116,28 +114,19 @@ func TestFlexRetries(t *testing.T) {
 
 				start := time.Now()
 				recipe, err := c.GenerateRecipe(t.Context(), nil, ResponseRef{ID: "resp-menu"})
-				if tc.wantError {
-					require.ErrorContains(t, err, "failed to generate recipe")
-					var apiErr *openai.Error
-					require.ErrorAs(t, err, &apiErr)
-					assert.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
-					assert.Equal(t, "resource_unavailable", apiErr.Code)
-					assert.Nil(t, recipe)
-				} else {
-					require.NoError(t, err)
-					require.NotNil(t, recipe)
-					assert.Equal(t, "Tofu stir-fry", recipe.Title)
-				}
+				require.NoError(t, err)
+				require.NotNil(t, recipe)
+				assert.Equal(t, "Tofu stir-fry", recipe.Title)
 				assert.Equal(t, tc.wantCalls, calls)
 				if tc.retryAfter != "" {
 					assert.Equal(t, tc.wantWait, time.Since(start))
 				} else if tc.wantCalls == 2 {
-					assert.GreaterOrEqual(t, time.Since(start), 375*time.Millisecond)
-					assert.LessOrEqual(t, time.Since(start), 500*time.Millisecond)
+					assert.GreaterOrEqual(t, time.Since(start), 750*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), time.Second)
 				} else {
-					// 0.5, 1, 2, 4, 8, 16, 32, 60, 60, 60 seconds, with up to 25% jitter.
-					assert.GreaterOrEqual(t, time.Since(start), 182625*time.Millisecond)
-					assert.LessOrEqual(t, time.Since(start), 243500*time.Millisecond)
+					// 1, 2, 4, 8, 16, 32, 64, 128, 256, 300 seconds, with up to 25% jitter.
+					assert.GreaterOrEqual(t, time.Since(start), 608250*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), 811*time.Second)
 				}
 			})
 		})

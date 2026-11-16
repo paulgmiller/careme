@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"careme/internal/config"
 
@@ -31,6 +30,7 @@ type client struct {
 	imageModel            openai.ImageModel
 	wineModel             string
 	oai                   openai.Client
+	httpClient            *http.Client
 	promptRecorder        PromptRecorder
 }
 
@@ -62,10 +62,6 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
-	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
-		// Allow capacity to recover while keeping retries inside the job deadline.
-		opts = append(opts, option.WithMaxRetries(10), option.WithMaxRetryDelay(time.Minute))
-	}
 	opts = append(opts, option.WithMiddleware(logOpenAIRetry))
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
@@ -75,6 +71,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	return &client{
 		serviceTier:    cfg.ServiceTier,
 		oai:            aiClient,
+		httpClient:     httpClient,
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
