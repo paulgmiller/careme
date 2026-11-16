@@ -31,7 +31,8 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
-  - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
+  - Email and campaign recipe/menu generation requests use flex processing. Flex responses retry HTTP 429s for up to an hour, then log an error and retry on standard processing. A successful standard fallback completes the job successfully. Each email delivery and campaign location has a 70-minute budget covering generation and retries; cancellation still stops work. Interactive requests retain their existing processing tier.
+  - See [AI retry policy](docs/ai-retries.md) for how we configure the SDK's native retries and handle Standard fallback.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
 - `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.

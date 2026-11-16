@@ -77,7 +77,7 @@ func (c *client) MergeShoppingQuantities(ctx context.Context, ingredients []Ingr
 	text := scheme(c.shoppingSchema)
 	text.Format.OfJSONSchema.Name = "shopping_ingredients"
 	text.Format.OfJSONSchema.Strict = openai.Bool(true)
-	resp, err := c.oai.Responses.New(ctx, responses.ResponseNewParams{
+	resp, err := c.newResponse(ctx, responses.ResponseNewParams{
 		Model:        shoppingMergeModel,
 		Reasoning:    noReasoning(),
 		ServiceTier:  c.serviceTier,

@@ -110,7 +110,7 @@ func (s *service) RunOnce(ctx context.Context, now time.Time) error {
 }
 
 func (s *service) generateLocation(ctx context.Context, c campaign, now time.Time) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, ai.FlexJobTimeout)
 	defer cancel()
 	locationID := c.Location.ID
 	loc, err := s.locations.GetLocationByID(ctx, locationID)
