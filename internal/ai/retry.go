@@ -31,7 +31,6 @@ func (c *client) newResponse(ctx context.Context, params responses.ResponseNewPa
 	flexCtx, cancel := context.WithTimeout(ctx, flexRetryBudget)
 	defer cancel()
 
-	observer.deadline = started.Add(flexRetryBudget)
 	resp, err := c.oai.Responses.New(flexCtx, params,
 		option.WithMaxRetries(math.MaxInt),
 		option.WithMaxRetryDelay(flexRetryBudget),
@@ -43,4 +42,32 @@ func (c *client) newResponse(ctx context.Context, params responses.ResponseNewPa
 		"error", err, "model", params.Model, "attempts", observer.attempts, "elapsed", time.Since(started), "status", observer.lastStatus)
 	params.ServiceTier = responses.ResponseNewParamsServiceTierDefault
 	return c.newResponse(ctx, params)
+}
+
+// retryObserver belongs to one SDK call, including all of its retry attempts.
+type retryObserver struct {
+	attempts   int
+	lastStatus int
+}
+
+func (o *retryObserver) middleware(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, err
+	}
+	o.attempts++
+	resp, err := next(req)
+	o.lastStatus = 0
+	if resp != nil {
+		o.lastStatus = resp.StatusCode
+	}
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests &&
+		(resp.Header.Get("Retry-After") != "" || resp.Header.Get("Retry-After-Ms") != "") {
+		slog.InfoContext(req.Context(), "OpenAI returned retry instructions",
+			"source", "openai", "url", req.URL.String(), "attempt", o.attempts,
+			"status", resp.StatusCode, "retry_after", resp.Header.Get("Retry-After"), "retry_after_ms", resp.Header.Get("Retry-After-Ms"),
+			"x_should_retry", resp.Header.Get("X-Should-Retry"), "request_id", resp.Header.Get("X-Request-Id"))
+	} else if o.attempts > 1 {
+		slog.InfoContext(req.Context(), "Retried HTTP request", "source", "openai", "url", req.URL.String(), "attempt", o.attempts)
+	}
+	return resp, err
 }

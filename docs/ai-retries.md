@@ -1,6 +1,6 @@
 # AI retries and Standard fallback
 
-[`internal/ai/flex.go`](../internal/ai/flex.go) configures the OpenAI SDK's native
+[`internal/ai/retry.go`](../internal/ai/retry.go) configures the OpenAI SDK's native
 retries for Flex Responses API calls. Campaigns and mail select Flex.
 
 ## Retry settings
