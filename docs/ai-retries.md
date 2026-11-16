@@ -25,7 +25,7 @@ exponential backoff. With the pinned `openai-go/v3 v3.96.0`, this means:
 Retries log at INFO through `logOpenAIRetry`. Calls using other tiers, including
 Standard fallback, use the SDK's default retry settings.
 
-The same middleware logs failed responses with retry headers at WARN as
+The same middleware logs HTTP 429 responses with retry headers at INFO as
 `OpenAI returned retry instructions`. Fields include the raw `retry_after`
 (seconds or HTTP date), `retry_after_ms`, `status`, `attempt`, `x_should_retry`,
 and `request_id`. These logs appear even when a server-directed wait exceeds the
