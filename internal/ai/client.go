@@ -30,7 +30,6 @@ type client struct {
 	imageModel            openai.ImageModel
 	wineModel             string
 	oai                   openai.Client
-	httpClient            *http.Client
 	promptRecorder        PromptRecorder
 }
 
@@ -71,7 +70,6 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	return &client{
 		serviceTier:    cfg.ServiceTier,
 		oai:            aiClient,
-		httpClient:     httpClient,
 		recipeSchema:   recipe,
 		wineSchema:     wine,
 		menuSchema:     menu,
@@ -202,5 +200,16 @@ func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Respon
 	if attempt > 0 {
 		slog.InfoContext(req.Context(), "Retrying HTTP request", "source", "openai", "url", req.URL.String(), "attempt", attempt+1)
 	}
-	return next(req)
+	resp, err := next(req)
+	if resp != nil && resp.StatusCode >= http.StatusBadRequest {
+		retryAfter := resp.Header.Get("Retry-After")
+		retryAfterMs := resp.Header.Get("Retry-After-Ms")
+		if retryAfter != "" || retryAfterMs != "" {
+			slog.WarnContext(req.Context(), "OpenAI returned retry instructions",
+				"source", "openai", "url", req.URL.String(), "attempt", attempt+1,
+				"status", resp.StatusCode, "retry_after", retryAfter, "retry_after_ms", retryAfterMs,
+				"x_should_retry", resp.Header.Get("X-Should-Retry"), "request_id", resp.Header.Get("X-Request-Id"))
+		}
+	}
+	return resp, err
 }

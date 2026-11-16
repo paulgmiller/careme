@@ -26,7 +26,6 @@ func TestFlexFallback(t *testing.T) {
 	}{
 		{name: "exponential backoff"},
 		{name: "server requests an hour", retryAfter: "3600"},
-		{name: "server requests two hours", retryAfter: "7200"},
 		{name: "standard also fails", retryAfter: "3600", standardFails: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,14 +101,13 @@ func TestFlexDoesNotFallbackOnOtherFailures(t *testing.T) {
 					body, err := io.ReadAll(req.Body)
 					require.NoError(t, err)
 					assert.Contains(t, string(body), `"service_tier":"flex"`)
-					return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":{"message":"failed"}}`)), Request: req}, nil
+					return &http.Response{StatusCode: status, Header: http.Header{"Retry-After": {"3600"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"message":"failed"}}`)), Request: req}, nil
 				})}, &capturePromptRecorder{})
 				_, err := c.GenerateRecipe(t.Context(), nil, ResponseRef{ID: "resp-menu"})
 				require.Error(t, err)
-				if status == http.StatusBadRequest {
-					assert.Equal(t, 1, calls)
-				} else {
-					assert.Equal(t, 3, calls)
+				assert.Equal(t, 1, calls)
+				if status == http.StatusInternalServerError {
+					require.ErrorIs(t, err, context.DeadlineExceeded)
 				}
 			})
 		})
@@ -132,4 +130,55 @@ func TestFlexCancellationDoesNotFallback(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 		assert.Equal(t, 1, calls)
 	})
+}
+
+func TestFlexUsesNativeRetryPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		status      int
+		shouldRetry string
+		retryAfter  string
+		wantError   bool
+	}{
+		{name: "request timeout", status: http.StatusRequestTimeout},
+		{name: "conflict", status: http.StatusConflict},
+		{name: "not implemented", status: http.StatusNotImplemented},
+		{name: "server requests retry", status: http.StatusBadRequest, shouldRetry: "true"},
+		{name: "server refuses retry", status: http.StatusTooManyRequests, shouldRetry: "false", wantError: true},
+		{name: "server wait exceeds hour", status: http.StatusTooManyRequests, retryAfter: "7200", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				cfg := testAIConfig(config.DefaultRecipeModel)
+				cfg.ServiceTier = "flex"
+				calls := 0
+				start := time.Now()
+				c := NewClient(cfg, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls++
+					var body map[string]any
+					require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+					assert.Equal(t, "flex", body["service_tier"], "native retry decisions must not trigger early fallback")
+					if calls == 1 {
+						resp := flexUnavailableResponse(req)
+						resp.StatusCode = tc.status
+						resp.Header.Set("X-Should-Retry", tc.shouldRetry)
+						resp.Header.Set("Retry-After", tc.retryAfter)
+						return resp, nil
+					}
+					return menuPlanHTTPResponse(req, "resp-recipe", `{"title":"Tofu stir-fry"}`), nil
+				})}, &capturePromptRecorder{})
+				recipe, err := c.GenerateRecipe(t.Context(), nil, ResponseRef{ID: "resp-menu"})
+				if tc.wantError {
+					require.Error(t, err)
+					assert.Nil(t, recipe)
+					assert.Equal(t, 1, calls)
+					assert.Zero(t, time.Since(start))
+				} else {
+					require.NoError(t, err)
+					assert.Equal(t, "Tofu stir-fry", recipe.Title)
+					assert.Equal(t, 2, calls)
+				}
+			})
+		})
+	}
 }

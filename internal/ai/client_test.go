@@ -81,7 +81,7 @@ func TestFlexRetries(t *testing.T) {
 		wantWait   time.Duration
 	}{
 		{name: "capacity recovers", failures: 1, wantCalls: 2},
-		{name: "capacity recovers on last attempt", failures: 10, wantCalls: 11},
+		{name: "capacity recovers after ten retries", failures: 10, wantCalls: 11},
 		{name: "short retry after", failures: 1, retryAfter: "1", wantCalls: 2, wantWait: time.Second},
 		{name: "minute retry after", failures: 1, retryAfter: "60", wantCalls: 2, wantWait: time.Minute},
 		{name: "long retry after", failures: 1, retryAfter: "120", wantCalls: 2, wantWait: 2 * time.Minute},
@@ -121,12 +121,12 @@ func TestFlexRetries(t *testing.T) {
 				if tc.retryAfter != "" {
 					assert.Equal(t, tc.wantWait, time.Since(start))
 				} else if tc.wantCalls == 2 {
-					assert.GreaterOrEqual(t, time.Since(start), 750*time.Millisecond)
-					assert.LessOrEqual(t, time.Since(start), time.Second)
+					assert.GreaterOrEqual(t, time.Since(start), 375*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), 500*time.Millisecond)
 				} else {
-					// 1, 2, 4, 8, 16, 32, 64, 128, 256, 300 seconds, with up to 25% jitter.
-					assert.GreaterOrEqual(t, time.Since(start), 608250*time.Millisecond)
-					assert.LessOrEqual(t, time.Since(start), 811*time.Second)
+					// 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256 seconds, with up to 25% jitter.
+					assert.GreaterOrEqual(t, time.Since(start), 383625*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), 511500*time.Millisecond)
 				}
 			})
 		})

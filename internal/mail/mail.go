@@ -42,10 +42,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const (
-	mailSentPrefix       = "mail/sent/"
-	emailDeliveryTimeout = 70 * time.Minute
-)
+const mailSentPrefix = "mail/sent/"
 
 type mailSentClaim struct {
 	SentAt     time.Time `json:"sent_at"`
@@ -192,7 +189,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		slog.DebugContext(ctx, "user has no favorite store", "user", user.ID)
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, ai.FlexJobTimeout)
 	defer cancel()
 
 	p, err := m.emailParams(ctx, user)
@@ -231,7 +228,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 // the requested address and does not record a sent-mail claim.
 func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	defer m.wait()
-	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, ai.FlexJobTimeout)
 	defer cancel()
 
 	address, err := netmail.ParseAddress(recipient)
