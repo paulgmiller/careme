@@ -22,7 +22,8 @@ exponential backoff. With the pinned `openai-go/v3 v3.96.0`, this means:
 - A server-directed wait exceeding one hour stops retries immediately and returns
   the API error. It does not trigger Standard fallback.
 
-Retries log at INFO through `logOpenAIRetry`. Calls using other tiers, including
+One per-call `retryObserver` middleware tracks attempts and last status and logs
+each attempt at most once, at INFO. Calls using other tiers, including
 Standard fallback, use the SDK's default retry settings.
 
 The same middleware logs HTTP 429 responses with retry headers at INFO as

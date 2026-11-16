@@ -178,7 +178,7 @@ func TestStandardTierKeepsShortRetries(t *testing.T) {
 	for i, entry := range entries {
 		var fields map[string]any
 		require.NoError(t, json.Unmarshal([]byte(entry), &fields))
-		assert.Equal(t, "Retrying HTTP request", fields["msg"])
+		assert.Equal(t, "Retried HTTP request", fields["msg"])
 		assert.Equal(t, "openai", fields["source"])
 		assert.Equal(t, float64(i+2), fields["attempt"])
 	}
