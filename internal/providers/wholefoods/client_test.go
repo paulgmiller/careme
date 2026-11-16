@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,6 +18,10 @@ import (
 	"time"
 
 	"careme/internal/brightdata"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -237,7 +242,7 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 			}
 
 			pageSize := defaultCategoryLimit
-			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+			if offset == strconv.Itoa(defaultCategoryLimit*3) {
 				pageSize = 1
 			}
 
@@ -273,16 +278,109 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 	if got, want := attemptsByOffset[strconv.Itoa(defaultCategoryLimit*2)], 2; got != want {
 		t.Fatalf("unexpected late page attempts: got %d want %d", got, want)
 	}
-	if got, want := len(resp), defaultCategoryLimit*2+1; got != want {
+	if got, want := len(resp), defaultCategoryLimit*3+1; got != want {
 		t.Fatalf("unexpected result count: got %d want %d", got, want)
 	}
-	if len(proxySessions) == 0 {
-		t.Fatal("expected proxy sessions to be captured")
+	require.Len(t, proxySessions, 5)
+	assert.Equal(t, proxySessions[0], proxySessions[1])
+	assert.Equal(t, proxySessions[0], proxySessions[2])
+	assert.NotEqual(t, proxySessions[2], proxySessions[3], "timeout retry should rotate the session")
+	assert.Equal(t, proxySessions[3], proxySessions[4], "successful pagination should retain the replacement session")
+}
+
+func TestCategory_RotatesSessionsThroughBrightDataTimeouts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		timeouts int
+		attempts int
+	}{
+		{name: "recovers", timeouts: 1, attempts: 2},
+		{name: "exhausted", timeouts: 3, attempts: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Exercise the nested retry stack used in production. The inner
+			// Bright Data client receives an expired per-attempt context.
+			proxyClient, err := brightdata.NewProxyAwareHTTPClient(brightdata.ProxyConfig{})
+			require.NoError(t, err)
+			proxyClient.Timeout = time.Millisecond
+			var sessions []string
+			proxyClient.Transport.(*retryablehttp.RoundTripper).Client.HTTPClient.Transport = wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+				session, ok := brightdata.ProxySessionIDFromContext(r.Context())
+				require.True(t, ok)
+				sessions = append(sessions, session)
+				if len(sessions) <= tc.timeouts {
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: ioNopCloserString(`{"results":[]}`), Request: r}, nil
+			})
+			_, err = NewClientWithBaseURL("https://example.com", proxyClient).Category(t.Context(), "shellfish", "10103")
+			if tc.timeouts == 3 {
+				require.ErrorContains(t, err, "wholefoods request failed after 3 attempt(s)")
+				assert.ErrorIs(t, err, context.DeadlineExceeded)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Len(t, sessions, tc.attempts)
+			assert.Len(t, slices.Compact(slices.Clone(sessions)), tc.attempts, "every timeout retry should use a new session")
+		})
 	}
-	for _, sessionID := range proxySessions[1:] {
-		if sessionID != proxySessions[0] {
-			t.Fatalf("expected pagination and retries to retain session %q, got %q", proxySessions[0], sessionID)
-		}
+}
+
+func TestCategory_RetrySessionPolicy(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		status     int
+		err        error
+		cancel     bool
+		attempts   int
+		wantRotate bool
+	}{
+		{name: "timeout", err: wholeFoodsTimeoutError{}, attempts: 2, wantRotate: true},
+		{name: "server error", status: http.StatusBadGateway, attempts: 2},
+		{name: "not found", status: http.StatusNotFound, attempts: 1},
+		{name: "canceled", err: context.Canceled, cancel: true, attempts: 1},
+		{name: "network error", err: errors.New("connection reset"), attempts: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var sessions []string
+			client := NewClientWithBaseURL("https://example.com", &http.Client{
+				Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+					session, ok := brightdata.ProxySessionIDFromContext(r.Context())
+					require.True(t, ok)
+					sessions = append(sessions, session)
+					if len(sessions) == 1 {
+						if tc.cancel {
+							cancel()
+						}
+						if tc.err != nil {
+							return nil, tc.err
+						}
+						return &http.Response{StatusCode: tc.status, Header: make(http.Header), Body: ioNopCloserString(`{}`), Request: r}, nil
+					}
+					return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: ioNopCloserString(`{"results":[]}`), Request: r}, nil
+				}),
+			})
+			_, err := client.Category(ctx, "shellfish", "10103")
+			if tc.attempts == 2 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				if tc.err != nil {
+					assert.ErrorIs(t, err, tc.err)
+				}
+			}
+			require.Len(t, sessions, tc.attempts)
+			if tc.attempts == 2 {
+				assert.Equal(t, tc.wantRotate, sessions[0] != sessions[1])
+			}
+		})
 	}
 }
 
@@ -338,6 +436,8 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 
 	logs := logBuf.String()
 	for _, want := range []string{
+		"Rotating Bright Data proxy session",
+		"reason=timeout",
 		"Retrying HTTP request",
 		"source=wholefoods",
 		`url="https://example.com/api/products/category/fresh-vegetables?limit=60&offset=120&store=10153"`,
