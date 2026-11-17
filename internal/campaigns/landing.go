@@ -3,8 +3,10 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"careme/internal/auth"
 	"careme/internal/templates"
@@ -106,7 +108,7 @@ type landingUserLookup interface {
 
 type landingHandler struct {
 	campaign   landingCampaign
-	formAction string
+	name       string
 	users      landingUserLookup
 	authClient auth.AuthClient
 }
@@ -124,13 +126,13 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Campaign       landingCampaign
 		User           *utypes.User
 		ServerSignedIn bool
-		FormAction     string
+		CampaignName   string
 	}{
 		Page:           templates.NewPage(ctx),
 		Campaign:       h.campaign,
 		User:           user,
 		ServerSignedIn: user != nil,
-		FormAction:     h.formAction,
+		CampaignName:   h.name,
 	}
 	data.Title = h.campaign.Title
 	data.Description = h.campaign.Blurb
@@ -138,4 +140,24 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "campaign template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+type planHandler struct {
+	campaign landingCampaign
+}
+
+func (h planHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	instructions := h.campaign.Instructions
+	if h.campaign.AskGuestCount {
+		guests, err := strconv.Atoi(query.Get("guests"))
+		if err != nil || guests < 1 || guests > 100 {
+			http.Error(w, "Tell us how many people are coming (1–100).", http.StatusBadRequest)
+			return
+		}
+		instructions += fmt.Sprintf("\nCook for %d people. Use this as the guest count when planning portions.", guests)
+	}
+	query.Set("instructions", instructions)
+	query.Del("guests")
+	http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
 }
