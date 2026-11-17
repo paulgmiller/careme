@@ -1,17 +1,43 @@
 # Kroger staples queries
 
 The provider retains the original search terms, removes brand filtering, and
-adds `Meat & Seafood` and `Dairy & Eggs`. This addresses
-[#927](https://github.com/paulgmiller/careme/issues/927) without replacing the
-original selection with unrelated high-scoring products.
+adds `turkey`, `sausage`, and `Dairy & Eggs`. Targeted turkey and sausage searches
+replace the broader `Meat & Seafood` search following the comparison below.
 
-The twelve searches cover fresh vegetables, fresh produce, beef, chicken,
-fish, pork, shellfish, lamb, grains, pasta, meat/seafood, and dairy/eggs. The
+The thirteen searches cover fresh vegetables, fresh produce, beef, chicken,
+turkey, sausage, fish, pork, shellfish, lamb, grains, pasta, and dairy/eggs. The
 vegetable search's original spelling error is corrected; both spellings returned
 identical product sets in the measured samples. No local or API brand whitelist
 is applied.
 
-## Comparison
+## Turkey and sausage comparison
+
+Measured November 17, 2026 using the same grades for both plans, preserving
+stock, price, frozen-product filtering, and product-ID deduplication. Replace
+`Meat & Seafood` with `turkey` and `sausage`; keep all other searches.
+
+| Measure | QFC 70500874 | Fred Meyer 70100023 |
+| --- | ---: | ---: |
+| Score before → after | 56 → 59 | 57 → 59 |
+| Grade sum above 6 before → after | 5,683 → 5,906 | 5,786 → 5,958 |
+| Unique products before → after | 1,874 → 2,138 | 1,968 → 2,315 |
+| Products lost / gained | 7 / 271 | 10 / 357 |
+| Products above grade 6 lost / gained | 0 / 29 | 1 / 25 |
+
+Both stores gain turkey and sausage options. Fred Meyer loses the specific
+Kroger Fresh Farm Raised Atlantic Salmon Fillet Portion (grade 9); its `fish`
+search does not recover that product within the API search window. Other lost
+products score 6 or below. QFC loses only products scoring 6 or below.
+A follow-up Fred Meyer inspection found 28 other eligible salmon products
+(excluding pet food) in the first 300 `fish` results, including fresh Atlantic
+fillets, center-cut loin, and sockeye fillets. The missing portion appears in
+a direct `salmon` search, confirming a search-coverage gap rather than rejection
+by the ingredient filters.
+Frozen whole turkeys remain excluded; the targeted turkey search does not
+change the frozen-product rules. Results reflect inventory and search ranking
+at measurement time, rather than a guarantee about future catalogs.
+
+## Original comparison
 
 Measured November 6, 2026 at QFC `70500874` and Fred Meyer `70100023`. Each step
 adds to the preceding plan. Scores sum unique products' grades above 6, then
@@ -37,7 +63,7 @@ samples; removing a local filter cannot itself remove an API match.
 
 Earlier attempts to replace the original terms with fewer broad queries raised
 the aggregate score but lost fresh fish, beef cuts, chicken, and herbs. The
-final plan preserves the original searches rather than imposing the earlier
+plan preserved the original searches rather than imposing the earlier
 39-request target. Request counts above are measured page-fetch costs, not a
 runtime limit; retries and changes in inventory can change them.
 
