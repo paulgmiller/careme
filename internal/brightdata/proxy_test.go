@@ -2,11 +2,19 @@ package brightdata
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
@@ -143,6 +151,7 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if retryTransport.Client.HTTPClient.Transport != http.DefaultTransport {
 		t.Fatalf("expected default base transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
+	assert.Equal(t, 10*time.Second, retryTransport.Client.HTTPClient.Timeout, "timeout must apply to each attempt inside the retry loop")
 }
 
 func TestWithRetries_OnlyRetriesGet5xx(t *testing.T) {
@@ -240,4 +249,150 @@ func mustRequest(t *testing.T, method string) *http.Request {
 		t.Fatalf("NewRequestWithContext() error = %v", err)
 	}
 	return req
+}
+
+func TestWithRetries_ProxySessions(t *testing.T) {
+	t.Parallel()
+	for _, sticky := range []bool{false, true} {
+		for _, tc := range []struct {
+			name   string
+			err    error
+			status int
+			rotate bool
+		}{
+			{name: "timeout", err: context.DeadlineExceeded, rotate: true},
+			{name: "network timeout", err: &net.DNSError{Err: "timeout", IsTimeout: true}, rotate: true},
+			{name: "server error", status: http.StatusBadGateway},
+			{name: "network error", err: errors.New("connection reset")},
+		} {
+			t.Run(fmt.Sprintf("%s/sticky=%v", tc.name, sticky), func(t *testing.T) {
+				t.Parallel()
+				ctx := t.Context()
+				if sticky {
+					ctx = WithProxySessionID(ctx, "original")
+				}
+				var sessions []string
+				client := withRetries(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					session, ok := ProxySessionIDFromContext(req.Context())
+					require.Equal(t, sticky, ok)
+					if sticky {
+						require.NotEmpty(t, session)
+					}
+					sessions = append(sessions, session)
+					if len(sessions) == 1 && tc.err != nil {
+						return nil, tc.err
+					}
+					status := http.StatusOK
+					if len(sessions) == 1 {
+						status = tc.status
+					}
+					return &http.Response{StatusCode: status, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
+				})})
+				retries := client.Transport.(*retryablehttp.RoundTripper).Client
+				retries.RetryWaitMin = 0
+				retries.RetryWaitMax = 0
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+				require.NoError(t, err)
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				require.Len(t, sessions, 2)
+				assert.Equal(t, sticky && tc.rotate, sessions[0] != sessions[1])
+				if sticky {
+					assert.Equal(t, "original", sessions[0])
+					// A later request using the category's context retains the
+					// replacement session after the timeout was recovered.
+					resp, err = client.Do(req.Clone(ctx))
+					require.NoError(t, err)
+					require.NoError(t, resp.Body.Close())
+					require.Len(t, sessions, 3)
+					assert.Equal(t, sessions[1], sessions[2])
+				}
+			})
+		}
+	}
+}
+
+func TestWithRetries_AttemptTimeoutRotatesSession(t *testing.T) {
+	t.Parallel()
+	var sessions []string
+	client := withRetries(&http.Client{Timeout: time.Millisecond, Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		session, ok := ProxySessionIDFromContext(req.Context())
+		require.True(t, ok)
+		sessions = append(sessions, session)
+		if len(sessions) == 1 {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
+	})})
+	retries := client.Transport.(*retryablehttp.RoundTripper).Client
+	retries.RetryWaitMin = 0
+	retries.RetryWaitMax = 0
+	req, err := http.NewRequestWithContext(WithProxySessionID(t.Context(), "original"), http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Len(t, sessions, 2)
+	assert.NotEqual(t, sessions[0], sessions[1])
+}
+
+func TestWithRetries_ConcurrentRequestsCanRotateSharedSession(t *testing.T) {
+	t.Parallel()
+	ctx := WithProxySessionID(t.Context(), "original")
+	client := withRetries(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		session, ok := ProxySessionIDFromContext(req.Context())
+		require.True(t, ok)
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(session)), Request: req}, nil
+	})})
+	retries := client.Transport.(*retryablehttp.RoundTripper).Client
+	sessions := make(chan string, 8)
+	t.Run("requests", func(t *testing.T) {
+		for i := range cap(sessions) {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				t.Parallel()
+				_, _ = retries.CheckRetry(ctx, nil, context.DeadlineExceeded)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+				require.NoError(t, err)
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				sessions <- string(body)
+			})
+		}
+	})
+	close(sessions)
+	count := 0
+	for session := range sessions {
+		assert.NotEmpty(t, session)
+		assert.NotEqual(t, "original", session)
+		count++
+	}
+	assert.Equal(t, 8, count)
+}
+
+func TestWithRetries_CheckRetryRotatesBeforeReturning(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		err    error
+		rotate bool
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, rotate: true},
+		{name: "canceled", err: context.Canceled},
+		{name: "server error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := WithProxySessionID(t.Context(), "original")
+			client := withRetries(&http.Client{})
+			_, _ = client.Transport.(*retryablehttp.RoundTripper).Client.CheckRetry(ctx, nil, tc.err)
+			session, ok := ProxySessionIDFromContext(ctx)
+			require.True(t, ok)
+			assert.Equal(t, tc.rotate, session != "original")
+		})
+	}
 }

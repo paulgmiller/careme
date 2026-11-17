@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,6 +18,10 @@ import (
 	"time"
 
 	"careme/internal/brightdata"
+
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCategory_BuildsRequestAndDecodesFixture(t *testing.T) {
@@ -122,7 +127,9 @@ func TestCategory_UsesSeparateProxySessionPerCategory(t *testing.T) {
 func TestCategory_StatusError(t *testing.T) {
 	t.Parallel()
 
+	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
 		http.Error(w, "nope", http.StatusBadGateway)
 	}))
 	t.Cleanup(server.Close)
@@ -136,13 +143,14 @@ func TestCategory_StatusError(t *testing.T) {
 	if !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	assert.Equal(t, 1, attempts, "Whole Foods should leave retries to the injected client")
 }
 
 func TestCategory_RetriesTransient5xx(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
 			if attempts < 3 {
@@ -162,7 +170,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 				Request: r,
 			}, nil
 		}),
-	})
+	}))
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
 	if err != nil {
@@ -183,7 +191,7 @@ func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T)
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Timeout: time.Millisecond,
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
@@ -200,7 +208,7 @@ func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T)
 				Request: r,
 			}, nil
 		}),
-	})
+	}))
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
 	if err != nil {
@@ -222,7 +230,7 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 
 	attemptsByOffset := map[string]int{}
 	var proxySessions []string
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			sessionID, ok := brightdata.ProxySessionIDFromContext(r.Context())
 			if !ok {
@@ -233,11 +241,11 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 			offset := r.URL.Query().Get("offset")
 			attemptsByOffset[offset]++
 			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
-				return nil, wholeFoodsTimeoutError{}
+				return nil, context.DeadlineExceeded
 			}
 
 			pageSize := defaultCategoryLimit
-			if offset == strconv.Itoa(defaultCategoryLimit*2) {
+			if offset == strconv.Itoa(defaultCategoryLimit*3) {
 				pageSize = 1
 			}
 
@@ -264,7 +272,7 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 				Request: r,
 			}, nil
 		}),
-	})
+	}))
 
 	resp, err := client.Category(context.Background(), "fresh-vegetables", "10153")
 	if err != nil {
@@ -273,16 +281,111 @@ func TestCategory_RetriesLatePageAttemptTimeoutWithinCategoryBudget(t *testing.T
 	if got, want := attemptsByOffset[strconv.Itoa(defaultCategoryLimit*2)], 2; got != want {
 		t.Fatalf("unexpected late page attempts: got %d want %d", got, want)
 	}
-	if got, want := len(resp), defaultCategoryLimit*2+1; got != want {
+	if got, want := len(resp), defaultCategoryLimit*3+1; got != want {
 		t.Fatalf("unexpected result count: got %d want %d", got, want)
 	}
-	if len(proxySessions) == 0 {
-		t.Fatal("expected proxy sessions to be captured")
+	require.Len(t, proxySessions, 5)
+	assert.Equal(t, proxySessions[0], proxySessions[1])
+	assert.Equal(t, proxySessions[0], proxySessions[2])
+	assert.NotEqual(t, proxySessions[2], proxySessions[3], "timeout retry should rotate the session")
+	assert.Equal(t, proxySessions[3], proxySessions[4], "successful pagination should retain the replacement session")
+}
+
+func TestCategory_RotatesSessionsThroughBrightDataTimeouts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		timeouts int
+		attempts int
+	}{
+		{name: "recovers", timeouts: 1, attempts: 2},
+		{name: "exhausted", timeouts: 5, attempts: 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// The shared client owns the attempt timeout and the only retry loop.
+			proxyClient, err := brightdata.NewProxyAwareHTTPClient(brightdata.ProxyConfig{})
+			require.NoError(t, err)
+			retries := proxyClient.Transport.(*retryablehttp.RoundTripper).Client
+			retries.HTTPClient.Timeout = time.Millisecond
+			retries.RetryWaitMin = 0
+			retries.RetryWaitMax = 0
+			var sessions []string
+			retries.HTTPClient.Transport = wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+				session, ok := brightdata.ProxySessionIDFromContext(r.Context())
+				require.True(t, ok)
+				sessions = append(sessions, session)
+				if len(sessions) <= tc.timeouts {
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: ioNopCloserString(`{"results":[]}`), Request: r}, nil
+			})
+			_, err = NewClientWithBaseURL("https://example.com", proxyClient).Category(t.Context(), "shellfish", "10103")
+			if tc.timeouts == 5 {
+				require.ErrorContains(t, err, "giving up after 5 attempt(s)")
+				assert.ErrorIs(t, err, context.DeadlineExceeded)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Len(t, sessions, tc.attempts)
+			assert.Len(t, slices.Compact(slices.Clone(sessions)), tc.attempts, "every timeout retry should use a new session")
+		})
 	}
-	for _, sessionID := range proxySessions[1:] {
-		if sessionID != proxySessions[0] {
-			t.Fatalf("expected pagination and retries to retain session %q, got %q", proxySessions[0], sessionID)
-		}
+}
+
+func TestCategory_RetrySessionPolicy(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		status     int
+		err        error
+		cancel     bool
+		attempts   int
+		wantRotate bool
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, attempts: 2, wantRotate: true},
+		{name: "server error", status: http.StatusBadGateway, attempts: 2},
+		{name: "not found", status: http.StatusNotFound, attempts: 1},
+		{name: "canceled", err: context.Canceled, cancel: true, attempts: 1},
+		{name: "network error", err: errors.New("connection reset"), attempts: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var sessions []string
+			client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
+				Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+					session, ok := brightdata.ProxySessionIDFromContext(r.Context())
+					require.True(t, ok)
+					sessions = append(sessions, session)
+					if len(sessions) == 1 {
+						if tc.cancel {
+							cancel()
+						}
+						if tc.err != nil {
+							return nil, tc.err
+						}
+						return &http.Response{StatusCode: tc.status, Header: make(http.Header), Body: ioNopCloserString(`{}`), Request: r}, nil
+					}
+					return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: ioNopCloserString(`{"results":[]}`), Request: r}, nil
+				}),
+			}))
+			_, err := client.Category(ctx, "shellfish", "10103")
+			if tc.attempts == 2 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				if tc.err != nil {
+					assert.ErrorIs(t, err, tc.err)
+				}
+			}
+			require.Len(t, sessions, tc.attempts)
+			if tc.attempts == 2 {
+				assert.Equal(t, tc.wantRotate, sessions[0] != sessions[1])
+			}
+		})
 	}
 }
 
@@ -295,12 +398,12 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 	})
 
 	attemptsByOffset := map[string]int{}
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			offset := r.URL.Query().Get("offset")
 			attemptsByOffset[offset]++
 			if offset == strconv.Itoa(defaultCategoryLimit*2) && attemptsByOffset[offset] == 1 {
-				return nil, wholeFoodsTimeoutError{}
+				return nil, context.DeadlineExceeded
 			}
 
 			pageSize := defaultCategoryLimit
@@ -329,7 +432,7 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 				Request:    r,
 			}, nil
 		}),
-	})
+	}))
 
 	_, err := client.Category(context.Background(), "fresh-vegetables", "10153")
 	if err != nil {
@@ -338,8 +441,10 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 
 	logs := logBuf.String()
 	for _, want := range []string{
+		"Rotating Bright Data proxy session",
+		"reason=timeout",
 		"Retrying HTTP request",
-		"source=wholefoods",
+		"source=brightdata",
 		`url="https://example.com/api/products/category/fresh-vegetables?limit=60&offset=120&store=10153"`,
 		"attempt=2",
 	} {
@@ -498,16 +603,15 @@ func ioNopCloserString(body string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(body))
 }
 
-type wholeFoodsTimeoutError struct{}
-
-func (wholeFoodsTimeoutError) Error() string {
-	return "timeout awaiting headers"
-}
-
-func (wholeFoodsTimeoutError) Timeout() bool {
-	return true
-}
-
-func (wholeFoodsTimeoutError) Temporary() bool {
-	return true
+// Inject the transport into the shared retry client, as production does.
+// Skip backoff waits in tests while retaining the production attempt limit.
+func wholeFoodsProxyClient(t *testing.T, baseClient *http.Client) *http.Client {
+	t.Helper()
+	client, err := brightdata.NewProxyAwareHTTPClient(brightdata.ProxyConfig{})
+	require.NoError(t, err)
+	transport := client.Transport.(*retryablehttp.RoundTripper)
+	transport.Client.HTTPClient = baseClient
+	transport.Client.RetryWaitMin = 0
+	transport.Client.RetryWaitMax = 0
+	return client
 }
