@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
+	"sync/atomic"
 
 	"careme/internal/httpretry"
 
@@ -32,20 +32,16 @@ type ProxyConfig struct {
 
 type proxySessionIDContextKey struct{}
 
-type proxySession struct {
-	mu     sync.Mutex
-	id     string
-	failed bool
-}
-
-// WithProxySessionID requests a sticky Bright Data proxy peer. A timeout marks
-// the session for rotation on the next request, including an outer client's
-// retry. Successful requests retain the current peer across calls using ctx.
+// WithProxySessionID requests a sticky Bright Data proxy peer. A timeout rotates
+// the session so subsequent requests, including an outer client's retry, use the
+// replacement. Successful requests retain the current peer across calls using ctx.
 func WithProxySessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, proxySessionIDContextKey{}, &proxySession{id: sessionID})
+	session := new(atomic.Pointer[string])
+	session.Store(&sessionID)
+	return context.WithValue(ctx, proxySessionIDContextKey{}, session)
 }
 
 // ProxySessionIDFromContext returns the Bright Data proxy session associated
@@ -54,13 +50,11 @@ func ProxySessionIDFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
-	session, ok := ctx.Value(proxySessionIDContextKey{}).(*proxySession)
+	session, ok := ctx.Value(proxySessionIDContextKey{}).(*atomic.Pointer[string])
 	if !ok {
 		return "", false
 	}
-	session.mu.Lock()
-	defer session.mu.Unlock()
-	return session.id, true
+	return *session.Load(), true
 }
 
 func LoadConfig() ProxyConfig {
@@ -151,26 +145,7 @@ func retriable(ctx context.Context, resp *http.Response, err error) (bool, error
 func withRetries(baseClient *http.Client) *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.HTTPClient = baseClient
-	logRetry := httpretry.LogRetry("brightdata")
-	retryClient.RequestLogHook = func(logger retryablehttp.Logger, req *http.Request, attempt int) {
-		session, ok := req.Context().Value(proxySessionIDContextKey{}).(*proxySession)
-		if !ok {
-			*req = *req.WithContext(WithProxySessionID(req.Context(), rand.Text()))
-			session = req.Context().Value(proxySessionIDContextKey{}).(*proxySession)
-		}
-		session.mu.Lock()
-		rotate := session.failed
-		if rotate {
-			session.id = rand.Text()
-			session.failed = false
-		}
-		session.mu.Unlock()
-		if rotate {
-			slog.InfoContext(req.Context(), "Rotating Bright Data proxy session",
-				"source", "brightdata", "url", req.URL.String(), "reason", "timeout")
-		}
-		logRetry(logger, req, attempt)
-	}
+	retryClient.RequestLogHook = httpretry.LogRetry("brightdata")
 
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
@@ -178,10 +153,10 @@ func withRetries(baseClient *http.Client) *http.Client {
 	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
 		var netErr net.Error
 		if err != nil && !errors.Is(err, context.Canceled) && (errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()) {
-			if session, ok := ctx.Value(proxySessionIDContextKey{}).(*proxySession); ok {
-				session.mu.Lock()
-				session.failed = true
-				session.mu.Unlock()
+			if session, ok := ctx.Value(proxySessionIDContextKey{}).(*atomic.Pointer[string]); ok {
+				id := rand.Text()
+				session.Store(&id)
+				slog.InfoContext(ctx, "Rotating Bright Data proxy session", "source", "brightdata", "reason", "timeout")
 			}
 		}
 		return retriable(ctx, resp, err)
