@@ -3,8 +3,10 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"careme/internal/auth"
 	"careme/internal/templates"
@@ -12,12 +14,13 @@ import (
 )
 
 type landingCampaign struct {
-	Label        string
-	ImageURL     string
-	ImageAlt     string
-	Title        string
-	Blurb        string
-	Instructions string
+	Label         string
+	ImageURL      string
+	ImageAlt      string
+	Title         string
+	Blurb         string
+	Instructions  string
+	AskGuestCount bool
 }
 
 // Add dinner campaigns here; each uses the same landing page.
@@ -72,14 +75,27 @@ When multiple plans work, prefer the one with the lower total grocery spend, eve
 `,
 	},
 	"fancy": {
-		Label:    "A little more special",
-		ImageURL: "https://test.careme.cooking/recipe/unvnQMT4FdW5tkJR3JACOQ==/image",
-		ImageAlt: "Seared chops with roasted squash and a rich pan sauce.",
-		Title:    "Make dinner an occasion.",
-		Blurb:    "Plan a memorable date night or dinner party with ingredients from your local store.",
+		AskGuestCount: true,
+		Label:         "A little more special",
+		ImageURL:      "https://test.careme.cooking/recipe/unvnQMT4FdW5tkJR3JACOQ==/image",
+		ImageAlt:      "Seared chops with roasted squash and a rich pan sauce.",
+		Title:         "Make dinner an occasion.",
+		Blurb:         "Plan a memorable date night or dinner party with ingredients from your local store.",
 		Instructions: `Plan elevated dinners for date nights or dinner parties. Favor dishes that feel special, look impressive, and introduce approachable techniques that build cooking skills without becoming overly difficult.
 Allow somewhat higher-cost ingredients, premium cuts, richer sauces, and more elaborate sides when they meaningfully improve the meal. Prefer thoughtful presentation and restaurant-style touches over expense for its own sake.
 When multiple plans work, prefer the one that feels more distinctive and occasion-worthy, even if it costs somewhat more or takes a little longer.
+`,
+	},
+	"thanksgiving": {
+		AskGuestCount: true,
+		Label:         "Thanksgiving dinner",
+		Title:         "Bring everyone to the Thanksgiving table.",
+		Blurb:         "Tell us how many people are coming. Build a Thanksgiving menu and shopping list with ingredients from your local store.",
+		ImageURL:      "https://test.careme.cooking/recipe/ypaq_eTdA-kcqsFBMzhu8g==/image",
+		ImageAlt:      "Quinoa-Stuffed Acorn Squash with Sage-Walnut Butter",
+		Instructions: `Plan one cohesive Thanksgiving dinner, not a week of separate dinners. Create 6 recipes to serve together: one turkey centerpiece (or a vegetarian main if requested), four complementary holiday sides, and one dessert.
+Favor Thanksgiving classics such as stuffing, mashed potatoes, seasonal vegetables, cranberry sauce, and pumpkin pie, using ingredients available at the selected store. Size the main appropriately for the party rather than assuming a whole turkey is always needed.
+Scale every dish for the full guest count. Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
 `,
 	},
 }
@@ -95,6 +111,18 @@ type landingHandler struct {
 }
 
 func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	if h.campaign.AskGuestCount && (query.Has("zip") || query.Has("lat") || query.Has("lon")) {
+		guests, err := strconv.Atoi(query.Get("guests"))
+		if err != nil || guests < 1 || guests > 100 {
+			http.Error(w, "Tell us how many people are coming (1–100).", http.StatusBadRequest)
+			return
+		}
+		query.Set("instructions", h.campaign.Instructions+fmt.Sprintf("\nCook for %d people. Scale all recipes and ingredient quantities to serve this many guests.", guests))
+		query.Del("guests")
+		http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
+		return
+	}
 	ctx := r.Context()
 	user, err := h.users.FromRequest(ctx, r, h.authClient)
 	if err != nil && !errors.Is(err, auth.ErrNoSession) {
@@ -107,11 +135,16 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Campaign       landingCampaign
 		User           *utypes.User
 		ServerSignedIn bool
+		FormAction     string
 	}{
 		Page:           templates.NewPage(ctx),
 		Campaign:       h.campaign,
 		User:           user,
 		ServerSignedIn: user != nil,
+		FormAction:     "/locations",
+	}
+	if h.campaign.AskGuestCount {
+		data.FormAction = r.URL.Path
 	}
 	data.Title = h.campaign.Title
 	data.Description = h.campaign.Blurb

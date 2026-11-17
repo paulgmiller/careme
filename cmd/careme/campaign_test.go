@@ -17,6 +17,7 @@ func TestCampaignLandingAndInstructions(t *testing.T) {
 	client := newTestClient(t)
 	for _, campaign := range []struct{ slug, title string }{
 		{"fancy", "Make dinner an occasion."},
+		{"thanksgiving", "Bring everyone to the Thanksgiving table."},
 		{"budget", "Good dinners. Smaller grocery bills."},
 		{"vegetarian", "Vegetarian dinners worth gathering for."},
 		{"mediterranean", "Bring Mediterranean flavor to your weeknight."},
@@ -27,12 +28,23 @@ func TestCampaignLandingAndInstructions(t *testing.T) {
 			assert.Contains(t, body, campaign.title)
 			assert.NotContains(t, body, "Your kitchen")
 			assert.NotContains(t, body, "Careme will:")
-			instructions := extractHiddenValue(t, body, "instructions")
-			require.NotEmpty(t, instructions)
-
 			for _, query := range []string{"zip=90005", "lat=34.05&lon=-118.3"} {
 				t.Run(query, func(t *testing.T) {
-					locationsBody := mustGetBody(t, client, srv.URL+"/locations?"+query+"&instructions="+url.QueryEscape(instructions))
+					var instructions, locationsBody string
+					if campaign.slug == "fancy" || campaign.slug == "thanksgiving" {
+						assert.Contains(t, body, `name="guests"`)
+						locationsBody = mustGetBody(t, client, srv.URL+"/c/"+campaign.slug+"?"+query+"&guests=12")
+						instructions = extractHiddenValue(t, locationsBody, "instructions")
+						assert.Contains(t, instructions, "Cook for 12 people.")
+						if campaign.slug == "thanksgiving" {
+							assert.Contains(t, instructions, "one cohesive Thanksgiving dinner")
+							assert.Contains(t, instructions, "Create 6 recipes")
+						}
+					} else {
+						instructions = extractHiddenValue(t, body, "instructions")
+						locationsBody = mustGetBody(t, client, srv.URL+"/locations?"+query+"&instructions="+url.QueryEscape(instructions))
+					}
+					require.NotEmpty(t, instructions)
 					forms := regexp.MustCompile(`(?s)<form[^>]*action="/recipes"[^>]*>(.*?)</form>`).FindAllStringSubmatch(locationsBody, -1)
 					require.NotEmpty(t, forms)
 					for _, form := range forms {
