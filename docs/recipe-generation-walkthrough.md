@@ -8,7 +8,7 @@ This document covers the first-time generation path inside `generatorService.Gen
 flowchart TD
     subgraph Legend["Model color"]
         MiniLegend["gpt-6-luna<br/>Grading"]
-        RecipeModelLegend["gpt-6.1-sol<br/>Menu planning + recipe generation + retry"]
+        RecipeModelLegend["gpt-6.2-sol<br/>Menu planning + recipe generation + retry"]
         OpenRouterLegend["OpenRouter<br/>Recipe critique"]
     end
 
@@ -85,9 +85,9 @@ The model boundary in this section is ingredient grading. Fetching staples is st
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-6.1-sol`.
+After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-6.2-sol`.
 
-The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-6.1-sol` recipe model call:
+The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-6.2-sol` recipe model call:
 
 - append the plan instructions to the base instructions
 - call `GenerateRecipe`
@@ -115,7 +115,7 @@ Usage logs expose both `usage_inputTokensDetails_cachedTokens` and `usage_inputT
 
 `critiqueAndMaybeRetryRecipe` asks the OpenRouter critique model for feedback. The model is selected with `OPENROUTER_CRITIQUE_MODEL` and defaults to `google/gemini-4-argon`. If critiques are disabled, the rubberstamp service returns a passing score without a model call.
 
-When a Gemini critique score is at least `8`, the recipe is kept. Opus-family models use their calibrated cutoff of `7` when selected explicitly. Scores below the model-specific cutoff cause one more `gpt-6.1-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
+When a Gemini critique score is at least `8`, the recipe is kept. Opus-family models use their calibrated cutoff of `7` when selected explicitly. Scores below the model-specific cutoff cause one more `gpt-6.2-sol` recipe model call using the critique feedback and original recipe response ID, and that retry replaces the original recipe.
 
 Once all workers finish, `GenerateRecipes` fans the recipe results back into:
 
