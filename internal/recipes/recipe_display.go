@@ -13,11 +13,12 @@ type cookingMethodDisplay struct {
 }
 
 type recipePropertyDisplay struct {
-	Time           string
-	Servings       string
-	Cost           string
-	Calories       string
-	CookingMethods []cookingMethodDisplay
+	SpecialEquipment []string
+	Time             string
+	Servings         string
+	Cost             string
+	Calories         string
+	CookingMethods   []cookingMethodDisplay
 }
 
 // newRecipePropertyDisplay also supports recipes cached before structured properties
@@ -63,11 +64,12 @@ func newRecipePropertyDisplay(recipe ai.Recipe) recipePropertyDisplay {
 	}
 
 	return recipePropertyDisplay{
-		Time:           timeDisplay,
-		Servings:       servingsDisplay,
-		Cost:           costDisplay,
-		Calories:       caloriesDisplay,
-		CookingMethods: methods,
+		Time:             timeDisplay,
+		Servings:         servingsDisplay,
+		Cost:             costDisplay,
+		Calories:         caloriesDisplay,
+		CookingMethods:   methods,
+		SpecialEquipment: recipe.Properties.SpecialEquipment,
 	}
 }
 

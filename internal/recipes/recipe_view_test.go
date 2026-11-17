@@ -1,6 +1,8 @@
 package recipes
 
 import (
+	"bytes"
+	"html/template"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -594,5 +596,42 @@ func TestStoreDetailsInRecipeAndShoppingListHeaders(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRecipeViewsShowRequiredSpecialEquipment(t *testing.T) {
+	t.Parallel()
+	loc := locations.Location{ID: "70000001", Name: "Store"}
+	params := DefaultParams(&loc, time.Now())
+	for _, equipment := range [][]string{nil, {}, {"Food processor", "Mortar and pestle", "Pressure cooker", "Dutch oven"}, {"<script>alert(1)</script>"}} {
+		recipe := ai.Recipe{
+			Title: "Dinner", Properties: ai.RecipeProperties{SpecialEquipment: equipment},
+			Instructions: []string{"Prepare dinner."},
+		}
+		for _, view := range []string{"recipe", "shopping list", "email"} {
+			t.Run(view+"/"+strings.Join(equipment, ","), func(t *testing.T) {
+				w := httptest.NewRecorder()
+				var html string
+				attribute := "title"
+				switch view {
+				case "recipe":
+					writeRecipePage(t.Context(), w, recipeViewInput{params: params, recipe: recipe, currentUser: renderTestUser(true)})
+					html = assertHTTPSuccess(t, w)
+				case "shopping list":
+					formatShoppingListHTMLForTest(t.Context(), params, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, true, recipeSelection{}, w)
+					html = assertHTTPSuccess(t, w)
+				case "email":
+					var body bytes.Buffer
+					require.NoError(t, FormatMail(params, ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, "https://careme.cooking", "https://careme.cooking/unsubscribe", &body))
+					html = body.String()
+					attribute = "aria-label"
+				}
+				assert.Equal(t, len(equipment), strings.Count(html, attribute+`="Required equipment:`))
+				for _, name := range equipment {
+					assert.Contains(t, html, attribute+`="Required equipment: `+template.HTMLEscapeString(name)+`"`)
+				}
+				assert.NotContains(t, html, "<script>alert(1)</script>")
+			})
+		}
 	}
 }

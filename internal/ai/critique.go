@@ -50,6 +50,7 @@ Judge the recipe like an experienced chef helping create recipes to teach home c
 - do not name the FDA, USDA, or other government agencies, quote official temperature guidance, compare Careme's target with a regulatory target, or add a temperature disclaimer in any critique field
 - are the total time, serving yield, total cost, and calories-per-serving estimates plausible for the ingredients and quantities
 - does properties.total_minutes match the total time implied by all instruction steps, including prep, resting, and passive cooking
+- does properties.special_equipment list every specialty tool or vessel required by the instructions, including a food processor, mortar and pestle, pressure cooker, or Dutch oven when used, while omitting ordinary tools and optional alternatives
 - do properties.cooking_methods match the instructions, avoid combining no_cook with another method
 - is health empty unless it explains a meaningful dietary or nutritional ingredient swap and its practical tradeoff, without unsupported health claims
 - does the dish sound balanced, appealing, and well plated

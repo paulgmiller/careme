@@ -23,6 +23,11 @@
       <span>{{.Label}}</span>
     </li>
     {{end}}
+    {{range .SpecialEquipment}}
+    <li class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5" title="Required equipment: {{.}}">
+      <span class="sr-only">Required equipment: </span>{{.}}
+    </li>
+    {{end}}
   </ul>
 </section>
 {{end}}
