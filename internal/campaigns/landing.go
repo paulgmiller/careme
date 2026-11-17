@@ -3,10 +3,8 @@ package campaigns
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"careme/internal/auth"
 	"careme/internal/templates"
@@ -91,11 +89,13 @@ When multiple plans work, prefer the one that feels more distinctive and occasio
 		Label:         "Thanksgiving dinner",
 		Title:         "Bring everyone to the Thanksgiving table.",
 		Blurb:         "Tell us how many people are coming. Build a Thanksgiving menu and shopping list with ingredients from your local store.",
-		ImageURL:      "https://test.careme.cooking/recipe/ypaq_eTdA-kcqsFBMzhu8g==/image",
-		ImageAlt:      "Quinoa-Stuffed Acorn Squash with Sage-Walnut Butter",
+		ImageURL:      "https://test.careme.cooking/recipe/lqi74zXNvQNoFdRTrIBD2g==/image",
+		ImageAlt:      "A slice of pumpkin pie topped with whipped cream.",
 		Instructions: `Plan one cohesive Thanksgiving dinner, not a week of separate dinners. Create 6 recipes to serve together: one turkey centerpiece (or a vegetarian main if requested), four complementary holiday sides, and one dessert.
 Favor Thanksgiving classics such as stuffing, mashed potatoes, seasonal vegetables, cranberry sauce, and pumpkin pie, using ingredients available at the selected store. Size the main appropriately for the party rather than assuming a whole turkey is always needed.
-Scale every dish for the full guest count. Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
+Size the menu as one shared meal for the guest count, not six complete dinners per person. Allocate a sensible share of the meal to the main, each side, and dessert. Choose each recipe's yield and portion size based on its role and the other dishes, with smaller tasting portions for multiple sides and modest leftovers. Do not blindly give every recipe the guest count in full dinner-sized servings, or divide the guest count equally by six; everyone should have enough to eat across the whole menu.
+In each recipe plan's recipe_instructions, state that it is part of the same six-dish Thanksgiving meal, the total guest count, its role, and a concrete yield with portion sizes or total quantities for that dish. Carry these portion targets into the final recipe quantities and servings; a side may have a different serving count from the main. Do not add a separate full meal or extra sides to each recipe.
+Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
 `,
 	},
 }
@@ -106,23 +106,12 @@ type landingUserLookup interface {
 
 type landingHandler struct {
 	campaign   landingCampaign
+	formAction string
 	users      landingUserLookup
 	authClient auth.AuthClient
 }
 
 func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	if h.campaign.AskGuestCount && (query.Has("zip") || query.Has("lat") || query.Has("lon")) {
-		guests, err := strconv.Atoi(query.Get("guests"))
-		if err != nil || guests < 1 || guests > 100 {
-			http.Error(w, "Tell us how many people are coming (1–100).", http.StatusBadRequest)
-			return
-		}
-		query.Set("instructions", h.campaign.Instructions+fmt.Sprintf("\nCook for %d people. Scale all recipes and ingredient quantities to serve this many guests.", guests))
-		query.Del("guests")
-		http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
-		return
-	}
 	ctx := r.Context()
 	user, err := h.users.FromRequest(ctx, r, h.authClient)
 	if err != nil && !errors.Is(err, auth.ErrNoSession) {
@@ -141,10 +130,7 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Campaign:       h.campaign,
 		User:           user,
 		ServerSignedIn: user != nil,
-		FormAction:     "/locations",
-	}
-	if h.campaign.AskGuestCount {
-		data.FormAction = r.URL.Path
+		FormAction:     h.formAction,
 	}
 	data.Title = h.campaign.Title
 	data.Description = h.campaign.Blurb

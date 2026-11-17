@@ -33,12 +33,17 @@ func TestCampaignLandingAndInstructions(t *testing.T) {
 					var instructions, locationsBody string
 					if campaign.slug == "fancy" || campaign.slug == "thanksgiving" {
 						assert.Contains(t, body, `name="guests"`)
-						locationsBody = mustGetBody(t, client, srv.URL+"/c/"+campaign.slug+"?"+query+"&guests=12")
+						assert.Contains(t, body, `action="/c/`+campaign.slug+`/plan"`)
+						locationsBody = mustGetBody(t, client, srv.URL+"/c/"+campaign.slug+"/plan?"+query+"&guests=12")
 						instructions = extractHiddenValue(t, locationsBody, "instructions")
 						assert.Contains(t, instructions, "Cook for 12 people.")
 						if campaign.slug == "thanksgiving" {
 							assert.Contains(t, instructions, "one cohesive Thanksgiving dinner")
 							assert.Contains(t, instructions, "Create 6 recipes")
+							assert.Contains(t, instructions, "Size the menu as one shared meal")
+							assert.Contains(t, instructions, "a concrete yield with portion sizes or total quantities")
+							assert.NotContains(t, instructions, "Scale every dish for the full guest count")
+							assert.NotContains(t, instructions, "Scale all recipes and ingredient quantities to serve this many guests")
 						}
 					} else {
 						instructions = extractHiddenValue(t, body, "instructions")

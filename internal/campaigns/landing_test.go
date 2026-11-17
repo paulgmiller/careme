@@ -44,6 +44,9 @@ func TestLandingRoutes(t *testing.T) {
 		{"unknown campaign", http.MethodGet, "/c/missing", auth.ErrNoSession, http.StatusNotFound},
 		{"old URL", http.MethodGet, "/campaigns/fancy", auth.ErrNoSession, http.StatusNotFound},
 		{"POST rejected", http.MethodPost, "/c/fancy", auth.ErrNoSession, http.StatusMethodNotAllowed},
+		{"POST plan rejected", http.MethodPost, "/c/fancy/plan", auth.ErrNoSession, http.StatusMethodNotAllowed},
+		{"non-party plan missing", http.MethodGet, "/c/budget/plan", auth.ErrNoSession, http.StatusNotFound},
+		{"unknown plan missing", http.MethodGet, "/c/missing/plan", auth.ErrNoSession, http.StatusNotFound},
 		{"account failure", http.MethodGet, "/c/fancy", errors.New("account unavailable"), http.StatusInternalServerError},
 		{"existing redirect", http.MethodGet, "/c/issaquah", auth.ErrNoSession, http.StatusFound},
 	} {
@@ -59,10 +62,11 @@ func TestLandingRoutes(t *testing.T) {
 				assert.Contains(t, response.Body.String(), `<meta name="description" content="`+c.Blurb+`" />`)
 				assert.Contains(t, response.Body.String(), c.Blurb)
 				if c.AskGuestCount {
-					assert.Contains(t, response.Body.String(), `action="`+tt.path+`"`)
+					assert.Contains(t, response.Body.String(), `action="`+tt.path+`/plan"`)
 					assert.Contains(t, response.Body.String(), `name="guests" type="number" min="1" max="100" step="1" required`)
 					assert.Contains(t, response.Body.String(), "How many people are coming?")
 				} else {
+					assert.Contains(t, response.Body.String(), `action="/locations"`)
 					assert.Contains(t, response.Body.String(), c.Instructions)
 					assert.NotContains(t, response.Body.String(), `name="guests"`)
 				}
@@ -76,9 +80,30 @@ func TestLandingRoutes(t *testing.T) {
 				} else {
 					assert.Contains(t, response.Body.String(), "Dinner photo coming soon")
 				}
+				if tt.path == "/c/thanksgiving" {
+					assert.Contains(t, response.Body.String(), `src="https://test.careme.cooking/recipe/lqi74zXNvQNoFdRTrIBD2g==/image"`)
+					assert.Contains(t, response.Body.String(), `alt="A slice of pumpkin pie topped with whipped cream."`)
+				}
 				assert.NotContains(t, response.Body.String(), "Your kitchen")
 			}
 		})
+	}
+}
+
+func TestLandingWithLocationQueryStillRenders(t *testing.T) {
+	require.NoError(t, templates.Init(&config.Config{}))
+	for _, slug := range []string{"fancy", "thanksgiving"} {
+		for _, query := range []string{"zip=98101&guests=8", "lat=47.6&lon=-122.3&guests=0"} {
+			t.Run(slug+"/"+query, func(t *testing.T) {
+				mux := http.NewServeMux()
+				Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
+				response := httptest.NewRecorder()
+				mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/"+slug+"?"+query, nil))
+				require.Equal(t, http.StatusOK, response.Code)
+				assert.Empty(t, response.Header().Get("Location"))
+				assert.Contains(t, response.Body.String(), `action="/c/`+slug+`/plan"`)
+			})
+		}
 	}
 }
 
@@ -90,7 +115,7 @@ func TestGuestCountSubmission(t *testing.T) {
 					mux := http.NewServeMux()
 					Register(mux, landingUserStub{err: auth.ErrNoSession}, auth.DefaultMock())
 					response := httptest.NewRecorder()
-					mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/"+slug+"?"+location+"&guests="+guests+"&instructions=override&utm_source=facebook", nil))
+					mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/c/"+slug+"/plan?"+location+"&guests="+guests+"&instructions=override&utm_source=facebook", nil))
 					if guests != "1" && guests != "8" && guests != "100" {
 						require.Equal(t, http.StatusBadRequest, response.Code)
 						assert.Empty(t, response.Header().Get("Location"))
@@ -101,7 +126,7 @@ func TestGuestCountSubmission(t *testing.T) {
 					require.NoError(t, err)
 					assert.Equal(t, "/locations", target.Path)
 					query := target.Query()
-					assert.Equal(t, dinnerCampaigns[slug].Instructions+"\nCook for "+guests+" people. Scale all recipes and ingredient quantities to serve this many guests.", query.Get("instructions"))
+					assert.Equal(t, dinnerCampaigns[slug].Instructions+"\nCook for "+guests+" people. Use this as the guest count when planning portions.", query.Get("instructions"))
 					assert.Equal(t, "facebook", query.Get("utm_source"))
 					assert.False(t, query.Has("guests"))
 					coordinates, err := url.ParseQuery(location)
