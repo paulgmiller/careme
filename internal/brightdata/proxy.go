@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"careme/internal/httpretry"
 
@@ -22,6 +23,8 @@ import (
 
 //go:embed brightdata.crt
 var brightDataRootCA []byte
+
+const defaultRequestAttemptTimeout = 10 * time.Second
 
 type ProxyConfig struct {
 	Host     string `json:"host"`
@@ -88,7 +91,9 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 		}
 	}
 
-	client := &http.Client{Transport: transport}
+	// This client performs one attempt. A timeout on the returned standard
+	// client would instead cover the entire retry sequence.
+	client := &http.Client{Transport: transport, Timeout: defaultRequestAttemptTimeout}
 
 	return withRetries(client), nil
 }
@@ -151,6 +156,10 @@ func withRetries(baseClient *http.Client) *http.Client {
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
 	// We'll tune these once we have a clearer sense of how often these retries fire.
 	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		// A timeout can leave retries pinned to a stalled sticky proxy peer.
+		// Replace the session so the next attempt and later requests sharing
+		// it ask Bright Data for another peer. Rotate before the context check:
+		// an outer retry layer may have imposed this attempt's deadline.
 		var netErr net.Error
 		if err != nil && !errors.Is(err, context.Canceled) && (errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()) {
 			if session, ok := ctx.Value(proxySessionIDContextKey{}).(*atomic.Pointer[string]); ok {

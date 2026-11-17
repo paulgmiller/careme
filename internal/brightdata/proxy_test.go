@@ -151,6 +151,7 @@ func TestNewProxyAwareHTTPClient_DisabledLeavesDefaultTransport(t *testing.T) {
 	if retryTransport.Client.HTTPClient.Transport != http.DefaultTransport {
 		t.Fatalf("expected default base transport, got %T", retryTransport.Client.HTTPClient.Transport)
 	}
+	assert.Equal(t, 10*time.Second, retryTransport.Client.HTTPClient.Timeout, "timeout must apply to each attempt inside the retry loop")
 }
 
 func TestWithRetries_OnlyRetriesGet5xx(t *testing.T) {

@@ -7,24 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"careme/internal/brightdata"
-	"careme/internal/httpretry"
-
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 const (
 	// DefaultBaseURL is the public Whole Foods Market website origin.
-	DefaultBaseURL               = "https://www.wholefoodsmarket.com"
-	defaultCategoryLimit         = 60
-	defaultCategoryTimeout       = 2 * time.Minute
-	defaultRequestAttemptTimeout = 10 * time.Second
+	DefaultBaseURL         = "https://www.wholefoodsmarket.com"
+	defaultCategoryLimit   = 60
+	defaultCategoryTimeout = 2 * time.Minute
 )
 
 // client calls the public Whole Foods category products endpoint.
@@ -142,7 +137,8 @@ type StoreAddress struct {
 	Country            string `json:"COUNTRY"`
 }
 
-// NewClient creates a Whole Foods client with a default base URL and timeout.
+// NewClient creates a Whole Foods client using the injected HTTP client's
+// timeout and retry policy, with the default base URL.
 func NewClient(httpClient *http.Client) *client {
 	return NewClientWithBaseURL(DefaultBaseURL, httpClient)
 }
@@ -159,7 +155,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 
 	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: withWholeFoodsRetries(httpClient),
+		httpClient: httpClient,
 	}
 }
 
@@ -252,48 +248,4 @@ func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
-}
-
-func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
-	if baseClient == nil {
-		baseClient = http.DefaultClient
-	}
-	retryHTTPClient := *baseClient
-	if retryHTTPClient.Timeout == 0 || retryHTTPClient.Timeout > defaultRequestAttemptTimeout {
-		retryHTTPClient.Timeout = defaultRequestAttemptTimeout
-	}
-	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient = &retryHTTPClient
-	retryClient.RetryMax = 2
-	retryClient.RetryWaitMin = 100 * time.Millisecond
-	retryClient.RetryWaitMax = time.Second
-	retryClient.CheckRetry = wholeFoodsRetryPolicy
-	retryClient.RequestLogHook = httpretry.LogRetry("wholefoods")
-	retryClient.ErrorHandler = func(resp *http.Response, err error, attempts int) (*http.Response, error) {
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
-		if err == nil {
-			err = fmt.Errorf("HTTP status %d", resp.StatusCode)
-		}
-		return nil, fmt.Errorf("wholefoods request failed after %d attempt(s): %w", attempts, err)
-	}
-	return retryClient.StandardClient()
-}
-
-func wholeFoodsRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
-	if ctx.Err() != nil {
-		return false, ctx.Err()
-	}
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return false, err
-		}
-		var netErr net.Error
-		return errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout(), nil
-	}
-	if resp == nil || resp.Request == nil || resp.Request.Method != http.MethodGet {
-		return false, nil
-	}
-	return resp.StatusCode >= http.StatusInternalServerError && resp.StatusCode <= 599, nil
 }

@@ -127,7 +127,9 @@ func TestCategory_UsesSeparateProxySessionPerCategory(t *testing.T) {
 func TestCategory_StatusError(t *testing.T) {
 	t.Parallel()
 
+	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
 		http.Error(w, "nope", http.StatusBadGateway)
 	}))
 	t.Cleanup(server.Close)
@@ -141,13 +143,14 @@ func TestCategory_StatusError(t *testing.T) {
 	if !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	assert.Equal(t, 1, attempts, "Whole Foods should leave retries to the injected client")
 }
 
 func TestCategory_RetriesTransient5xx(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
 			if attempts < 3 {
@@ -167,7 +170,7 @@ func TestCategory_RetriesTransient5xx(t *testing.T) {
 				Request: r,
 			}, nil
 		}),
-	})
+	}))
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
 	if err != nil {
@@ -188,7 +191,7 @@ func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T)
 	t.Parallel()
 
 	attempts := 0
-	client := NewClientWithBaseURL("https://example.com", &http.Client{
+	client := NewClientWithBaseURL("https://example.com", wholeFoodsProxyClient(t, &http.Client{
 		Timeout: time.Millisecond,
 		Transport: wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 			attempts++
@@ -205,7 +208,7 @@ func TestCategory_RetriesRequestAttemptTimeoutWithinCategoryBudget(t *testing.T)
 				Request: r,
 			}, nil
 		}),
-	})
+	}))
 
 	resp, err := client.Category(context.Background(), "beef", "10216")
 	if err != nil {
@@ -296,17 +299,19 @@ func TestCategory_RotatesSessionsThroughBrightDataTimeouts(t *testing.T) {
 		attempts int
 	}{
 		{name: "recovers", timeouts: 1, attempts: 2},
-		{name: "exhausted", timeouts: 3, attempts: 3},
+		{name: "exhausted", timeouts: 5, attempts: 5},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			// Exercise the nested retry stack used in production. The inner
-			// Bright Data client receives an expired per-attempt context.
+			// The shared client owns the attempt timeout and the only retry loop.
 			proxyClient, err := brightdata.NewProxyAwareHTTPClient(brightdata.ProxyConfig{})
 			require.NoError(t, err)
-			proxyClient.Timeout = time.Millisecond
+			retries := proxyClient.Transport.(*retryablehttp.RoundTripper).Client
+			retries.HTTPClient.Timeout = time.Millisecond
+			retries.RetryWaitMin = 0
+			retries.RetryWaitMax = 0
 			var sessions []string
-			proxyClient.Transport.(*retryablehttp.RoundTripper).Client.HTTPClient.Transport = wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+			retries.HTTPClient.Transport = wholeFoodsRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 				session, ok := brightdata.ProxySessionIDFromContext(r.Context())
 				require.True(t, ok)
 				sessions = append(sessions, session)
@@ -317,8 +322,8 @@ func TestCategory_RotatesSessionsThroughBrightDataTimeouts(t *testing.T) {
 				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: ioNopCloserString(`{"results":[]}`), Request: r}, nil
 			})
 			_, err = NewClientWithBaseURL("https://example.com", proxyClient).Category(t.Context(), "shellfish", "10103")
-			if tc.timeouts == 3 {
-				require.ErrorContains(t, err, "wholefoods request failed after 3 attempt(s)")
+			if tc.timeouts == 5 {
+				require.ErrorContains(t, err, "giving up after 5 attempt(s)")
 				assert.ErrorIs(t, err, context.DeadlineExceeded)
 			} else {
 				require.NoError(t, err)
@@ -343,7 +348,7 @@ func TestCategory_RetrySessionPolicy(t *testing.T) {
 		{name: "server error", status: http.StatusBadGateway, attempts: 2},
 		{name: "not found", status: http.StatusNotFound, attempts: 1},
 		{name: "canceled", err: context.Canceled, cancel: true, attempts: 1},
-		{name: "network error", err: errors.New("connection reset"), attempts: 1},
+		{name: "network error", err: errors.New("connection reset"), attempts: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -439,7 +444,7 @@ func TestCategory_LogsRetryAttemptsWithCategoryStoreAndOffset(t *testing.T) {
 		"Rotating Bright Data proxy session",
 		"reason=timeout",
 		"Retrying HTTP request",
-		"source=wholefoods",
+		"source=brightdata",
 		`url="https://example.com/api/products/category/fresh-vegetables?limit=60&offset=120&store=10153"`,
 		"attempt=2",
 	} {
@@ -598,15 +603,15 @@ func ioNopCloserString(body string) io.ReadCloser {
 	return io.NopCloser(strings.NewReader(body))
 }
 
-// Disable inner retries here so these tests exercise the provider's outer retry
-// policy while retaining Bright Data's session handling.
+// Inject the transport into the shared retry client, as production does.
+// Skip backoff waits in tests while retaining the production attempt limit.
 func wholeFoodsProxyClient(t *testing.T, baseClient *http.Client) *http.Client {
 	t.Helper()
 	client, err := brightdata.NewProxyAwareHTTPClient(brightdata.ProxyConfig{})
 	require.NoError(t, err)
 	transport := client.Transport.(*retryablehttp.RoundTripper)
 	transport.Client.HTTPClient = baseClient
-	transport.Client.RetryMax = 0
-	transport.Client.ErrorHandler = retryablehttp.PassthroughErrorHandler
+	transport.Client.RetryWaitMin = 0
+	transport.Client.RetryWaitMax = 0
 	return client
 }
