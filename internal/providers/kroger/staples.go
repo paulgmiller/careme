@@ -270,6 +270,12 @@ func defaultStaples() []staplesFilter {
 			Term: "chicken",
 		},
 		{
+			Term: "turkey",
+		},
+		{
+			Term: "sausage",
+		},
+		{
 			Term: "fish",
 		},
 		{
@@ -288,7 +294,6 @@ func defaultStaples() []staplesFilter {
 		{
 			Term: "pasta",
 		},
-		{Term: "Meat & Seafood"},
 		{Term: "Dairy & Eggs"},
 	}...)
 }
