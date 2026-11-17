@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -160,7 +159,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 
 	return &client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
+		httpClient: withWholeFoodsRetries(httpClient),
 	}
 }
 
@@ -169,6 +168,7 @@ func NewClientWithBaseURL(baseURL string, httpClient *http.Client) *client {
 func (c *client) Category(ctx context.Context, queryterm, store string) ([]product, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultCategoryTimeout)
 	defer cancel()
+	ctx = brightdata.WithProxySessionID(ctx, rand.Text())
 
 	queryterm = strings.TrimSpace(queryterm)
 	if queryterm == "" {
@@ -179,9 +179,6 @@ func (c *client) Category(ctx context.Context, queryterm, store string) ([]produ
 	if store == "" {
 		return nil, errors.New("store is required")
 	}
-	// Each category owns its retry state; a replacement session survives into
-	// subsequent pages without affecting concurrent category requests.
-	httpClient := withWholeFoodsRetries(c.httpClient, rand.Text())
 
 	endpoint, err := url.Parse(c.baseURL + "/api/products/category/" + url.PathEscape(queryterm))
 	if err != nil {
@@ -197,7 +194,7 @@ func (c *client) Category(ctx context.Context, queryterm, store string) ([]produ
 		endpoint.RawQuery = params.Encode()
 
 		var page categoryResponse
-		if err := getJSON(ctx, httpClient, endpoint.String(), &page); err != nil {
+		if err := c.getJSON(ctx, endpoint.String(), &page); err != nil {
 			return nil, err
 		}
 
@@ -228,17 +225,13 @@ func (c *client) StoreSummary(ctx context.Context, store string) (*StoreSummaryR
 }
 
 func (c *client) getJSON(ctx context.Context, endpoint string, dest any) error {
-	return getJSON(ctx, withWholeFoodsRetries(c.httpClient, ""), endpoint, dest)
-}
-
-func getJSON(ctx context.Context, httpClient *http.Client, endpoint string, dest any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request %q: %w", endpoint, err)
 	}
@@ -261,7 +254,7 @@ func getJSON(ctx context.Context, httpClient *http.Client, endpoint string, dest
 	return nil
 }
 
-func withWholeFoodsRetries(baseClient *http.Client, proxySessionID string) *http.Client {
+func withWholeFoodsRetries(baseClient *http.Client) *http.Client {
 	if baseClient == nil {
 		baseClient = http.DefaultClient
 	}
@@ -274,26 +267,8 @@ func withWholeFoodsRetries(baseClient *http.Client, proxySessionID string) *http
 	retryClient.RetryMax = 2
 	retryClient.RetryWaitMin = 100 * time.Millisecond
 	retryClient.RetryWaitMax = time.Second
-	rotateSession := false
-	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
-		retry, checkErr := wholeFoodsRetryPolicy(ctx, resp, err)
-		// Transport errors are retried only for timeouts. HTTP status retries
-		// retain the current session.
-		rotateSession = retry && err != nil
-		return retry, checkErr
-	}
-	logRetry := httpretry.LogRetry("wholefoods")
-	retryClient.RequestLogHook = func(logger retryablehttp.Logger, req *http.Request, attempt int) {
-		if attempt > 0 && rotateSession && proxySessionID != "" {
-			proxySessionID = rand.Text()
-			slog.InfoContext(req.Context(), "Rotating Bright Data proxy session",
-				"source", "wholefoods", "url", req.URL.String(), "attempt", attempt+1, "reason", "timeout")
-		}
-		if proxySessionID != "" {
-			*req = *req.WithContext(brightdata.WithProxySessionID(req.Context(), proxySessionID))
-		}
-		logRetry(logger, req, attempt)
-	}
+	retryClient.CheckRetry = wholeFoodsRetryPolicy
+	retryClient.RequestLogHook = httpretry.LogRetry("wholefoods")
 	retryClient.ErrorHandler = func(resp *http.Response, err error, attempts int) (*http.Response, error) {
 		if resp != nil {
 			_ = resp.Body.Close()

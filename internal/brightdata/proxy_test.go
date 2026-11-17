@@ -2,11 +2,19 @@ package brightdata
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	retryablehttp "github.com/hashicorp/go-retryablehttp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProxyConfigValidate_AllowsDisabled(t *testing.T) {
@@ -240,4 +248,121 @@ func mustRequest(t *testing.T, method string) *http.Request {
 		t.Fatalf("NewRequestWithContext() error = %v", err)
 	}
 	return req
+}
+
+func TestWithRetries_ProxySessions(t *testing.T) {
+	t.Parallel()
+	for _, sticky := range []bool{false, true} {
+		for _, tc := range []struct {
+			name   string
+			err    error
+			status int
+			rotate bool
+		}{
+			{name: "timeout", err: context.DeadlineExceeded, rotate: true},
+			{name: "network timeout", err: &net.DNSError{Err: "timeout", IsTimeout: true}, rotate: true},
+			{name: "server error", status: http.StatusBadGateway},
+			{name: "network error", err: errors.New("connection reset")},
+		} {
+			t.Run(fmt.Sprintf("%s/sticky=%v", tc.name, sticky), func(t *testing.T) {
+				t.Parallel()
+				ctx := t.Context()
+				if sticky {
+					ctx = WithProxySessionID(ctx, "original")
+				}
+				var sessions []string
+				client := withRetries(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					session, ok := ProxySessionIDFromContext(req.Context())
+					require.True(t, ok)
+					require.NotEmpty(t, session)
+					sessions = append(sessions, session)
+					if len(sessions) == 1 && tc.err != nil {
+						return nil, tc.err
+					}
+					status := http.StatusOK
+					if len(sessions) == 1 {
+						status = tc.status
+					}
+					return &http.Response{StatusCode: status, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
+				})})
+				retries := client.Transport.(*retryablehttp.RoundTripper).Client
+				retries.RetryWaitMin = 0
+				retries.RetryWaitMax = 0
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+				require.NoError(t, err)
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				require.Len(t, sessions, 2)
+				assert.Equal(t, tc.rotate, sessions[0] != sessions[1])
+				if sticky {
+					assert.Equal(t, "original", sessions[0])
+					// A later request using the category's context retains the
+					// replacement session after the timeout was recovered.
+					resp, err = client.Do(req.Clone(ctx))
+					require.NoError(t, err)
+					require.NoError(t, resp.Body.Close())
+					require.Len(t, sessions, 3)
+					assert.Equal(t, sessions[1], sessions[2])
+				}
+			})
+		}
+	}
+}
+
+func TestWithRetries_AttemptTimeoutRotatesSession(t *testing.T) {
+	t.Parallel()
+	var sessions []string
+	client := withRetries(&http.Client{Timeout: time.Millisecond, Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		session, ok := ProxySessionIDFromContext(req.Context())
+		require.True(t, ok)
+		sessions = append(sessions, session)
+		if len(sessions) == 1 {
+			<-req.Context().Done()
+			return nil, req.Context().Err()
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: http.NoBody, Request: req}, nil
+	})})
+	retries := client.Transport.(*retryablehttp.RoundTripper).Client
+	retries.RetryWaitMin = 0
+	retries.RetryWaitMax = 0
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.Len(t, sessions, 2)
+	assert.NotEqual(t, sessions[0], sessions[1])
+}
+
+func TestWithRetries_ConcurrentRequestsHaveSeparateSessions(t *testing.T) {
+	t.Parallel()
+	client := withRetries(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		session, ok := ProxySessionIDFromContext(req.Context())
+		require.True(t, ok)
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(session)), Request: req}, nil
+	})})
+	sessions := make(chan string, 8)
+	t.Run("requests", func(t *testing.T) {
+		for i := range cap(sessions) {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				t.Parallel()
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://example.com", nil)
+				require.NoError(t, err)
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				sessions <- string(body)
+			})
+		}
+	})
+	close(sessions)
+	seen := make(map[string]bool)
+	for session := range sessions {
+		assert.False(t, seen[session], "independent requests should not share sessions")
+		seen[session] = true
+	}
+	assert.Len(t, seen, 8)
 }
