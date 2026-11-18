@@ -33,10 +33,10 @@ improvement hypotheses, not measured quality gains.
 
 These are workload-specific recommendations, not OpenAI benchmarks. Compare `low`
 and `medium` first; test `high` only if repeated failures on complicated recipes
-justify the latency and cost. GPT-6.2 Sol supports `low`, `medium`, `high`,
-`xhigh`, and `max`. See the [Sol model reference](https://developers.openai.com/api/docs/models/gpt-6.2-sol).
+justify the latency and cost. GPT-6.1 Sol supports `low`, `medium`, `high`,
+`xhigh`, and `max`. See the [Sol model reference](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-The production recipe and menu model is now `gpt-6.2-sol`.
+Production uses `gpt-6.1-sol` for recipes and `gpt-6.2-sol` for menu planning.
 The [September 29 comparison](../evals/recipe-generation/gpt61-sol-comparison-2026-09-29.md)
 compares GPT-6.1 Sol with GPT-6 Sol. Menu creation, regeneration,
 menu ingredient repair, recipe generation/revision, and recipe questions explicitly
@@ -59,7 +59,7 @@ The menu eval includes a long-description vegetarian regression case. The recipe
 eval can select the production model explicitly with:
 
 ```sh
-./task.sh evals EVAL=recipe-generation MODEL=gpt-6.2-sol -- --no-cache --repeat 3 --output /tmp/sol-recipe-eval.json
+./task.sh evals EVAL=recipe-generation MODEL=gpt-6.1-sol -- --no-cache --repeat 3 --output /tmp/sol-recipe-eval.json
 ```
 
 See [eval setup and credential requirements](../evals/README.md). Live evals make

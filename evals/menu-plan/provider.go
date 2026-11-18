@@ -70,7 +70,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	if err := json.Unmarshal(encoded, &settings); err != nil {
 		return nil, fmt.Errorf("decode provider options: %w", err)
 	}
-	cfg.AI.RecipeModel = resolveModel(settings, cfg.AI.RecipeModel)
+	cfg.AI.MenuModel = resolveModel(settings, cfg.AI.MenuModel)
 	model := strings.TrimSpace(settings.Config.JudgeModel)
 	if model == "" {
 		return nil, fmt.Errorf("config.judge_model is required")
@@ -84,7 +84,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	result["metadata"].(map[string]any)["requestedModel"] = cfg.AI.RecipeModel
+	result["metadata"].(map[string]any)["requestedModel"] = cfg.AI.MenuModel
 	return result, nil
 }
 

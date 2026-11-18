@@ -51,6 +51,8 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe generation
 
+The [2026-11-17 GPT-6.2 Sol comparison](recipe-generation/gpt62-sol-comparison-2026-11-17.md) compares GPT-6.2 Sol with a fresh GPT-6.1 Sol baseline on the current recipe and menu suites.
+
 The [2026-09-29 GPT-6.1 Sol comparison](recipe-generation/gpt61-sol-comparison-2026-09-29.md) compares GPT-6.1 Sol with GPT-6 Sol on recipe and menu runs.
 
 The [2026-09-22 GPT-6 Sol rollout](recipe-generation/gpt6-sol-rollout-2026-09-22.md) records recipe and menu results and compares the eight shared recipe cases with the recorded Astra baseline. The [2026-09-07 model comparison](recipe-generation/README.md) records earlier Astra, GPT-5.6 Sol, and Luna results.
