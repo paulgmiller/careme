@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,11 +15,59 @@ import (
 	"time"
 
 	"careme/internal/config"
+	locationtypes "careme/internal/locations/types"
 
 	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMenuPlanAPIErrorDiagnostics(t *testing.T) {
+	for _, tier := range []responses.ResponseNewParamsServiceTier{"default", "flex"} {
+		t.Run(string(tier), func(t *testing.T) {
+			cfg := testAIConfig(config.DefaultRecipeModel)
+			cfg.ServiceTier = tier
+			calls := 0
+			c := NewClient(cfg, &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{
+					StatusCode: http.StatusBadRequest,
+					Header: http.Header{
+						"Content-Type": {"application/json"}, "X-Request-Id": {"req-menu-failed"},
+						"Set-Cookie": {"private-cookie"},
+					},
+					Body:    io.NopCloser(strings.NewReader(`{"error":{"message":"Unsupported service tier for this model","type":"invalid_request_error","code":"unsupported_value","param":"service_tier","private":"private-body-field"}}`)),
+					Request: req,
+				}, nil
+			})}, &capturePromptRecorder{})
+			_, err := c.CreateMenuPlan(t.Context(), &locationtypes.Location{ID: "70100023", State: "WA"}, nil,
+				[]string{"private-prompt"}, time.Now(), nil, 3)
+			require.Error(t, err)
+			assert.Equal(t, 1, calls, "400 must not retry or fall back")
+			joined := errors.Join(fmt.Errorf("generate campaign: %w", err), errors.New("other location failed"))
+			for _, detail := range []string{
+				"400 Bad Request", string(cfg.MenuModel), string(tier), "req-menu-failed",
+				"invalid_request_error", "unsupported_value", "service_tier", "Unsupported service tier for this model",
+			} {
+				assert.Contains(t, joined.Error(), detail)
+			}
+			for _, private := range []string{"test-key", "private-cookie", "private-body-field", "private-prompt"} {
+				assert.NotContains(t, joined.Error(), private)
+			}
+			var apiErr *openai.Error
+			require.ErrorAs(t, joined, &apiErr)
+			assert.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+			assert.Equal(t, "unsupported_value", apiErr.Code)
+		})
+	}
+}
+
+func TestResponseErrorPreservesNonAPIErrors(t *testing.T) {
+	assert.NoError(t, responseError(responses.ResponseNewParams{}, nil))
+	err := fmt.Errorf("request stopped: %w", context.Canceled)
+	assert.Same(t, err, responseError(responses.ResponseNewParams{}, err))
+}
 
 func TestFlexFallback(t *testing.T) {
 	for _, tc := range []struct {

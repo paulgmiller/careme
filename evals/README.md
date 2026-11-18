@@ -198,9 +198,30 @@ Select either candidate with `MODEL=gpt-6-sol` or `MODEL=gpt-6.1-sol`; direct
 Promptfoo runs accept `RECIPE_EVAL_MODEL`, and provider `config.model` takes
 precedence. The selected model is recorded in `metadata.requestedModel`.
 
-The provider uses the production menu model (currently `gpt-6.2-sol`) with medium
+The provider uses the production menu model (currently `gpt-6.1-sol`) with medium
 reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
 configuration path. Each case makes a menu generation call and a separate judge call.
+
+Both the `menu-plan` and `recipe-generation` suites run every case against two
+providers: `service_tier=default` for web requests and `service_tier=flex` for
+campaigns and mail. Before changing production models, SDK, or request options,
+run the affected suite without the eval cache. For a small menu compatibility
+check across both tiers:
+
+```sh
+./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'One quick seasonal chicken dinner' --output /tmp/menu-plan-tiers.json
+```
+
+These providers send the actual production requests, including reasoning,
+schema, and prompt-cache options. A candidate can be checked with `MODEL=...`
+before rollout. In November 2026, GPT-6.2 Sol passed
+regular-tier evals but rejected campaign requests because it did not support Flex;
+menu planning was rolled back to GPT-6.1 Sol. Mocked Go tests cannot verify live
+model/tier compatibility, and cached eval results cannot establish it either.
+Quality assertions apply to both tiers; the 20-second menu and 60-second recipe
+latency limits apply only to default-tier requests. Provider `config.service_tier`
+selects the tier, recorded as `metadata.requestedServiceTier`. Flex capacity
+retries can make live evals take longer. Both suites require the judge key.
 
 The suite checks requested plan count, catalog membership for every anchor and
 side, and no repeated ingredient across anchor/side slots (ignoring case and

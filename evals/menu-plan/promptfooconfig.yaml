@@ -8,8 +8,14 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: menu-plan
+    label: menu-plan-default
     config:
+      service_tier: default
+      judge_model: google/gemini-3.1-pro-preview
+  - id: 'file://provider.go'
+    label: menu-plan-flex
+    config:
+      service_tier: flex
       judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
@@ -25,8 +31,10 @@ defaultTest:
             `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
         };
       metric: menu-quality
-    - type: latency
-      threshold: 20000
+    - type: javascript
+      value: |
+        const { metadata, latencyMs } = context.providerResponse;
+        return metadata.requestedServiceTier === 'flex' || latencyMs <= 20000;
       metric: menu-plan-latency-under-20s
     - type: is-json
       metric: menu-plan-json

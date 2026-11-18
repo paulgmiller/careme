@@ -19,6 +19,7 @@
 Run tasks from the repository root; `./task.sh --list` lists development commands. [Taskfile.yml](Taskfile.yml) owns command details.
 
 - Go changes: `./task.sh verify-go`; for core logic use `./task.sh verify-go -- -cover`. For targeted iteration: `./task.sh test -- -run TestName`.
+- Production recipe/menu model, SDK, or request-option changes: run the affected `recipe-generation` or `menu-plan` eval with `--no-cache`; both cover default and Flex service tiers. Test candidate models with `MODEL=...` before rollout. Report missing credentials or unavailable APIs as blocked; mocked tests and cached evals do not establish compatibility.
 - HTML/CSS changes: `./task.sh verify-ui`, then inspect the affected UI and include screenshots in PRs. CSS generation requires Docker.
 - Documentation only: review accuracy and run `git diff --check`.
 - Changes to `internal/recipes/params.go` `Produce()`: run `./task.sh producecheck` before and after; report the score difference. Requires real API credentials from `.envtest`. If unavailable, report the check as blocked and complete other verification.

@@ -13,6 +13,7 @@ import (
 	"careme/internal/config"
 
 	"github.com/openai/openai-go/v3/responses"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type promptfooContext struct {
@@ -33,9 +34,10 @@ type recipeCritiquer interface {
 
 type providerOptions struct {
 	Config struct {
-		Model           string                    `json:"model"`
-		ReasoningEffort responses.ReasoningEffort `json:"reasoning_effort"`
-		JudgeModel      string                    `json:"judge_model"`
+		Model           string                                 `json:"model"`
+		ReasoningEffort responses.ReasoningEffort              `json:"reasoning_effort"`
+		JudgeModel      string                                 `json:"judge_model"`
+		ServiceTier     responses.ResponseNewParamsServiceTier `json:"service_tier"`
 	} `json:"config"`
 }
 
@@ -74,8 +76,10 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	}
 	aiConfig := cfg.AI
 	aiConfig.RecipeModel = settings.Config.Model
-	generator := ai.NewClient(aiConfig, http.DefaultClient, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
-	judge := ai.NewCritiquer(cfg.OpenRouter.APIKey, settings.Config.JudgeModel, http.DefaultClient)
+	aiConfig.ServiceTier = settings.Config.ServiceTier
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	generator := ai.NewClient(aiConfig, httpClient, nil).WithRecipeReasoningEffort(settings.Config.ReasoningEffort)
+	judge := ai.NewCritiquer(cfg.OpenRouter.APIKey, settings.Config.JudgeModel, httpClient)
 	result, err := runEval(body, generator, judge)
 	if err != nil {
 		return nil, err
@@ -83,6 +87,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	metadata := result["metadata"].(map[string]any)
 	metadata["requestedModel"] = settings.Config.Model
 	metadata["requestedReasoningEffort"] = settings.Config.ReasoningEffort
+	metadata["requestedServiceTier"] = string(settings.Config.ServiceTier)
 	return result, nil
 }
 

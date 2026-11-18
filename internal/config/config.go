@@ -24,7 +24,8 @@ const (
 	// See evals/recipe-generation/gpt62-sol-comparison-2026-11-17.md before changing it.
 	DefaultRecipeModel openai.ResponsesModel = openai.ChatModelGPT6_1Sol
 	// DefaultMenuModel is the production model for menu planning.
-	DefaultMenuModel openai.ResponsesModel = openai.ChatModelGPT6_2Sol
+	// GPT-6.2 Sol rejects the Flex tier used by campaigns and mail.
+	DefaultMenuModel openai.ResponsesModel = openai.ChatModelGPT6_1Sol
 	// DefaultImageModel is the production model for recipe image generation.
 	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_6Flare
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
