@@ -110,9 +110,7 @@ tasks:
       - npm exec --yes --package eslint@10.4.0 -- eslint internal/static
 
   test:
-    desc: Run tests with mocks enabled by default
-    env:
-      ENABLE_MOCKS: '{{default "1" .ENABLE_MOCKS}}'
+    desc: Run tests with the caller's environment
     cmds:
       - go test ./... {{.CLI_ARGS}}
 
