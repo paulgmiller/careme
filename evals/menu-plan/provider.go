@@ -16,6 +16,8 @@ import (
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type promptfooContext struct {
@@ -46,8 +48,9 @@ func CallApi(_ string, options map[string]any, ctx map[string]any) (map[string]a
 
 type settings struct {
 	Config struct {
-		Model      string `json:"model"`
-		JudgeModel string `json:"judge_model"`
+		Model       string                                 `json:"model"`
+		JudgeModel  string                                 `json:"judge_model"`
+		ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier"`
 	} `json:"config"`
 }
 
@@ -71,6 +74,7 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 		return nil, fmt.Errorf("decode provider options: %w", err)
 	}
 	cfg.AI.MenuModel = resolveModel(settings, cfg.AI.MenuModel)
+	cfg.AI.ServiceTier = settings.Config.ServiceTier
 	model := strings.TrimSpace(settings.Config.JudgeModel)
 	if model == "" {
 		return nil, fmt.Errorf("config.judge_model is required")
@@ -78,13 +82,15 @@ func callAPI(options map[string]any, ctx map[string]any) (map[string]any, error)
 	if strings.TrimSpace(cfg.AI.APIKey) == "" || strings.TrimSpace(cfg.OpenRouter.APIKey) == "" {
 		return nil, fmt.Errorf("AI_API_KEY and OPENROUTER_API_KEY are required for judged menu evals")
 	}
-	planner := ai.NewClient(cfg.AI, http.DefaultClient, nil)
-	judge := newMenuJudge(cfg.OpenRouter.APIKey, model, http.DefaultClient)
+	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	planner := ai.NewClient(cfg.AI, httpClient, nil)
+	judge := newMenuJudge(cfg.OpenRouter.APIKey, model, httpClient)
 	result, err := runEval(body, planner, judge)
 	if err != nil {
 		return nil, err
 	}
 	result["metadata"].(map[string]any)["requestedModel"] = cfg.AI.MenuModel
+	result["metadata"].(map[string]any)["requestedServiceTier"] = string(cfg.AI.ServiceTier)
 	return result, nil
 }
 

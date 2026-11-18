@@ -36,7 +36,7 @@ and `medium` first; test `high` only if repeated failures on complicated recipes
 justify the latency and cost. GPT-6.1 Sol supports `low`, `medium`, `high`,
 `xhigh`, and `max`. See the [Sol model reference](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-Production uses `gpt-6.1-sol` for recipes and `gpt-6.2-sol` for menu planning.
+Production uses `gpt-6.1-sol` for recipes and `gpt-6.1-sol` for menu planning.
 The [September 29 comparison](../evals/recipe-generation/gpt61-sol-comparison-2026-09-29.md)
 compares GPT-6.1 Sol with GPT-6 Sol. Menu creation, regeneration,
 menu ingredient repair, recipe generation/revision, and recipe questions explicitly

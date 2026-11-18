@@ -8,7 +8,7 @@ This document covers the first-time generation path inside `generatorService.Gen
 flowchart TD
     subgraph Legend["Model color"]
         MiniLegend["gpt-6-luna<br/>Grading"]
-        MenuModelLegend["gpt-6.2-sol<br/>Menu planning"]
+        MenuModelLegend["gpt-6.1-sol<br/>Menu planning"]
         RecipeModelLegend["gpt-6.1-sol<br/>Recipe generation + retry"]
         OpenRouterLegend["OpenRouter<br/>Recipe critique"]
     end
@@ -88,7 +88,7 @@ The model boundary in this section is ingredient grading. Fetching staples is st
 
 ## Menu Plan And Recipe Fan-Out
 
-After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-6.2-sol`.
+After grading, `GenerateRecipes` sorts the ingredient list deterministically and calls the menu-planning model through `CreateMenuPlan` for exactly three plans. Deterministic ordering keeps the serialized ingredient TSV identical when its contents have not changed, which is required for prompt-cache prefix matches. The menu plan request includes the location, filtered ingredients, user directive, user instructions, recipe date, and recently cooked recipe titles. Menu planning uses `gpt-6.1-sol`.
 
 The returned `menuPlan.Plans` are processed with `parallelism.MapWithErrors`. Each plan becomes one worker and makes its own `gpt-6.1-sol` recipe model call:
 

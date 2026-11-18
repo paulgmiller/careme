@@ -37,7 +37,7 @@ func TestNewClientUsesModelsByRole(t *testing.T) {
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, &capturePromptRecorder{})
 
 	assert.Equal(t, "gpt-6.1-sol", client.recipeModel)
-	assert.Equal(t, "gpt-6.2-sol", client.menuModel)
+	assert.Equal(t, "gpt-6.1-sol", client.menuModel)
 	if client.recipeModel != config.DefaultRecipeModel {
 		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.recipeModel)
 	}
