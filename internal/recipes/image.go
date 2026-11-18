@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -50,4 +52,31 @@ func (iio imageStore) Save(ctx context.Context, hash string, image *ai.Generated
 	}
 	// TODO store content meta data somewher?
 	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
+}
+
+func (s *server) startRecipeImageGeneration(ctx context.Context, recipe ai.Recipe) {
+	s.wg.Go(func() {
+		recipeHash := recipe.ComputeHash()
+		// 4 minutes is a magical number here. neeed to look at data.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
+		defer cancel()
+
+		exists, err := s.images.Exists(ctx, recipeHash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
+			return
+		}
+		if exists {
+			return
+		}
+		slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
+		image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
+			return
+		}
+		if err := s.images.Save(ctx, recipeHash, image); err != nil {
+			slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
+		}
+	})
 }

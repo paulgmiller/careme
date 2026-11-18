@@ -572,6 +572,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
 			return
 		}
+		s.startRecipeImageGeneration(ctx, *replacement)
 		replaced, err := s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,
@@ -585,7 +586,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
 				slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
 			} else {
-				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
+				s.startSavedRecipeWineGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
 			}
 		}
 		if err := s.generationStatuses.Complete(ctx, id, newHash); err != nil {
