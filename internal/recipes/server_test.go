@@ -3246,11 +3246,10 @@ func (g blockingRecipeImageGenerator) GenerateRecipeImage(ctx context.Context, r
 	}
 }
 
-func TestKickgeneration_StartsImagesWithoutWaitingForThem(t *testing.T) {
+func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	recipe := ai.Recipe{Title: "Unsaved suggestion"}
 	ig := blockingRecipeImageGenerator{started: make(chan struct{}), release: make(chan struct{})}
 	s := newTestServer(t,
-		withTestGenerator(&captureKickgenerationGenerator{shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}}),
 		withImageGenerator(ig),
 	)
 	defer func() {
@@ -3263,17 +3262,12 @@ func TestKickgeneration_StartsImagesWithoutWaitingForThem(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "generated-image", string(data))
 	}()
-	params := DefaultParams(&locations.Location{ID: "70003002", Name: "Store"}, time.Now())
-	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
+	s.GenerateInBackground(t.Context(), recipe)
 	select {
 	case <-ig.started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("image generation did not start for the unsaved recipe")
 	}
-	require.Eventually(t, func() bool {
-		_, err := s.FromCache(t.Context(), params.Hash())
-		return err == nil
-	}, 5*time.Second, 10*time.Millisecond, "shopping list must be available while image generation is blocked")
 	exists, err := s.images.Exists(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.False(t, exists)

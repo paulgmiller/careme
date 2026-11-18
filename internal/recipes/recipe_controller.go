@@ -572,7 +572,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
 			return
 		}
-		s.startRecipeImageGeneration(ctx, *replacement)
+		s.GenerateInBackground(ctx, *replacement)
 		replaced, err := s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,

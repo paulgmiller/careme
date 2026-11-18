@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -54,7 +55,20 @@ func (iio imageStore) Save(ctx context.Context, hash string, image *ai.Generated
 	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }
 
-func (s *server) startRecipeImageGeneration(ctx context.Context, recipe ai.Recipe) {
+// RecipeImageGenerator owns background dish images shared by recipe generation and edits.
+type RecipeImageGenerator struct {
+	images   ImageStore
+	imagegen ImageGen
+	wg       sync.WaitGroup
+}
+
+func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
+	return &RecipeImageGenerator{images: images, imagegen: imagegen}
+}
+
+func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
+
+func (s *RecipeImageGenerator) GenerateInBackground(ctx context.Context, recipe ai.Recipe) {
 	s.wg.Go(func() {
 		recipeHash := recipe.ComputeHash()
 		// 4 minutes is a magical number here. neeed to look at data.

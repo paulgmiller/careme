@@ -650,10 +650,6 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 			return
 		}
 
-		for _, recipe := range shoppingList.Recipes {
-			s.startRecipeImageGeneration(ctx, recipe)
-		}
-
 		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
