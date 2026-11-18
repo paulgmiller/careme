@@ -23,10 +23,12 @@ func TestNewClientTrimsModels(t *testing.T) {
 	client := NewClient(config.AIConfig{
 		APIKey:      "test-key",
 		RecipeModel: " candidate-model ",
+		MenuModel:   " candidate-menu-model ",
 		ImageModel:  " candidate-image-model ",
 	}, nil, &capturePromptRecorder{})
 
-	assert.Equal(t, "candidate-model", client.model)
+	assert.Equal(t, "candidate-model", client.recipeModel)
+	assert.Equal(t, "candidate-menu-model", client.menuModel)
 	assert.Equal(t, "candidate-image-model", string(client.imageModel))
 	assert.Equal(t, defaultWineModel, client.wineModel)
 }
@@ -34,9 +36,10 @@ func TestNewClientTrimsModels(t *testing.T) {
 func TestNewClientUsesModelsByRole(t *testing.T) {
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, &capturePromptRecorder{})
 
-	assert.Equal(t, "gpt-6.1-sol", client.model)
-	if client.model != config.DefaultRecipeModel {
-		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)
+	assert.Equal(t, "gpt-6.1-sol", client.recipeModel)
+	assert.Equal(t, "gpt-6.2-sol", client.menuModel)
+	if client.recipeModel != config.DefaultRecipeModel {
+		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.recipeModel)
 	}
 	if client.wineModel != openai.ChatModelGPT6Luna {
 		t.Fatalf("expected wine model to use low-cost Luna path, got %q", client.wineModel)

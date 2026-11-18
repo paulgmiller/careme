@@ -154,7 +154,7 @@ func TestCreateMenuPlanPreservesModelIngredientChoices(t *testing.T) {
 				assert.Contains(t, string(body), tc.instruction)
 				assert.Contains(t, string(body), "Correct obvious ingredient typos")
 				assert.Contains(t, string(body), "Decide which role best fits the dish")
-				assert.Equal(t, config.DefaultRecipeModel, params["model"])
+				assert.Equal(t, config.DefaultMenuModel, params["model"])
 				assert.Contains(t, params["prompt_cache_key"], "careme:store-day:v1:")
 				assert.Equal(t, 2, strings.Count(string(body), `"prompt_cache_breakpoint":{"mode":"explicit"}`))
 				output, err := json.Marshal(MenuPlan{Plans: []RecipePlan{{AnchorIngredient: tc.anchor, SideVegetable: tc.side, RecipeInstructions: []string{tc.direction}}}})
@@ -199,7 +199,9 @@ func TestCreateMenuPlanRejectsNonPositiveCount(t *testing.T) {
 func TestCreateMenuPlanRecordsPrompt(t *testing.T) {
 	const model = "candidate-model"
 	recorder := &capturePromptRecorder{}
-	client := NewClient(testAIConfig(model), menuPlanResponseClient(t, "resp-menu-create"), recorder)
+	cfg := testAIConfig(config.DefaultRecipeModel)
+	cfg.MenuModel = model
+	client := NewClient(cfg, menuPlanResponseClient(t, "resp-menu-create"), recorder)
 	ingredients := []InputIngredient{
 		{Description: "tofu"},
 		{Description: "Broccoli"},
@@ -311,6 +313,7 @@ func TestRegenerateMenuPlanRecordsPrompt(t *testing.T) {
 	if recorder.record.ResponseID != "resp-menu-after" || recorder.record.PreviousResponseID != "resp-menu-before" {
 		t.Fatalf("unexpected prompt record: %#v", recorder.record)
 	}
+	assert.Equal(t, config.DefaultMenuModel, recorder.record.Model)
 	body := mustJSON(t, recorder.record.Input)
 	if !strings.Contains(body, "Build 1 replacement recipe plan(s) by default") || !strings.Contains(body, "less spicy") {
 		t.Fatalf("unexpected recorded regenerate prompt: %s", body)
@@ -389,7 +392,7 @@ func menuPlanHTTPResponse(req *http.Request, responseID, outputText string) *htt
 					"output_tokens_details": {"reasoning_tokens": 0},
 					"total_tokens": 2
 				}
-			}`, responseID, config.DefaultRecipeModel, outputText))),
+			}`, responseID, config.DefaultMenuModel, outputText))),
 		Request: req,
 	}
 }

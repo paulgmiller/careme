@@ -19,8 +19,12 @@ const additionalStoresEnableEnv = "EXTRA_STORES_ENABLE"
 const (
 	defaultLocalOrigin = "http://localhost:8080"
 
-	// DefaultRecipeModel is the production model for recipe and menu generation.
+	// DefaultRecipeModel is the production model for recipe generation.
+	// GPT-6.1 Sol passed more recipe cases than GPT-6.2 Sol at medium or high effort.
+	// See evals/recipe-generation/gpt62-sol-comparison-2026-11-17.md before changing it.
 	DefaultRecipeModel openai.ResponsesModel = openai.ChatModelGPT6_1Sol
+	// DefaultMenuModel is the production model for menu planning.
+	DefaultMenuModel openai.ResponsesModel = openai.ChatModelGPT6_2Sol
 	// DefaultImageModel is the production model for recipe image generation.
 	DefaultImageModel openai.ImageModel = openai.ImageModelGPTImage2_6Flare
 	// DefaultCritiqueModel is the production OpenRouter recipe critique model.
@@ -53,6 +57,7 @@ type AIConfig struct {
 	ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier,omitempty"`
 	APIKey      string                                 `json:"api_key"`
 	RecipeModel openai.ResponsesModel                  `json:"recipe_model"`
+	MenuModel   openai.ResponsesModel                  `json:"menu_model"`
 	ImageModel  openai.ImageModel                      `json:"image_model"`
 }
 
@@ -196,6 +201,7 @@ func Load() (*Config, error) {
 	cfg.AI = AIConfig{
 		APIKey:      os.Getenv("AI_API_KEY"),
 		RecipeModel: DefaultRecipeModel,
+		MenuModel:   DefaultMenuModel,
 		ImageModel:  DefaultImageModel,
 	}
 	cfg.IngredientGrading = IngredientGradingConfig{

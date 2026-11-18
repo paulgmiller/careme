@@ -16,7 +16,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/oapi-codegen/runtime v1.8.0
-	github.com/openai/openai-go/v3 v3.96.0
+	github.com/openai/openai-go/v3 v3.101.0
 	github.com/paulgmiller/kage v0.5.0
 	github.com/samber/lo v1.53.0
 	github.com/sendgrid/rest v2.6.9+incompatible

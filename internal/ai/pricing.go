@@ -99,8 +99,9 @@ func openAITextTokenPrice(model string) (textTokenPrice, bool) {
 	case openai.ChatModelGPT6_1Terra:
 		// Verified 2026-11-05: https://developers.openai.com/api/docs/models/gpt-6.1-terra
 		return textTokenPrice{inputUSDPerMillion: 1, cachedInputUSDPerMillion: 0.05, cacheWriteUSDPerMillion: 1.25, outputUSDPerMillion: 5}, true
-	case openai.ChatModelGPT6_1Sol:
-		// Verified 2026-09-29: https://developers.openai.com/api/docs/models/gpt-6.1-sol
+	case openai.ChatModelGPT6_2Sol, openai.ChatModelGPT6_1Sol:
+		// https://developers.openai.com/api/docs/models/gpt-6.2-sol
+		// https://developers.openai.com/api/docs/models/gpt-6.1-sol
 		return textTokenPrice{inputUSDPerMillion: 2, cachedInputUSDPerMillion: 0.10, cacheWriteUSDPerMillion: 2.50, outputUSDPerMillion: 10}, true
 	case openai.ChatModelGPT6Sol:
 		// Verified 2026-09-22: https://developers.openai.com/api/docs/models/gpt-6-sol

@@ -211,7 +211,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	messages := messagesToInput(promptMessages)
 
 	params := responses.ResponseNewParams{
-		Model:              c.model,
+		Model:              c.recipeModel,
 		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
@@ -232,7 +232,7 @@ func (c *client) Regenerate(ctx context.Context, instructions []string, previous
 	}
 
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToRecipe(ctx, aiCategoryRecipe, c.model, previous.PromptCacheKey, resp)
+	return responseToRecipe(ctx, aiCategoryRecipe, c.recipeModel, previous.PromptCacheKey, resp)
 }
 
 func (c *client) GenerateRecipe(ctx context.Context, instructions []string, menu ResponseRef) (*Recipe, error) {
@@ -263,7 +263,7 @@ func (c *client) generateRecipe(ctx context.Context, instructions []string, menu
 	}
 	promptMessages := cleanInstructionMessages(instructions)
 	params := responses.ResponseNewParams{
-		Model:              c.model,
+		Model:              c.recipeModel,
 		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(menu.ID),
@@ -286,7 +286,7 @@ func (c *client) generateRecipe(ctx context.Context, instructions []string, menu
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	recipe, err := responseToRecipe(ctx, aiCategoryRecipe, c.model, menu.PromptCacheKey, resp)
+	recipe, err := responseToRecipe(ctx, aiCategoryRecipe, c.recipeModel, menu.PromptCacheKey, resp)
 	return recipe, resp, err
 }
 
@@ -297,7 +297,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	}
 
 	params := responses.ResponseNewParams{
-		Model:        c.model,
+		Model:        c.recipeModel,
 		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		Instructions: openai.String("Answer the user's question about the recipe. Use formatting sparingly. Prefer plain text; use Markdown bullet lists (- ) only for distinct options or steps. If using bold (**text**), emphasize only a key recommendation, at most once per answer.  Put blank lines around bullet lists. Do not use headings, links, images, code, blockquotes, tables, HTML, or other Markdown. Be concise and do not regenerate the full recipe or output JSON."),
 		Input: responses.ResponseNewParamsInputUnion{
@@ -313,7 +313,7 @@ func (c *client) AskQuestion(ctx context.Context, question string, previous Resp
 	if err != nil {
 		return nil, fmt.Errorf("failed to answer question: %w", err)
 	}
-	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.model, responseUsageLogAttr(c.model, resp.Usage, string(resp.ServiceTier)))
+	slog.InfoContext(ctx, "API usage", "ai_category", aiCategoryRecipeQuestion, "model", c.recipeModel, responseUsageLogAttr(c.recipeModel, resp.Usage, string(resp.ServiceTier)))
 	answer := strings.TrimSpace(resp.OutputText())
 	if answer == "" {
 		return nil, fmt.Errorf("empty response from model")

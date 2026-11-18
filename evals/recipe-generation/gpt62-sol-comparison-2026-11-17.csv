@@ -1,0 +1,77 @@
+suite,model,eval_id,case,quality_or_min_dimension,request_fidelity,culinary_coherence,meaningful_variety,generation_ms,generation_cost_usd,passed,failed_assertions,reasoning_effort
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,Yucatecan grilled chicken from cached menu plan,9,,,,39310,0.068268,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside,10,,,,29236,0.0665925,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,saved — Moroccan Braised Lamb & Carrots,8,,,,51334,0.0276339,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,saved — Sichuan Chicken & Bok Choy Stir-Fry,8,,,,48871,0.0739735,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,saved — Lemon-Parmesan Coho with Summer Orzo,10,,,,29795,0.061234,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,lower-scoring — Chile-Lime Jicama Cucumber Crunch,9,,,,31292,0.055543499999999996,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash,7,,,,29807,0.0212263,False,critique-quality,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,lower-scoring — Sumac-Pistachio Coho with Charred Corn,8,,,,34060,0.06565700000000001,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,pantry regression — Southern Smothered Chicken uses catalog garlic,10,,,,37444,0.0214604,True,,medium
+recipe-generation,gpt-6.1-sol,eval-vsj-2026-11-17T23:17:20,pantry regression — Summer Orzo omits cooking water from ingredients,9,,,,40725,0.020948400000000002,True,,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,Yucatecan grilled chicken from cached menu plan,7,,,,18616,0.063252,False,critique-quality,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside,8,,,,14724,0.0620465,False,chef-recommended-doneness,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,saved — Moroccan Braised Lamb & Carrots,6,,,,23682,0.0254423,False,critique-quality,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,saved — Sichuan Chicken & Bok Choy Stir-Fry,7,,,,19134,0.06651750000000001,False,critique-quality,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,saved — Lemon-Parmesan Coho with Summer Orzo,7,,,,16387,0.060018,False,critique-quality,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,lower-scoring — Chile-Lime Jicama Cucumber Crunch,8,,,,9974,0.050837499999999994,True,,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash,9,,,,17743,0.0588095,True,,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,lower-scoring — Sumac-Pistachio Coho with Charred Corn,8,,,,16397,0.061931,True,,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,pantry regression — Southern Smothered Chicken uses catalog garlic,9,,,,15455,0.018438799999999998,True,,medium
+recipe-generation,gpt-6.2-sol,eval-Ri8-2026-11-17T23:20:11,pantry regression — Summer Orzo omits cooking water from ingredients,9,,,,15018,0.0173168,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,One quick seasonal chicken dinner,10,10,10,10,9356,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Preserve long catalog names while honoring vegetarian and equipment constraints,10,10,10,10,7897,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Three distinct dinners preserve global directions and assign limited saffron once,7,10,7,10,10398,,False,menu-quality;three-distinct-meal-categories,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Explicitly requested halloumi can anchor dinner outside the catalog,10,10,10,10,9353,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Avoiding halloumi does not authorize an unavailable anchor,10,10,10,10,2799,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,User-owned duroc pork retains only its ingredient name as the anchor,10,10,10,10,11190,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,User-owned dover sole retains only its ingredient name as the anchor,6,6,9,10,7618,,False,menu-quality;available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Extra broccoli outside the catalog can be an anchor or a side,10,10,10,10,9697,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Correct a typo in user-owned strawberries outside the catalog,10,10,10,10,9021,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Correct a typo in user-owned broccoli used as a side,5,5,10,10,3717,,False,menu-quality;available-menu-ingredients,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Four seasonal regional dinners cover every category,10,10,10,10,11972,,False,distinct-menu-ingredients;all-four-meal-categories,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Category override — all meals fancy,10,10,10,10,17142,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Category override — all meals healthy,6,10,10,6,10286,,False,menu-quality,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Category override — all meals different,10,10,10,10,16382,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — default single dinner,10,10,10,10,8244,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — default majority of three dinners,10,10,10,10,14919,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — healthy four dinners still need a strict majority,10,10,10,10,11778,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — explicit vegetarian overrides the default,10,10,10,10,15246,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — explicit vegan overrides the default,10,10,10,10,14189,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — no meat or seafood in TSV allows common cuts,10,10,10,10,11474,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Protein anchors — no meat in TSV still honors vegetarian,10,10,10,10,10705,,True,,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Small Thanksgiving table: six dishes collectively feed four guests,2,2,4,4,32517,,False,shared-meal-quality;six-dishes-with-guest-context,medium
+menu-plan,gpt-6.1-sol,eval-nH3-2026-11-17T23:22:35,Large Thanksgiving table: six dishes collectively feed twelve guests,10,10,10,10,48128,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,One quick seasonal chicken dinner,10,10,10,10,3021,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Preserve long catalog names while honoring vegetarian and equipment constraints,10,10,10,10,2933,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Three distinct dinners preserve global directions and assign limited saffron once,10,10,10,10,4932,,False,three-distinct-meal-categories,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Explicitly requested halloumi can anchor dinner outside the catalog,10,10,10,10,2868,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Avoiding halloumi does not authorize an unavailable anchor,10,10,10,10,2704,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,User-owned duroc pork retains only its ingredient name as the anchor,10,10,10,10,2881,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,User-owned dover sole retains only its ingredient name as the anchor,10,10,10,10,2617,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Extra broccoli outside the catalog can be an anchor or a side,10,10,10,10,2628,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Correct a typo in user-owned strawberries outside the catalog,10,10,10,10,2730,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Correct a typo in user-owned broccoli used as a side,10,10,10,10,2615,,False,available-menu-ingredients,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Four seasonal regional dinners cover every category,7,7,9,10,5627,,False,menu-quality;distinct-menu-ingredients;all-four-meal-categories,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Category override — all meals fancy,10,10,10,10,4911,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Category override — all meals healthy,10,10,10,10,5491,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Category override — all meals different,10,10,10,10,6963,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — default single dinner,10,10,10,10,2885,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — default majority of three dinners,10,10,10,10,5165,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — healthy four dinners still need a strict majority,10,10,10,10,6517,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — explicit vegetarian overrides the default,10,10,10,10,5848,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — explicit vegan overrides the default,10,10,10,10,5317,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — no meat or seafood in TSV allows common cuts,10,10,10,10,7304,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Protein anchors — no meat in TSV still honors vegetarian,10,10,10,10,4774,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Small Thanksgiving table: six dishes collectively feed four guests,10,10,10,10,19039,,True,,medium
+menu-plan,gpt-6.2-sol,eval-GbA-2026-11-17T23:27:20,Large Thanksgiving table: six dishes collectively feed twelve guests,7,10,7,10,23226,,False,shared-meal-quality,medium
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,Yucatecan grilled chicken from cached menu plan,8,,,,31763,0.075432,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,Quality Food Center Bellevue East tri-tip from JcpTfxJ5UMM recommends medium-rare without a regulatory aside,9,,,,31190,0.0765565,False,chef-recommended-doneness,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,saved — Moroccan Braised Lamb & Carrots,6,,,,54128,0.0531823,False,critique-quality,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,saved — Sichuan Chicken & Bok Choy Stir-Fry,8,,,,42815,0.08777750000000001,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,saved — Lemon-Parmesan Coho with Summer Orzo,8,,,,35171,0.076488,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,lower-scoring — Chile-Lime Jicama Cucumber Crunch,9,,,,20320,0.0226627,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,lower-scoring — Chilean Pebre Tri-Tip with Roasted Squash,5,,,,41981,0.0809395,False,critique-quality,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,lower-scoring — Sumac-Pistachio Coho with Charred Corn,8,,,,41668,0.084571,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,pantry regression — Southern Smothered Chicken uses catalog garlic,8,,,,42950,0.043088800000000003,True,,high
+recipe-generation,gpt-6.2-sol,eval-nzd-2026-11-17T23:37:12,pantry regression — Summer Orzo omits cooking water from ingredients,8,,,,26020,0.0275268,True,,high

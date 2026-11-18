@@ -368,7 +368,7 @@ with `gpt-6-luna` instead of the former JEV integration. It uses the same ten-le
 rubric, rounding its zero-based score and adding one for a 1–10 ingredient grade,
 and requires `AI_API_KEY`. Each uncached ingredient gets its own Decisions
 request, with up to 64 concurrent requests per grader instance. Explicit model names select the
-Responses grader; recipe generation and meal planning continue to use `gpt-6.1-sol`.
+Responses grader; recipe generation uses `gpt-6.1-sol` and meal planning uses `gpt-6.2-sol`.
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
 OpenAI `text-embedding-3-small` embedding of each ingredient description alongside

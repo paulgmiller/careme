@@ -36,9 +36,9 @@ and `medium` first; test `high` only if repeated failures on complicated recipes
 justify the latency and cost. GPT-6.1 Sol supports `low`, `medium`, `high`,
 `xhigh`, and `max`. See the [Sol model reference](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-The production recipe and menu model is now `gpt-6.1-sol`.
+Production uses `gpt-6.1-sol` for recipes and `gpt-6.2-sol` for menu planning.
 The [September 29 comparison](../evals/recipe-generation/gpt61-sol-comparison-2026-09-29.md)
-records fresh recipe and menu results against GPT-6 Sol. Menu creation, regeneration,
+compares GPT-6.1 Sol with GPT-6 Sol. Menu creation, regeneration,
 menu ingredient repair, recipe generation/revision, and recipe questions explicitly
 use `medium` effort. This keeps effort consistent across stored continuations.
 The lower-effort recommendations above remain future evaluation candidates.

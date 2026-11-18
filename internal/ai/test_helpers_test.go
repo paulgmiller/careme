@@ -13,6 +13,7 @@ func testAIConfig(recipeModel string) config.AIConfig {
 	return config.AIConfig{
 		APIKey:      "test-key",
 		RecipeModel: recipeModel,
+		MenuModel:   config.DefaultMenuModel,
 		ImageModel:  config.DefaultImageModel,
 	}
 }
