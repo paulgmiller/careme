@@ -20,6 +20,9 @@ import (
 
 func TestCallAPISendsConfiguredServiceTierAndReportsRejection(t *testing.T) {
 	t.Setenv("KAGE_SECRET_FILE", t.TempDir()+"/missing")
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("KROGER_CLIENT_ID", "")
+	t.Setenv("KROGER_CLIENT_SECRET", "")
 	t.Setenv("AI_API_KEY", "test-key")
 	t.Setenv("OPENROUTER_API_KEY", "test-judge-key")
 	t.Setenv("RECIPE_EVAL_MODEL", "")
