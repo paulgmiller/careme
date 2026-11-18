@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	texttemplate "text/template"
 	"unicode"
 	"unicode/utf8"
 
@@ -34,8 +35,10 @@ const (
 	recipeSaveConversion       ConversionEvent = "recipe_save"
 )
 
-//go:embed *.html
+//go:embed *.html *.txt
 var htmlFiles embed.FS
+
+var MailText *texttemplate.Template
 
 var Home,
 	CampaignLanding,
@@ -98,6 +101,10 @@ func Init(config *config.Config) error {
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
 	Mail = ensure(tmpls, "mail.html")
+	MailText, err = texttemplate.New("mail.txt").ParseFS(htmlFiles, "mail.txt")
+	if err != nil {
+		return err
+	}
 
 	// todo pull from config.
 	Clarityproject = os.Getenv("CLARITY_PROJECT_ID")

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
-	"unicode/utf8"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -455,8 +454,10 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if got := client.last.Headers["List-Unsubscribe-Post"]; got != "List-Unsubscribe=One-Click" {
 		t.Fatalf("expected one-click List-Unsubscribe-Post header, got %q", got)
 	}
-	if got := client.last.Subject; got != "Test Recipe" {
-		t.Fatalf("expected dynamic recipe subject, got %q", got)
+	storeDate, err := locations.StoreTime(t.Context(), time.Now(), location)
+	require.NoError(t, err)
+	if got := client.last.Subject; got != recipeEmailSubject(storeDate) {
+		t.Fatalf("expected dated meal-plan subject, got %q", got)
 	}
 	if _, ok := client.ctx.Deadline(); !ok {
 		t.Fatal("expected SendGrid request to receive the per-email deadline")
@@ -464,6 +465,12 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 	if len(client.last.Attachments) != 0 {
 		t.Fatalf("expected no image attachments, got %d", len(client.last.Attachments))
 	}
+	assert.Equal(t, "Careme", client.last.From.Name)
+	assert.Equal(t, "chef@careme.cooking", client.last.From.Address)
+	assert.Equal(t, "text/plain", client.last.Content[0].Type)
+	assert.Contains(t, client.last.Content[0].Value, "Test Recipe")
+	assert.Contains(t, client.last.Content[0].Value, "30 min")
+	assert.Contains(t, client.last.Content[0].Value, "Unsubscribe from these emails: "+strings.Trim(wantOneClickURL, "<>"))
 	htmlContent := client.last.Content[1].Value
 	recipe := ai.Recipe{
 		Title: "Test Recipe",
@@ -593,48 +600,9 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 	}
 }
 
-func TestRecipeEmailSubjectIsDynamicAndShort(t *testing.T) {
-	tests := []struct {
-		name     string
-		recipes  []ai.Recipe
-		expected string
-	}{
-		{
-			name:     "one recipe",
-			recipes:  []ai.Recipe{{Title: "Chicken piccata"}},
-			expected: "Chicken piccata",
-		},
-		{
-			name: "multiple recipes",
-			recipes: []ai.Recipe{
-				{Title: "Chicken piccata"},
-				{Title: "Spring pasta"},
-				{Title: "Salmon bowls"},
-			},
-			expected: "Chicken piccata +2",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := recipeEmailSubject(ai.ShoppingList{Recipes: tt.recipes})
-			if got != tt.expected {
-				t.Fatalf("recipeEmailSubject() = %q, want %q", got, tt.expected)
-			}
-			if utf8.RuneCountInString(got) > 60 {
-				t.Fatalf("subject has %d runes, want at most 60: %q", utf8.RuneCountInString(got), got)
-			}
-		})
-	}
-
-	longTitle := strings.Repeat("Delicious dinner ", 10)
-	got := recipeEmailSubject(ai.ShoppingList{Recipes: []ai.Recipe{{Title: longTitle}, {Title: "Second"}}})
-	if utf8.RuneCountInString(got) != 60 {
-		t.Fatalf("truncated subject has %d runes, want 60: %q", utf8.RuneCountInString(got), got)
-	}
-	if !strings.HasSuffix(got, "… +1") {
-		t.Fatalf("expected truncated subject to preserve remaining count, got %q", got)
-	}
+func TestRecipeEmailSubjectUsesStoreDate(t *testing.T) {
+	date := time.Date(2026, time.November, 12, 23, 0, 0, 0, time.FixedZone("store", -8*60*60))
+	assert.Equal(t, "Your Careme meal plan for November 12, 2026", recipeEmailSubject(date))
 }
 
 func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
