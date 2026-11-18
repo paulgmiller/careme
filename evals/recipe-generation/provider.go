@@ -34,10 +34,10 @@ type recipeCritiquer interface {
 
 type providerOptions struct {
 	Config struct {
-		Model           string                    `json:"model"`
-		ReasoningEffort responses.ReasoningEffort `json:"reasoning_effort"`
-		JudgeModel      string                    `json:"judge_model"`
-		ServiceTier responses.ResponseNewParamsServiceTier `json:"service_tier"`
+		Model           string                                 `json:"model"`
+		ReasoningEffort responses.ReasoningEffort              `json:"reasoning_effort"`
+		JudgeModel      string                                 `json:"judge_model"`
+		ServiceTier     responses.ResponseNewParamsServiceTier `json:"service_tier"`
 	} `json:"config"`
 }
 

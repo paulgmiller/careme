@@ -4,16 +4,57 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
+
+type evalTransport func(*http.Request) (*http.Response, error)
+
+func (f evalTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestCallAPISendsFlexAndReportsRejection(t *testing.T) {
+	t.Setenv("KAGE_SECRET_FILE", t.TempDir()+"/missing")
+	t.Setenv("AI_API_KEY", "test-key")
+	t.Setenv("OPENROUTER_API_KEY", "test-judge-key")
+	t.Setenv("RECIPE_EVAL_MODEL", "")
+	t.Setenv("RECIPE_EVAL_REASONING_EFFORT", "")
+	previous := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+	calls := 0
+	http.DefaultTransport = evalTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		assert.Equal(t, "/v1/responses", r.URL.Path)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, string(config.DefaultRecipeModel), body["model"])
+		assert.Equal(t, "flex", body["service_tier"])
+		assert.Equal(t, "resp-menu", body["previous_response_id"])
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": {"application/json"}}, Request: r,
+			Body: io.NopCloser(strings.NewReader(`{"error":{"message":"Unsupported tier","type":"invalid_request_error","param":"service_tier"}}`)),
+		}, nil
+	})
+	result, err := CallApi("", map[string]any{"config": map[string]any{"service_tier": "flex"}},
+		map[string]any{"vars": map[string]any{"menu_plan": ai.MenuPlan{
+			ResponseID: "resp-menu", Plans: []ai.RecipePlan{{AnchorIngredient: "Chicken"}},
+		}}})
+	require.NoError(t, err)
+	assert.Contains(t, result["error"], "Unsupported tier")
+	assert.NotContains(t, result, "output")
+	assert.Equal(t, 1, calls, "a rejected recipe must fail the eval before judging")
+}
 
 type stubCritiquer struct {
 	received ai.Recipe
