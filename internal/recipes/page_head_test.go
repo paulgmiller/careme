@@ -40,6 +40,11 @@ func TestPageHeadMetadata(t *testing.T) {
 				require.NoError(t, err)
 				page = view.Page
 				title = "Recipes for Market &amp; Farm"
+				if !tc.empty {
+					require.Equal(t, "2026-09-15: Pasta & greens.", page.Description)
+				} else {
+					require.Equal(t, "2026-09-15.", page.Description)
+				}
 			} else {
 				view, err := newRecipePageView(t.Context(), recipeViewInput{params: params, recipe: recipe, hasRecipeImage: tc.image})
 				require.NoError(t, err)
