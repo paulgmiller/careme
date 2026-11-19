@@ -1,16 +1,22 @@
 package smithbrothersfarms
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"time"
 
+	"careme/internal/ai"
 	"careme/internal/ingredients/cachekey"
 
 	"github.com/stretchr/testify/assert"
@@ -103,7 +109,11 @@ func TestFetchStaplesFailures(t *testing.T) {
 					assert.ErrorIs(t, err, wantErr)
 				}
 				assert.Nil(t, got)
-				assert.Len(t, *calls, i+1)
+				attempts := 1
+				if failure.name != "parse" {
+					attempts = 3
+				}
+				assert.Len(t, *calls, i+attempts)
 				for _, body := range *bodies {
 					assert.True(t, body.closed)
 				}
@@ -167,4 +177,107 @@ func TestIdentityAndWineLookup(t *testing.T) {
 	_, err = provider.FetchWines(t.Context(), "other_delivery", nil)
 	require.ErrorContains(t, err, "invalid")
 	assert.Empty(t, *calls)
+}
+
+func TestFetchRetriesBodyReadFailures(t *testing.T) {
+	for _, page := range []string{"produce", "organic-box"} {
+		for _, readErr := range []error{context.DeadlineExceeded, io.ErrUnexpectedEOF} {
+			t.Run(page+"/"+readErr.Error(), func(t *testing.T) {
+				var logs bytes.Buffer
+				previous := slog.Default()
+				slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+				t.Cleanup(func() { slog.SetDefault(previous) })
+				var bodies []*trackedBody
+				c := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					var reader io.Reader = strings.NewReader(fixture(t, page))
+					if len(bodies) == 0 {
+						// Include partial HTML to ensure it is discarded before the next attempt.
+						reader = io.MultiReader(strings.NewReader("<html>partial"), iotest.ErrReader(readErr))
+					}
+					body := &trackedBody{Reader: reader}
+					bodies = append(bodies, body)
+					return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+				})})
+				c.httpClient.RetryWaitMin = 0
+				c.httpClient.RetryWaitMax = 0
+				var got []ai.InputIngredient
+				var err error
+				if page == "produce" {
+					got, err = c.Fetch(t.Context(), stapleURLs[0])
+				} else {
+					got, err = c.FetchHarvestBox(t.Context(), baseURL+"/"+harvestBoxes[0].slug, harvestBoxes[0].name)
+				}
+				require.NoError(t, err)
+				assert.NotEmpty(t, got)
+				require.Len(t, bodies, 2)
+				for _, body := range bodies {
+					assert.True(t, body.closed)
+				}
+				assert.Contains(t, logs.String(), `"msg":"Retrying HTTP request"`)
+				assert.Contains(t, logs.String(), `"source":"smithbrothersfarms"`)
+				assert.Contains(t, logs.String(), `"attempt":2`)
+			})
+		}
+	}
+}
+
+func TestFetchBodyReadFailureExhaustionAndCancellation(t *testing.T) {
+	for _, canceled := range []bool{false, true} {
+		t.Run(fmt.Sprint("canceled=", canceled), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			var bodies []*trackedBody
+			c := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				err := io.ErrUnexpectedEOF
+				if canceled {
+					cancel()
+					err = context.Canceled
+				}
+				body := &trackedBody{Reader: iotest.ErrReader(err)}
+				bodies = append(bodies, body)
+				return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+			})})
+			c.httpClient.RetryWaitMin = 0
+			c.httpClient.RetryWaitMax = 0
+			got, err := c.Fetch(ctx, stapleURLs[0])
+			assert.Nil(t, got)
+			if canceled {
+				require.ErrorIs(t, err, context.Canceled)
+				assert.Len(t, bodies, 1)
+			} else {
+				require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+				assert.ErrorContains(t, err, "read "+stapleURLs[0])
+				assert.Len(t, bodies, 3)
+			}
+			for _, body := range bodies {
+				assert.True(t, body.closed)
+			}
+		})
+	}
+}
+
+func TestFetchRetriesTimeoutAfterHeaders(t *testing.T) {
+	var attempts atomic.Int32
+	page := fixture(t, "produce")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "<html>partial")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		_, _ = io.WriteString(w, page)
+	}))
+	defer server.Close()
+	base := server.Client()
+	base.Timeout = 50 * time.Millisecond
+	c := NewClient(base)
+	c.httpClient.RetryWaitMin = 0
+	c.httpClient.RetryWaitMax = 0
+	got, err := c.Fetch(t.Context(), server.URL)
+	require.NoError(t, err)
+	assert.NotEmpty(t, got)
+	assert.EqualValues(t, 2, attempts.Load())
+	assert.Equal(t, 50*time.Millisecond, base.Timeout)
 }
