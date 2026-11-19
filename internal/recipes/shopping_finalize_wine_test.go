@@ -41,6 +41,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 		producer := newTestServer(t, withTestCache(store))
 		p := finalizedWineTestParams(t, s)
 		recipe := p.Saved[0]
+		recipe.OriginHash = p.Hash()
 		started, release := make(chan struct{}), make(chan struct{})
 		var calls atomic.Int32
 		producer.generator = wineTestGenerator{generator: producer.generator, pick: func(ctx context.Context, _ string, _ ai.Recipe, _ time.Time) (*ai.WineSelection, error) {
@@ -56,7 +57,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 			}
 			return &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Selected red", Quantity: "750mL"}, {ProductID: "backup", Name: "Backup"}}}, nil
 		}}
-		producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
+		producer.startWineForTest(t.Context(), recipe)
 		<-started
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
@@ -107,12 +108,13 @@ func TestFinalizeStopsWaitingWhenWineFailsOnAnotherServer(t *testing.T) {
 		producer := newTestServer(t, withTestCache(store))
 		p := finalizedWineTestParams(t, s)
 		recipe := p.Saved[0]
+		recipe.OriginHash = p.Hash()
 		release := make(chan struct{})
 		producer.generator = wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
 			<-release
 			return nil, errors.New("failed to parse wine selection: invalid character 'T' looking for beginning of value")
 		}}
-		producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
+		producer.startWineForTest(t.Context(), recipe)
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
 		synctest.Wait()
@@ -172,6 +174,7 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 				producer := newTestServer(t, withTestCache(producerStore))
 				p := finalizedWineTestParams(t, s)
 				recipe := p.Saved[0]
+				recipe.OriginHash = p.Hash()
 				calls := 0
 				producer.generator = wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
 					calls++
@@ -186,7 +189,7 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 				if scenario == "empty cached result" {
 					require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{}, Commentary: "No matches."}))
 				} else {
-					producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
+					producer.startWineForTest(t.Context(), recipe)
 					producer.Wait()
 				}
 				started := time.Now()
@@ -282,6 +285,7 @@ func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T)
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			require.NoError(t, s.SaveIngredients(t.Context(), p.LocationHash(), []ai.InputIngredient{{ProductID: "food", Description: "Food", VariantID: "food-upc", Size: "1 lb"}}))
 			recipe := p.Saved[0]
+			recipe.OriginHash = p.Hash()
 			require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Picked red"}}}))
 			catalog := []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Catalog red", Size: "750mL"}}
 			// Other dates, stores, and style sets must not supply ordering metadata.
@@ -318,4 +322,8 @@ func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T)
 			}
 		})
 	}
+}
+
+func (s *server) startWineForTest(ctx context.Context, recipe ai.Recipe) {
+	s.wg.Go(func() { worker := recipeWineGenerator{s.recipeio, s.generator}; _ = worker.RecipeReady(ctx, recipe) })
 }

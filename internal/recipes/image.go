@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"strconv"
-	"sync"
 	"time"
 
 	"careme/internal/ai"
@@ -84,26 +82,5 @@ func (s *RecipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe
 	if err := s.images.Save(ctx, hash, image); err != nil {
 		return fmt.Errorf("save image: %w", err)
 	}
-	return nil
-}
-
-// Background returns the nonblocking recipe completion path used by the web server.
-func (s *RecipeImageGenerator) Background() *backgroundRecipeImages {
-	return &backgroundRecipeImages{RecipeImageGenerator: s}
-}
-
-type backgroundRecipeImages struct {
-	*RecipeImageGenerator
-	wg sync.WaitGroup
-}
-
-func (b *backgroundRecipeImages) Wait() { b.wg.Wait() }
-
-func (b *backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
-	b.wg.Go(func() {
-		if err := b.RecipeImageGenerator.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
-			slog.ErrorContext(ctx, "failed to generate recipe image", "error", err)
-		}
-	})
 	return nil
 }

@@ -87,13 +87,13 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	var generator recipes.ExtGenerator
-	var imageJobs *recipes.RecipeImageGenerator
+	var imageJobs *recipes.RecipeExtras
 	var marketExtractor farmersmarket.IngredientExtractor
 	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), recipes.NewMockImageGen())
+		imageJobs = recipes.NewRecipeExtras(recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), recipes.NewMockImageGen()), recipes.NewMockWineGenerator(cache))
 		backgroundJobs := imageJobs.Background()
 		waiters = append(waiters, backgroundJobs)
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache), backgroundJobs)
@@ -115,7 +115,7 @@ func runServer(cfg *config.Config, addr string) error {
 		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient)
+		imageJobs = recipes.NewRecipeExtras(recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient), recipes.NewRecipeWineGenerator(cache, aiclient, staples))
 		backgroundJobs := imageJobs.Background()
 		waiters = append(waiters, backgroundJobs)
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache), backgroundJobs)

@@ -1295,7 +1295,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	g := newTestGenerator(t, aiStub, critiquer, seededStaples(t, params), noopstatuswriter{}, nil)
 
 	images := make(chan ai.Recipe, 2)
-	g.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
+	g.extras = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
 	got, err := g.GenerateRecipes(t.Context(), params)
 	require.Len(t, images, 1, "only the final replacement needs a new image")
 	assert.Equal(t, "Ready Dinner", (<-images).Title)

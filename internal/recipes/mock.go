@@ -14,18 +14,18 @@ import (
 )
 
 type mock struct {
-	saver        recipeSaver
-	critiquer    mockRecipeCritiquer
-	statuses     statusWriter
-	recipeImages postRecipe
+	saver     recipeSaver
+	critiquer mockRecipeCritiquer
+	statuses  statusWriter
+	extras    postRecipe
 }
 
 type mockRecipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, recipeImages postRecipe) mock {
-	return mock{saver: saver, critiquer: critiquer, statuses: statuses, recipeImages: recipeImages}
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, extras postRecipe) mock {
+	return mock{saver: saver, critiquer: critiquer, statuses: statuses, extras: extras}
 }
 
 func NewMockImageGen() mock {
@@ -455,7 +455,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 			}
 		}
 		if i < len(plan.Plans) {
-			if err := m.recipeImages.RecipeReady(ctx, recipe); err != nil {
+			if err := m.extras.RecipeReady(ctx, recipe); err != nil {
 				return nil, err
 			}
 			time.Sleep(100 * time.Millisecond)

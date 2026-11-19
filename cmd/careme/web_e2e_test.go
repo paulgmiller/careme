@@ -298,7 +298,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	// Location lookups write their cache asynchronously, beyond HTTP response completion.
 	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
-	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen())
+	imageJobs := recipes.NewRecipeExtras(recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen()), recipes.NewMockWineGenerator(cacheStore))
 	backgroundJobs := imageJobs.Background()
 	t.Cleanup(backgroundJobs.Wait)
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), backgroundJobs)

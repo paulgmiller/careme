@@ -53,7 +53,7 @@ type statusStore interface {
 
 type server struct {
 	recipeio
-	*backgroundRecipeImages
+	*backgroundRecipeExtras
 	generationStatuses statusStore
 	cfg                *config.Config
 	storage            *users.Storage
@@ -72,7 +72,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageJobs *RecipeImageGenerator, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageJobs *RecipeExtras, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
@@ -81,7 +81,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	}
 	s := &server{
 		recipeio:               IO(c),
-		backgroundRecipeImages: imageJobs.Background(),
+		backgroundRecipeExtras: imageJobs.Background(),
 		generationStatuses:     status.NewStore(c),
 		cfg:                    cfg,
 		storage:                storage,
@@ -104,5 +104,5 @@ func (s *server) Register(mux routing.Registrar) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
-	s.backgroundRecipeImages.Wait()
+	s.backgroundRecipeExtras.Wait()
 }

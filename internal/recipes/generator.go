@@ -60,14 +60,14 @@ type generatorService struct {
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
-	recipeImages postRecipe
+	extras       postRecipe
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, recipeImages postRecipe) (*generatorService, error) {
-	if recipeImages == nil {
-		return nil, fmt.Errorf("recipe image generator is required")
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, extras postRecipe) (*generatorService, error) {
+	if extras == nil {
+		return nil, fmt.Errorf("post-recipe processor is required")
 	}
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
@@ -90,11 +90,15 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		staples:      staples,
 		statusWriter: statuses,
 		saver:        recipeSaver,
-		recipeImages: recipeImages,
+		extras:       extras,
 	}, nil
 }
 
 func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+	return pickWine(ctx, g.aiClient, g.staples, location, recipe, date)
+}
+
+func pickWine(ctx context.Context, client aiClient, staples staplesService, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	ctx, span := tracer.Start(ctx, "recipes.pickawine")
 	defer span.End()
 	var styles []string
@@ -109,7 +113,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
 	}
 
-	wines, err := g.staples.FetchWines(ctx, location, styles, date)
+	wines, err := staples.FetchWines(ctx, location, styles, date)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +125,7 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 		return i.ProductID
 	})
 
-	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
+	selection, err := client.PickWine(ctx, recipe, wines)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +192,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
-			if err := g.recipeImages.RecipeReady(ctx, *final); err != nil {
+			if err := g.extras.RecipeReady(ctx, *final); err != nil {
 				return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
@@ -281,7 +285,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		if err := g.recipeImages.RecipeReady(ctx, *final); err != nil {
+		if err := g.extras.RecipeReady(ctx, *final); err != nil {
 			return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {

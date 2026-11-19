@@ -2137,7 +2137,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), `/save"`)
 }
 
-func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
+func TestHandleSaveRecipeDoesNotStartExtras(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -2180,13 +2180,8 @@ func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
-	assert.Equal(t, 1, g.winePickCalls)
+	assert.Equal(t, 0, g.winePickCalls)
 	assert.Equal(t, 0, ig.imageCalls)
-
-	wine, err := s.wineFromCache(t.Context(), recipeHash)
-	require.NoError(t, err)
-	require.NotNil(t, wine)
-	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
 	exists, err := s.images.Exists(t.Context(), recipeHash)
 	require.NoError(t, err)
