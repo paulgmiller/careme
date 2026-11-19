@@ -70,7 +70,7 @@ func Init(config *config.Config) error {
 		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return publicOrigin },
-		"SmallImage":                func(path string) smallImage { return smallImageForPath(publicOrigin, path) },
+		"SmallImage":                func(hash string) smallImage { return smallRecipeImage(publicOrigin, hash) },
 		"RecipeSaveConversion":      func() ConversionEvent { return recipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
@@ -109,25 +109,26 @@ func emailRecipeImageURL(publicOrigin, hash string) string {
 }
 
 type smallImage struct {
+	URL    string
 	Path   string
 	Width  int
 	Height int
 	Type   string
 }
 
-func smallImageForPath(publicOrigin, path string) smallImage {
-	if !supportsCloudflareImageTransformations(publicOrigin) {
-		return smallImage{Path: path}
+func smallRecipeImage(publicOrigin, hash string) smallImage {
+	image := smallImage{Path: recipeImagePath(publicOrigin, hash, 480, "jpeg")}
+	if supportsCloudflareImageTransformations(publicOrigin) {
+		// These describe the normal transformed image. On transformation errors,
+		// prefer the original image even though its format and dimensions may differ.
+		// Recipe photos are square; width-only resizing preserves their aspect ratio.
+		// TODO: Try a larger shared size for social previews and shopping-list images.
+		image.Width = 480
+		image.Height = 480
+		image.Type = "image/jpeg"
 	}
-	// A fixed JPEG avoids format negotiation and gives crawlers a small image
-	// with known dimensions. Do not redirect to an untransformed image on error:
-	// its format and dimensions would no longer match the declared metadata.
-	// Recipe photos are square; width-only resizing preserves their aspect ratio.
-	// TODO: Try a larger shared size for social previews and shopping-list images.
-	return smallImage{
-		Path:  "/cdn-cgi/image/width=480,quality=75,format=jpeg" + path,
-		Width: 480, Height: 480, Type: "image/jpeg",
-	}
+	image.URL = strings.TrimRight(publicOrigin, "/") + image.Path
+	return image
 }
 
 func recipeImagePath(publicOrigin, hash string, width int, imageFormat string) string {

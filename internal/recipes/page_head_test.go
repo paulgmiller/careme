@@ -66,7 +66,7 @@ func TestPageHeadMetadata(t *testing.T) {
 					path = "/recipes?h=list_hash%3D%3D"
 				}
 				require.Contains(t, rendered, `property="og:url" content="https://test.careme.cooking`+path+`"`)
-				imageURL := "https://test.careme.cooking/cdn-cgi/image/width=480,quality=75,format=jpeg/recipe/" + recipe.ComputeHash() + "/image"
+				imageURL := "https://test.careme.cooking/cdn-cgi/image/width=480,quality=75,format=jpeg,onerror=redirect/recipe/" + recipe.ComputeHash() + "/image"
 				require.Contains(t, rendered, `property="og:image" content="`+imageURL+`"`)
 				require.Contains(t, rendered, `name="twitter:image" content="`+imageURL+`"`)
 				var thumbnail bytes.Buffer
@@ -99,7 +99,7 @@ func TestShoppingListSocialImage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			view, err := newShoppingListPageView(t.Context(), shoppingListViewInput{params: params, list: ai.ShoppingList{Recipes: recipes}, recipeImages: tc.images})
 			require.NoError(t, err)
-			require.Equal(t, tc.wantPath, view.Social.ImagePath)
+			require.Equal(t, tc.wantPath, "/recipe/"+view.Social.ImageHash+"/image")
 			require.Equal(t, "Generated image of "+recipes[0].Title, view.Social.ImageAlt)
 			var body bytes.Buffer
 			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&body, "shoppinglist.html", view))

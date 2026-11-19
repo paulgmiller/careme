@@ -24,8 +24,8 @@ func TestRecipeImageURLsUseCloudflareForCaremeHosts(t *testing.T) {
 	const hash = "recipe_hash=="
 	assert.Equal(
 		t,
-		"/cdn-cgi/image/width=480,quality=75,format=jpeg/recipe/recipe_hash==/image",
-		smallImageForPath("https://careme.cooking", "/recipe/"+hash+"/image").Path,
+		"/cdn-cgi/image/width=480,quality=75,format=jpeg,onerror=redirect/recipe/recipe_hash==/image",
+		smallRecipeImage("https://careme.cooking", hash).Path,
 	)
 	assert.Equal(
 		t,
@@ -38,21 +38,23 @@ func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
 	t.Parallel()
 
 	const hash = "recipe_hash=="
-	assert.Equal(t, "/recipe/recipe_hash==/image", smallImageForPath("http://localhost:8080", "/recipe/"+hash+"/image").Path)
+	assert.Equal(t, "/recipe/recipe_hash==/image", smallRecipeImage("http://localhost:8080", hash).Path)
 	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
 }
 
 func TestSmallImage(t *testing.T) {
 	t.Parallel()
 	for _, origin := range []string{"https://careme.cooking", "https://test.careme.cooking/"} {
-		preview := smallImageForPath(origin, "/recipe/recipe_hash==/image")
-		assert.Equal(t, "/cdn-cgi/image/width=480,quality=75,format=jpeg/recipe/recipe_hash==/image", preview.Path)
+		preview := smallRecipeImage(origin, "recipe_hash==")
+		assert.Equal(t, strings.TrimRight(origin, "/")+preview.Path, preview.URL)
+		assert.Equal(t, "/cdn-cgi/image/width=480,quality=75,format=jpeg,onerror=redirect/recipe/recipe_hash==/image", preview.Path)
 		assert.Equal(t, 480, preview.Width)
 		assert.Equal(t, 480, preview.Height)
 		assert.Equal(t, "image/jpeg", preview.Type)
 	}
 	for _, origin := range []string{"http://localhost:8080", "https://careme.example", "https://careme.cooking.example"} {
-		preview := smallImageForPath(origin, "/recipe/hash/image")
+		preview := smallRecipeImage(origin, "hash")
+		assert.Equal(t, origin+"/recipe/hash/image", preview.URL)
 		assert.Equal(t, "/recipe/hash/image", preview.Path)
 		assert.Empty(t, preview.Type)
 		assert.Zero(t, preview.Width)
