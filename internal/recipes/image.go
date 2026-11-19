@@ -55,25 +55,14 @@ func (iio imageStore) Save(ctx context.Context, hash string, image *ai.Generated
 	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }
 
-// RecipeImageGenerator owns background dish images shared by recipe generation and edits.
+// RecipeImageGenerator generates and caches dish images.
 type RecipeImageGenerator struct {
 	images   ImageStore
 	imagegen ImageGen
-	wg       sync.WaitGroup
 }
 
 func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
 	return &RecipeImageGenerator{images: images, imagegen: imagegen}
-}
-
-func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
-
-func (s *RecipeImageGenerator) generateInBackground(ctx context.Context, recipe ai.Recipe) {
-	s.wg.Go(func() {
-		if err := s.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
-			slog.ErrorContext(ctx, "failed to prepare recipe image", "error", err)
-		}
-	})
 }
 
 // RecipeReady generates and caches the completed recipe's image before returning.
@@ -99,11 +88,22 @@ func (s *RecipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe
 }
 
 // Background returns the nonblocking recipe completion path used by the web server.
-func (s *RecipeImageGenerator) Background() backgroundRecipeImages { return backgroundRecipeImages{s} }
+func (s *RecipeImageGenerator) Background() *backgroundRecipeImages {
+	return &backgroundRecipeImages{RecipeImageGenerator: s}
+}
 
-type backgroundRecipeImages struct{ images *RecipeImageGenerator }
+type backgroundRecipeImages struct {
+	*RecipeImageGenerator
+	wg sync.WaitGroup
+}
 
-func (b backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
-	b.images.generateInBackground(ctx, recipe)
+func (b *backgroundRecipeImages) Wait() { b.wg.Wait() }
+
+func (b *backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	b.wg.Go(func() {
+		if err := b.RecipeImageGenerator.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
+			slog.ErrorContext(ctx, "failed to generate recipe image", "error", err)
+		}
+	})
 	return nil
 }

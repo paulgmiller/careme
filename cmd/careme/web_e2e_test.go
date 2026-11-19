@@ -299,7 +299,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
 	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen())
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), imageJobs.Background())
+	backgroundJobs := imageJobs.Background()
+	t.Cleanup(backgroundJobs.Wait)
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), backgroundJobs)
 	centroids := locations.LoadCentroids()
 	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
 	if err != nil {

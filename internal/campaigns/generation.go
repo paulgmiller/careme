@@ -92,7 +92,7 @@ func NewService(cfg *config.Config, providers providerFactory) (*service, error)
 	}
 	return &service{
 		locations: locationStore, generator: generator, store: store,
-		statuses: statuses, wait: func() { imageJobs.Wait(); critiquer.Wait() },
+		statuses: statuses, wait: critiquer.Wait,
 	}, nil
 }
 

@@ -53,7 +53,7 @@ type statusStore interface {
 
 type server struct {
 	recipeio
-	*RecipeImageGenerator
+	*backgroundRecipeImages
 	generationStatuses statusStore
 	cfg                *config.Config
 	storage            *users.Storage
@@ -80,17 +80,17 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		return nil, fmt.Errorf("order view builder is required")
 	}
 	s := &server{
-		recipeio:             IO(c),
-		RecipeImageGenerator: imageJobs,
-		generationStatuses:   status.NewStore(c),
-		cfg:                  cfg,
-		storage:              storage,
-		generator:            generator,
-		locServer:            locServer,
-		clerk:                clerkClient,
-		critiques:            critique.NewStore(c),
-		shoppingMerger:       shoppingMerger,
-		orderView:            orderView,
+		recipeio:               IO(c),
+		backgroundRecipeImages: imageJobs.Background(),
+		generationStatuses:     status.NewStore(c),
+		cfg:                    cfg,
+		storage:                storage,
+		generator:              generator,
+		locServer:              locServer,
+		clerk:                  clerkClient,
+		critiques:              critique.NewStore(c),
+		shoppingMerger:         shoppingMerger,
+		orderView:              orderView,
 	}
 	return s, nil
 }
@@ -104,5 +104,5 @@ func (s *server) Register(mux routing.Registrar) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
-	s.RecipeImageGenerator.Wait()
+	s.backgroundRecipeImages.Wait()
 }

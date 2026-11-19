@@ -143,7 +143,7 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 		locServer:          locationserver,
 		client:             sendgrid.NewSendClient(sendgridkey),
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
-		wait:               func() { imageJobs.Wait(); mc.Wait() },
+		wait:               mc.Wait,
 		unsubscribeFactory: users.NewUnsubscribeTokenFactory(*cfg),
 	}, nil
 }
