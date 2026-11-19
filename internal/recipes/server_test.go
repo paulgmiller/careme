@@ -1414,7 +1414,7 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	return &clone
 }
 
-func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
+func TestKickgeneration_AvoidsRecentlyCookedAndSavedRecipes(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -1442,7 +1442,7 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 	}
 
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
-	AugmentParamsFromUser(t.Context(), utypes.User{LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked}}, s.FeedbackIO, params)
+	require.NoError(t, AugmentParamsFromUser(t.Context(), utypes.User{LastRecipes: []utypes.Recipe{cookedRecent, notCookedRecent, tooOldCooked}}, s.FeedbackIO, s.decisionHistory, params))
 	require.NoError(t, s.kickgeneration(t.Context(), params, guestUser.ID))
 
 	select {
@@ -1453,8 +1453,8 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	captured := generator.LastParams()
 	require.NotNil(t, captured)
-	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
-		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
+	if got, want := captured.LastRecipes, []string{"Cooked Recently", "Only Saved"}; !slices.Equal(got, want) {
+		t.Fatalf("expected recently cooked and saved recipes in avoid list, got %v", got)
 	}
 }
 

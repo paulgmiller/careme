@@ -93,6 +93,9 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 	if err != nil {
 		return nil, fmt.Errorf("load recipe: %w", err)
 	}
+	if err := s.recordRecipeDecision(ctx, currentUser.ID, *recipe); err != nil {
+		return nil, err
+	}
 	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
 		return nil, fmt.Errorf("save recipe to user profile: %w", err)
 	}
@@ -151,12 +154,6 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.storage.RemoveRecipe(currentUser, recipeHash); err != nil {
-		slog.ErrorContext(ctx, "failed to remove recipe from storage", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
-		return
-	}
-
 	recipe, recipeErr := s.SingleFromCache(ctx, recipeHash)
 	if recipeErr != nil {
 		if errors.Is(recipeErr, cache.ErrNotFound) {
@@ -167,6 +164,17 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
+	if err := s.recordRecipeDecision(ctx, currentUser.ID, *recipe); err != nil {
+		slog.ErrorContext(ctx, "failed to record dismissed recipe", "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+		return
+	}
+	if _, err := s.storage.RemoveRecipe(currentUser, recipeHash); err != nil {
+		slog.ErrorContext(ctx, "failed to remove recipe from storage", "hash", recipeHash, "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+		return
+	}
+
 	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, selectionHash, false); err != nil {
 		slog.ErrorContext(ctx, "failed to render dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -257,6 +265,12 @@ func (s *server) startSavedRecipeWineGeneration(ctx context.Context, recipeHash 
 
 func isSingleRecipeAction(r *http.Request) bool {
 	return strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe")
+}
+
+func (s *server) recordRecipeDecision(ctx context.Context, userID string, recipe ai.Recipe) error {
+	return s.decisionHistory.Record(ctx, userID, utypes.Recipe{
+		Title: recipe.Title, Hash: recipe.ComputeHash(), CreatedAt: time.Now(),
+	})
 }
 
 // saveRecipesToUserProfile adds saved recipes to the user's profile

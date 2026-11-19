@@ -98,6 +98,39 @@ tests:
           description: Jasmine Rice
           size: 2 lb
 
+  - description: Recent recipe decisions avoid repeated dishes without excluding their ingredients
+    options:
+      disableVarExpansion: true
+    vars:
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-11-19'
+      count: 1
+      instructions: Use tofu and broccoli for dinner, under 45 minutes.
+      last_recipes:
+        - Thai Tofu and Broccoli Stir-Fry
+        - Ginger Tofu and Broccoli Stir-Fry
+      ingredients:
+        - id: tofu
+          description: Extra Firm Tofu
+          size: 16 oz
+        - id: broccoli
+          description: Broccoli Crowns
+          size: 1 lb
+        - id: rice
+          description: Jasmine Rice
+          size: 2 lb
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output).plans[0];
+          return recipe.anchor_ingredient === 'Extra Firm Tofu'
+            && recipe.side_vegetable === 'Broccoli Crowns'
+            && recipe.dish_format !== 'stir-fry';
+        metric: recent-dish-cooldown-without-ingredient-aversion
+
   - description: Preserve long catalog names while honoring vegetarian and equipment constraints
     vars:
       location:
