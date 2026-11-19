@@ -46,12 +46,7 @@ type service struct {
 	generator recipeGenerator
 	store     recipeStore
 	statuses  generationStatusStore
-	imageJobs recipeImages
 	wait      func()
-}
-
-type recipeImages interface {
-	WaitOn(context.Context, []ai.Recipe) error
 }
 
 type providerFactory interface {
@@ -97,7 +92,7 @@ func NewService(cfg *config.Config, providers providerFactory) (*service, error)
 	}
 	return &service{
 		locations: locationStore, generator: generator, store: store,
-		statuses: statuses, imageJobs: imageJobs, wait: func() { imageJobs.Wait(); critiquer.Wait() },
+		statuses: statuses, wait: func() { imageJobs.Wait(); critiquer.Wait() },
 	}, nil
 }
 
@@ -136,44 +131,41 @@ func (s *service) generateLocation(ctx context.Context, c campaign, now time.Tim
 
 func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) error {
 	hash := p.Hash()
-	list, err := s.store.FromCache(ctx, hash)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+	_, err := s.store.FromCache(ctx, hash)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
 	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
-
-	if err == nil {
-		// Cached lists may still need images after an interrupted or failed run.
-		return s.imageJobs.WaitOn(ctx, list.Recipes)
-	}
-
-	if err := s.prepare(ctx, p); err != nil {
+	_, err = s.prepare(ctx, p)
+	if err != nil {
 		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
 			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
 		}
 		return err
 	}
-
 	return nil
 }
 
-func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
+func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
-		return fmt.Errorf("save campaign params: %w", err)
+		return nil, fmt.Errorf("save campaign params: %w", err)
 	}
 	list, err := s.generator.GenerateRecipes(ctx, p)
 	if err != nil {
-		return fmt.Errorf("generate campaign recipes: %w", err)
+		return nil, fmt.Errorf("generate campaign recipes: %w", err)
 	}
 
 	if len(list.Recipes) == 0 {
-		return fmt.Errorf("campaign shopping list contains no recipes")
+		return nil, fmt.Errorf("campaign shopping list contains no recipes")
 	}
 	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
-		return fmt.Errorf("save campaign shopping list: %w", err)
+		return nil, fmt.Errorf("save campaign shopping list: %w", err)
 	}
 
-	return s.imageJobs.WaitOn(ctx, list.Recipes)
+	return list, nil
 }

@@ -76,16 +76,11 @@ type mailer struct {
 	userStorage        userStore
 	generator          generator // interface requires making params public
 	generationStatuses generationStatusStore
-	imageJobs          recipeImages
 	locServer          locServer
 	client             emailClient
 	publicOrigin       string
 	wait               func()
 	unsubscribeFactory users.UnsubscribeTokenFactory
-}
-
-type recipeImages interface {
-	WaitOn(context.Context, []ai.Recipe) error
 }
 
 type providerFactory interface {
@@ -145,7 +140,6 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 		userStorage:        userStorage,
 		generator:          generator,
 		generationStatuses: generationStatuses,
-		imageJobs:          imageJobs,
 		locServer:          locationserver,
 		client:             sendgrid.NewSendClient(sendgridkey),
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
@@ -306,10 +300,6 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	}
 	if len(shoppingList.Recipes) == 0 {
 		return fmt.Errorf("shopping list %q contains no recipes", paramsHash)
-	}
-
-	if err := m.imageJobs.WaitOn(ctx, shoppingList.Recipes); err != nil {
-		return fmt.Errorf("prepare recipe images: %w", err)
 	}
 
 	var buf bytes.Buffer

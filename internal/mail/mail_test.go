@@ -182,10 +182,6 @@ func (fakeMailImageGenerator) GenerateStepImage(context.Context, ai.Recipe, int)
 	panic("unexpected step image request")
 }
 
-func configureFakeMailImages(m *mailer) {
-	m.imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(cache.NewInMemoryCache()), fakeMailImageGenerator{})
-}
-
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 	g.ctx = ctx
 	g.params = p
@@ -234,7 +230,6 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 		},
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
-	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -251,20 +246,6 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	}
 }
 
-func TestDeliverEmailReturnsImageFailureWithoutSending(t *testing.T) {
-	providerErr := errors.New("image service unavailable")
-	client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
-	m := &mailer{
-		cache:     newFakeMailCache(t),
-		client:    client,
-		imageJobs: recipes.NewRecipeImageGenerator(recipes.NewImageStore(cache.NewInMemoryCache()), fakeMailImageGenerator{err: providerErr}),
-	}
-	err := m.deliverEmail(t.Context(), utypes.User{ID: "user-1", Email: []string{"u1@example.com"}}, recipes.DefaultParams(testMailLocation(), time.Now()))
-	require.ErrorIs(t, err, providerErr)
-	assert.ErrorContains(t, err, "Test Recipe")
-	assert.Nil(t, client.last, "required image failures must prevent email delivery")
-}
-
 func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 	fc := newFakeMailCache(t)
 	fc.shoppingListJSON = `{"recipes":[]}`
@@ -275,7 +256,6 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 		locServer: &fakeMailLocServer{location: location},
 		client:    client,
 	}
-	configureFakeMailImages(m)
 
 	err := m.deliverEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -406,7 +386,6 @@ func TestSendEmail_RecordsSentClaimOnSuccessSendGridStatus(t *testing.T) {
 		publicOrigin:       "https://careme.cooking",
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
-	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -502,7 +481,6 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 		publicOrigin:       "https://careme.cooking",
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
-	configureFakeMailImages(m)
 
 	m.sendEmail(context.Background(), utypes.User{
 		ID:            "user-1",
@@ -559,7 +537,6 @@ func TestForceSendToEmailBypassesScheduleAndTargetsRequestedAddress(t *testing.T
 		wait:               func() { waited = true },
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
-	configureFakeMailImages(m)
 
 	err := m.ForceSendToEmail(context.Background(), "Paul <u1@example.com>")
 	if err != nil {
@@ -657,7 +634,6 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 		publicOrigin:       "https://careme.cooking",
 		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
 	}
-	configureFakeMailImages(m)
 
 	err := m.deliverEmail(context.Background(), utypes.User{
 		ID:        "user-1",
@@ -694,7 +670,6 @@ func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
 				c := newFakeMailCache(t)
 				client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
 				m := &mailer{cache: c, locServer: &fakeMailLocServer{location: location}, client: client, unsubscribeFactory: users.FakeUnsubscribeTokenFactory()}
-				configureFakeMailImages(m)
 				p, err := m.emailParams(t.Context(), utypes.User{ID: "user-1", FavoriteStore: location.ID, Email: []string{"chef@example.com"}})
 				require.NoError(t, err)
 				assert.True(t, time.Now().Equal(p.Date))

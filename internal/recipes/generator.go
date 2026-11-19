@@ -50,8 +50,8 @@ type statusWriter interface {
 	Update(ctx context.Context, hash string, message string) error
 }
 
-type recipeImageStarter interface {
-	GenerateInBackground(context.Context, ai.Recipe)
+type postRecipe interface {
+	RecipeReady(context.Context, ai.Recipe) error
 }
 
 type generatorService struct {
@@ -60,12 +60,12 @@ type generatorService struct {
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
-	recipeImages recipeImageStarter
+	recipeImages postRecipe
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, recipeImages recipeImageStarter) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, recipeImages postRecipe) (*generatorService, error) {
 	if recipeImages == nil {
 		return nil, fmt.Errorf("recipe image generator is required")
 	}
@@ -188,7 +188,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
-			g.recipeImages.GenerateInBackground(ctx, *final)
+			if err := g.recipeImages.RecipeReady(ctx, *final); err != nil {
+				return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
+			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 				slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 			}
@@ -279,7 +281,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		g.recipeImages.GenerateInBackground(ctx, *final)
+		if err := g.recipeImages.RecipeReady(ctx, *final); err != nil {
+			return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
+		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 			slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 		}

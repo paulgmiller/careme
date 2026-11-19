@@ -94,7 +94,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
 		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), recipes.NewMockImageGen())
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache), imageJobs)
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache), imageJobs.Background())
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
@@ -114,7 +114,7 @@ func runServer(cfg *config.Config, addr string) error {
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
 		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache), imageJobs)
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache), imageJobs.Background())
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}

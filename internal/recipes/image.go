@@ -11,8 +11,6 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
-	"careme/internal/parallelism"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -62,7 +60,6 @@ type RecipeImageGenerator struct {
 	images   ImageStore
 	imagegen ImageGen
 	wg       sync.WaitGroup
-	inflight singleflight.Group
 }
 
 func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
@@ -73,47 +70,40 @@ func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
 
 func (s *RecipeImageGenerator) GenerateInBackground(ctx context.Context, recipe ai.Recipe) {
 	s.wg.Go(func() {
-		if err := s.WaitOn(context.WithoutCancel(ctx), []ai.Recipe{recipe}); err != nil {
+		if err := s.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
 			slog.ErrorContext(ctx, "failed to prepare recipe image", "error", err)
 		}
 	})
 }
 
-// WaitOn waits for the recipes' images, joining generation already in progress.
-// It reuses cached images and generates missing images, including for cached lists.
-func (s *RecipeImageGenerator) WaitOn(ctx context.Context, recipes []ai.Recipe) error {
-	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (struct{}, error) {
-		hash := recipe.ComputeHash()
-		result := s.inflight.DoChan(hash, func() (any, error) {
-			ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-			defer cancel()
-			exists, err := s.images.Exists(ctx, hash)
-			if err != nil {
-				return nil, fmt.Errorf("check image cache: %w", err)
-			}
-			if exists {
-				return nil, nil
-			}
-			image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
-			if err != nil {
-				return nil, fmt.Errorf("generate image: %w", err)
-			}
-			if err := s.images.Save(ctx, hash, image); err != nil {
-				return nil, fmt.Errorf("save image: %w", err)
-			}
-			return nil, nil
-		})
-		var err error
-		select {
-		case completed := <-result:
-			err = completed.Err
-		case <-ctx.Done():
-			err = ctx.Err()
-		}
-		if err != nil {
-			return struct{}{}, fmt.Errorf("%q: %w", recipe.Title, err)
-		}
-		return struct{}{}, nil
-	})
-	return err
+// RecipeReady generates and caches the completed recipe's image before returning.
+func (s *RecipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	defer cancel()
+	hash := recipe.ComputeHash()
+	exists, err := s.images.Exists(ctx, hash)
+	if err != nil {
+		return fmt.Errorf("check image cache: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
+	if err != nil {
+		return fmt.Errorf("generate image for %q: %w", recipe.Title, err)
+	}
+	if err := s.images.Save(ctx, hash, image); err != nil {
+		return fmt.Errorf("save image: %w", err)
+	}
+	return nil
+}
+
+// Background returns the nonblocking recipe completion path used by the web server.
+func (s *RecipeImageGenerator) Background() backgroundRecipeImages { return backgroundRecipeImages{s} }
+
+type backgroundRecipeImages struct{ images *RecipeImageGenerator }
+
+func (b backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	b.images.GenerateInBackground(ctx, recipe)
+	return nil
 }
