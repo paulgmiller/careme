@@ -2622,6 +2622,7 @@ func TestHandleRegenerate_GuestStartsAllowanceWhenCookieMissing(t *testing.T) {
 		withTestClerk(noSessionAuth{}),
 		withTestGenerator(generator),
 	)
+	t.Cleanup(s.Wait)
 	p := DefaultParams(&locations.Location{ID: "70001001", Name: "Test Store"}, time.Now())
 	require.NoError(t, s.SaveParams(t.Context(), p))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{
