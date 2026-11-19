@@ -68,7 +68,7 @@ func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageG
 
 func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
 
-func (s *RecipeImageGenerator) GenerateInBackground(ctx context.Context, recipe ai.Recipe) {
+func (s *RecipeImageGenerator) generateInBackground(ctx context.Context, recipe ai.Recipe) {
 	s.wg.Go(func() {
 		if err := s.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
 			slog.ErrorContext(ctx, "failed to prepare recipe image", "error", err)
@@ -104,6 +104,6 @@ func (s *RecipeImageGenerator) Background() backgroundRecipeImages { return back
 type backgroundRecipeImages struct{ images *RecipeImageGenerator }
 
 func (b backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
-	b.images.GenerateInBackground(ctx, recipe)
+	b.images.generateInBackground(ctx, recipe)
 	return nil
 }

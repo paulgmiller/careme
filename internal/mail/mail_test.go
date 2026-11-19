@@ -1,7 +1,6 @@
 package mail
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -165,21 +164,6 @@ func (f *fakeGenerationStatusStore) Start(_ context.Context, hash, _ string) err
 func (f *fakeGenerationStatusStore) Fail(_ context.Context, _ string, err error) error {
 	f.failedErr = err
 	return nil
-}
-
-type fakeMailImageGenerator struct {
-	err error
-}
-
-func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Recipe) (*ai.GeneratedImage, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return &ai.GeneratedImage{Body: bytes.NewReader([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})}, nil
-}
-
-func (fakeMailImageGenerator) GenerateStepImage(context.Context, ai.Recipe, int) (*ai.GeneratedImage, error) {
-	panic("unexpected step image request")
 }
 
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {

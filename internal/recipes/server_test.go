@@ -3246,7 +3246,7 @@ func (g blockingRecipeImageGenerator) GenerateRecipeImage(ctx context.Context, r
 	}
 }
 
-func TestRecipeImagesGenerateInBackground(t *testing.T) {
+func TestRecipeImagesgenerateInBackground(t *testing.T) {
 	recipe := ai.Recipe{Title: "Unsaved suggestion"}
 	ig := blockingRecipeImageGenerator{started: make(chan struct{}), release: make(chan struct{})}
 	s := newTestServer(t,
@@ -3262,7 +3262,7 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "generated-image", string(data))
 	}()
-	s.GenerateInBackground(t.Context(), recipe)
+	s.generateInBackground(t.Context(), recipe)
 	select {
 	case <-ig.started:
 	case <-time.After(5 * time.Second):

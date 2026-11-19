@@ -141,7 +141,7 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
-	_, err = s.prepare(ctx, p)
+	err = s.prepare(ctx, p)
 	if err != nil {
 		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
 			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
@@ -151,21 +151,21 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	return nil
 }
 
-func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {
 	if err := s.store.SaveParams(ctx, p); err != nil && !errors.Is(err, recipes.ErrAlreadyExists) {
-		return nil, fmt.Errorf("save campaign params: %w", err)
+		return fmt.Errorf("save campaign params: %w", err)
 	}
 	list, err := s.generator.GenerateRecipes(ctx, p)
 	if err != nil {
-		return nil, fmt.Errorf("generate campaign recipes: %w", err)
+		return fmt.Errorf("generate campaign recipes: %w", err)
 	}
 
 	if len(list.Recipes) == 0 {
-		return nil, fmt.Errorf("campaign shopping list contains no recipes")
+		return fmt.Errorf("campaign shopping list contains no recipes")
 	}
 	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
-		return nil, fmt.Errorf("save campaign shopping list: %w", err)
+		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 
-	return list, nil
+	return nil
 }
