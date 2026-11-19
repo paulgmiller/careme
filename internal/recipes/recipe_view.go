@@ -18,7 +18,6 @@ type recipeImageView struct {
 	Hash      string
 	HasImage  bool
 	Thumbnail bool
-	Poll      bool
 }
 
 type recipePageView struct {
@@ -112,7 +111,7 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 		Thread:                  threadView,
 		Feedback:                input.feedback,
 		RecipeHash:              recipeHash,
-		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage, Poll: true},
+		RecipeImage:             recipeImageView{Hash: recipeHash, HasImage: input.hasRecipeImage},
 		ServerSignedIn:          serverSignedIn,
 		User:                    input.currentUser,
 		AuthReturnTo:            "/recipe/" + recipeHash,
@@ -125,16 +124,10 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 
 	data.Title = recipe.Title
 	data.Description = fmt.Sprintf("%s Recipe for %s on %s.", recipe.Description, data.Location.Name, data.Date)
-	if recipe.Title != "" {
-		imagePath := "/favicon.ico"
-		if input.hasRecipeImage {
-			imagePath = "/recipe/" + recipeHash + "/image"
-		}
-		data.Social = &templates.SocialPreview{
-			Title:       recipe.Title,
-			Description: recipe.Description,
-			ImagePath:   imagePath,
-		}
+	data.Social = &templates.SocialPreview{
+		Path:      "/recipe/" + recipeHash,
+		ImageHash: recipeHash,
+		ImageAlt:  "Generated image of " + recipe.Title,
 	}
 
 	return data, nil
