@@ -49,6 +49,9 @@ func (rio recipeio) saveWine(ctx context.Context, hash string, selection *ai.Win
 // A saved selection with no wines is complete; only a missing record is retried.
 // Recipes without wine styles need no pick when there is no saved selection.
 func (rio recipeio) waitForWine(ctx context.Context, recipe ai.Recipe) (*ai.WineSelection, error) {
+	if recipe.AllowAlcoholicPairings != nil && !*recipe.AllowAlcoholicPairings {
+		return &ai.WineSelection{}, nil
+	}
 	hash := recipe.ComputeHash()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()

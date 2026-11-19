@@ -89,6 +89,9 @@ func (g *generatorService) PickAWine(ctx context.Context, location string, recip
 	ctx, span := tracer.Start(ctx, "recipes.pickawine")
 	defer span.End()
 	var styles []string
+	if recipe.AllowAlcoholicPairings != nil && !*recipe.AllowAlcoholicPairings {
+		return &ai.WineSelection{Wines: []ai.Ingredient{}}, nil
+	}
 	for _, style := range recipe.WineStyles {
 		style = strings.TrimSpace(style)
 		if style != "" {
@@ -167,6 +170,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
+			applyPairingPolicy(recipe, new(plan.AllowAlcoholicPairings))
 			recipe.OriginHash = hash
 			enrichIngredientsMetadata(recipe.Ingredients, ingMap)
 			if err := g.saver.SaveRecipe(ctx, *recipe); err != nil {
@@ -256,6 +260,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			return nil, err
 		}
 		// would prefer to do this deeper down in client like response id but have to pass in the hash
+		applyPairingPolicy(recipe, new(plan.AllowAlcoholicPairings))
 		recipe.OriginHash = hash
 
 		enrichIngredientsMetadata(recipe.Ingredients, ingMap)
@@ -308,11 +313,12 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
-func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef, allowAlcoholicPairings *bool) (*ai.Recipe, error) {
 	r, err := g.aiClient.Regenerate(ctx, instructions, previous)
 	if err != nil {
 		return nil, err
 	}
+	applyPairingPolicy(r, allowAlcoholicPairings)
 	// don't block
 	g.critiquer.CritiqueRecipeInBackground(ctx, *r)
 	return r, nil
@@ -379,6 +385,7 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 		return nil, fmt.Errorf("failed to regenerate recipe %q from critique feedback: %w", recipe.Title, err)
 	}
 	enrichIngredientsMetadata(retry.Ingredients, ingMap)
+	applyPairingPolicy(retry, recipe.AllowAlcoholicPairings)
 	retry.OriginHash = hash
 	retry.ParentHash = recipe.ComputeHash()
 	if err := g.saver.SaveRecipe(ctx, *retry); err != nil {
@@ -387,6 +394,13 @@ func (g *generatorService) critiqueAndMaybeRetryRecipe(ctx context.Context, hash
 	g.critiquer.CritiqueRecipeInBackground(ctx, *retry)
 
 	return retry, nil
+}
+
+func applyPairingPolicy(recipe *ai.Recipe, allowed *bool) {
+	recipe.AllowAlcoholicPairings = allowed
+	if allowed != nil && !*allowed {
+		recipe.WineStyles = []string{}
+	}
 }
 
 func enrichIngredientsMetadata(ingredients []ai.Ingredient, byProductID map[string]ai.InputIngredient) {

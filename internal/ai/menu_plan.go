@@ -80,6 +80,8 @@ type RecipePlan struct {
 	Category         MealCategory `json:"category" yaml:"category"`
 	// so generic this is directive, user instructions, servings, time? Split it up?
 	RecipeInstructions []string `json:"recipe_instructions" yaml:"recipe_instructions,omitempty"`
+
+	AllowAlcoholicPairings bool `json:"allow_alcoholic_pairings" yaml:"allow_alcoholic_pairings"`
 }
 
 func (p RecipePlan) Instructions() []string {
@@ -91,6 +93,9 @@ func (p RecipePlan) Instructions() []string {
 	}
 	if direction := p.Category.instruction(); direction != "" {
 		instructions = append(instructions, direction+" Explicit user dietary, time, budget, and equipment constraints still apply.")
+	}
+	if !p.AllowAlcoholicPairings {
+		instructions = append(instructions, "Suggest a nonalcoholic drink pairing for this dish and return an empty wine_styles array. This pairing restriction alone does not prohibit alcohol in cooking; follow the user's cooking restrictions separately.")
 	}
 	for _, instruction := range p.RecipeInstructions {
 		if trimmed := strings.TrimSpace(instruction); trimmed != "" {
@@ -195,8 +200,9 @@ Fancy: emphasize richer flavors, more indulgent, higher-calorie ingredients, gre
 Local: emphasize produce and proteins associated with the user's region and current season, using available ingredients; do not claim verified local sourcing.
 Different: emphasize lesser-known cuisines, regional dishes, and less-familiar seasonings.
 Explicit user dietary, time, budget, and equipment constraints take priority over category directions.
+Set allow_alcoholic_pairings for every recipe. Default to true unless user directions restrict alcoholic drinks. For "no alcohol", "alcohol-free", or "I don't drink", set it to false; for restrictions limited to specific meals, set it to false only for those meals. "Wine only with the fancy dinner" means true only for the fancy meal. Wine enthusiasm leaves it true. "No alcohol" also prohibits alcohol in cooking: repeat that restriction in each affected recipe's recipe_instructions. "No alcoholic drinks" or "I don't drink, but wine in sauces is fine" restricts pairings without prohibiting cooking alcohol. Interpret the user's complete direction and preserve explicit cooking exceptions.
 Unless the user requests vegetarian, vegan, or another explicit dietary or ingredient direction that overrides this default, use meat or seafood as anchor_ingredient in a strict majority of meals: at least floor(meal count / 2) + 1 (1 of 1, 2 of 3, 3 of 4). Meat or seafood includes poultry, beef, pork, lamb, fish, and shellfish such as shrimp; eggs, dairy, broth, and plant proteins do not count. The meat or seafood must be the anchor, not merely a side, garnish, or mention in recipe_instructions. Healthy meals and requests for more vegetables still follow this default; use lighter meat or seafood and plenty of vegetables. Choose the required meat or seafood anchors before filling any remaining meals with other anchors, while respecting the ingredient availability rules below. For vegetarian or vegan requests, use no meat or seafood and carry the dietary constraint into every meal's recipe_instructions.
-Example plan: {"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","category":"healthy","recipe_instructions":["Use the user's anise in this recipe."]}
+Example plan: {"allow_alcoholic_pairings":true,"cuisine":"French Bistro","anchor_ingredient":"chicken thighs","dish_format":"grain bowl","side_vegetable":"green beans","category":"healthy","recipe_instructions":["Use the user's anise in this recipe."]}
 Choose distinct dish formats across the menu when practical. Use this compact set of canonical formats: ` + strings.Join(dishFormatList, ", ") + `. Choose the dish format before deciding how to cook it. Vegetables may be incorporated into the main dish.
 Try and ensure variety across cuisines, anchor ingredients, dish formats, and side vegetables.
 Choose anchor_ingredient and side_vegetable from the provided TSV ingredients. Use the exact ingredient Description text from the TSV. Do not choose an unavailable related ingredient; use the available ingredient's name instead. Exception: when the user explicitly asks to use a specific ingredient or says they already have it (including leftovers or a recent purchase), you may choose it as anchor_ingredient or side_vegetable even if it is absent from the TSV. Decide which role best fits the dish unless the user specifies a role. For that exception, anchor_ingredient and side_vegetable must contain only the ingredient name, preserving specific varieties; never put a sentence, ownership statement, or shopping source there. For example, "I have leftover duroc pork" gives anchor_ingredient "duroc pork", and "I got dover sole at Costco" gives anchor_ingredient "dover sole". For "I have extra broccoli", use "broccoli" as either anchor_ingredient or side_vegetable, whichever suits the dish. Include the relevant user direction in recipe_instructions for that recipe. Correct obvious ingredient typos while preserving the user's intent; for example, "I have extra strawberies" refers to "strawberries". A dietary preference, a request for protein, or a direction to avoid an ingredient does not authorize this exception.

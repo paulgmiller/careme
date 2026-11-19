@@ -77,6 +77,8 @@ type Recipe struct {
 	OriginHash     string           `json:"origin_hash,omitempty" jsonschema:"-"`      // not in schema
 	ParentHash     string           `json:"parent_hash,omitempty" jsonschema:"-"`      // regeneration metadata, not in schema
 	PromptCacheKey string           `json:"prompt_cache_key,omitempty" jsonschema:"-"` // server-owned cache routing metadata
+
+	AllowAlcoholicPairings *bool `json:"allow_alcoholic_pairings,omitempty" jsonschema:"-"` // server-owned; absent in legacy recipes
 	// Shove wine selection in here
 }
 
@@ -104,6 +106,9 @@ func (r *Recipe) ComputeHash() string {
 	}
 	lo.Must(io.WriteString(fnv, r.Health))
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
+	if r.AllowAlcoholicPairings != nil && !*r.AllowAlcoholicPairings {
+		lo.Must(io.WriteString(fnv, "|allow_alcoholic_pairings=false|"))
+	}
 	// Reflection keeps presence detection aligned with RecipeProperties when fields
 	// are added. The payload below remains explicit because its field order is part
 	// of the recipe identity contract.
@@ -158,7 +163,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - ` + saltSeasoningStandard + `
 - When doneness matters, recommend the doneness that best suits the dish and give one concise target or pull temperature, plus a brief rest when useful. Do not name the FDA, USDA, or other government agencies; quote official food-safety guidance; compare the recommended doneness with alternate regulatory temperatures; or add a temperature disclaimer. Careme provides a separate temperature guide beside the recipe.
 - Aim for healthy unless otherwise stated. Calorie estimates must be reasonable for the stated quantities and servings.
-- Include wine pairing guidance when useful; otherwise explain briefly why a pairing is not needed.
+- Include wine pairing guidance when useful and allowed by the recipe directions. When alcoholic pairings are prohibited, suggest a nonalcoholic drink tied to the dish and return an empty wine_styles array. Honor cooking-alcohol restrictions separately: "no alcohol" excludes alcohol from both drinks and cooking, while "no alcoholic drinks" permits cooking alcohol unless otherwise restricted.
 
 # Field Guidance
 - title: use a short, appetizing name.

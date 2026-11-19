@@ -88,7 +88,8 @@ const validRecipeContext = `{
 	"vars": {
 		"menu_plan": {
 			"plans": [{
-				"cuisine": "Italian",
+				"allow_alcoholic_pairings": true,
+                "cuisine": "Italian",
 				"anchor_ingredient": "Chicken Thighs",
 				"dish_format": "sheet pan",
 				"side_vegetable": "Broccoli",
@@ -235,7 +236,7 @@ func TestCheckedInCasesGenerateAndJudge(t *testing.T) {
 		} `yaml:"tests"`
 	}
 	require.NoError(t, yaml.Unmarshal(body, &suite))
-	require.Len(t, suite.Tests, 10)
+	require.Len(t, suite.Tests, 14)
 	for _, tc := range suite.Tests {
 		t.Run(tc.Description, func(t *testing.T) {
 			body, err := json.Marshal(map[string]any{"vars": tc.Vars})

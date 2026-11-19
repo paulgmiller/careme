@@ -1215,12 +1215,13 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	params := DefaultParams(&locations.Location{ID: "70001001", Name: "Store"}, now)
 	shoppingListHash := params.Hash()
 	original := ai.Recipe{
-		Title:        "Original Steak Dinner",
-		Description:  "Original.",
-		Ingredients:  []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
-		Instructions: []string{"Cook steak.", "Serve."},
-		OriginHash:   shoppingListHash,
-		ResponseID:   "resp-original",
+		AllowAlcoholicPairings: new(false),
+		Title:                  "Original Steak Dinner",
+		Description:            "Original.",
+		Ingredients:            []ai.Ingredient{{Name: "Steak", Quantity: "1 lb"}},
+		Instructions:           []string{"Cook steak.", "Serve."},
+		OriginHash:             shoppingListHash,
+		ResponseID:             "resp-original",
 	}
 	originalHash := original.ComputeHash()
 	params.Saved = []ai.Recipe{original}
@@ -1296,6 +1297,9 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 
 	updatedRecipe, err := s.SingleFromCache(t.Context(), newHash)
 	require.NoError(t, err)
+	require.NotNil(t, updatedRecipe.AllowAlcoholicPairings)
+	assert.False(t, *updatedRecipe.AllowAlcoholicPairings)
+	assert.Empty(t, updatedRecipe.WineStyles)
 	assert.Equal(t, originalHash, updatedRecipe.ParentHash)
 	assert.Equal(t, shoppingListHash, updatedRecipe.OriginHash)
 
@@ -1380,7 +1384,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef, allowAlcoholicPairings *bool) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
@@ -1583,15 +1587,16 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef, allowAlcoholicPairings *bool) (*ai.Recipe, error) {
 	c.regenerateCalls++
 	c.lastResponse = previous
 	return &ai.Recipe{
-		Title:        "Updated Skirt Steak Dinner",
-		Description:  "Updated after questions.",
-		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
-		Instructions: []string{"Cook the steak.", "Serve."},
-		ResponseID:   "resp-regenerated",
+		AllowAlcoholicPairings: allowAlcoholicPairings,
+		Title:                  "Updated Skirt Steak Dinner",
+		Description:            "Updated after questions.",
+		Ingredients:            []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
+		Instructions:           []string{"Cook the steak.", "Serve."},
+		ResponseID:             "resp-regenerated",
 	}, nil
 }
 
