@@ -53,18 +53,18 @@ func (iio imageStore) Save(ctx context.Context, hash string, image *ai.Generated
 	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
 }
 
-// RecipeImageGenerator generates and caches dish images.
-type RecipeImageGenerator struct {
+// recipeImageGenerator generates and caches dish images.
+type recipeImageGenerator struct {
 	images   ImageStore
 	imagegen ImageGen
 }
 
-func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
-	return &RecipeImageGenerator{images: images, imagegen: imagegen}
+func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *recipeImageGenerator {
+	return &recipeImageGenerator{images: images, imagegen: imagegen}
 }
 
 // RecipeReady generates and caches the completed recipe's image before returning.
-func (s *RecipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+func (s *recipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	hash := recipe.ComputeHash()

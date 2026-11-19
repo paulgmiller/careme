@@ -61,26 +61,20 @@ func (w *recipeWineGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe)
 	return nil
 }
 
-type RecipeExtras struct {
-	*RecipeImageGenerator
-	wine postRecipe
-}
+// RecipeExtras runs independent recipe completion workers concurrently.
+type RecipeExtras []postRecipe
 
-func NewRecipeExtras(images *RecipeImageGenerator, wine postRecipe) *RecipeExtras {
-	return &RecipeExtras{images, wine}
-}
-
-func (e *RecipeExtras) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
-	_, err := parallelism.MapWithErrors([]postRecipe{e.RecipeImageGenerator, e.wine}, func(job postRecipe) (struct{}, error) { return struct{}{}, job.RecipeReady(ctx, recipe) })
+func (e RecipeExtras) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	_, err := parallelism.MapWithErrors(e, func(job postRecipe) (struct{}, error) { return struct{}{}, job.RecipeReady(ctx, recipe) })
 	return err
 }
 
-func (e *RecipeExtras) Background() *backgroundRecipeExtras {
+func (e RecipeExtras) Background() *backgroundRecipeExtras {
 	return &backgroundRecipeExtras{RecipeExtras: e}
 }
 
 type backgroundRecipeExtras struct {
-	*RecipeExtras
+	RecipeExtras
 	wg sync.WaitGroup
 }
 

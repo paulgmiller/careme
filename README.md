@@ -23,6 +23,13 @@ bash tailwind/generate.sh
 ```
 if you change input css or any *.html
 
+Run `./herdr <branch-name>` from a Herdr terminal to create a worktree at
+`~/src/careme/<branch-name>` and open it in Herdr. All checkouts can live under
+`~/src/careme/` (with the main checkout at `main/`); add that parent directory
+to VS Code's **Workspaces: Manage Workspace Trust** list to trust them together.
+`./cleanup-worktrees` previews old, clean worktrees under this directory;
+use `--apply` to remove eligible worktrees or `--root` to select another directory.
+
 
 ## Configuration
 

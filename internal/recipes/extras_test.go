@@ -31,7 +31,7 @@ func TestRecipeExtrasRunIndependently(t *testing.T) {
 		}})
 		wine := postRecipeFunc(func(context.Context, ai.Recipe) error { close(wineStarted); <-release; return nil })
 		done := make(chan error, 1)
-		go func() { done <- NewRecipeExtras(images, wine).RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}) }()
+		go func() { done <- RecipeExtras{images, wine}.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}) }()
 		<-imageStarted
 		<-wineStarted
 		synctest.Wait()
@@ -73,10 +73,23 @@ func TestBackgroundRecipeExtrasReturnBeforeWineCompletes(t *testing.T) {
 		images := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
 			return &ai.GeneratedImage{Body: strings.NewReader("image")}, nil
 		}})
-		extras := NewRecipeExtras(images, postRecipeFunc(func(context.Context, ai.Recipe) error { close(started); <-release; return nil })).Background()
+		extras := RecipeExtras{images, postRecipeFunc(func(context.Context, ai.Recipe) error { close(started); <-release; return nil })}.Background()
 		require.NoError(t, extras.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}))
 		<-started
 		close(release)
 		extras.Wait()
 	})
+}
+
+func TestRecipeExtrasCollectsEveryWorkerError(t *testing.T) {
+	first, second := errors.New("first worker failed"), errors.New("second worker failed")
+	jobs := RecipeExtras{
+		postRecipeFunc(func(context.Context, ai.Recipe) error { return first }),
+		postRecipeFunc(func(context.Context, ai.Recipe) error { return nil }),
+		postRecipeFunc(func(context.Context, ai.Recipe) error { return second }),
+	}
+	err := jobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"})
+	require.ErrorIs(t, err, first)
+	require.ErrorIs(t, err, second)
+	require.NoError(t, RecipeExtras{}.RecipeReady(t.Context(), ai.Recipe{}))
 }

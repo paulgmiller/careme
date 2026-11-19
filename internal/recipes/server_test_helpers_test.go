@@ -58,7 +58,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, NewRecipeExtras(NewRecipeImageGenerator(NewImageStore(cfg.imageCache), cfg.imagegen), &recipeWineGenerator{IO(cfg.cache), cfg.generator}), cfg.clerk, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, RecipeExtras{NewRecipeImageGenerator(NewImageStore(cfg.imageCache), cfg.imagegen), &recipeWineGenerator{IO(cfg.cache), cfg.generator}}, NewImageStore(cfg.imageCache), cfg.imagegen, cfg.clerk, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

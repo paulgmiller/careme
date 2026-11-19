@@ -54,6 +54,8 @@ type statusStore interface {
 type server struct {
 	recipeio
 	*backgroundRecipeExtras
+	images             ImageStore
+	imagegen           ImageGen
 	generationStatuses statusStore
 	cfg                *config.Config
 	storage            *users.Storage
@@ -72,7 +74,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageJobs *RecipeExtras, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageJobs RecipeExtras, images ImageStore, imagegen ImageGen, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
@@ -82,15 +84,16 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	s := &server{
 		recipeio:               IO(c),
 		backgroundRecipeExtras: imageJobs.Background(),
-		generationStatuses:     status.NewStore(c),
-		cfg:                    cfg,
-		storage:                storage,
-		generator:              generator,
-		locServer:              locServer,
-		clerk:                  clerkClient,
-		critiques:              critique.NewStore(c),
-		shoppingMerger:         shoppingMerger,
-		orderView:              orderView,
+		images:                 images, imagegen: imagegen,
+		generationStatuses: status.NewStore(c),
+		cfg:                cfg,
+		storage:            storage,
+		generator:          generator,
+		locServer:          locServer,
+		clerk:              clerkClient,
+		critiques:          critique.NewStore(c),
+		shoppingMerger:     shoppingMerger,
+		orderView:          orderView,
 	}
 	return s, nil
 }
