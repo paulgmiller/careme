@@ -24,6 +24,9 @@
           </div>
         </div>
 
+        {{if .ServerSignedIn}}
+        <div id="preference-suggestion" hx-get="/recipes/{{.Hash}}/preferences" hx-trigger="load" hx-swap="outerHTML"></div>
+        {{end}}
         {{template "shopping_content" .}}
       </div>
 

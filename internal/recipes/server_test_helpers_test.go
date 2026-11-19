@@ -9,6 +9,7 @@ import (
 
 	ordertypes "careme/internal/orders/types"
 
+	"careme/internal/ai"
 	"careme/internal/auth"
 	"careme/internal/cache"
 	"careme/internal/config"
@@ -58,7 +59,7 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.imagegen = mock{}
 	}
 
-	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, ai.NoopPreferenceSuggester{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

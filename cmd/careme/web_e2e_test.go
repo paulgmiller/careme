@@ -320,7 +320,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, cacheStore, mockAuth, generator, cartTestShoppingMerger{}, ai.NoopPreferenceSuggester{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}

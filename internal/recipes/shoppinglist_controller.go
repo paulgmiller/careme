@@ -88,6 +88,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
 	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+	s.bestEffortSuggestPreferences(ctx, currentUser, p)
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -531,6 +532,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	s.setFavoriteStore(ctx, currentUser, p.Location)
 
 	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+	s.bestEffortSuggestPreferences(ctx, currentUser, p)
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			// Another request with these content-addressed params owns the generation.

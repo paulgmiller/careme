@@ -10,4 +10,5 @@ const (
 	aiCategoryIngredientGrading = "ingredient_grading"
 	aiCategoryCritique          = "critique"
 	aiCategoryShoppingMerge     = "shopping_merge"
+	aiCategoryPreferences       = "cooking_preferences"
 )

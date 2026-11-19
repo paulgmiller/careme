@@ -51,7 +51,12 @@ type statusStore interface {
 	Complete(ctx context.Context, id, newHash string) error
 }
 
+type preferenceSuggester interface {
+	SuggestPreferences(context.Context, string, string) ([]ai.PreferenceChange, error)
+}
+
 type server struct {
+	preferenceSuggester preferenceSuggester
 	recipeio
 	images             ImageStore
 	imagegen           ImageGen
@@ -73,26 +78,30 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, preferences preferenceSuggester, orderView orderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
 	if orderView == nil {
 		return nil, fmt.Errorf("order view builder is required")
 	}
+	if preferences == nil {
+		return nil, fmt.Errorf("preference suggester is required")
+	}
 	s := &server{
-		recipeio:           IO(c),
-		images:             NewImageStore(imageCache),
-		imagegen:           imagegen,
-		generationStatuses: status.NewStore(c),
-		cfg:                cfg,
-		storage:            storage,
-		generator:          generator,
-		locServer:          locServer,
-		clerk:              clerkClient,
-		critiques:          critique.NewStore(c),
-		shoppingMerger:     shoppingMerger,
-		orderView:          orderView,
+		preferenceSuggester: preferences,
+		recipeio:            IO(c),
+		images:              NewImageStore(imageCache),
+		imagegen:            imagegen,
+		generationStatuses:  status.NewStore(c),
+		cfg:                 cfg,
+		storage:             storage,
+		generator:           generator,
+		locServer:           locServer,
+		clerk:               clerkClient,
+		critiques:           critique.NewStore(c),
+		shoppingMerger:      shoppingMerger,
+		orderView:           orderView,
 	}
 	return s, nil
 }
@@ -100,6 +109,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 func (s *server) Register(mux routing.Registrar) {
 	s.registerRecipeRoutes(mux)
 	s.registerShoppingListRoutes(mux)
+	s.registerPreferenceRoutes(mux)
 	// save/dimsiss
 	s.registerSelectionRoutes(mux)
 }

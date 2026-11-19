@@ -377,3 +377,15 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
+
+### Cooking preference suggestions
+
+`preference-suggestions/<SHA-256(user ID + NUL + generation hash)>` stores
+user-specific proposals separately from shared recipe parameters and results.
+Each record contains the chef notes, original cooking preferences, exact proposed
+changes, an approval revision ID, state, and a 24-hour expiry. Reads enforce the
+expiry; files/blobs are retained until normal cache cleanup. Pending extraction
+stops polling after three minutes if its worker is interrupted. Suggestions are
+created only from signed-in users' explicit build/regenerate submissions, never
+from viewing another person's shared recipe link. Approval updates the existing
+`users/` cooking preferences; dismissal affects only that proposal.

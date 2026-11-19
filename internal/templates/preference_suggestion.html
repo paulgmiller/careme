@@ -1,0 +1,30 @@
+{{define "preference_suggestion"}}
+{{if eq .State "pending"}}
+<div id="preference-suggestion" class="px-8 pt-6" hx-get="/recipes/{{.Hash}}/preferences" hx-trigger="every 2s" hx-swap="outerHTML" aria-live="polite">
+  <p class="text-sm text-ink-600">{{if .Message}}{{.Message}}{{else}}Checking your notes for preferences to remember…{{end}}</p>
+</div>
+{{else if eq .State "ready"}}
+<aside id="preference-suggestion" class="m-8 rounded-2xl border border-brand-200 bg-brand-50 p-4" aria-labelledby="preference-heading">
+  <h2 id="preference-heading" class="text-lg font-semibold text-brand-700">Remember for future recipes?</h2>
+  <p class="mt-2 text-sm text-ink-600">Save these cooking preferences for future recipes and emailed menus.</p>
+  {{range .Changes}}
+  <div class="mt-3 text-sm text-ink-900">
+    {{if .Before}}<p>Replace: <span class="whitespace-pre-wrap">{{.Before}}</span></p><p>With: <strong class="whitespace-pre-wrap">{{.After}}</strong></p>
+    {{else}}<p class="whitespace-pre-wrap font-semibold">{{.After}}</p>{{end}}
+  </div>
+  {{end}}
+  {{if .Before}}<details class="mt-3 text-sm text-ink-600"><summary>Your saved cooking preferences</summary><p class="mt-2 whitespace-pre-wrap">{{.Before}}</p></details>{{end}}
+  {{if .Message}}<p role="status" class="mt-3 text-sm text-ink-600">{{.Message}}</p>{{end}}
+  <form method="POST" action="/recipes/{{.Hash}}/preferences" hx-post="/recipes/{{.Hash}}/preferences" hx-target="#preference-suggestion" hx-swap="outerHTML" hx-disabled-elt="find button" class="mt-4 flex flex-wrap items-center gap-3">
+    <input type="hidden" name="proposal_id" value="{{.ID}}" />
+    <button type="submit" name="action" value="save" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white">Save preference</button>
+    <button type="submit" name="action" value="dismiss" class="rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700">Not now</button>
+  </form>
+  <a href="/user?tab=customize#directive" class="mt-3 inline-block text-sm text-brand-700 underline">Edit cooking preferences</a>
+</aside>
+{{else if eq .State "saved"}}
+<div id="preference-suggestion" class="px-8 pt-6 text-sm text-brand-700" role="status">Saved to cooking preferences. <a href="/user?tab=customize#directive" class="underline">Edit cooking preferences</a></div>
+{{else if eq .State "failed"}}
+<div id="preference-suggestion" class="px-8 pt-6 text-sm text-ink-600">Could not check for preferences to remember. <a href="/user?tab=customize#directive" class="text-brand-700 underline">Edit cooking preferences</a></div>
+{{else}}<div id="preference-suggestion"></div>{{end}}
+{{end}}

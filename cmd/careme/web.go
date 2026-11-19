@@ -90,6 +90,9 @@ func runServer(cfg *config.Config, addr string) error {
 	var imageGen recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
 	var shoppingMerger recipes.ShoppingQuantityMerger
+	var preferences interface {
+		SuggestPreferences(context.Context, string, string) ([]ai.PreferenceChange, error)
+	}
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
@@ -97,6 +100,7 @@ func runServer(cfg *config.Config, addr string) error {
 		imageGen = recipes.NewMockImageGen()
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
+		preferences = ai.NoopPreferenceSuggester{}
 
 	} else {
 		critiquer := critique.NewManager(cfg, cache, aiHTTPClient)
@@ -104,6 +108,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		shoppingMerger = aiclient
+		preferences = aiclient
 		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
@@ -145,7 +150,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.NewOrderViewBuilder(cache))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, preferences, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}
