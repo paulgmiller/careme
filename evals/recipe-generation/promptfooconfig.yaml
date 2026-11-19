@@ -8,7 +8,7 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: 'recipe-generation {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
+    label: 'recipe-generation default {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
     config:
       # model overrides RECIPE_EVAL_MODEL; empty uses the production default.
       model: '{{ env.RECIPE_EVAL_MODEL }}'
@@ -16,11 +16,21 @@ providers:
       reasoning_effort: '{{ env.RECIPE_EVAL_REASONING_EFFORT }}'
       # Keep the judge fixed while comparing generation models.
       judge_model: google/gemini-3.1-pro-preview
+      service_tier: default
+  - id: 'file://provider.go'
+    label: 'recipe-generation flex {{ env.RECIPE_EVAL_MODEL }} reasoning={{ env.RECIPE_EVAL_REASONING_EFFORT }}'
+    config:
+      model: '{{ env.RECIPE_EVAL_MODEL }}'
+      reasoning_effort: '{{ env.RECIPE_EVAL_REASONING_EFFORT }}'
+      judge_model: google/gemini-3.1-pro-preview
+      service_tier: flex
 
 defaultTest:
   assert:
-    - type: latency
-      threshold: 60000
+    - type: javascript
+      value: |
+        const { metadata, latencyMs } = context.providerResponse;
+        return metadata.requestedServiceTier === 'flex' || latencyMs <= 60000;
       metric: generation-latency-under-60s
     - type: javascript
       value: |

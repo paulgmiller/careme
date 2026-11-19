@@ -11,11 +11,51 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/config"
 	"careme/internal/locations"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCallAPISendsConfiguredServiceTierAndReportsRejection(t *testing.T) {
+	t.Setenv("KAGE_SECRET_FILE", t.TempDir()+"/missing")
+	t.Setenv("ENABLE_MOCKS", "1")
+	t.Setenv("KROGER_CLIENT_ID", "")
+	t.Setenv("KROGER_CLIENT_SECRET", "")
+	t.Setenv("AI_API_KEY", "test-key")
+	t.Setenv("OPENROUTER_API_KEY", "test-judge-key")
+	t.Setenv("RECIPE_EVAL_MODEL", "")
+	previous := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+	calls := 0
+	http.DefaultTransport = judgeTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		assert.Equal(t, "/v1/responses", r.URL.Path)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, string(config.DefaultMenuModel), body["model"])
+		assert.Equal(t, "flex", body["service_tier"])
+		assert.Equal(t, "medium", body["reasoning"].(map[string]any)["effort"])
+		assert.Equal(t, "explicit", body["prompt_cache_options"].(map[string]any)["mode"])
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": {"application/json"}}, Request: r,
+			Body: io.NopCloser(strings.NewReader(`{"error":{"message":"This model does not support service_tier=flex","type":"invalid_request_error","param":"service_tier"}}`)),
+		}, nil
+	})
+	result, err := CallApi("", map[string]any{"config": map[string]any{
+		"service_tier": "flex", "judge_model": "judge-model",
+	}}, map[string]any{"vars": map[string]any{
+		"location":    map[string]any{"id": "store", "state": "WA"},
+		"ingredients": []map[string]any{{"description": "Chicken Thighs"}},
+		"date":        "2026-11-18", "count": 1,
+	}})
+	require.NoError(t, err)
+	assert.Contains(t, result["error"], "This model does not support service_tier=flex")
+	assert.NotContains(t, result, "output")
+	assert.Equal(t, 1, calls, "a rejected menu must fail the eval before judging")
+}
 
 type stubMenuPlanner struct {
 	location     *locations.Location

@@ -12,7 +12,6 @@ import (
 func TestRecordRecipePromptStoresResponseParams(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	c := &client{
-		model:          "gpt-test",
 		promptRecorder: recorder,
 	}
 	ctx := context.Background()
@@ -48,7 +47,6 @@ func TestRecordRecipePromptStoresResponseParams(t *testing.T) {
 func TestRecordRecipePromptIgnoresRecorderErrors(t *testing.T) {
 	recorder := &capturePromptRecorder{err: errors.New("cache down")}
 	c := &client{
-		model:          "gpt-test",
 		promptRecorder: recorder,
 	}
 
@@ -62,7 +60,6 @@ func TestRecordRecipePromptIgnoresRecorderErrors(t *testing.T) {
 func TestRecordRecipePromptSkipsMissingResponseID(t *testing.T) {
 	recorder := &capturePromptRecorder{}
 	c := &client{
-		model:          "gpt-test",
 		promptRecorder: recorder,
 	}
 

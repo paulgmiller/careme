@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"careme/internal/config"
 
@@ -27,7 +25,8 @@ type client struct {
 	wineSchema            map[string]any
 	menuSchema            map[string]any
 	shoppingSchema        map[string]any
-	model                 openai.ResponsesModel
+	recipeModel           openai.ResponsesModel
+	menuModel             openai.ResponsesModel
 	imageModel            openai.ImageModel
 	wineModel             string
 	oai                   openai.Client
@@ -35,7 +34,6 @@ type client struct {
 }
 
 func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	model := strings.TrimSpace(cfg.RecipeModel)
 	imageModel := strings.TrimSpace(cfg.ImageModel)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
@@ -62,11 +60,6 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
 	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
-	if cfg.ServiceTier == responses.ResponseNewParamsServiceTierFlex {
-		// Allow capacity to recover while keeping retries inside the job deadline.
-		opts = append(opts, option.WithMaxRetries(10), option.WithMaxRetryDelay(time.Minute))
-	}
-	opts = append(opts, option.WithMiddleware(logOpenAIRetry))
 	if httpClient != nil {
 		opts = append(opts, option.WithHTTPClient(httpClient))
 	}
@@ -79,7 +72,8 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 		wineSchema:     wine,
 		menuSchema:     menu,
 		shoppingSchema: shopping,
-		model:          model,
+		recipeModel:    strings.TrimSpace(cfg.RecipeModel),
+		menuModel:      strings.TrimSpace(cfg.MenuModel),
 		imageModel:     imageModel,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,
@@ -113,7 +107,8 @@ func (c *client) Ready(ctx context.Context) error {
 	// more CORRECT to do a very simple response request with allowed tokens 1 but this seems cheaper
 	// https://chatgpt.com/share/6984da16-ff88-8009-8486-4e0479ac6a01
 	// could only do it once to ensure startup
-	_, err := c.oai.Models.List(ctx)
+	observer := retryObserver{}
+	_, err := c.oai.Models.List(ctx, option.WithMiddleware(observer.middleware))
 	return err
 }
 
@@ -198,12 +193,4 @@ func (c *client) recordRecipePrompt(ctx context.Context, responseID string, para
 	if err := c.promptRecorder.RecordPrompt(ctx, record); err != nil {
 		slog.ErrorContext(ctx, "failed to record recipe prompt", "response_id", responseID, "error", err)
 	}
-}
-
-func logOpenAIRetry(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {
-	attempt, _ := strconv.Atoi(req.Header.Get("X-Stainless-Retry-Count"))
-	if attempt > 0 {
-		slog.InfoContext(req.Context(), "Retrying HTTP request", "source", "openai", "url", req.URL.String(), "attempt", attempt+1)
-	}
-	return next(req)
 }

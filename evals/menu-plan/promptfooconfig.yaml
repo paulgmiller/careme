@@ -8,8 +8,14 @@ prompts:
 
 providers:
   - id: 'file://provider.go'
-    label: menu-plan
+    label: menu-plan-default
     config:
+      service_tier: default
+      judge_model: google/gemini-3.1-pro-preview
+  - id: 'file://provider.go'
+    label: menu-plan-flex
+    config:
+      service_tier: flex
       judge_model: google/gemini-3.1-pro-preview
 
 defaultTest:
@@ -25,8 +31,10 @@ defaultTest:
             `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
         };
       metric: menu-quality
-    - type: latency
-      threshold: 20000
+    - type: javascript
+      value: |
+        const { metadata, latencyMs } = context.providerResponse;
+        return metadata.requestedServiceTier === 'flex' || latencyMs <= 20000;
       metric: menu-plan-latency-under-20s
     - type: is-json
       metric: menu-plan-json
@@ -530,3 +538,174 @@ tests:
       catalog_exceptions:
         anchor_ingredients: []
     assert: *protein-anchor-assertions
+
+  # Thanksgiving dishes form one shared meal. Use shared-meal assertions instead
+  # of the default separate-dinner variety and ingredient-uniqueness checks.
+  - description: 'Small Thanksgiving table: six dishes collectively feed four guests'
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-11-26'
+      count: 6
+      ingredients:
+      - id: turkey
+        description: Turkey Breast
+        size: 3 lb
+      - id: potatoes
+        description: Yukon Gold Potatoes
+        size: 5 lb
+      - id: bread
+        description: Sourdough Bread
+        size: 1 lb
+      - id: celery
+        description: Celery
+        size: 1 bunch
+      - id: onions
+        description: Yellow Onions
+        size: 3 lb
+      - id: beans
+        description: Green Beans
+        size: 1 lb
+      - id: cranberries
+        description: Fresh Cranberries
+        size: 12 oz
+      - id: pumpkin
+        description: Pumpkin Puree
+        size: 15 oz
+      - id: carrots
+        description: Carrots
+        size: 2 lb
+      - id: squash
+        description: Butternut Squash
+        size: 2 lb
+      - id: apples
+        description: Apples
+        size: 3 lb
+      - id: butter
+        description: Unsalted Butter
+        size: 1 lb
+      - id: milk
+        description: Whole Milk
+        size: 1 gallon
+      - id: eggs
+        description: Eggs
+        size: 12 count
+      guests: 4
+      instructions: |
+        Plan one cohesive Thanksgiving dinner, not a week of separate dinners. Create 6 recipes to serve together: one turkey centerpiece (or a vegetarian main if requested), four complementary holiday sides, and one dessert.
+        Favor Thanksgiving classics such as stuffing, mashed potatoes, seasonal vegetables, cranberry sauce, and pumpkin pie, using ingredients available at the selected store. Size the main appropriately for the party rather than assuming a whole turkey is always needed.
+        Size the menu as one shared meal for the guest count, not six complete dinners per person. Allocate a sensible share of the meal to the main, each side, and dessert. Choose each recipe's yield and portion size based on its role and the other dishes, with smaller tasting portions for multiple sides and modest leftovers. Do not blindly give every recipe the guest count in full dinner-sized servings, or divide the guest count equally by six; everyone should have enough to eat across the whole menu.
+        In each recipe plan's recipe_instructions, state that it is part of the same six-dish Thanksgiving meal, the total guest count, its role, and a concrete yield with portion sizes or total quantities for that dish. Carry these portion targets into the final recipe quantities and servings; a side may have a different serving count from the main. Do not add a separate full meal or extra sides to each recipe.
+        Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
+
+        Cook for 4 people. Use this as the guest count when planning portions.
+    options:
+      disableDefaultAsserts: true
+    assert:
+    - type: is-json
+    - type: javascript
+      metric: shared-meal-quality
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        const score = Math.min(critique.request_fidelity, critique.culinary_coherence, critique.meaningful_variety);
+        return {
+          pass: score >= 8 && critique.issues.every(issue => issue.severity === 'low'),
+          score: score / 10,
+          reason: [critique.summary, ...critique.issues.map(issue =>
+            `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
+        };
+    - type: javascript
+      metric: six-dishes-with-guest-context
+      value: |
+        const plans = JSON.parse(output).plans;
+        const guests = context.vars.guests;
+        const count = new RegExp(`\\b(?:${guests}|${guests === 4 ? 'four' : 'twelve'})\\b`, 'i');
+        return plans.length === 6 && plans.every(plan => {
+          const directions = (plan.recipe_instructions ?? []).join(' ');
+          return count.test(directions) && /Thanksgiving|shared meal|six.dish/i.test(directions);
+        });
+  - description: 'Large Thanksgiving table: six dishes collectively feed twelve guests'
+    vars:
+      location:
+        id: eval-store-seattle
+        state: WA
+      date: '2026-11-26'
+      count: 6
+      ingredients:
+      - id: turkey
+        description: Turkey Breast
+        size: 3 lb
+      - id: potatoes
+        description: Yukon Gold Potatoes
+        size: 5 lb
+      - id: bread
+        description: Sourdough Bread
+        size: 1 lb
+      - id: celery
+        description: Celery
+        size: 1 bunch
+      - id: onions
+        description: Yellow Onions
+        size: 3 lb
+      - id: beans
+        description: Green Beans
+        size: 1 lb
+      - id: cranberries
+        description: Fresh Cranberries
+        size: 12 oz
+      - id: pumpkin
+        description: Pumpkin Puree
+        size: 15 oz
+      - id: carrots
+        description: Carrots
+        size: 2 lb
+      - id: squash
+        description: Butternut Squash
+        size: 2 lb
+      - id: apples
+        description: Apples
+        size: 3 lb
+      - id: butter
+        description: Unsalted Butter
+        size: 1 lb
+      - id: milk
+        description: Whole Milk
+        size: 1 gallon
+      - id: eggs
+        description: Eggs
+        size: 12 count
+      guests: 12
+      instructions: |
+        Plan one cohesive Thanksgiving dinner, not a week of separate dinners. Create 6 recipes to serve together: one turkey centerpiece (or a vegetarian main if requested), four complementary holiday sides, and one dessert.
+        Favor Thanksgiving classics such as stuffing, mashed potatoes, seasonal vegetables, cranberry sauce, and pumpkin pie, using ingredients available at the selected store. Size the main appropriately for the party rather than assuming a whole turkey is always needed.
+        Size the menu as one shared meal for the guest count, not six complete dinners per person. Allocate a sensible share of the meal to the main, each side, and dessert. Choose each recipe's yield and portion size based on its role and the other dishes, with smaller tasting portions for multiple sides and modest leftovers. Do not blindly give every recipe the guest count in full dinner-sized servings, or divide the guest count equally by six; everyone should have enough to eat across the whole menu.
+        In each recipe plan's recipe_instructions, state that it is part of the same six-dish Thanksgiving meal, the total guest count, its role, and a concrete yield with portion sizes or total quantities for that dish. Carry these portion targets into the final recipe quantities and servings; a side may have a different serving count from the main. Do not add a separate full meal or extra sides to each recipe.
+        Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
+
+        Cook for 12 people. Use this as the guest count when planning portions.
+    options:
+      disableDefaultAsserts: true
+    assert:
+    - type: is-json
+    - type: javascript
+      metric: shared-meal-quality
+      value: |
+        const critique = context.providerResponse.metadata.critique;
+        const score = Math.min(critique.request_fidelity, critique.culinary_coherence, critique.meaningful_variety);
+        return {
+          pass: score >= 8 && critique.issues.every(issue => issue.severity === 'low'),
+          score: score / 10,
+          reason: [critique.summary, ...critique.issues.map(issue =>
+            `${issue.category} (recipes ${issue.recipe_indexes.join(', ')}): ${issue.detail} Fix: ${issue.suggested_fix}`)].join('\n'),
+        };
+    - type: javascript
+      metric: six-dishes-with-guest-context
+      value: |
+        const plans = JSON.parse(output).plans;
+        const guests = context.vars.guests;
+        const count = new RegExp(`\\b(?:${guests}|${guests === 4 ? 'four' : 'twelve'})\\b`, 'i');
+        return plans.length === 6 && plans.every(plan => {
+          const directions = (plan.recipe_instructions ?? []).join(' ');
+          return count.test(directions) && /Thanksgiving|shared meal|six.dish/i.test(directions);
+        });

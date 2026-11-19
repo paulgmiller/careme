@@ -31,7 +31,8 @@ The application is configured via environment variables:
 - `KROGER_CLIENT_ID` - Kroger API client ID (required)
 - `KROGER_CLIENT_SECRET` - Kroger API client secret (required)
 - `AI_API_KEY` - OpenAI API key for recipe generation and chat (required)
-  - Email and campaign recipe/menu generation requests use flex processing. Each email delivery and campaign location has a 10-minute budget covering generation and retries. Interactive requests retain their existing processing tier.
+  - Email and campaign recipe/menu generation requests use flex processing. Flex responses retry HTTP 429s for up to an hour, then log an error and retry on standard processing. A successful standard fallback completes the job successfully. Each email delivery and campaign location has a 70-minute budget covering generation and retries; cancellation still stops work. Interactive requests retain their existing processing tier.
+  - See [AI retry policy](docs/ai-retries.md) for how we configure the SDK's native retries and handle Standard fallback.
   - Images continue to use standard image generation; the Images API does not expose a flex service tier. Text spend logs include the returned service tier and apply flex rates when served on flex.
 ### Optional 
 - `MNFOODCLUB_ORDER_API_URL` and `MNFOODCLUB_ORDER_ACCESS_TOKEN` - opt into the proposed Food Club ordering API for MN Food Club, TC Farm, and Nelson Grass Farm. Set the partner API base URL and its dedicated bearer token; these are separate from BigCommerce catalog credentials. The partner endpoint must be supplied before real use.
@@ -195,11 +196,11 @@ See [docs/cache-layout.md](docs/cache-layout.md) for the authoritative cache key
 
 ### Advertised recipe cronjob
 
-Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true`, processing one campaign at a time through recipe and image generation. Ingredient grading and recipe images within each campaign remain concurrent. MN Food Club, TC Farm, and Nelson Grass Farm use weekly recipe hashes anchored to Monday in their local timezone (`America/Chicago`); other enabled stores use daily hashes. There is no hour or weekday restriction on generation; cached lists and images prevent repeated work for the same recipe hash. Smith Brothers Farms generation remains disabled, with its campaign redirect active. The job creates its own flex AI client and exits with an error if any due store fails. It reuses cached shopping lists and images, and retries incomplete work even when parameters were saved by an earlier attempt.
+Run `careme -campaigns` to generate recipes and images for advertised stores with `Generate: true`, processing one campaign at a time through recipe and image generation. Ingredient grading and recipe images within each campaign remain concurrent. MN Food Club, TC Farm, and Nelson Grass Farm use weekly recipe hashes anchored to Monday in their local timezone (`America/Chicago`); other enabled stores use daily hashes. There is no hour or weekday restriction on generation; cached lists and images prevent repeated work for the same recipe hash. Smith Brothers Farms generation remains disabled, with its campaign redirect active. The job creates its own flex AI client and exits with an error if any due store fails. Completed shopping lists are reused without starting image work again. New generations complete required recipe images before the job saves the list; previously admitted incomplete generations require the web retry instead of restarting under the same hash.
 
 For the three MNFoodClub storefronts and Smith Brothers Farms, recipe requests throughout the week resolve to Monday's list, including explicit dates within that week. The week switches on Monday at the existing 9 AM local store-day boundary. Previously shared hash links keep their original lists.
 
-`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, at the top of each hour from 6–10 AM Pacific in production (`0 6-10 * * *`, `America/Los_Angeles`), with the same store, AI, auth, storage, and telemetry credentials used by the mail job. These five daily starts cover the store-day boundary across US timezones, plus one hour afterward. Create-only recipe parameters prevent scheduled jobs from restarting a generation already admitted by the web app or another job. Existing completed recipes are reused, and missing images can be retried. If admitted recipes are still missing, the job returns a not-ready error; failed or abandoned recipe generation requires the web retry, which creates a separate generation URL. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping scheduled runs and allows four job retries (five attempts total).
+`deploy/cronjob-careme-advertised-recipes.yaml` runs the application image directly on `ADVERTISED_RECIPES_SCHEDULE`, at the top of each hour from 6–10 AM Pacific in production (`0 6-10 * * *`, `America/Los_Angeles`), with the same store, AI, auth, storage, and telemetry credentials used by the mail job. These five daily starts cover the store-day boundary across US timezones, plus one hour afterward. Create-only recipe parameters prevent scheduled jobs from restarting a generation already admitted by the web app or another job. Existing completed recipes are reused without regenerating images. If admitted recipes are still missing, the job returns a not-ready error; failed or abandoned recipe generation requires the web retry, which creates a separate generation URL. It no longer calls the web server's generation endpoint. Kubernetes prevents overlapping scheduled runs and allows four job retries (five attempts total).
 
 Automatic campaign runs are temporarily suspended in `caremetest` by `deploy/deploy.sh`; production still runs daily. To manually run generation-enabled advertised stores in test using the deployed image and credentials, create a Job from the suspended CronJob:
 
@@ -295,6 +296,45 @@ the existing grading and nearest-ingredient lookup. Wine candidates include ever
 page of the Wine & Wine Alternatives category (BigCommerce category 178), using
 the same stock and pricing rules. Requested wine styles do not restrict this list.
 
+### Full Circle ingredients
+
+Full Circle staples are available under `fullcircle_delivery`:
+
+```sh
+INGREDIENT_GRADING_ENABLE=false go run ./cmd/ingredients -location fullcircle_delivery -verbose
+```
+
+The provider imports Dairy, Meat, and Grains & Rice using the public JSON
+requests behind [Full Circle's grocery catalog](https://www.fullcircle.com/product/farm-product-list).
+It retains listing IDs, brands, package sizes, and published prices, merges
+products listed in multiple categories, and excludes explicitly sold-out products.
+The anonymous catalog does not confirm stock or pricing for a particular delivery.
+No credentials or new environment configuration are required. Nearby discovery
+uses an approximate Seattle metro box including Bellevue and Issaquah.
+
+The provider also appends a temporary, user-supplied produce box: 2 Valencia
+oranges, 1 lb Murcott mandarins, 1 Hass avocado, 1 bunch broccoli, 1 head red leaf
+lettuce, 1 bunch red chard, 1 bunch red radishes, 1 fennel bulb with fronds,
+1 lb yellow potatoes, and 1 red onion. These entries retain the supplied quantities,
+have no individual prices, and carry the same preassigned 10/10 grade as other
+providers' produce shares. This fixed list is not live account inventory; update
+`internal/providers/fullcircle/produce_box.go` when the contents change. Changes
+to box contents invalidate ingredient and recipe cache hashes. Fetching ingredients
+through recipe generation populates the catalog snapshot used by location scores;
+`cmd/ingredients` only caches individual grades.
+
+The [Traditional CSA page](https://www.fullcircle.com/product/detail/2#comparesizes)
+has a “Show Sample Box Content For Each Size” link. Those are sample contents,
+so this provider does not import them as current produce inventory.
+[Actual delivery contents](https://www.fullcircle.com/how-it-works/customize-your-box)
+are available in the customer's account during the customization window. Full
+Circle sends a reminder on Thursday afternoon before the delivery week; the
+window usually closes 48–72 hours before delivery, depending on the area.
+
+Run the optional public catalog check with
+`FULLCIRCLE_LIVE_TEST=1 go test ./internal/providers/fullcircle -run TestLiveCatalog -v`.
+The default tests use small catalog fixtures and do not access Full Circle.
+
 ### Smith Brothers Farms ingredients
 
 Nearby search includes Smith Brothers Farms home delivery in two approximate
@@ -328,7 +368,7 @@ with `gpt-6-luna` instead of the former JEV integration. It uses the same ten-le
 rubric, rounding its zero-based score and adding one for a 1–10 ingredient grade,
 and requires `AI_API_KEY`. Each uncached ingredient gets its own Decisions
 request, with up to 64 concurrent requests per grader instance. Explicit model names select the
-Responses grader; recipe generation and meal planning continue to use `gpt-6.1-sol`.
+Responses grader; recipe generation uses `gpt-6.1-sol` and meal planning uses `gpt-6.1-sol`.
 
 With `AI_API_KEY` configured and `INGREDIENT_GRADING_ENABLE=1`, grading stores an
 OpenAI `text-embedding-3-small` embedding of each ingredient description alongside
@@ -347,6 +387,8 @@ grade, and cosine similarity, ordered from closest to furthest. The first lookup
 may fetch and grade the store catalog; subsequent lookups reuse cached product
 grades and embeddings. Store provider credentials are the same as for the
 existing ingredients command. Recipe generation context is unchanged.
+
+See [Kroger staples diagnostics and query study](docs/kroger-staples-study.md) for catalog inspection and query optimization.
 
 ### Local Yokels ingredients
 

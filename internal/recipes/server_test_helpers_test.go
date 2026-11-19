@@ -51,14 +51,14 @@ func newTestServer(t testing.TB, opts ...testServerOption) *server {
 		cfg.storage = users.NewStorage(cfg.cache)
 	}
 	if cfg.generator == nil {
-		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache), noopstatuswriter{})
+		cfg.generator = NewMockGenerator(IO(cfg.cache), critique.NewMock(cfg.cache), noopstatuswriter{}, noopRecipeImages{})
 	}
 
 	if cfg.imagegen == nil {
 		cfg.imagegen = mock{}
 	}
 
-	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, cfg.imageCache, cfg.clerk, cfg.imagegen, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
+	s, err := NewHandler(cfg.cfg, cfg.storage, cfg.generator, cfg.locServer, cfg.cache, NewRecipeImageGenerator(NewImageStore(cfg.imageCache), cfg.imagegen), cfg.clerk, SimpleShoppingQuantityMerger{}, orderViewBuilderFunc(func(ordertypes.OrderViewInput) (*ordertypes.OrderView, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

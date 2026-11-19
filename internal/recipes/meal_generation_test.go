@@ -113,6 +113,8 @@ func TestMealReplacementCancelsOnlyCurrentSlot(t *testing.T) {
 					return &ai.RecipeCritique{OverallScore: 10}, nil
 				}}
 				g := newTestGenerator(t, client, critiquer, fixedStaplesService{}, owner, rio)
+				images := make(chan string, 4)
+				g.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe.Title })
 				ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 				defer cancel()
 				type outcome struct {
@@ -148,6 +150,8 @@ func TestMealReplacementCancelsOnlyCurrentSlot(t *testing.T) {
 					t.Fatal("generation did not finish")
 				}
 				require.NoError(t, result.err)
+				require.Len(t, images, 2, "superseded meals must not start image generation")
+				assert.ElementsMatch(t, []string{"Final", "Steady"}, []string{<-images, <-images})
 				assert.Equal(t, "Final", result.list.Recipes[0].Title)
 				assert.Equal(t, "Steady", result.list.Recipes[1].Title)
 				if regeneration {

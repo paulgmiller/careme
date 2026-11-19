@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	openai "github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
 )
 
 type GeneratedImage struct {
@@ -78,6 +79,7 @@ func (c *client) GenerateStepImage(ctx context.Context, recipe Recipe, step int)
 }
 
 func (c *client) generateImage(ctx context.Context, prompt string) (*GeneratedImage, error) {
+	observer := retryObserver{}
 	resp, err := c.oai.Images.Generate(ctx, openai.ImageGenerateParams{
 		Prompt:       prompt,
 		Model:        c.imageModel,
@@ -85,7 +87,7 @@ func (c *client) generateImage(ctx context.Context, prompt string) (*GeneratedIm
 		OutputFormat: recipeImageOutputFormat,
 		Quality:      recipeImageQuality,
 		Size:         recipeImageSize,
-	})
+	}, option.WithMiddleware(observer.middleware))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate recipe image: %w", err)
 	}

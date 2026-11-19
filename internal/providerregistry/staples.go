@@ -8,6 +8,7 @@ import (
 	"careme/internal/farmersmarket"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
+	"careme/internal/providers/fullcircle"
 	"careme/internal/providers/heb"
 	"careme/internal/providers/imperfectfoods"
 	"careme/internal/providers/kroger"
@@ -82,6 +83,7 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 		backends = append([]recipes.StaplesBackend{
 			imperfectfoods.NewStaplesProvider(),
 			localyokels.NewStaplesProvider(localyokels.NewClient(brightdataClient)),
+			fullcircle.NewStaplesProvider(fullcircle.NewClient(brightdataClient)),
 		}, backends...)
 	}
 	return backends, nil

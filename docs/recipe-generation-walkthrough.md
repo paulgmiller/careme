@@ -8,7 +8,8 @@ This document covers the first-time generation path inside `generatorService.Gen
 flowchart TD
     subgraph Legend["Model color"]
         MiniLegend["gpt-6-luna<br/>Grading"]
-        RecipeModelLegend["gpt-6.1-sol<br/>Menu planning + recipe generation + retry"]
+        MenuModelLegend["gpt-6.1-sol<br/>Menu planning"]
+        RecipeModelLegend["gpt-6.1-sol<br/>Recipe generation + retry"]
         OpenRouterLegend["OpenRouter<br/>Recipe critique"]
     end
 
@@ -59,10 +60,12 @@ flowchart TD
     W --> X["Return ai.ShoppingList with menu plan"]
 
     classDef mini fill:#e0f2fe,stroke:#0284c7,color:#0f172a,stroke-width:2px
+    classDef menuModel fill:#ffedd5,stroke:#c2410c,color:#0f172a,stroke-width:2px
     classDef recipeModel fill:#dcfce7,stroke:#16a34a,color:#0f172a,stroke-width:2px
     classDef openrouter fill:#f3e8ff,stroke:#7e22ce,color:#0f172a,stroke-width:2px
 
-    class MiniLegend,J,N mini
+    class MiniLegend,J mini
+    class MenuModelLegend,N menuModel
     class RecipeModelLegend,P1,P2,P3,U1,U2,U3 recipeModel
     class OpenRouterLegend,R1,R2,R3 openrouter
 ```

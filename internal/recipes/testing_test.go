@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"testing"
 
 	"careme/internal/ai"
@@ -19,3 +20,14 @@ func saveRecipesForOrigin(t *testing.T, saver recipeSaver, originHash string, re
 		}
 	}
 }
+
+type recipeImageStarterFunc func(context.Context, ai.Recipe)
+
+func (f recipeImageStarterFunc) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	f(ctx, recipe)
+	return nil
+}
+
+type noopRecipeImages struct{}
+
+func (noopRecipeImages) RecipeReady(context.Context, ai.Recipe) error { return nil }

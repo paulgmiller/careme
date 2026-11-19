@@ -23,10 +23,12 @@ func TestNewClientTrimsModels(t *testing.T) {
 	client := NewClient(config.AIConfig{
 		APIKey:      "test-key",
 		RecipeModel: " candidate-model ",
+		MenuModel:   " candidate-menu-model ",
 		ImageModel:  " candidate-image-model ",
 	}, nil, &capturePromptRecorder{})
 
-	assert.Equal(t, "candidate-model", client.model)
+	assert.Equal(t, "candidate-model", client.recipeModel)
+	assert.Equal(t, "candidate-menu-model", client.menuModel)
 	assert.Equal(t, "candidate-image-model", string(client.imageModel))
 	assert.Equal(t, defaultWineModel, client.wineModel)
 }
@@ -34,9 +36,10 @@ func TestNewClientTrimsModels(t *testing.T) {
 func TestNewClientUsesModelsByRole(t *testing.T) {
 	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, &capturePromptRecorder{})
 
-	assert.Equal(t, "gpt-6.1-sol", client.model)
-	if client.model != config.DefaultRecipeModel {
-		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.model)
+	assert.Equal(t, "gpt-6.1-sol", client.recipeModel)
+	assert.Equal(t, "gpt-6.1-sol", client.menuModel)
+	if client.recipeModel != config.DefaultRecipeModel {
+		t.Fatalf("expected primary recipe model to be %q, got %q", config.DefaultRecipeModel, client.recipeModel)
 	}
 	if client.wineModel != openai.ChatModelGPT6Luna {
 		t.Fatalf("expected wine model to use low-cost Luna path, got %q", client.wineModel)
@@ -79,14 +82,12 @@ func TestFlexRetries(t *testing.T) {
 		retryAfter string
 		wantCalls  int
 		wantWait   time.Duration
-		wantError  bool
 	}{
 		{name: "capacity recovers", failures: 1, wantCalls: 2},
-		{name: "capacity recovers on last attempt", failures: 10, wantCalls: 11},
-		{name: "capacity remains unavailable", failures: 11, wantCalls: 11, wantError: true},
+		{name: "capacity recovers after ten retries", failures: 10, wantCalls: 11},
 		{name: "short retry after", failures: 1, retryAfter: "1", wantCalls: 2, wantWait: time.Second},
 		{name: "minute retry after", failures: 1, retryAfter: "60", wantCalls: 2, wantWait: time.Minute},
-		{name: "retry after exceeds cap", failures: 1, retryAfter: "120", wantCalls: 1, wantError: true},
+		{name: "long retry after", failures: 1, retryAfter: "120", wantCalls: 2, wantWait: 2 * time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -116,18 +117,9 @@ func TestFlexRetries(t *testing.T) {
 
 				start := time.Now()
 				recipe, err := c.GenerateRecipe(t.Context(), nil, ResponseRef{ID: "resp-menu"})
-				if tc.wantError {
-					require.ErrorContains(t, err, "failed to generate recipe")
-					var apiErr *openai.Error
-					require.ErrorAs(t, err, &apiErr)
-					assert.Equal(t, http.StatusTooManyRequests, apiErr.StatusCode)
-					assert.Equal(t, "resource_unavailable", apiErr.Code)
-					assert.Nil(t, recipe)
-				} else {
-					require.NoError(t, err)
-					require.NotNil(t, recipe)
-					assert.Equal(t, "Tofu stir-fry", recipe.Title)
-				}
+				require.NoError(t, err)
+				require.NotNil(t, recipe)
+				assert.Equal(t, "Tofu stir-fry", recipe.Title)
 				assert.Equal(t, tc.wantCalls, calls)
 				if tc.retryAfter != "" {
 					assert.Equal(t, tc.wantWait, time.Since(start))
@@ -135,9 +127,9 @@ func TestFlexRetries(t *testing.T) {
 					assert.GreaterOrEqual(t, time.Since(start), 375*time.Millisecond)
 					assert.LessOrEqual(t, time.Since(start), 500*time.Millisecond)
 				} else {
-					// 0.5, 1, 2, 4, 8, 16, 32, 60, 60, 60 seconds, with up to 25% jitter.
-					assert.GreaterOrEqual(t, time.Since(start), 182625*time.Millisecond)
-					assert.LessOrEqual(t, time.Since(start), 243500*time.Millisecond)
+					// 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256 seconds, with up to 25% jitter.
+					assert.GreaterOrEqual(t, time.Since(start), 383625*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), 511500*time.Millisecond)
 				}
 			})
 		})
@@ -189,7 +181,7 @@ func TestStandardTierKeepsShortRetries(t *testing.T) {
 	for i, entry := range entries {
 		var fields map[string]any
 		require.NoError(t, json.Unmarshal([]byte(entry), &fields))
-		assert.Equal(t, "Retrying HTTP request", fields["msg"])
+		assert.Equal(t, "Retried HTTP request", fields["msg"])
 		assert.Equal(t, "openai", fields["source"])
 		assert.Equal(t, float64(i+2), fields["attempt"])
 	}

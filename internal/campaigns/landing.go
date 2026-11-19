@@ -3,8 +3,10 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"careme/internal/auth"
 	"careme/internal/templates"
@@ -12,12 +14,13 @@ import (
 )
 
 type landingCampaign struct {
-	Label        string
-	ImageURL     string
-	ImageAlt     string
-	Title        string
-	Blurb        string
-	Instructions string
+	Label         string
+	ImageURL      string
+	ImageAlt      string
+	Title         string
+	Blurb         string
+	Instructions  string
+	AskGuestCount bool
 }
 
 // Add dinner campaigns here; each uses the same landing page.
@@ -72,14 +75,29 @@ When multiple plans work, prefer the one with the lower total grocery spend, eve
 `,
 	},
 	"fancy": {
-		Label:    "A little more special",
-		ImageURL: "https://test.careme.cooking/recipe/unvnQMT4FdW5tkJR3JACOQ==/image",
-		ImageAlt: "Seared chops with roasted squash and a rich pan sauce.",
-		Title:    "Make dinner an occasion.",
-		Blurb:    "Plan a memorable date night or dinner party with ingredients from your local store.",
+		AskGuestCount: true,
+		Label:         "A little more special",
+		ImageURL:      "https://test.careme.cooking/recipe/unvnQMT4FdW5tkJR3JACOQ==/image",
+		ImageAlt:      "Seared chops with roasted squash and a rich pan sauce.",
+		Title:         "Make dinner an occasion.",
+		Blurb:         "Plan a memorable date night or dinner party with ingredients from your local store.",
 		Instructions: `Plan elevated dinners for date nights or dinner parties. Favor dishes that feel special, look impressive, and introduce approachable techniques that build cooking skills without becoming overly difficult.
 Allow somewhat higher-cost ingredients, premium cuts, richer sauces, and more elaborate sides when they meaningfully improve the meal. Prefer thoughtful presentation and restaurant-style touches over expense for its own sake.
 When multiple plans work, prefer the one that feels more distinctive and occasion-worthy, even if it costs somewhat more or takes a little longer.
+`,
+	},
+	"thanksgiving": {
+		AskGuestCount: true,
+		Label:         "Thanksgiving dinner",
+		Title:         "Bring everyone to the Thanksgiving table.",
+		Blurb:         "Tell us how many people are coming. Build a Thanksgiving menu and shopping list with ingredients from your local store.",
+		ImageURL:      "https://test.careme.cooking/recipe/lqi74zXNvQNoFdRTrIBD2g==/image",
+		ImageAlt:      "A slice of pumpkin pie topped with whipped cream.",
+		Instructions: `Plan one cohesive Thanksgiving dinner, not a week of separate dinners. Create 6 recipes to serve together: one turkey centerpiece (or a vegetarian main if requested), four complementary holiday sides, and one dessert.
+Favor Thanksgiving classics such as stuffing, mashed potatoes, seasonal vegetables, cranberry sauce, and pumpkin pie, using ingredients available at the selected store. Size the main appropriately for the party rather than assuming a whole turkey is always needed.
+Size the menu as one shared meal for the guest count, not six complete dinners per person. Allocate a sensible share of the meal to the main, each side, and dessert. Choose each recipe's yield and portion size based on its role and the other dishes, with smaller tasting portions for multiple sides and modest leftovers. Do not blindly give every recipe the guest count in full dinner-sized servings, or divide the guest count equally by six; everyone should have enough to eat across the whole menu.
+In each recipe plan's recipe_instructions, state that it is part of the same six-dish Thanksgiving meal, the total guest count, its role, and a concrete yield with portion sizes or total quantities for that dish. Carry these portion targets into the final recipe quantities and servings; a side may have a different serving count from the main. Do not add a separate full meal or extra sides to each recipe.
+Include practical make-ahead steps, oven temperatures, and cooking times so the cook can coordinate the meal with a normal home kitchen and limited oven space.
 `,
 	},
 }
@@ -90,6 +108,7 @@ type landingUserLookup interface {
 
 type landingHandler struct {
 	campaign   landingCampaign
+	name       string
 	users      landingUserLookup
 	authClient auth.AuthClient
 }
@@ -107,11 +126,13 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Campaign       landingCampaign
 		User           *utypes.User
 		ServerSignedIn bool
+		CampaignName   string
 	}{
 		Page:           templates.NewPage(ctx),
 		Campaign:       h.campaign,
 		User:           user,
 		ServerSignedIn: user != nil,
+		CampaignName:   h.name,
 	}
 	data.Title = h.campaign.Title
 	data.Description = h.campaign.Blurb
@@ -119,4 +140,24 @@ func (h landingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "campaign template execute error", "error", err)
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+type planHandler struct {
+	campaign landingCampaign
+}
+
+func (h planHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	instructions := h.campaign.Instructions
+	if h.campaign.AskGuestCount {
+		guests, err := strconv.Atoi(query.Get("guests"))
+		if err != nil || guests < 1 || guests > 100 {
+			http.Error(w, "Tell us how many people are coming (1–100).", http.StatusBadRequest)
+			return
+		}
+		instructions += fmt.Sprintf("\nCook for %d people. Use this as the guest count when planning portions.", guests)
+	}
+	query.Set("instructions", instructions)
+	query.Del("guests")
+	http.Redirect(w, r, "/locations?"+query.Encode(), http.StatusFound)
 }

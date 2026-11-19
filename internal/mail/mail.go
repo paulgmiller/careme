@@ -25,7 +25,6 @@ import (
 	ingredientgrading "careme/internal/ingredients/grading"
 	"careme/internal/locations"
 	"careme/internal/logsetup"
-	"careme/internal/parallelism"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
@@ -42,10 +41,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const (
-	mailSentPrefix       = "mail/sent/"
-	emailDeliveryTimeout = 10 * time.Minute
-)
+const mailSentPrefix = "mail/sent/"
 
 type mailSentClaim struct {
 	SentAt     time.Time `json:"sent_at"`
@@ -70,15 +66,6 @@ type generationStatusStore interface {
 	Fail(ctx context.Context, hash string, err error) error
 }
 
-type imageGenerator interface {
-	GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error)
-}
-
-type imageStore interface {
-	Exists(ctx context.Context, hash string) (bool, error)
-	Save(ctx context.Context, hash string, image *ai.GeneratedImage) error
-}
-
 type userStore interface {
 	List(ctx context.Context) ([]utypes.User, error)
 	GetByEmail(email string) (*utypes.User, error)
@@ -89,8 +76,6 @@ type mailer struct {
 	userStorage        userStore
 	generator          generator // interface requires making params public
 	generationStatuses generationStatusStore
-	imageGenerator     imageGenerator
-	imageStore         imageStore
 	locServer          locServer
 	client             emailClient
 	publicOrigin       string
@@ -127,7 +112,8 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore))
+	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiClient)
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore), imageJobs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -154,8 +140,6 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 		userStorage:        userStorage,
 		generator:          generator,
 		generationStatuses: generationStatuses,
-		imageGenerator:     aiClient,
-		imageStore:         recipes.NewImageStore(imageCache),
 		locServer:          locationserver,
 		client:             sendgrid.NewSendClient(sendgridkey),
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
@@ -192,7 +176,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 		slog.DebugContext(ctx, "user has no favorite store", "user", user.ID)
 		return
 	}
-	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, ai.FlexJobTimeout)
 	defer cancel()
 
 	p, err := m.emailParams(ctx, user)
@@ -231,7 +215,7 @@ func (m *mailer) sendEmail(ctx context.Context, user utypes.User) {
 // the requested address and does not record a sent-mail claim.
 func (m *mailer) ForceSendToEmail(ctx context.Context, recipient string) error {
 	defer m.wait()
-	ctx, cancel := context.WithTimeout(ctx, emailDeliveryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, ai.FlexJobTimeout)
 	defer cancel()
 
 	address, err := netmail.ParseAddress(recipient)
@@ -327,10 +311,6 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		return fmt.Errorf("shopping list %q contains no recipes", paramsHash)
 	}
 
-	if err := m.prepareRecipeImages(ctx, shoppingList.Recipes); err != nil {
-		return fmt.Errorf("prepare recipe images: %w", err)
-	}
-
 	var buf bytes.Buffer
 	unsubscribeParams := url.Values{
 		"user":  []string{user.ID},
@@ -389,36 +369,6 @@ func (m *mailer) recordSentClaim(ctx context.Context, userID, paramsHash string)
 
 func sentMailKey(userID, paramsHash string) string {
 	return mailSentPrefix + paramsHash + "/" + userID
-}
-
-func (m *mailer) prepareRecipeImages(ctx context.Context, recipeList []ai.Recipe) error {
-	_, err := parallelism.MapWithErrors(recipeList, func(recipe ai.Recipe) (struct{}, error) {
-		if err := m.prepareRecipeImage(ctx, recipe); err != nil {
-			return struct{}{}, fmt.Errorf("%q: %w", recipe.Title, err)
-		}
-		return struct{}{}, nil
-	})
-	return err
-}
-
-func (m *mailer) prepareRecipeImage(ctx context.Context, recipe ai.Recipe) error {
-	hash := recipe.ComputeHash()
-	exists, err := m.imageStore.Exists(ctx, hash)
-	if err != nil {
-		return fmt.Errorf("check image cache: %w", err)
-	}
-	if exists {
-		return nil
-	}
-
-	generated, err := m.imageGenerator.GenerateRecipeImage(ctx, recipe)
-	if err != nil {
-		return fmt.Errorf("generate image: %w", err)
-	}
-	if err := m.imageStore.Save(ctx, hash, generated); err != nil {
-		return fmt.Errorf("save image: %w", err)
-	}
-	return nil
 }
 
 // recipeEmailSubject formats a subject for a validated, non-empty shopping list.

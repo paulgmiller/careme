@@ -13,8 +13,10 @@ import (
 // Register adds campaign landing pages and store redirect routes to mux.
 func Register(mux routing.Registrar, users landingUserLookup, authClient auth.AuthClient) {
 	for name, campaign := range dinnerCampaigns {
+		mux.Handle("GET /c/"+name+"/plan", planHandler{campaign: campaign})
 		mux.Handle("GET /c/"+name, landingHandler{
 			campaign:   campaign,
+			name:       name,
 			users:      users,
 			authClient: authClient,
 		})

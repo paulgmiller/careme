@@ -2,15 +2,19 @@ package brightdata
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"sync/atomic"
+	"time"
 
 	"careme/internal/httpretry"
 
@@ -19,6 +23,8 @@ import (
 
 //go:embed brightdata.crt
 var brightDataRootCA []byte
+
+const defaultRequestAttemptTimeout = 10 * time.Second
 
 type ProxyConfig struct {
 	Host     string `json:"host"`
@@ -29,14 +35,16 @@ type ProxyConfig struct {
 
 type proxySessionIDContextKey struct{}
 
-// WithProxySessionID requests a sticky Bright Data proxy peer for the lifetime
-// of ctx. Callers should use a different alphanumeric ID when they want a
-// different peer.
+// WithProxySessionID requests a sticky Bright Data proxy peer. A timeout rotates
+// the session so subsequent requests, including an outer client's retry, use the
+// replacement. Successful requests retain the current peer across calls using ctx.
 func WithProxySessionID(ctx context.Context, sessionID string) context.Context {
 	if sessionID == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, proxySessionIDContextKey{}, sessionID)
+	session := new(atomic.Pointer[string])
+	session.Store(&sessionID)
+	return context.WithValue(ctx, proxySessionIDContextKey{}, session)
 }
 
 // ProxySessionIDFromContext returns the Bright Data proxy session associated
@@ -45,8 +53,11 @@ func ProxySessionIDFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
-	sessionID, ok := ctx.Value(proxySessionIDContextKey{}).(string)
-	return sessionID, ok && sessionID != ""
+	session, ok := ctx.Value(proxySessionIDContextKey{}).(*atomic.Pointer[string])
+	if !ok {
+		return "", false
+	}
+	return *session.Load(), true
 }
 
 func LoadConfig() ProxyConfig {
@@ -80,7 +91,9 @@ func NewProxyAwareHTTPClient(cfg ProxyConfig) (*http.Client, error) {
 		}
 	}
 
-	client := &http.Client{Transport: transport}
+	// This client performs one attempt. A timeout on the returned standard
+	// client would instead cover the entire retry sequence.
+	client := &http.Client{Transport: transport, Timeout: defaultRequestAttemptTimeout}
 
 	return withRetries(client), nil
 }
@@ -142,7 +155,21 @@ func withRetries(baseClient *http.Client) *http.Client {
 	// Keep the library defaults for now:
 	// RetryMax=4, RetryWaitMin=1s, RetryWaitMax=30s, Backoff=DefaultBackoff.
 	// We'll tune these once we have a clearer sense of how often these retries fire.
-	retryClient.CheckRetry = retriable
+	retryClient.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		// A timeout can leave retries pinned to a stalled sticky proxy peer.
+		// Replace the session so the next attempt and later requests sharing
+		// it ask Bright Data for another peer. Rotate before the context check:
+		// an outer retry layer may have imposed this attempt's deadline.
+		var netErr net.Error
+		if err != nil && !errors.Is(err, context.Canceled) && (errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout()) {
+			if session, ok := ctx.Value(proxySessionIDContextKey{}).(*atomic.Pointer[string]); ok {
+				id := rand.Text()
+				session.Store(&id)
+				slog.InfoContext(ctx, "Rotating Bright Data proxy session", "source", "brightdata", "reason", "timeout")
+			}
+		}
+		return retriable(ctx, resp, err)
+	}
 	return retryClient.StandardClient()
 }
 
