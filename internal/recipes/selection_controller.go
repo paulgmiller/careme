@@ -101,7 +101,7 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 	if err != nil {
 		return nil, fmt.Errorf("load recipe params: %w", err)
 	}
-	s.startSavedRecipeBackgroundGeneration(ctx, recipeHash, *recipe, params.Location.ID, params.Date)
+	s.startSavedRecipeWineGeneration(ctx, recipeHash, *recipe, params.Location.ID, params.Date)
 
 	return recipe, nil
 }
@@ -179,13 +179,6 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 		if err := templates.Recipe.ExecuteTemplate(&response, "recipe_save_action", newRecipeSaveActionView(recipe, shoppingListHash, saved)); err != nil {
 			return fmt.Errorf("render recipe save action: %w", err)
 		}
-		if saved {
-			// Refresh the image panel after saving starts background generation.
-			image := recipeImageView{Hash: recipeHash, HasImage: s.recipeImageExistsForCard(ctx, recipeHash), Poll: true}
-			if err := templates.Recipe.ExecuteTemplate(&response, "recipe_image_response", image); err != nil {
-				return fmt.Errorf("render saved recipe image: %w", err)
-			}
-		}
 	} else {
 		if err := writeShoppingRecipeCard(&response, recipe, shoppingRecipeInput{
 			Saved:              saved,
@@ -236,61 +229,30 @@ func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string
 	return exists
 }
 
-func (s *server) startSavedRecipeBackgroundGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
+func (s *server) startSavedRecipeWineGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
 	s.wg.Go(func() {
-		bgctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
 		defer cancel()
-		s.ensureSavedRecipeWine(bgctx, recipeHash, locationID, recipe, date)
+		exists, err := s.wineExists(ctx, recipeHash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
+			return
+		}
+		if exists {
+			return
+		}
+		slog.InfoContext(ctx, "generating wine picks on save", "hash", recipeHash)
+		selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
+			// Wine is optional. Publish a completed empty result so finalization on
+			// any server stops waiting for this failed attempt.
+			selection = &ai.WineSelection{Wines: []ai.Ingredient{}}
+		}
+		if err := s.saveWine(ctx, recipeHash, selection); err != nil {
+			slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
+		}
 	})
-	s.wg.Go(func() {
-		s.ensureRecipeImage(ctx, recipeHash, recipe)
-	})
-}
-
-func (s *server) ensureSavedRecipeWine(ctx context.Context, recipeHash, locationID string, recipe ai.Recipe, date time.Time) {
-	exists, err := s.wineExists(ctx, recipeHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
-		return
-	}
-	if exists {
-		return
-	}
-	slog.InfoContext(ctx, "generating wine picks on save", "hash", recipeHash)
-	selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
-		// Wine is optional. Publish a completed empty result so finalization on
-		// any server stops waiting for this failed attempt.
-		selection = &ai.WineSelection{Wines: []ai.Ingredient{}}
-	}
-	if err := s.saveWine(ctx, recipeHash, selection); err != nil {
-		slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
-	}
-}
-
-func (s *server) ensureRecipeImage(ctx context.Context, recipeHash string, recipe ai.Recipe) {
-	// 4 minutes is a magical number here. neeed to look at data.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
-	defer cancel()
-
-	exists, err := s.images.Exists(ctx, recipeHash)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
-		return
-	}
-	if exists {
-		return
-	}
-	slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
-	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
-		return
-	}
-	if err := s.images.Save(ctx, recipeHash, image); err != nil {
-		slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
-	}
 }
 
 func isSingleRecipeAction(r *http.Request) bool {
