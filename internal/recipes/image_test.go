@@ -51,7 +51,7 @@ func TestRequiredImagesJoinBackgroundGeneration(t *testing.T) {
 				worker.GenerateInBackground(t.Context(), recipe)
 				<-started
 				done := make(chan error, 1)
-				go func() { done <- worker.Prepare(t.Context(), []ai.Recipe{recipe}) }()
+				go func() { done <- worker.WaitOn(t.Context(), []ai.Recipe{recipe}) }()
 				synctest.Wait()
 				select {
 				case <-done:
@@ -66,7 +66,7 @@ func TestRequiredImagesJoinBackgroundGeneration(t *testing.T) {
 					assert.ErrorContains(t, err, recipe.Title)
 				} else {
 					require.NoError(t, err)
-					require.NoError(t, worker.Prepare(t.Context(), []ai.Recipe{recipe}))
+					require.NoError(t, worker.WaitOn(t.Context(), []ai.Recipe{recipe}))
 				}
 				assert.Equal(t, int32(1), calls.Load(), "required images must reuse background work or cached results")
 				exists, err := store.Exists(t.Context(), recipe.ComputeHash())
@@ -90,12 +90,12 @@ func TestRequiredImagesCanCancelWhileBackgroundContinues(t *testing.T) {
 		<-started
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
-		go func() { done <- worker.Prepare(ctx, []ai.Recipe{recipe}) }()
+		go func() { done <- worker.WaitOn(ctx, []ai.Recipe{recipe}) }()
 		synctest.Wait()
 		cancel()
 		require.ErrorIs(t, <-done, context.Canceled)
 		close(release)
 		worker.Wait()
-		require.NoError(t, worker.Prepare(t.Context(), []ai.Recipe{recipe}))
+		require.NoError(t, worker.WaitOn(t.Context(), []ai.Recipe{recipe}))
 	})
 }

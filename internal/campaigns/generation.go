@@ -35,14 +35,23 @@ type recipeStore interface {
 	SaveShoppingList(context.Context, *ai.ShoppingList, string) error
 }
 
+type generationStatusStore interface {
+	Start(context.Context, string, string) error
+	Fail(context.Context, string, error) error
+}
+
 // service runs advertised recipe generation independently of the web server.
 type service struct {
 	locations advertisedLocationStore
 	generator recipeGenerator
 	store     recipeStore
-	statuses  *status.Store
-	imageJobs *recipes.RecipeImageGenerator
+	statuses  generationStatusStore
+	imageJobs recipeImages
 	wait      func()
+}
+
+type recipeImages interface {
+	WaitOn(context.Context, []ai.Recipe) error
 }
 
 type providerFactory interface {
@@ -131,16 +140,13 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if err != nil && !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
-	missing := errors.Is(err, cache.ErrNotFound)
 	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
 
-	if !missing { // small chance someone got to this locationb before us?
-		if err := s.imageJobs.Prepare(ctx, list.Recipes); err != nil {
-			return err
-		}
-		return nil
+	if err == nil {
+		// Cached lists may still need images after an interrupted or failed run.
+		return s.imageJobs.WaitOn(ctx, list.Recipes)
 	}
 
 	if err := s.prepare(ctx, p); err != nil {
@@ -169,9 +175,5 @@ func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 
-	if err := s.imageJobs.Prepare(ctx, list.Recipes); err != nil {
-		return err
-	}
-
-	return nil
+	return s.imageJobs.WaitOn(ctx, list.Recipes)
 }

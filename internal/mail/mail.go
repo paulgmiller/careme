@@ -76,12 +76,16 @@ type mailer struct {
 	userStorage        userStore
 	generator          generator // interface requires making params public
 	generationStatuses generationStatusStore
-	imageJobs          *recipes.RecipeImageGenerator
+	imageJobs          recipeImages
 	locServer          locServer
 	client             emailClient
 	publicOrigin       string
 	wait               func()
 	unsubscribeFactory users.UnsubscribeTokenFactory
+}
+
+type recipeImages interface {
+	WaitOn(context.Context, []ai.Recipe) error
 }
 
 type providerFactory interface {
@@ -304,7 +308,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 		return fmt.Errorf("shopping list %q contains no recipes", paramsHash)
 	}
 
-	if err := m.imageJobs.Prepare(ctx, shoppingList.Recipes); err != nil {
+	if err := m.imageJobs.WaitOn(ctx, shoppingList.Recipes); err != nil {
 		return fmt.Errorf("prepare recipe images: %w", err)
 	}
 

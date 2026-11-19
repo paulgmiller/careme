@@ -134,7 +134,7 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash())
+		state, err := s.statuses.(*status.Store).Load(t.Context(), p.Hash())
 		require.NoError(t, err)
 		assert.Contains(t, state.Failed, "flex unavailable")
 	}
@@ -152,7 +152,7 @@ func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
 	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
 	assert.Equal(t, 2*len(g.params), images.calls)
 	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash())
+		state, err := s.statuses.(*status.Store).Load(t.Context(), p.Hash())
 		require.NoError(t, err)
 		assert.Empty(t, state.Failed)
 	}

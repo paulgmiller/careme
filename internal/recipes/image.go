@@ -73,15 +73,15 @@ func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
 
 func (s *RecipeImageGenerator) GenerateInBackground(ctx context.Context, recipe ai.Recipe) {
 	s.wg.Go(func() {
-		if err := s.Prepare(context.WithoutCancel(ctx), []ai.Recipe{recipe}); err != nil {
+		if err := s.WaitOn(context.WithoutCancel(ctx), []ai.Recipe{recipe}); err != nil {
 			slog.ErrorContext(ctx, "failed to prepare recipe image", "error", err)
 		}
 	})
 }
 
-// Prepare waits for required images, joining any generation already in progress.
-// Cached images are reused, including for previously generated shopping lists.
-func (s *RecipeImageGenerator) Prepare(ctx context.Context, recipes []ai.Recipe) error {
+// WaitOn waits for the recipes' images, joining generation already in progress.
+// It reuses cached images and generates missing images, including for cached lists.
+func (s *RecipeImageGenerator) WaitOn(ctx context.Context, recipes []ai.Recipe) error {
 	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (struct{}, error) {
 		hash := recipe.ComputeHash()
 		result := s.inflight.DoChan(hash, func() (any, error) {
