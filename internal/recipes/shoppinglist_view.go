@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -146,17 +147,13 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 
 	data.Title = "Recipes for " + data.Location.Name
 	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
-	if len(recipeViews) > 0 {
+	if len(input.list.Recipes) > 0 {
+		recipe := input.list.Recipes[0]
 		data.Social = &templates.SocialPreview{
-			Title:       recipeViews[0].Title,
-			Description: recipeViews[0].Description,
-			ImagePath:   "/favicon.ico",
-		}
-		for _, recipe := range recipeViews {
-			if recipe.HasImage {
-				data.Social.ImagePath = "/recipe/" + recipe.Hash + "/image"
-				break
-			}
+			Title:       recipe.Title,
+			Description: recipe.Description,
+			Path:        "/recipes?h=" + url.QueryEscape(input.hash),
+			ImagePath:   "/recipe/" + recipe.ComputeHash() + "/image",
 		}
 	}
 

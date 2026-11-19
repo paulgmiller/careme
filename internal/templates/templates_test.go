@@ -42,6 +42,24 @@ func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
 	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
 }
 
+func TestSocialImage(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"https://careme.cooking", "https://test.careme.cooking/"} {
+		preview := socialImageForPath(origin, "/recipe/recipe_hash==/image")
+		assert.Equal(t, strings.TrimRight(origin, "/")+"/cdn-cgi/image/width=600,height=600,fit=cover,quality=75,format=jpeg/recipe/recipe_hash==/image", preview.URL)
+		assert.Equal(t, 600, preview.Width)
+		assert.Equal(t, 600, preview.Height)
+		assert.Equal(t, "image/jpeg", preview.Type)
+	}
+	for _, origin := range []string{"http://localhost:8080", "https://careme.example", "https://careme.cooking.example"} {
+		preview := socialImageForPath(origin, "/recipe/hash/image")
+		assert.Equal(t, origin+"/recipe/hash/image", preview.URL)
+		assert.Empty(t, preview.Type)
+		assert.Zero(t, preview.Width)
+		assert.Zero(t, preview.Height)
+	}
+}
+
 func TestClarityScriptIncludesSessionID(t *testing.T) {
 	prev := Clarityproject
 	t.Cleanup(func() {

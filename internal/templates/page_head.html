@@ -8,7 +8,14 @@
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
   <meta property="og:title" content="{{.Title}}" />
   <meta property="og:description" content="{{.Description}}" />
-  <meta property="og:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  <meta property="og:url" content="{{PublicOrigin}}{{.Path}}" />
+  {{with SocialImage .ImagePath}}
+  <meta property="og:image" content="{{.URL}}" />
+  {{if .Type}}<meta property="og:image:type" content="{{.Type}}" />{{end}}
+  {{if .Width}}<meta property="og:image:width" content="{{.Width}}" />{{end}}
+  {{if .Height}}<meta property="og:image:height" content="{{.Height}}" />{{end}}
+  {{end}}
+  <meta property="og:image:alt" content="Generated image of {{.Title}}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
@@ -16,7 +23,8 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="{{.Title}}" />
   <meta name="twitter:description" content="{{.Description}}" />
-  <meta name="twitter:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  <meta name="twitter:image" content="{{(SocialImage .ImagePath).URL}}" />
+  <meta name="twitter:image:alt" content="Generated image of {{.Title}}" />
   {{end}}
 
   {{template "app_head" .Style}}

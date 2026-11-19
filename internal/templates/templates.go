@@ -71,6 +71,7 @@ func Init(config *config.Config) error {
 		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return publicOrigin },
+		"SocialImage":               func(path string) socialImage { return socialImageForPath(publicOrigin, path) },
 		"RecipeSaveConversion":      func() ConversionEvent { return recipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
@@ -111,6 +112,27 @@ func shoppingRecipeImageURL(publicOrigin, hash string) string {
 
 func emailRecipeImageURL(publicOrigin, hash string) string {
 	return strings.TrimRight(publicOrigin, "/") + recipeImagePath(publicOrigin, hash, emailRecipeImageWidth, "jpeg")
+}
+
+type socialImage struct {
+	URL    string
+	Width  int
+	Height int
+	Type   string
+}
+
+func socialImageForPath(publicOrigin, path string) socialImage {
+	origin := strings.TrimRight(publicOrigin, "/")
+	if !supportsCloudflareImageTransformations(publicOrigin) {
+		return socialImage{URL: origin + path}
+	}
+	// A fixed JPEG avoids format negotiation and gives crawlers a small image
+	// with known dimensions. Do not redirect to an untransformed image on error:
+	// its format and dimensions would no longer match the declared metadata.
+	return socialImage{
+		URL:   origin + "/cdn-cgi/image/width=600,height=600,fit=cover,quality=75,format=jpeg" + path,
+		Width: 600, Height: 600, Type: "image/jpeg",
+	}
 }
 
 func recipeImagePath(publicOrigin, hash string, width int, imageFormat string) string {
