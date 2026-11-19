@@ -20,9 +20,8 @@ import (
 const clerkJSVersion = "5.99.0"
 
 const (
-	shoppingRecipeImageWidth = 480
-	emailRecipeImageWidth    = 752
-	recipeImageQuality       = 75
+	emailRecipeImageWidth = 752
+	recipeImageQuality    = 75
 )
 
 // ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
@@ -71,11 +70,10 @@ func Init(config *config.Config) error {
 		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return publicOrigin },
-		"SocialImage":               func(path string) socialImage { return socialImageForPath(publicOrigin, path) },
+		"SmallImage":                func(path string) smallImage { return smallImageForPath(publicOrigin, path) },
 		"RecipeSaveConversion":      func() ConversionEvent { return recipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
-		"ShoppingRecipeImageURL":    func(hash string) string { return shoppingRecipeImageURL(publicOrigin, hash) },
 		"AssetPath":                 func() string { return static.AssetPath },
 		"UserInitial":               userInitial,
 	}
@@ -106,32 +104,29 @@ func Init(config *config.Config) error {
 	return nil
 }
 
-func shoppingRecipeImageURL(publicOrigin, hash string) string {
-	return recipeImagePath(publicOrigin, hash, shoppingRecipeImageWidth, "auto")
-}
-
 func emailRecipeImageURL(publicOrigin, hash string) string {
 	return strings.TrimRight(publicOrigin, "/") + recipeImagePath(publicOrigin, hash, emailRecipeImageWidth, "jpeg")
 }
 
-type socialImage struct {
-	URL    string
+type smallImage struct {
+	Path   string
 	Width  int
 	Height int
 	Type   string
 }
 
-func socialImageForPath(publicOrigin, path string) socialImage {
-	origin := strings.TrimRight(publicOrigin, "/")
+func smallImageForPath(publicOrigin, path string) smallImage {
 	if !supportsCloudflareImageTransformations(publicOrigin) {
-		return socialImage{URL: origin + path}
+		return smallImage{Path: path}
 	}
 	// A fixed JPEG avoids format negotiation and gives crawlers a small image
 	// with known dimensions. Do not redirect to an untransformed image on error:
 	// its format and dimensions would no longer match the declared metadata.
-	return socialImage{
-		URL:   origin + "/cdn-cgi/image/width=600,height=600,fit=cover,quality=75,format=jpeg" + path,
-		Width: 600, Height: 600, Type: "image/jpeg",
+	// Recipe photos are square; width-only resizing preserves their aspect ratio.
+	// TODO: Try a larger shared size for social previews and shopping-list images.
+	return smallImage{
+		Path:  "/cdn-cgi/image/width=480,quality=75,format=jpeg" + path,
+		Width: 480, Height: 480, Type: "image/jpeg",
 	}
 }
 

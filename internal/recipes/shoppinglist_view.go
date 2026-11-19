@@ -150,10 +150,9 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	if len(input.list.Recipes) > 0 {
 		recipe := input.list.Recipes[0]
 		data.Social = &templates.SocialPreview{
-			Title:       recipe.Title,
-			Description: recipe.Description,
-			Path:        "/recipes?h=" + url.QueryEscape(input.hash),
-			ImagePath:   "/recipe/" + recipe.ComputeHash() + "/image",
+			Path:      "/recipes?h=" + url.QueryEscape(input.hash),
+			ImagePath: "/recipe/" + recipe.ComputeHash() + "/image",
+			ImageAlt:  "Generated image of " + recipe.Title,
 		}
 	}
 

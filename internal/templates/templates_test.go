@@ -24,8 +24,8 @@ func TestRecipeImageURLsUseCloudflareForCaremeHosts(t *testing.T) {
 	const hash = "recipe_hash=="
 	assert.Equal(
 		t,
-		"/cdn-cgi/image/width=480,quality=75,format=auto,onerror=redirect/recipe/recipe_hash==/image",
-		shoppingRecipeImageURL("https://careme.cooking", hash),
+		"/cdn-cgi/image/width=480,quality=75,format=jpeg/recipe/recipe_hash==/image",
+		smallImageForPath("https://careme.cooking", "/recipe/"+hash+"/image").Path,
 	)
 	assert.Equal(
 		t,
@@ -38,22 +38,22 @@ func TestRecipeImageURLsUseOriginalOutsideCloudflare(t *testing.T) {
 	t.Parallel()
 
 	const hash = "recipe_hash=="
-	assert.Equal(t, "/recipe/recipe_hash==/image", shoppingRecipeImageURL("http://localhost:8080", hash))
+	assert.Equal(t, "/recipe/recipe_hash==/image", smallImageForPath("http://localhost:8080", "/recipe/"+hash+"/image").Path)
 	assert.Equal(t, "https://careme.example/recipe/recipe_hash==/image", emailRecipeImageURL("https://careme.example", hash))
 }
 
-func TestSocialImage(t *testing.T) {
+func TestSmallImage(t *testing.T) {
 	t.Parallel()
 	for _, origin := range []string{"https://careme.cooking", "https://test.careme.cooking/"} {
-		preview := socialImageForPath(origin, "/recipe/recipe_hash==/image")
-		assert.Equal(t, strings.TrimRight(origin, "/")+"/cdn-cgi/image/width=600,height=600,fit=cover,quality=75,format=jpeg/recipe/recipe_hash==/image", preview.URL)
-		assert.Equal(t, 600, preview.Width)
-		assert.Equal(t, 600, preview.Height)
+		preview := smallImageForPath(origin, "/recipe/recipe_hash==/image")
+		assert.Equal(t, "/cdn-cgi/image/width=480,quality=75,format=jpeg/recipe/recipe_hash==/image", preview.Path)
+		assert.Equal(t, 480, preview.Width)
+		assert.Equal(t, 480, preview.Height)
 		assert.Equal(t, "image/jpeg", preview.Type)
 	}
 	for _, origin := range []string{"http://localhost:8080", "https://careme.example", "https://careme.cooking.example"} {
-		preview := socialImageForPath(origin, "/recipe/hash/image")
-		assert.Equal(t, origin+"/recipe/hash/image", preview.URL)
+		preview := smallImageForPath(origin, "/recipe/hash/image")
+		assert.Equal(t, "/recipe/hash/image", preview.Path)
 		assert.Empty(t, preview.Type)
 		assert.Zero(t, preview.Width)
 		assert.Zero(t, preview.Height)
