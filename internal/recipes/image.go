@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strconv"
+	"sync"
+	"time"
 
 	"careme/internal/ai"
 	"careme/internal/cache"
@@ -50,4 +53,57 @@ func (iio imageStore) Save(ctx context.Context, hash string, image *ai.Generated
 	}
 	// TODO store content meta data somewher?
 	return iio.cache.PutReader(ctx, recipeImageCacheKey(hash), image.Body, cache.Unconditional())
+}
+
+// RecipeImageGenerator generates and caches dish images.
+type RecipeImageGenerator struct {
+	images   ImageStore
+	imagegen ImageGen
+}
+
+func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
+	return &RecipeImageGenerator{images: images, imagegen: imagegen}
+}
+
+// RecipeReady generates and caches the completed recipe's image before returning.
+func (s *RecipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+	defer cancel()
+	hash := recipe.ComputeHash()
+	exists, err := s.images.Exists(ctx, hash)
+	if err != nil {
+		return fmt.Errorf("check image cache: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
+	if err != nil {
+		return fmt.Errorf("generate image for %q: %w", recipe.Title, err)
+	}
+	if err := s.images.Save(ctx, hash, image); err != nil {
+		return fmt.Errorf("save image: %w", err)
+	}
+	return nil
+}
+
+// Background returns the nonblocking recipe completion path used by the web server.
+func (s *RecipeImageGenerator) Background() *backgroundRecipeImages {
+	return &backgroundRecipeImages{RecipeImageGenerator: s}
+}
+
+type backgroundRecipeImages struct {
+	*RecipeImageGenerator
+	wg sync.WaitGroup
+}
+
+func (b *backgroundRecipeImages) Wait() { b.wg.Wait() }
+
+func (b *backgroundRecipeImages) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+	b.wg.Go(func() {
+		if err := b.RecipeImageGenerator.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
+			slog.ErrorContext(ctx, "failed to generate recipe image", "error", err)
+		}
+	})
+	return nil
 }

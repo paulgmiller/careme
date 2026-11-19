@@ -36,6 +36,9 @@ func (advertisedLocationStoreStub) GetLocationByID(ctx context.Context, id strin
 }
 
 type campaignGeneratorStub struct {
+	images interface {
+		RecipeReady(context.Context, ai.Recipe) error
+	}
 	mu       sync.Mutex
 	params   []*recipes.GeneratorParams
 	contexts []context.Context
@@ -50,10 +53,15 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 	if g.err != nil {
 		return nil, g.err
 	}
-	return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Dinner at " + p.Location.ID, Instructions: []string{"Cook dinner."}}}}, nil
+	recipe := ai.Recipe{Title: "Dinner at " + p.Location.ID, Instructions: []string{"Cook dinner."}}
+	if err := g.images.RecipeReady(ctx, recipe); err != nil {
+		return nil, err
+	}
+	return &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, nil
 }
 
 type campaignImageStub struct {
+	recipes.ImageStore
 	mu    sync.Mutex
 	calls int
 	err   error
@@ -73,13 +81,15 @@ func (g *campaignImageStub) GenerateStepImage(context.Context, ai.Recipe, int) (
 	panic("unexpected step image request")
 }
 
-func testService() (*service, *campaignGeneratorStub, *campaignImageStub) {
+func testService() (*service, *campaignGeneratorStub, *campaignImageStub, *status.Store) {
 	c := cache.NewInMemoryCache()
-	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
+	statuses := status.NewStore(c)
+	g, images := &campaignGeneratorStub{}, &campaignImageStub{ImageStore: recipes.NewImageStore(c)}
+	g.images = recipes.NewRecipeImageGenerator(images.ImageStore, images)
 	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
-		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
-	}, g, images
+		statuses: statuses, wait: func() {},
+	}, g, images, statuses
 }
 
 // Wednesday at the production job hour (9 AM Pacific).
@@ -91,7 +101,7 @@ var generatedCampaignLocationIDs = []string{
 }
 
 func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
-	s, g, images := testService()
+	s, g, images, _ := testService()
 	waited := false
 	s.wait = func() { waited = true }
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
@@ -114,7 +124,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, list.Recipes, 1)
 		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
-		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
+		body, err := images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
 		require.NoError(t, err)
 		data, err := io.ReadAll(body)
 		require.NoError(t, err)
@@ -128,12 +138,12 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 }
 
 func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
-	s, g, _ := testService()
+	s, g, _, statuses := testService()
 	g.err = errors.New("flex unavailable")
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash())
+		state, err := statuses.Load(t.Context(), p.Hash())
 		require.NoError(t, err)
 		assert.Contains(t, state.Failed, "flex unavailable")
 	}
@@ -142,23 +152,8 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	assert.Len(t, g.params, 2*len(generatedCampaignLocationIDs))
 }
 
-func TestRunOnceRetriesMissingImagesWithoutRegeneratingRecipes(t *testing.T) {
-	s, g, images := testService()
-	images.err = errors.New("image unavailable")
-	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "image unavailable")
-	images.err = nil
-	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
-	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
-	assert.Equal(t, 2*len(g.params), images.calls)
-	for _, p := range g.params {
-		state, err := s.statuses.Load(t.Context(), p.Hash())
-		require.NoError(t, err)
-		assert.Empty(t, state.Failed)
-	}
-}
-
 func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {
-	s, g, _ := testService()
+	s, g, _, _ := testService()
 	s.store = failingCampaignStore{s.store}
 	p := recipes.DefaultParams(&locations.Location{ID: "1"}, time.Now())
 	require.ErrorContains(t, s.generate(t.Context(), p), "cache unavailable")
@@ -195,7 +190,7 @@ func TestRunOnceGeneratesCampaignsAtAnyHourAndDay(t *testing.T) {
 		{"UTC Tuesday local Monday night", "2026-07-07T04:59:00Z", generatedCampaignLocationIDs},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			s, g, images := testService()
+			s, g, images, _ := testService()
 			now, err := time.Parse(time.RFC3339, tt.now)
 			require.NoError(t, err)
 			require.NoError(t, s.RunOnce(t.Context(), now))
@@ -240,14 +235,14 @@ func (g *blockingCampaignImages) GenerateRecipeImage(ctx context.Context, recipe
 }
 
 func TestRunOnceFinishesCampaignImagesBeforeStartingNextCampaign(t *testing.T) {
-	s, generator, images := testService()
+	s, generator, images, _ := testService()
 	started := make(chan string, len(generatedCampaignLocationIDs))
 	s.generator = campaignGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 		started <- p.Location.ID
 		return generator.GenerateRecipes(ctx, p)
 	})
 	blocked := &blockingCampaignImages{ImageGen: images, started: make(chan struct{}), release: make(chan struct{})}
-	s.imageGenerator = blocked
+	generator.images = recipes.NewRecipeImageGenerator(images.ImageStore, blocked)
 	done := make(chan error, 1)
 	go func() { done <- s.RunOnce(t.Context(), campaignTestTime) }()
 	select {
@@ -273,18 +268,8 @@ func TestRunOnceFinishesCampaignImagesBeforeStartingNextCampaign(t *testing.T) {
 	assert.Equal(t, len(generatedCampaignLocationIDs), images.calls)
 }
 
-func TestRunOnceRetriesMissingImagesAfter9AM(t *testing.T) {
-	s, g, images := testService()
-	images.err = errors.New("image unavailable")
-	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "image unavailable")
-	images.err = nil
-	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime.Add(2*time.Hour)))
-	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
-	assert.Equal(t, 2*len(g.params), images.calls)
-}
-
 func TestRunOnceReusesWeeklyCampaignsOnFollowingDay(t *testing.T) {
-	s, g, images := testService()
+	s, g, images, _ := testService()
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime.AddDate(0, 0, 1)))
 	counts := make(map[string]int)
@@ -300,4 +285,22 @@ func TestRunOnceReusesWeeklyCampaignsOnFollowingDay(t *testing.T) {
 	}
 	// The stub returns the same recipes on both days, so images are reused too.
 	assert.Equal(t, len(generatedCampaignLocationIDs), images.calls)
+}
+
+func TestCachedCampaignPreservesGenerationStatus(t *testing.T) {
+	s, generator, images, statuses := testService()
+	p := recipes.DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, campaignTestTime)
+	hash := p.Hash()
+	require.NoError(t, s.store.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Cached dinner"}}}, hash))
+	require.NoError(t, statuses.Start(t.Context(), hash, "Existing progress"))
+	require.NoError(t, statuses.Complete(t.Context(), hash, hash))
+	before, err := statuses.Load(t.Context(), hash)
+	require.NoError(t, err)
+	images.err = errors.New("cached lists must not generate images")
+	require.NoError(t, s.generate(t.Context(), p))
+	after, err := statuses.Load(t.Context(), hash)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+	assert.Empty(t, generator.params)
+	assert.Zero(t, images.calls)
 }

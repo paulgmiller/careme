@@ -2127,8 +2127,8 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `class="recipe-save-action pt-2"`)
 	require.Contains(t, rr.Body.String(), `Dismiss`)
 	require.NotContains(t, rr.Body.String(), `id="recipe-image-panel"`)
-	require.Contains(t, rr.Body.String(), `hx-swap-oob="innerHTML:#recipe-image-panel"`)
-	require.Contains(t, rr.Body.String(), `/recipe/`+recipeHash+`/image`)
+	require.NotContains(t, rr.Body.String(), `hx-swap-oob="innerHTML:#recipe-image-panel"`)
+	require.NotContains(t, rr.Body.String(), `/recipe/`+recipeHash+`/image`)
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 	require.Contains(t, rr.Body.String(), `"source":"recipe"`)
 	require.NotContains(t, rr.Body.String(), `id="shopping-recipe-`+strings.TrimRight(recipeHash, "=")+`"`)
@@ -2137,7 +2137,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), `/save"`)
 }
 
-func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
+func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -2181,19 +2181,16 @@ func TestHandleSaveRecipe_StartsBackgroundWineAndImageGeneration(t *testing.T) {
 
 	s.Wait()
 	assert.Equal(t, 1, g.winePickCalls)
-	assert.Equal(t, 1, ig.imageCalls)
+	assert.Equal(t, 0, ig.imageCalls)
 
 	wine, err := s.wineFromCache(t.Context(), recipeHash)
 	require.NoError(t, err)
 	require.NotNil(t, wine)
 	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
-	imageBody, err := s.images.FromCache(t.Context(), recipeHash)
+	exists, err := s.images.Exists(t.Context(), recipeHash)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, imageBody.Close()) }()
-	gotImage, err := io.ReadAll(imageBody)
-	require.NoError(t, err)
-	assert.Equal(t, []byte("saved-image-bytes"), gotImage)
+	assert.False(t, exists)
 }
 
 func TestHandleDismissRecipe_RemovesRecipeFromUserProfile(t *testing.T) {
@@ -3231,4 +3228,47 @@ func TestHandleRecipeImagePanelStopsPollingWhenImageArrives(t *testing.T) {
 	require.Contains(t, ready.Body.String(), `src="/recipe/recipe-hash/image"`)
 	require.NotContains(t, ready.Body.String(), "hx-trigger")
 	require.NotContains(t, ready.Body.String(), "hx-get")
+}
+
+type blockingRecipeImageGenerator struct {
+	ImageGen
+	started chan struct{}
+	release chan struct{}
+}
+
+func (g blockingRecipeImageGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
+	close(g.started)
+	select {
+	case <-g.release:
+		return &ai.GeneratedImage{Body: strings.NewReader("generated-image")}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestRecipeImagesGenerateInBackground(t *testing.T) {
+	recipe := ai.Recipe{Title: "Unsaved suggestion"}
+	ig := blockingRecipeImageGenerator{started: make(chan struct{}), release: make(chan struct{})}
+	s := newTestServer(t,
+		withImageGenerator(ig),
+	)
+	defer func() {
+		close(ig.release)
+		s.Wait()
+		body, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
+		require.NoError(t, err)
+		defer func() { require.NoError(t, body.Close()) }()
+		data, err := io.ReadAll(body)
+		require.NoError(t, err)
+		assert.Equal(t, "generated-image", string(data))
+	}()
+	require.NoError(t, s.RecipeReady(t.Context(), recipe))
+	select {
+	case <-ig.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("image generation did not start for the unsaved recipe")
+	}
+	exists, err := s.images.Exists(t.Context(), recipe.ComputeHash())
+	require.NoError(t, err)
+	require.False(t, exists)
 }

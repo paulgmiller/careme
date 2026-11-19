@@ -697,14 +697,12 @@ func TestShoppingImagesPollIndependently(t *testing.T) {
 					body := assertHTTPSuccess(t, w)
 					if ready {
 						assert.Contains(t, body, `src="/recipe/`+hash+`/image"`)
+						assert.Contains(t, body, `loading="lazy"`)
 						assert.NotContains(t, body, `hx-trigger="every 5s"`)
-					} else if saved {
+					} else {
 						assert.Contains(t, body, `hx-trigger="every 5s"`)
 						assert.Contains(t, body, `hx-get="/recipe/`+hash+`/image-panel?view=shopping"`)
 						assert.NotContains(t, body, `src="/recipe/`+hash+`/image"`)
-					} else {
-						assert.NotContains(t, body, `/image-panel`)
-						assert.NotContains(t, body, `hx-trigger="every 5s"`)
 					}
 				})
 			}

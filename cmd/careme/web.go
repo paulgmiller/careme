@@ -87,14 +87,16 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	var generator recipes.ExtGenerator
-	var imageGen recipes.ImageGen
+	var imageJobs *recipes.RecipeImageGenerator
 	var marketExtractor farmersmarket.IngredientExtractor
 	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
-		imageGen = recipes.NewMockImageGen()
+		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), recipes.NewMockImageGen())
+		backgroundJobs := imageJobs.Background()
+		waiters = append(waiters, backgroundJobs)
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache), backgroundJobs)
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
@@ -104,7 +106,6 @@ func runServer(cfg *config.Config, addr string) error {
 
 		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		shoppingMerger = aiclient
-		imageGen = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
 		backends, err := providers.NewStaplesBackends()
@@ -114,7 +115,10 @@ func runServer(cfg *config.Config, addr string) error {
 		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
+		imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient)
+		backgroundJobs := imageJobs.Background()
+		waiters = append(waiters, backgroundJobs)
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache), backgroundJobs)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
@@ -145,7 +149,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.NewOrderViewBuilder(cache))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageJobs, authClient, shoppingMerger, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

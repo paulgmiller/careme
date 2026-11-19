@@ -56,11 +56,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 			}
 			return &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Selected red", Quantity: "750mL"}, {ProductID: "backup", Name: "Backup"}}}, nil
 		}}
-		backgroundDone := make(chan struct{})
-		go func() {
-			defer close(backgroundDone)
-			producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
-		}()
+		producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
 		<-started
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
@@ -73,7 +69,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 		assert.Equal(t, int32(1), calls.Load())
 		close(release)
 		require.NoError(t, <-finalized)
-		<-backgroundDone
+		producer.Wait()
 		assert.Equal(t, int32(1), calls.Load())
 		items := cachedShoppingItems(t, s, p.Hash())
 		require.Len(t, items, 2)
@@ -116,7 +112,7 @@ func TestFinalizeStopsWaitingWhenWineFailsOnAnotherServer(t *testing.T) {
 			<-release
 			return nil, errors.New("failed to parse wine selection: invalid character 'T' looking for beginning of value")
 		}}
-		go producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
+		producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
 		synctest.Wait()
@@ -190,7 +186,8 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 				if scenario == "empty cached result" {
 					require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{}, Commentary: "No matches."}))
 				} else {
-					producer.ensureSavedRecipeWine(t.Context(), recipe.ComputeHash(), p.Location.ID, recipe, p.Date)
+					producer.startSavedRecipeWineGeneration(t.Context(), recipe.ComputeHash(), recipe, p.Location.ID, p.Date)
+					producer.Wait()
 				}
 				started := time.Now()
 				require.NoError(t, s.finalizeShoppingPurchases(t.Context(), p.Hash()))
