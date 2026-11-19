@@ -20,6 +20,7 @@ import (
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/locations"
 	"careme/internal/parallelism"
+	"careme/internal/recipes/decisions"
 	"careme/internal/recipes/feedback"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
@@ -87,7 +88,11 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
-	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+	if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, s.decisionHistory, p); err != nil {
+		slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
+		http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
+		return
+	}
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -351,7 +356,11 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if currentUser != nil {
 			// need directive to get to right hash
-			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+			if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, s.decisionHistory, p); err != nil {
+				slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
+				http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
+				return
+			}
 		}
 		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
@@ -530,7 +539,11 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	s.setFavoriteStore(ctx, currentUser, p.Location)
 
-	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
+	if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, s.decisionHistory, p); err != nil {
+		slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
+		http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
+		return
+	}
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			// Another request with these content-addressed params owns the generation.
@@ -612,25 +625,29 @@ func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User,
 	slog.InfoContext(ctx, "set favorite store from recipe generation", "user_id", currentUser.ID, "location_id", currentUser.FavoriteStore)
 }
 
-func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) {
-	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-		// magic number of days. Also should we include non feedback ones in shorter window
-		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
-	})
-	hashes := make([]string, 0, len(recent))
-	for _, recipe := range recent {
-		hashes = append(hashes, recipe.Hash)
+func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, history *decisions.Store, p *generatorParams) error {
+	return augmentParamsFromUserAt(ctx, user, fio, history, p, time.Now())
+}
+
+func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, history *decisions.Store, p *generatorParams, now time.Time) error {
+	recent, err := history.Recent(ctx, user.ID, now)
+	if err != nil {
+		return fmt.Errorf("load recent recipe decisions: %w", err)
 	}
-
-	// just checking exist enough?
-	cooked := fio.FeedbackByHash(ctx, hashes)
-
-	// doens't change hash
-	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-		return r.Title, cooked[r.Hash].Cooked
+	cookedCandidates := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(now.AddDate(0, 0, -14))
 	})
-
+	hashes := lo.Map(cookedCandidates, func(r utypes.Recipe, _ int) string { return r.Hash })
+	cooked := fio.FeedbackByHash(ctx, hashes)
+	titles := lo.FilterMap(cookedCandidates, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked || r.CreatedAt.After(now.Add(-decisions.Window))
+	})
+	for _, recipe := range recent {
+		titles = append(titles, recipe.Title)
+	}
+	p.LastRecipes = lo.Uniq(titles)
 	p.Directive = user.Directive
+	return nil
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID string) error {

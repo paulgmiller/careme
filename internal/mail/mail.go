@@ -27,6 +27,7 @@ import (
 	"careme/internal/logsetup"
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
+	"careme/internal/recipes/decisions"
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 	"careme/internal/users"
@@ -72,7 +73,7 @@ type userStore interface {
 }
 
 type mailer struct {
-	cache              cache.Cache
+	cache              cache.ListCache
 	userStorage        userStore
 	generator          generator // interface requires making params public
 	generationStatuses generationStatusStore
@@ -264,7 +265,9 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	rio := recipes.IO(m.cache)
-	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
+	if err := recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, decisions.NewStore(m.cache), p); err != nil {
+		return fmt.Errorf("load recipe history: %w", err)
+	}
 
 	paramsHash := p.Hash()
 	shoppingList, err := rio.FromCache(ctx, paramsHash)

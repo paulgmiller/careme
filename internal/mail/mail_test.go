@@ -82,6 +82,16 @@ func (c *fakeMailCache) Get(_ context.Context, key string) (io.ReadCloser, error
 	return io.NopCloser(strings.NewReader(value)), nil
 }
 
+func (c *fakeMailCache) List(_ context.Context, prefix, _ string) ([]string, error) {
+	var keys []string
+	for key := range c.data {
+		if suffix, ok := strings.CutPrefix(key, prefix); ok {
+			keys = append(keys, suffix)
+		}
+	}
+	return keys, nil
+}
+
 func (c *fakeMailCache) Exists(_ context.Context, key string) (bool, error) {
 	c.existsCalls++
 	_, ok := c.data[key]
