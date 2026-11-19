@@ -11,6 +11,8 @@ import (
 
 	"careme/internal/ai"
 	"careme/internal/cache"
+	"careme/internal/parallelism"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -60,6 +62,7 @@ type RecipeImageGenerator struct {
 	images   ImageStore
 	imagegen ImageGen
 	wg       sync.WaitGroup
+	inflight singleflight.Group
 }
 
 func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *RecipeImageGenerator {
@@ -70,27 +73,47 @@ func (s *RecipeImageGenerator) Wait() { s.wg.Wait() }
 
 func (s *RecipeImageGenerator) GenerateInBackground(ctx context.Context, recipe ai.Recipe) {
 	s.wg.Go(func() {
-		recipeHash := recipe.ComputeHash()
-		// 4 minutes is a magical number here. neeed to look at data.
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Minute)
-		defer cancel()
-
-		exists, err := s.images.Exists(ctx, recipeHash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to check cached recipe image", "hash", recipeHash, "error", err)
-			return
-		}
-		if exists {
-			return
-		}
-		slog.InfoContext(ctx, "generating new recipe image", "hash", recipeHash)
-		image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to generate recipe image", "hash", recipeHash, "error", err)
-			return
-		}
-		if err := s.images.Save(ctx, recipeHash, image); err != nil {
-			slog.ErrorContext(ctx, "failed to save recipe image", "hash", recipeHash, "error", err)
+		if err := s.Prepare(context.WithoutCancel(ctx), []ai.Recipe{recipe}); err != nil {
+			slog.ErrorContext(ctx, "failed to prepare recipe image", "error", err)
 		}
 	})
+}
+
+// Prepare waits for required images, joining any generation already in progress.
+// Cached images are reused, including for previously generated shopping lists.
+func (s *RecipeImageGenerator) Prepare(ctx context.Context, recipes []ai.Recipe) error {
+	_, err := parallelism.MapWithErrors(recipes, func(recipe ai.Recipe) (struct{}, error) {
+		hash := recipe.ComputeHash()
+		result := s.inflight.DoChan(hash, func() (any, error) {
+			ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+			defer cancel()
+			exists, err := s.images.Exists(ctx, hash)
+			if err != nil {
+				return nil, fmt.Errorf("check image cache: %w", err)
+			}
+			if exists {
+				return nil, nil
+			}
+			image, err := s.imagegen.GenerateRecipeImage(ctx, recipe)
+			if err != nil {
+				return nil, fmt.Errorf("generate image: %w", err)
+			}
+			if err := s.images.Save(ctx, hash, image); err != nil {
+				return nil, fmt.Errorf("save image: %w", err)
+			}
+			return nil, nil
+		})
+		var err error
+		select {
+		case completed := <-result:
+			err = completed.Err
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+		if err != nil {
+			return struct{}{}, fmt.Errorf("%q: %w", recipe.Title, err)
+		}
+		return struct{}{}, nil
+	})
+	return err
 }

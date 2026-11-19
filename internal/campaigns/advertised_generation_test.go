@@ -54,6 +54,7 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 }
 
 type campaignImageStub struct {
+	recipes.ImageStore
 	mu    sync.Mutex
 	calls int
 	err   error
@@ -75,10 +76,10 @@ func (g *campaignImageStub) GenerateStepImage(context.Context, ai.Recipe, int) (
 
 func testService() (*service, *campaignGeneratorStub, *campaignImageStub) {
 	c := cache.NewInMemoryCache()
-	g, images := &campaignGeneratorStub{}, &campaignImageStub{}
+	g, images := &campaignGeneratorStub{}, &campaignImageStub{ImageStore: recipes.NewImageStore(c)}
 	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
-		statuses: status.NewStore(c), images: recipes.NewImageStore(c), imageGenerator: images, wait: func() {},
+		statuses: status.NewStore(c), imageJobs: recipes.NewRecipeImageGenerator(recipes.NewImageStore(c), images), wait: func() {},
 	}, g, images
 }
 
@@ -114,7 +115,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, list.Recipes, 1)
 		assert.Equal(t, []string{"Cook dinner."}, list.Recipes[0].Instructions)
-		body, err := s.images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
+		body, err := images.FromCache(t.Context(), list.Recipes[0].ComputeHash())
 		require.NoError(t, err)
 		data, err := io.ReadAll(body)
 		require.NoError(t, err)
@@ -247,7 +248,7 @@ func TestRunOnceFinishesCampaignImagesBeforeStartingNextCampaign(t *testing.T) {
 		return generator.GenerateRecipes(ctx, p)
 	})
 	blocked := &blockingCampaignImages{ImageGen: images, started: make(chan struct{}), release: make(chan struct{})}
-	s.imageGenerator = blocked
+	s.imageJobs = recipes.NewRecipeImageGenerator(images.ImageStore, blocked)
 	done := make(chan error, 1)
 	go func() { done <- s.RunOnce(t.Context(), campaignTestTime) }()
 	select {

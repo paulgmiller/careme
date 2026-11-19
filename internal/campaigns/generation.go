@@ -18,8 +18,6 @@ import (
 	"careme/internal/recipes/prompts"
 	"careme/internal/recipes/status"
 
-	lop "github.com/samber/lo/parallel"
-
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -39,13 +37,12 @@ type recipeStore interface {
 
 // service runs advertised recipe generation independently of the web server.
 type service struct {
-	locations      advertisedLocationStore
-	generator      recipeGenerator
-	store          recipeStore
-	statuses       *status.Store
-	images         recipes.ImageStore
-	imageGenerator recipes.ImageGen
-	wait           func()
+	locations advertisedLocationStore
+	generator recipeGenerator
+	store     recipeStore
+	statuses  *status.Store
+	imageJobs *recipes.RecipeImageGenerator
+	wait      func()
 }
 
 type providerFactory interface {
@@ -84,13 +81,14 @@ func NewService(cfg *config.Config, providers providerFactory) (*service, error)
 	critiquer := critique.NewManager(cfg, c, httpClient)
 	statuses := status.NewStore(c)
 	store := recipes.IO(c)
-	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, func(context.Context, ai.Recipe) {})
+	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), client)
+	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, imageJobs)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}
 	return &service{
 		locations: locationStore, generator: generator, store: store,
-		statuses: statuses, images: recipes.NewImageStore(imageCache), imageGenerator: client, wait: critiquer.Wait,
+		statuses: statuses, imageJobs: imageJobs, wait: func() { imageJobs.Wait(); critiquer.Wait() },
 	}, nil
 }
 
@@ -139,7 +137,7 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	}
 
 	if !missing { // small chance someone got to this locationb before us?
-		if err := s.prepareImage(ctx, list); err != nil {
+		if err := s.imageJobs.Prepare(ctx, list.Recipes); err != nil {
 			return err
 		}
 		return nil
@@ -171,34 +169,9 @@ func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 
-	if err := s.prepareImage(ctx, list); err != nil {
+	if err := s.imageJobs.Prepare(ctx, list.Recipes); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (s *service) prepareImage(ctx context.Context, list *ai.ShoppingList) error {
-	errs := lop.Map(list.Recipes, func(recipe ai.Recipe, _ int) error {
-		// magic number for timeout
-		ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
-		defer cancel()
-		hash := recipe.ComputeHash()
-		exists, err := s.images.Exists(ctx, hash)
-		if err != nil {
-			return fmt.Errorf("check image cache: %w", err)
-		}
-		if exists {
-			return nil
-		}
-		image, err := s.imageGenerator.GenerateRecipeImage(ctx, recipe)
-		if err != nil {
-			return fmt.Errorf("generate image: %w", err)
-		}
-		if err := s.images.Save(ctx, hash, image); err != nil {
-			return fmt.Errorf("save image: %w", err)
-		}
-		return nil
-	})
-	return errors.Join(errs...)
 }

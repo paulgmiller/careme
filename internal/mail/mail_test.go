@@ -178,9 +178,12 @@ func (f fakeMailImageGenerator) GenerateRecipeImage(_ context.Context, _ ai.Reci
 	return &ai.GeneratedImage{Body: bytes.NewReader([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})}, nil
 }
 
+func (fakeMailImageGenerator) GenerateStepImage(context.Context, ai.Recipe, int) (*ai.GeneratedImage, error) {
+	panic("unexpected step image request")
+}
+
 func configureFakeMailImages(m *mailer) {
-	m.imageGenerator = fakeMailImageGenerator{}
-	m.imageStore = recipes.NewImageStore(cache.NewInMemoryCache())
+	m.imageJobs = recipes.NewRecipeImageGenerator(recipes.NewImageStore(cache.NewInMemoryCache()), fakeMailImageGenerator{})
 }
 
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
@@ -248,21 +251,18 @@ func TestSendEmail_DoesNotRecordSentClaimOnNonSuccessSendGridStatus(t *testing.T
 	}
 }
 
-func TestPrepareRecipeImagesReturnsGenerationError(t *testing.T) {
+func TestDeliverEmailReturnsImageFailureWithoutSending(t *testing.T) {
+	providerErr := errors.New("image service unavailable")
+	client := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
 	m := &mailer{
-		imageGenerator: fakeMailImageGenerator{err: errors.New("image service unavailable")},
-		imageStore:     recipes.NewImageStore(cache.NewInMemoryCache()),
+		cache:     newFakeMailCache(t),
+		client:    client,
+		imageJobs: recipes.NewRecipeImageGenerator(recipes.NewImageStore(cache.NewInMemoryCache()), fakeMailImageGenerator{err: providerErr}),
 	}
-
-	err := m.prepareRecipeImages(context.Background(), []ai.Recipe{{Title: "Test Recipe"}})
-	if err == nil {
-		t.Fatal("expected image generation error")
-	}
-	for _, want := range []string{"Test Recipe", "image service unavailable"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("expected error to contain %q, got %q", want, err)
-		}
-	}
+	err := m.deliverEmail(t.Context(), utypes.User{ID: "user-1", Email: []string{"u1@example.com"}}, recipes.DefaultParams(testMailLocation(), time.Now()))
+	require.ErrorIs(t, err, providerErr)
+	assert.ErrorContains(t, err, "Test Recipe")
+	assert.Nil(t, client.last, "required image failures must prevent email delivery")
 }
 
 func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {

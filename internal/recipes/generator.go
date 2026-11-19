@@ -50,20 +50,24 @@ type statusWriter interface {
 	Update(ctx context.Context, hash string, message string) error
 }
 
+type recipeImageStarter interface {
+	GenerateInBackground(context.Context, ai.Recipe)
+}
+
 type generatorService struct {
 	aiClient     aiClient
 	critiquer    recipeCritiquer
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
-	recipeReady  func(context.Context, ai.Recipe)
+	recipeImages recipeImageStarter
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, recipeReady func(context.Context, ai.Recipe)) (*generatorService, error) {
-	if recipeReady == nil {
-		return nil, fmt.Errorf("recipe completion callback is required")
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, recipeImages recipeImageStarter) (*generatorService, error) {
+	if recipeImages == nil {
+		return nil, fmt.Errorf("recipe image generator is required")
 	}
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
@@ -86,7 +90,7 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		staples:      staples,
 		statusWriter: statuses,
 		saver:        recipeSaver,
-		recipeReady:  recipeReady,
+		recipeImages: recipeImages,
 	}, nil
 }
 
@@ -184,7 +188,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
-			g.recipeReady(ctx, *final)
+			g.recipeImages.GenerateInBackground(ctx, *final)
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 				slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 			}
@@ -275,7 +279,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		g.recipeReady(ctx, *final)
+		g.recipeImages.GenerateInBackground(ctx, *final)
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 			slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 		}

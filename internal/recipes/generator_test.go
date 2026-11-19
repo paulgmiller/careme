@@ -122,7 +122,7 @@ func newTestGenerator(
 	if saver == nil {
 		saver = noopRecipeSaver{}
 	}
-	g, err := NewGenerator(aiClient, critiquer, staples, statuses, saver, func(context.Context, ai.Recipe) {})
+	g, err := NewGenerator(aiClient, critiquer, staples, statuses, saver, noopRecipeImages{})
 	require.NoError(t, err)
 	return g
 }
@@ -1295,7 +1295,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	g := newTestGenerator(t, aiStub, critiquer, seededStaples(t, params), noopstatuswriter{}, nil)
 
 	images := make(chan ai.Recipe, 2)
-	g.recipeReady = func(_ context.Context, recipe ai.Recipe) { images <- recipe }
+	g.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
 	got, err := g.GenerateRecipes(t.Context(), params)
 	require.Len(t, images, 1, "only the final replacement needs a new image")
 	assert.Equal(t, "Ready Dinner", (<-images).Title)
