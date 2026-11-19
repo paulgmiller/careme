@@ -275,8 +275,8 @@ func TestRecipePlanInstructions(t *testing.T) {
 		Category:         MealCategoryFancy,
 	}
 	got := plan.Instructions()
-	if len(got) != 5 {
-		t.Fatalf("expected five plan instructions, got %v", got)
+	if len(got) != 6 {
+		t.Fatalf("expected six plan instructions, got %v", got)
 	}
 	for _, phrase := range []string{
 		"Cuisine direction for this recipe: Korean.",
@@ -288,6 +288,24 @@ func TestRecipePlanInstructions(t *testing.T) {
 		if !strings.Contains(strings.Join(got, "\n"), phrase) {
 			t.Fatalf("expected plan instructions to contain %q, got %v", phrase, got)
 		}
+	}
+}
+
+func TestRecipePlanAlcoholicPairings(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	items := client.menuSchema["properties"].(map[string]any)["plans"].(map[string]any)["items"].(map[string]any)
+	props := items["properties"].(map[string]any)
+	assert.Equal(t, "boolean", props["allow_alcoholic_pairings"].(map[string]any)["type"])
+	assert.Contains(t, items["required"], "allow_alcoholic_pairings")
+	for _, allowed := range []bool{true, false} {
+		plan := RecipePlan{AllowAlcoholicPairings: allowed}
+		instructions := strings.Join(plan.Instructions(), "\n")
+		assert.Equal(t, !allowed, strings.Contains(instructions, "Suggest a nonalcoholic drink pairing"))
+		body, err := json.Marshal(plan)
+		require.NoError(t, err)
+		var decoded RecipePlan
+		require.NoError(t, json.Unmarshal(body, &decoded))
+		assert.Equal(t, allowed, decoded.AllowAlcoholicPairings)
 	}
 }
 
@@ -467,7 +485,7 @@ func TestLegacyRecipePlansRemainReadable(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"cuisine":"French","fancy":%t}`, fancy)), &plan))
 		assert.Empty(t, plan.Category)
 		assert.Equal(t, "French", plan.Cuisine)
-		assert.Len(t, plan.Instructions(), 4)
+		assert.Len(t, plan.Instructions(), 5)
 	}
 }
 

@@ -709,3 +709,69 @@ tests:
           const directions = (plan.recipe_instructions ?? []).join(' ');
           return count.test(directions) && /Thanksgiving|shared meal|six.dish/i.test(directions);
         });
+
+  - description: 'Alcohol pairing: no alcoholic drinks'
+    vars: &alcohol_pairing_menu
+      location:
+        id: eval-store-seattle
+        name: Seattle Eval Store
+        state: WA
+      date: '2026-08-21'
+      count: 3
+      instructions: No alcoholic drinks. Generate three dinners.
+      ingredients:
+        - {id: chicken, description: Chicken Thighs, size: 1 lb}
+        - {id: salmon, description: Salmon Fillets, size: 1 lb}
+        - {id: beef, description: Ground Beef, size: 1 lb}
+        - {id: broccoli, description: Broccoli, size: 1 lb}
+        - {id: carrots, description: Carrots, size: 1 lb}
+        - {id: zucchini, description: Zucchini, size: 1 lb}
+    assert:
+      - type: javascript
+        value: JSON.parse(output).plans.every((plan) => plan.allow_alcoholic_pairings === false)
+        metric: alcohol-pairing-decision
+  - description: 'Alcohol pairing: no alcohol including cooking'
+    vars:
+      <<: *alcohol_pairing_menu
+      instructions: No alcohol, including cooking. Generate three dinners.
+    assert:
+      - type: javascript
+        value: |
+          return JSON.parse(output).plans.every((plan) => plan.allow_alcoholic_pairings === false
+            && /alcohol/i.test(plan.recipe_instructions.join(' ')));
+        metric: alcohol-pairing-decision
+  - description: 'Alcohol pairing: cooking wine is allowed'
+    vars:
+      <<: *alcohol_pairing_menu
+      instructions: I don't drink, but wine in sauces is fine. Generate three dinners.
+    assert:
+      - type: javascript
+        value: JSON.parse(output).plans.every((plan) => plan.allow_alcoholic_pairings === false)
+        metric: alcohol-pairing-decision
+  - description: 'Alcohol pairing: wine enthusiast'
+    vars:
+      <<: *alcohol_pairing_menu
+      instructions: I love wine pairings. Generate three dinners.
+    assert:
+      - type: javascript
+        value: JSON.parse(output).plans.every((plan) => plan.allow_alcoholic_pairings === true)
+        metric: alcohol-pairing-decision
+  - description: 'Alcohol pairing: wine only with fancy dinner'
+    vars:
+      <<: *alcohol_pairing_menu
+      instructions: Generate one healthy, one fancy, and one different dinner. Wine only with the fancy dinner.
+    assert:
+      - type: javascript
+        value: |
+          const plans = JSON.parse(output).plans;
+          return plans.some((plan) => plan.category === 'fancy')
+            && plans.every((plan) => plan.allow_alcoholic_pairings === (plan.category === 'fancy'));
+        metric: alcohol-pairing-decision
+  - description: 'Alcohol pairing: default allows wine'
+    vars:
+      <<: *alcohol_pairing_menu
+      instructions: Generate three dinners.
+    assert:
+      - type: javascript
+        value: JSON.parse(output).plans.every((plan) => plan.allow_alcoholic_pairings === true)
+        metric: alcohol-pairing-decision

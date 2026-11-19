@@ -19,6 +19,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRecipePairingPolicyPersistenceAndIdentity(t *testing.T) {
+	legacy := Recipe{Title: "Dinner"}
+	allowed := legacy
+	allowed.AllowAlcoholicPairings = new(true)
+	prohibited := legacy
+	prohibited.AllowAlcoholicPairings = new(false)
+	assert.Equal(t, legacy.ComputeHash(), allowed.ComputeHash())
+	assert.NotEqual(t, legacy.ComputeHash(), prohibited.ComputeHash())
+	for _, recipe := range []Recipe{legacy, allowed, prohibited} {
+		body, err := json.Marshal(recipe)
+		require.NoError(t, err)
+		var decoded Recipe
+		require.NoError(t, json.Unmarshal(body, &decoded))
+		assert.Equal(t, recipe.AllowAlcoholicPairings, decoded.AllowAlcoholicPairings)
+		assert.Equal(t, recipe.ComputeHash(), decoded.ComputeHash())
+	}
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	assert.NotContains(t, mustJSON(t, client.recipeSchema), "allow_alcoholic_pairings")
+}
+
 func TestRecipeComputeHash(t *testing.T) {
 	recipe := Recipe{
 		Title:        "Test Recipe",

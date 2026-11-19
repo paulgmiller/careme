@@ -73,7 +73,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Yucatecan
+          - allow_alcoholic_pairings: true
+            cuisine: Yucatecan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
             dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
@@ -105,7 +106,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Korean
+          - allow_alcoholic_pairings: true
+            cuisine: Korean
             anchor_ingredient: Certified Angus Beef Tri Tip Steak (2 Steak per Pack)
             dish_format: main with sides
             side_vegetable: Cucumber
@@ -146,7 +148,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Moroccan
+          - allow_alcoholic_pairings: true
+            cuisine: Moroccan
             anchor_ingredient: Simple Truth® Natural Lamb Shoulder
             dish_format: main with sides
             side_vegetable: Carrots
@@ -179,7 +182,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Sichuan
+          - allow_alcoholic_pairings: true
+            cuisine: Sichuan
             anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
             dish_format: stir-fry
             side_vegetable: Bok Choy
@@ -212,7 +216,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Italian
+          - allow_alcoholic_pairings: true
+            cuisine: Italian
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Zucchini
@@ -244,7 +249,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Tex-Mex
+          - allow_alcoholic_pairings: true
+            cuisine: Tex-Mex
             anchor_ingredient: Jicama
             dish_format: salad
             side_vegetable: Cucumber Long Hot House English
@@ -277,7 +283,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Chilean
+          - allow_alcoholic_pairings: true
+            cuisine: Chilean
             anchor_ingredient: USDA Choice Beef Loin Tri Tip Roast - 2.5 Lb
             dish_format: main with sides
             side_vegetable: Yellow Crookneck Squash
@@ -306,7 +313,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Turkish
+          - allow_alcoholic_pairings: true
+            cuisine: Turkish
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Fresh Sweet Corn on the Cob-Each
@@ -330,7 +338,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Southern American
+          - allow_alcoholic_pairings: true
+            cuisine: Southern American
             anchor_ingredient: Foster Farms Fresh & Natural Chicken Thighs Value Pack
             dish_format: main with sides
             side_vegetable: Fresh Bagged Green Beans
@@ -361,7 +370,8 @@ tests:
     vars:
       menu_plan:
         plans:
-          - cuisine: Italian
+          - allow_alcoholic_pairings: true
+            cuisine: Italian
             anchor_ingredient: Fresh Coho Salmon Fillet
             dish_format: main with sides
             side_vegetable: Zucchini
@@ -381,3 +391,114 @@ tests:
           const cookingWater = /^(?:(?:plain|tap|fresh|cold|cool|warm|hot|boiling|filtered|salted|unsalted|reserved|starchy|pasta|cooking|drinking)\s+)*water\b(?!\s+chestnuts?\b)/i;
           return recipe.ingredients.every((ingredient) => !cookingWater.test(ingredient.name.trim()));
         metric: no-cooking-water-ingredient
+
+  - description: "Alcohol pairing: no alcoholic drinks"
+    vars:
+      menu_plan:
+        plans:
+          - allow_alcoholic_pairings: false
+            cuisine: Yucatecan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            dish_format: main with sides
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            category: different
+            recipe_instructions:
+              - No alcoholic drinks; cooking wine is allowed.
+              - Keep total time under 1 hour.
+              - Serve 2 people.
+        chef_note_suggestion: skip the scallop splurge
+        response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
+        prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const pairing = recipe.drink_pairing.replace(/\b(?:non[- ]?alcoholic|alcohol[- ]free)\s+(?:wine|beer|cider)\b/gi, '');
+          return (recipe.wine_styles ?? []).length === 0 && recipe.drink_pairing.trim().length > 0
+            && !/\b(?:wine|beer|cider|bourbon|vodka|rum|brandy|riesling|chardonnay|pinot|sauvignon)\b/i.test(pairing);
+        metric: alcohol-pairing-policy
+
+  - description: "Alcohol pairing: no alcohol including cooking"
+    vars:
+      menu_plan:
+        plans:
+          - allow_alcoholic_pairings: false
+            cuisine: Yucatecan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            dish_format: main with sides
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            category: different
+            recipe_instructions:
+              - No alcohol, including cooking. Do not use wine, beer, or spirits in this recipe.
+              - Keep total time under 1 hour.
+              - Serve 2 people.
+        chef_note_suggestion: skip the scallop splurge
+        response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
+        prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const pairing = recipe.drink_pairing.replace(/\b(?:non[- ]?alcoholic|alcohol[- ]free)\s+(?:wine|beer|cider)\b/gi, '');
+          return (recipe.wine_styles ?? []).length === 0 && recipe.drink_pairing.trim().length > 0
+            && !/\b(?:wine|beer|cider|bourbon|vodka|rum|brandy|riesling|chardonnay|pinot|sauvignon)\b/i.test(pairing);
+        metric: alcohol-pairing-policy
+      - type: javascript
+        value: |
+          return JSON.parse(output).ingredients.every((ingredient) =>
+            !/\b(?:wine|beer|brandy|rum|vodka|bourbon|sherry|marsala)\b/i.test(ingredient.name)
+            || /vinegar/i.test(ingredient.name));
+        metric: no-cooking-alcohol
+
+  - description: "Alcohol pairing: cooking wine is allowed"
+    vars:
+      menu_plan:
+        plans:
+          - allow_alcoholic_pairings: false
+            cuisine: Yucatecan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            dish_format: main with sides
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            category: different
+            recipe_instructions:
+              - I do not drink, but wine in sauces is fine. Make a white wine pan sauce using 1/4 cup white wine.
+              - Keep total time under 1 hour.
+              - Serve 2 people.
+        chef_note_suggestion: skip the scallop splurge
+        response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
+        prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          const pairing = recipe.drink_pairing.replace(/\b(?:non[- ]?alcoholic|alcohol[- ]free)\s+(?:wine|beer|cider)\b/gi, '');
+          return (recipe.wine_styles ?? []).length === 0 && recipe.drink_pairing.trim().length > 0
+            && !/\b(?:wine|beer|cider|bourbon|vodka|rum|brandy|riesling|chardonnay|pinot|sauvignon)\b/i.test(pairing);
+        metric: alcohol-pairing-policy
+      - type: javascript
+        value: JSON.parse(output).ingredients.some((ingredient) => /white wine/i.test(ingredient.name) && !/vinegar/i.test(ingredient.name))
+        metric: cooking-wine-permitted
+
+  - description: "Alcohol pairing: wine enthusiast"
+    vars:
+      menu_plan:
+        plans:
+          - allow_alcoholic_pairings: true
+            cuisine: Yucatecan
+            anchor_ingredient: Simple Truth® Natural Boneless Skinless Fresh Chicken Breast Family Pack BIG DEAL!
+            dish_format: main with sides
+            side_vegetable: Fresh Sweet Corn on the Cob-Each
+            category: different
+            recipe_instructions:
+              - I love wine. Suggest a wine pairing and at least one searchable wine style.
+              - Keep total time under 1 hour.
+              - Serve 2 people.
+        chef_note_suggestion: skip the scallop splurge
+        response_id: resp_08d83f4a731aea48006a88bb37cc3887d0a1f62112b5081731
+        prompt_cache_key: careme:store-day:v1:29c0fd07ffe51cb173c8a6b1
+    assert:
+      - type: javascript
+        value: |
+          const recipe = JSON.parse(output);
+          return recipe.wine_styles.length > 0;
+        metric: alcohol-pairing-policy

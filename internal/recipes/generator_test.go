@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -398,9 +399,10 @@ func menuPlanForRecipes(recipes []ai.Recipe) *ai.MenuPlan {
 	plans := make([]ai.RecipePlan, 0, len(recipes))
 	for _, recipe := range recipes {
 		plans = append(plans, ai.RecipePlan{
-			Cuisine:          "test",
-			AnchorIngredient: recipe.Title,
-			DishFormat:       "test",
+			AllowAlcoholicPairings: recipe.AllowAlcoholicPairings == nil || *recipe.AllowAlcoholicPairings,
+			Cuisine:                "test",
+			AnchorIngredient:       recipe.Title,
+			DishFormat:             "test",
 		})
 	}
 	return &ai.MenuPlan{Plans: plans, ResponseID: "resp-menu-plan"}
@@ -515,6 +517,89 @@ func TestWineIngredientsCacheKey_UsesStyleDateAndLocation(t *testing.T) {
 	if got != want {
 		t.Fatalf("unexpected cache key: got %q want %q", got, want)
 	}
+}
+
+func TestPickAWineProhibitedPairingsSkipProviderAndAI(t *testing.T) {
+	// These fakes panic on unexpected calls; neither catalog lookup nor AI is needed.
+	cacheStore := cache.NewFileCache(t.TempDir())
+	rio := IO(cacheStore)
+	g := newTestGenerator(t, &captureRegenerateAIClient{}, nil, panicStaplesService{}, nil, rio)
+	recipe := ai.Recipe{Title: "Dinner", AllowAlcoholicPairings: new(false), WineStyles: []string{"Pinot Noir"}}
+	selection, err := g.PickAWine(t.Context(), "store", recipe, time.Now())
+	require.NoError(t, err)
+	assert.Empty(t, selection.Wines)
+	// Finalization must also finish without a saved selection, even with bad styles.
+	selection, err = rio.waitForWine(t.Context(), recipe)
+	require.NoError(t, err)
+	assert.Empty(t, selection.Wines)
+	require.NoError(t, rio.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{{Name: "Unexpected wine"}}}))
+	selection, err = rio.waitForWine(t.Context(), recipe)
+	require.NoError(t, err)
+	assert.Empty(t, selection.Wines, "prohibited pairings also ignore stale cached selections")
+}
+
+func TestRegenerateRecipePreservesPairingPolicyBeforeCritique(t *testing.T) {
+	aiStub := &sequenceAIClient{regenerateResponses: []*ai.Recipe{{Title: "Dinner", WineStyles: []string{"Pinot Noir"}}}}
+	critiquer := &captureCritiqueService{}
+	g := newTestGenerator(t, aiStub, critiquer, panicStaplesService{}, nil, nil)
+	recipe, err := g.RegenerateRecipe(t.Context(), []string{"Make it brighter"}, ai.ResponseRef{ID: "resp-original"}, new(false))
+	require.NoError(t, err)
+	require.NotNil(t, recipe.AllowAlcoholicPairings)
+	assert.False(t, *recipe.AllowAlcoholicPairings)
+	assert.Empty(t, recipe.WineStyles)
+	critiqued := critiquer.critiqueRecipes()
+	require.Len(t, critiqued, 1)
+	assert.Equal(t, recipe.ComputeHash(), critiqued[0].ComputeHash())
+}
+
+func TestGenerateRecipesPersistsPairingPolicy(t *testing.T) {
+	for _, replacement := range []bool{false, true} {
+		for _, allowed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("replacement=%t/allowed=%t", replacement, allowed), func(t *testing.T) {
+				params := DefaultParams(&locations.Location{ID: "70004001", Name: "Store"}, time.Now())
+				if replacement {
+					params.Dismissed = []ai.Recipe{{Title: "Old Dinner"}}
+					params.PreviousMenuPlanResponseID = "resp-previous"
+				}
+				aiStub := &captureRegenerateAIClient{
+					recipe:   &ai.Recipe{Title: "Dinner", WineStyles: []string{"Pinot Noir"}},
+					menuPlan: &ai.MenuPlan{Plans: []ai.RecipePlan{{AllowAlcoholicPairings: allowed}}, ResponseID: "resp-plan"},
+				}
+				rio := IO(cache.NewFileCache(t.TempDir()))
+				g := newTestGenerator(t, aiStub, nil, seededStaples(t, params), nil, rio)
+				list, err := g.GenerateRecipes(t.Context(), params)
+				require.NoError(t, err)
+				require.Len(t, list.Recipes, 1)
+				recipe := list.Recipes[0]
+				require.NotNil(t, recipe.AllowAlcoholicPairings)
+				assert.Equal(t, allowed, *recipe.AllowAlcoholicPairings)
+				assert.Equal(t, !allowed, len(recipe.WineStyles) == 0)
+				stored, err := rio.SingleFromCache(t.Context(), recipe.ComputeHash())
+				require.NoError(t, err)
+				assert.Equal(t, recipe.AllowAlcoholicPairings, stored.AllowAlcoholicPairings)
+			})
+		}
+	}
+}
+
+func TestCritiqueRetryPreservesProhibitedPairings(t *testing.T) {
+	initial := ai.Recipe{Title: "Weak Dinner", ResponseID: "resp-initial", AllowAlcoholicPairings: new(false)}
+	retry := ai.Recipe{Title: "Better Dinner", WineStyles: []string{"Pinot Noir"}}
+	aiStub := &sequenceAIClient{regenerateResponses: []*ai.Recipe{&retry}}
+	critiquer := &captureCritiqueService{fn: func(ai.Recipe) (*ai.RecipeCritique, error) {
+		return &ai.RecipeCritique{OverallScore: 6, SuggestedFixes: []string{"Improve the sauce"}}, nil
+	}}
+	rio := IO(cache.NewFileCache(t.TempDir()))
+	g := newTestGenerator(t, aiStub, critiquer, panicStaplesService{}, nil, rio)
+	final, err := g.critiqueAndMaybeRetryRecipe(t.Context(), "list", &initial, map[string]ai.InputIngredient{})
+	require.NoError(t, err)
+	require.NotNil(t, final.AllowAlcoholicPairings)
+	assert.False(t, *final.AllowAlcoholicPairings)
+	assert.Empty(t, final.WineStyles)
+	stored, err := rio.SingleFromCache(t.Context(), final.ComputeHash())
+	require.NoError(t, err)
+	assert.Equal(t, final.AllowAlcoholicPairings, stored.AllowAlcoholicPairings)
+	assert.Empty(t, stored.WineStyles)
 }
 
 func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {

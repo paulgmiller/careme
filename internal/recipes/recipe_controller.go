@@ -558,7 +558,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 		defer cancel()
 
-		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
+		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous, recipe.AllowAlcoholicPairings)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return

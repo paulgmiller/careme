@@ -168,6 +168,8 @@ The legacy portion of the hash writes these values in order:
 4. Each instruction string, preserving instruction order.
 5. Health text and drink pairing.
 
+Recipes explicitly prohibiting alcoholic pairings append `|allow_alcoholic_pairings=false|` after the drink pairing. Absent (legacy) and allowed pairing decisions append nothing, preserving their existing identities. This separates alcohol-free recipes from alcohol-enabled wine recommendation caches. The decision is stored on the recipe and retained through retries; no cache prefix changes or migration are required.
+
 When any structured recipe property is present, the hash appends this pipe-delimited payload:
 
 ```text

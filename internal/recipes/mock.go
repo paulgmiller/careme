@@ -471,11 +471,12 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
-func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef, allowAlcoholicPairings *bool) (*ai.Recipe, error) {
 	_ = ctx
 	_ = instructions
 	_ = previous
 	recipe := mockRecipes[0]
+	applyPairingPolicy(&recipe, allowAlcoholicPairings)
 	recipe.Title = "Fresh " + recipe.Title
 	recipe.ResponseID = uuid.NewString()
 	return &recipe, nil
