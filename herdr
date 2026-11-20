@@ -8,7 +8,8 @@ fi
 
 name="$1"
 src="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-dest="$(dirname -- "$src")/careme_$name"
+root="$HOME/src/careme"
+dest="$root/$name"
 
 if [[ "${HERDR_ENV:-}" != 1 ]]; then
   echo "error: run this script from a terminal inside Herdr" >&2
@@ -33,6 +34,7 @@ if git -C "$src" show-ref --verify --quiet "refs/heads/$name"; then
 fi
 
 git -C "$src" fetch origin master
+mkdir -p -- "$(dirname -- "$dest")"
 # Create the checkout directly so Herdr opens an independent top-level workspace.
 git -C "$src" worktree add -b "$name" "$dest" origin/master
 exec herdr workspace create \

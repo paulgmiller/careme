@@ -87,10 +87,6 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	var generator recipes.ExtGenerator
-	var completion interface {
-		RecipeReady(context.Context, ai.Recipe, string, time.Time) error
-		Wait()
-	}
 	var imageProvider recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
 	var shoppingMerger recipes.ShoppingQuantityMerger
@@ -103,7 +99,7 @@ func runServer(cfg *config.Config, addr string) error {
 			recipes.NewMockWineGenerator(cache),
 		}
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc,
-			status.NewStore(cache), postJobs.Background())
+			status.NewStore(cache), postJobs) //no background for post jobs
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
@@ -126,13 +122,14 @@ func runServer(cfg *config.Config, addr string) error {
 		postJobs := recipes.PostRecipeJobs{
 			recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient),
 			recipes.NewRecipeWineGenerator(cache, aiclient, staples),
-		}
+		}.Background()
+
 		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss,
-			recipes.IO(cache), postJobs.Background())
+			recipes.IO(cache), postJobs)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
-		waiters = append(waiters, critiquer)
+		waiters = append(waiters, critiquer, postJobs)
 	}
 	watchdogServer.Register(infraRoutes)
 
@@ -159,7 +156,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, completion, recipes.NewImageStore(imageCache), imageProvider, authClient, shoppingMerger, providers.NewOrderViewBuilder(cache))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, recipes.NewImageStore(imageCache), imageProvider, authClient, shoppingMerger, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

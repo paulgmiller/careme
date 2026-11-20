@@ -49,13 +49,8 @@ type statusStore interface {
 	Complete(ctx context.Context, id, newHash string) error
 }
 
-type recipeCompletion interface {
-	Wait()
-}
-
 type server struct {
 	recipeio
-	recipeCompletion
 	images             ImageStore
 	imagegen           ImageGen
 	generationStatuses statusStore
@@ -63,11 +58,12 @@ type server struct {
 	storage            *users.Storage
 	generator          generator
 	locServer          locServer
-	wg                 sync.WaitGroup
-	clerk              auth.AuthClient
-	critiques          critiqueStore
-	shoppingMerger     ShoppingQuantityMerger
-	orderView          orderViewBuilder
+	//should generation have this?
+	wg             sync.WaitGroup
+	clerk          auth.AuthClient
+	critiques      critiqueStore
+	shoppingMerger ShoppingQuantityMerger
+	orderView      orderViewBuilder
 }
 
 type critiqueStore interface {
@@ -76,7 +72,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, completion recipeCompletion, images ImageStore, imagegen ImageGen, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, images ImageStore, imagegen ImageGen, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
@@ -84,9 +80,9 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		return nil, fmt.Errorf("order view builder is required")
 	}
 	s := &server{
-		recipeio:         IO(c),
-		recipeCompletion: completion,
-		images:           images, imagegen: imagegen,
+		recipeio:           IO(c),
+		images:             images,
+		imagegen:           imagegen,
 		generationStatuses: status.NewStore(c),
 		cfg:                cfg,
 		storage:            storage,
@@ -109,5 +105,4 @@ func (s *server) Register(mux routing.Registrar) {
 
 func (s *server) Wait() {
 	s.wg.Wait()
-	s.recipeCompletion.Wait()
 }
