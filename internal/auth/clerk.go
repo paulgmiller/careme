@@ -117,6 +117,10 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	// Failed verification applies signed-out behavior to this request. Do not
 	// erase browser cookies: Clerk can refresh an expired token, and a late
 	// response must not clear a newer token installed by another request.
+	// This overrides Clerk's default immediate 401: handlers run without session
+	// claims and must enforce their usual authorization. It does not accept the
+	// invalid token, redirect to login, or retry the request. session.js coordinates
+	// ClerkJS renewal before HTMX requests; real sign-out still reaches the handler.
 	onFailure := clerkhttp.AuthorizationFailureHandler(handler)
 
 	useSessionCookie := clerkhttp.AuthorizationJWTExtractor(func(r *http.Request) string {

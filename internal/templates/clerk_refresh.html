@@ -1,4 +1,6 @@
 {{if (ClerkEnabled)}}
+{{/* Keep both scripts deferred and in order: session.js uses the loaded Clerk
+global and installs its HTMX listeners before DOMContentLoaded. */}}
 <script
   defer
   crossorigin="anonymous"
