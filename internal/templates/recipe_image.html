@@ -1,6 +1,6 @@
 {{define "recipe_image"}}
 {{if .HasImage}}
-<img src="{{if .Thumbnail}}{{ShoppingRecipeImageURL .Hash}}{{else}}/recipe/{{.Hash}}/image{{end}}"
+<img src="{{if .Thumbnail}}{{(SmallImage .Hash).Path}}{{else}}/recipe/{{.Hash}}/image{{end}}"
      alt="Generated image of the dish" class="h-auto w-full object-cover" loading="lazy" />
 {{else}}
 <!-- 204 keeps polling; a ready image replaces this placeholder and stops polling. -->

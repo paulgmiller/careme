@@ -163,7 +163,7 @@ func (g *generatorService) generatePlannedRecipes(ctx context.Context, p *genera
 				replace(result.index)
 				continue
 			}
-			if err := g.recipeImages.RecipeReady(ctx, *result.recipe); err != nil {
+			if err := g.postJobs.RecipeReady(ctx, *result.recipe, p.Location.ID, p.Date); err != nil {
 				return nil, fmt.Errorf("complete recipe %q: %w", result.recipe.Title, err)
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, result.index, result.recipe.ComputeHash()); err != nil {

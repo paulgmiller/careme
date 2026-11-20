@@ -14,18 +14,18 @@ import (
 )
 
 type mock struct {
-	saver        recipeSaver
-	critiquer    mockRecipeCritiquer
-	statuses     statusWriter
-	recipeImages postRecipe
+	saver     recipeSaver
+	critiquer mockRecipeCritiquer
+	statuses  statusWriter
+	postJobs  postRecipe
 }
 
 type mockRecipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, recipeImages postRecipe) mock {
-	return mock{saver: saver, critiquer: critiquer, statuses: statuses, recipeImages: recipeImages}
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, postJobs postRecipe) mock {
+	return mock{saver: saver, critiquer: critiquer, statuses: statuses, postJobs: postJobs}
 }
 
 func NewMockImageGen() mock {
@@ -450,7 +450,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		critiquer:    mockGenerationCritiquer{critiquer: m.critiquer},
 		saver:        m.saver,
 		statusWriter: m.statuses,
-		recipeImages: m.recipeImages,
+		postJobs:     m.postJobs,
 	}
 	generated, err := g.generatePlannedRecipes(ctx, p, plan, map[string]ai.InputIngredient{})
 	if err != nil {
@@ -464,14 +464,16 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
-func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
-	_ = ctx
-	_ = instructions
-	_ = previous
-	recipe := mockRecipes[0]
-	recipe.Title = "Fresh " + recipe.Title
-	recipe.ResponseID = uuid.NewString()
-	return &recipe, nil
+func (m mock) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+	recipe, err := (mockMenuClient{mock: m}).Regenerate(ctx, instructions, previous)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.postJobs.RecipeReady(ctx, *recipe, params.Location.ID, params.Date); err != nil {
+		return nil, err
+	}
+
+	return recipe, nil
 }
 
 func (m mock) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
@@ -487,15 +489,5 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 	_ = recipe
 	return &ai.GeneratedImage{
 		Body: bytes.NewReader(mockRecipeImage),
-	}, nil
-}
-
-func (m mock) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	_ = ctx
-	_ = location
-	_ = date
-	return &ai.WineSelection{
-		Wines:      []ai.Ingredient{},
-		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
 	}, nil
 }

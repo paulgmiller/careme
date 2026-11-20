@@ -68,7 +68,10 @@ func (m mockMenuClient) GenerateRecipe(ctx context.Context, instructions []strin
 }
 
 func (m mockMenuClient) Regenerate(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
-	return m.mock.RegenerateRecipe(ctx, instructions, previous)
+	recipe := mockRecipes[0]
+	recipe.Title = "Fresh " + recipe.Title
+	recipe.ResponseID = uuid.NewString()
+	return &recipe, nil
 }
 
 func (m mockMenuClient) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
@@ -76,7 +79,10 @@ func (m mockMenuClient) AskQuestion(ctx context.Context, question string, previo
 }
 
 func (m mockMenuClient) PickWine(ctx context.Context, recipe ai.Recipe, _ []ai.InputIngredient) (*ai.WineSelection, error) {
-	return m.mock.PickAWine(ctx, "", recipe, time.Time{})
+	return &ai.WineSelection{
+		Wines:      []ai.Ingredient{},
+		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
+	}, nil
 }
 
 type mockGenerationCritiquer struct{ critiquer mockRecipeCritiquer }

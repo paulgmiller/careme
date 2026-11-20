@@ -97,12 +97,6 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 		return nil, fmt.Errorf("save recipe to user profile: %w", err)
 	}
 
-	params, err := s.ParamsFromCache(ctx, shoppingListHash)
-	if err != nil {
-		return nil, fmt.Errorf("load recipe params: %w", err)
-	}
-	s.startSavedRecipeWineGeneration(ctx, recipeHash, *recipe, params.Location.ID, params.Date)
-
 	return recipe, nil
 }
 
@@ -227,32 +221,6 @@ func (s *server) recipeImageExistsForCard(ctx context.Context, recipeHash string
 		return false
 	}
 	return exists
-}
-
-func (s *server) startSavedRecipeWineGeneration(ctx context.Context, recipeHash string, recipe ai.Recipe, locationID string, date time.Time) {
-	s.wg.Go(func() {
-		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
-		defer cancel()
-		exists, err := s.wineExists(ctx, recipeHash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to check cached wine selection after save", "hash", recipeHash, "error", err)
-			return
-		}
-		if exists {
-			return
-		}
-		slog.InfoContext(ctx, "generating wine picks on save", "hash", recipeHash)
-		selection, err := s.generator.PickAWine(ctx, locationID, recipe, date)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to pick wine after save", "hash", recipeHash, "error", err)
-			// Wine is optional. Publish a completed empty result so finalization on
-			// any server stops waiting for this failed attempt.
-			selection = &ai.WineSelection{Wines: []ai.Ingredient{}}
-		}
-		if err := s.saveWine(ctx, recipeHash, selection); err != nil {
-			slog.ErrorContext(ctx, "failed to save wine recommendation after save", "hash", recipeHash, "error", err)
-		}
-	})
 }
 
 func isSingleRecipeAction(r *http.Request) bool {

@@ -114,7 +114,12 @@ func TestMealReplacementCancelsOnlyCurrentSlot(t *testing.T) {
 				}}
 				g := newTestGenerator(t, client, critiquer, fixedStaplesService{}, owner, rio)
 				images := make(chan string, 4)
-				g.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe.Title })
+				g.postJobs = postRecipeFunc(func(_ context.Context, recipe ai.Recipe, location string, date time.Time) error {
+					assert.Equal(t, p.Location.ID, location)
+					assert.True(t, p.Date.Equal(date))
+					images <- recipe.Title
+					return nil
+				})
 				ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 				defer cancel()
 				type outcome struct {
@@ -316,5 +321,35 @@ func TestMealReplacementCancelsWhileAnotherReplacementIsPlanning(t *testing.T) {
 		require.NoError(t, err)
 	case <-ctx.Done():
 		t.Fatal("replacement generation did not finish")
+	}
+}
+
+func TestMealCompletionFailureDoesNotPublishReviewedRecipe(t *testing.T) {
+	t.Parallel()
+	for _, regeneration := range []bool{false, true} {
+		name := "initial"
+		if regeneration {
+			name = "regeneration"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := cache.NewInMemoryCache()
+			progress := status.NewStore(c)
+			p := DefaultParams(&locations.Location{ID: "70000123"}, time.Now())
+			if regeneration {
+				p.PreviousMenuPlanResponseID = "previous-menu"
+			}
+			require.NoError(t, progress.Start(t.Context(), p.Hash(), ""))
+			client := &sequenceAIClient{generateResponses: []*ai.ShoppingList{{Recipes: []ai.Recipe{{Title: "Dinner"}}}}}
+			g := newTestGenerator(t, client, &captureCritiqueService{}, fixedStaplesService{}, progress, IO(c))
+			failure := errors.New("completion failed")
+			g.postJobs = postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { return failure })
+			list, err := g.GenerateRecipes(t.Context(), p)
+			require.ErrorIs(t, err, failure)
+			assert.Nil(t, list)
+			published, err := progress.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			require.Len(t, published.Slots, 1)
+			assert.False(t, published.Slots[0].Reviewed)
+		})
 	}
 }

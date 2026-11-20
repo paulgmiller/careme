@@ -20,9 +20,8 @@ import (
 const clerkJSVersion = "5.99.0"
 
 const (
-	shoppingRecipeImageWidth = 480
-	emailRecipeImageWidth    = 752
-	recipeImageQuality       = 75
+	emailRecipeImageWidth = 752
+	recipeImageQuality    = 75
 )
 
 // ConversionEvent identifies a neutral browser conversion published through Google Tag Manager.
@@ -71,10 +70,10 @@ func Init(config *config.Config) error {
 		"EmailRecipeImageURL":       emailRecipeImageURL,
 		"InstructionNumber":         func(index int) int { return index + 1 },
 		"PublicOrigin":              func() string { return publicOrigin },
+		"SmallImage":                func(hash string) smallImage { return smallRecipeImage(publicOrigin, hash) },
 		"RecipeSaveConversion":      func() ConversionEvent { return recipeSaveConversion },
 		"SignInPath":                signInPath,
 		"SignupCompletedConversion": func() ConversionEvent { return SignupCompletedConversion },
-		"ShoppingRecipeImageURL":    func(hash string) string { return shoppingRecipeImageURL(publicOrigin, hash) },
 		"AssetPath":                 func() string { return static.AssetPath },
 		"UserInitial":               userInitial,
 	}
@@ -105,12 +104,31 @@ func Init(config *config.Config) error {
 	return nil
 }
 
-func shoppingRecipeImageURL(publicOrigin, hash string) string {
-	return recipeImagePath(publicOrigin, hash, shoppingRecipeImageWidth, "auto")
-}
-
 func emailRecipeImageURL(publicOrigin, hash string) string {
 	return strings.TrimRight(publicOrigin, "/") + recipeImagePath(publicOrigin, hash, emailRecipeImageWidth, "jpeg")
+}
+
+type smallImage struct {
+	URL    string
+	Path   string
+	Width  int
+	Height int
+	Type   string
+}
+
+func smallRecipeImage(publicOrigin, hash string) smallImage {
+	image := smallImage{Path: recipeImagePath(publicOrigin, hash, 480, "jpeg")}
+	if supportsCloudflareImageTransformations(publicOrigin) {
+		// These describe the normal transformed image. On transformation errors,
+		// prefer the original image even though its format and dimensions may differ.
+		// Recipe photos are square; width-only resizing preserves their aspect ratio.
+		// TODO: Try a larger shared size for social previews and shopping-list images.
+		image.Width = 480
+		image.Height = 480
+		image.Type = "image/jpeg"
+	}
+	image.URL = strings.TrimRight(publicOrigin, "/") + image.Path
+	return image
 }
 
 func recipeImagePath(publicOrigin, hash string, width int, imageFormat string) string {
