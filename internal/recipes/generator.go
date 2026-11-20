@@ -293,11 +293,6 @@ func (g *generatorService) RegenerateRecipe(ctx context.Context, original ai.Rec
 	if err != nil {
 		return nil, err
 	}
-	r.OriginHash = original.OriginHash
-	r.ParentHash = original.ComputeHash()
-	if err := g.saver.SaveRecipe(ctx, *r); err != nil {
-		return nil, fmt.Errorf("save regenerated recipe: %w", err)
-	}
 	if err := g.postJobs.RecipeReady(ctx, *r, params.Location.ID, params.Date); err != nil {
 		return nil, fmt.Errorf("complete regenerated recipe: %w", err)
 	}

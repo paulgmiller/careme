@@ -573,7 +573,14 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return
 		}
+		replacement.OriginHash = recipe.OriginHash
 		oldHash := recipe.ComputeHash()
+		replacement.ParentHash = oldHash
+		if err := s.SaveRecipe(ctx, *replacement); err != nil {
+			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
+			return
+		}
+
 		newHash := replacement.ComputeHash()
 		_, err = s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
