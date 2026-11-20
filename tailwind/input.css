@@ -1,6 +1,7 @@
 /* Load Tailwind and scan server-rendered templates for utility classes. */
 @import "tailwindcss";
 @source "../internal/templates/**/*.html";
+@source "../internal/static/about-feed.js";
 
 /* Instacart's approved dark CTA theme. Keep the logo's original colors. */
 .instacart-cta {
