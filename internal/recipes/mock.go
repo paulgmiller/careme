@@ -500,13 +500,3 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 		Body: bytes.NewReader(mockRecipeImage),
 	}, nil
 }
-
-func (m mock) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	_ = ctx
-	_ = location
-	_ = date
-	return &ai.WineSelection{
-		Wines:      []ai.Ingredient{},
-		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
-	}, nil
-}
