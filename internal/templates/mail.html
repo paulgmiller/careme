@@ -75,5 +75,8 @@
   {{range .CookingMethods}}
   <span aria-label="Cooking method: {{.Label}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">{{.Emoji}}&nbsp;{{.Label}}</span>
   {{end}}
+  {{range .SpecialEquipment}}
+  <span aria-label="Required equipment: {{.}}" style="display:inline-block; margin:0 6px 6px 0; border-radius:9999px; background-color:#f3f4f6; padding:5px 9px; color:#4b5563; font-size:13px; white-space:nowrap;">{{.}}</span>
+  {{end}}
 </div>
 {{end}}

@@ -194,6 +194,7 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 		"estimated_cost_dollars",
 		"calories_per_serving",
 		"cooking_methods",
+		"special_equipment",
 	} {
 		assert.Contains(t, fields, name)
 		assert.Contains(t, schemaRequired(t, recipeProperties), name)
@@ -204,6 +205,11 @@ func TestRecipeSchemaUsesStructuredProperties(t *testing.T) {
 		assert.Equal(t, "integer", field["type"])
 		assert.Equal(t, float64(1), field["minimum"])
 	}
+
+	equipment := schemaObject(t, fields["special_equipment"])
+	assert.Equal(t, "array", equipment["type"])
+	assert.Equal(t, "string", schemaObject(t, equipment["items"])["type"])
+	assert.NotContains(t, equipment, "minItems")
 
 	methods := schemaObject(t, fields["cooking_methods"])
 	assert.Equal(t, float64(1), methods["minItems"])
@@ -313,7 +319,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 					"role": "assistant",
 					"content": [{
 						"type": "output_text",
-						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"]},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
+						"text": "{\"title\":\"Korean Chicken\",\"description\":\"Fast dinner.\",\"properties\":{\"total_minutes\":35,\"servings\":4,\"estimated_cost_dollars\":12,\"calories_per_serving\":510,\"cooking_methods\":[\"stovetop\"],\"special_equipment\":[\"Food processor\",\"Mortar and pestle\",\"Pressure cooker\",\"Dutch oven\",\"Food processor\"]},\"ingredients\":[],\"instructions\":[\"Prep.\"],\"health\":\"\",\"drink_pairing\":\"Water.\",\"wine_styles\":[]}",
 						"annotations": []
 					}]
 				}],
@@ -341,6 +347,7 @@ func TestGenerateRecipeUsesMenuResponseIDWithoutIngredientTSV(t *testing.T) {
 			assert.InDelta(t, 0.0003225, cost, 1e-10)
 			assert.Equal(t, 35, got.Properties.TotalMinutes)
 			assert.Equal(t, []CookingMethod{CookingMethodStovetop}, got.Properties.CookingMethods)
+			assert.Equal(t, []string{"Food processor", "Mortar and pestle", "Pressure cooker", "Dutch oven"}, got.Properties.SpecialEquipment)
 			if !reflect.DeepEqual(got.Instructions, []string{"Prep."}) {
 				t.Fatalf("unexpected instructions: %+v", got.Instructions)
 			}
@@ -513,4 +520,47 @@ func TestResponseUsageLogAttr(t *testing.T) {
 	}) {
 		t.Fatalf("unexpected attrs: %#v", attr.Value.Group())
 	}
+}
+
+func TestRecipeSpecialEquipmentHashCompatibility(t *testing.T) {
+	base := Recipe{Properties: RecipeProperties{TotalMinutes: 35, Servings: 4, EstimatedCostDollars: 21, CaloriesPerServing: 540, CookingMethods: []CookingMethod{CookingMethodStovetop, CookingMethodOven}}}
+	// Pin the existing structured-property payload as well as the legacy hash above.
+	want := "n4S6GEygPMJbv2Ef3fSk6Q=="
+	require.Equal(t, want, base.ComputeHash())
+	for _, equipment := range [][]string{nil, {}} {
+		recipe := base
+		recipe.Properties.SpecialEquipment = equipment
+		assert.Equal(t, want, recipe.ComputeHash())
+	}
+	for _, body := range []string{
+		`{"title":"Legacy"}`,
+		`{"title":"Legacy","properties":{"special_equipment":null}}`,
+		`{"title":"Legacy","properties":{"special_equipment":[]}}`,
+	} {
+		var recipe Recipe
+		require.NoError(t, json.Unmarshal([]byte(body), &recipe))
+		legacy := Recipe{Title: "Legacy"}
+		assert.Equal(t, legacy.ComputeHash(), recipe.ComputeHash(), body)
+	}
+	first := base
+	first.Properties.SpecialEquipment = []string{"Food processor"}
+	assert.NotEqual(t, want, first.ComputeHash())
+	second := first
+	second.Properties.SpecialEquipment = []string{"Dutch oven"}
+	assert.NotEqual(t, first.ComputeHash(), second.ComputeHash())
+	first.Properties.SpecialEquipment = []string{"a|b", "c"}
+	second.Properties.SpecialEquipment = []string{"a", "b|c"}
+	assert.NotEqual(t, first.ComputeHash(), second.ComputeHash())
+}
+
+func TestSpecialEquipmentPromptGuidance(t *testing.T) {
+	for _, prompt := range []string{systemMessage, menuPlanSystemMessage} {
+		assert.Contains(t, prompt, "avoid requiring specialty equipment unless the user requests it or it is necessary for the requested dish")
+	}
+	for _, equipment := range []string{"food processor", "mortar and pestle", "pressure cooker", "Dutch oven"} {
+		assert.Contains(t, systemMessage, equipment)
+		assert.Contains(t, recipeCritiqueSystemInstruction, equipment)
+	}
+	assert.Contains(t, systemMessage, "Return an empty array when none is required")
+	assert.Contains(t, systemMessage, "equipment mentioned only as an optional alternative")
 }

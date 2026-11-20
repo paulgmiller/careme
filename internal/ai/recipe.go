@@ -55,6 +55,7 @@ func (CookingMethod) JSONSchema() *jsonschema.Schema {
 }
 
 type RecipeProperties struct {
+	SpecialEquipment     []string        `json:"special_equipment"`
 	TotalMinutes         int             `json:"total_minutes" jsonschema:"minimum=1"`
 	Servings             int             `json:"servings" jsonschema:"minimum=1"`
 	EstimatedCostDollars int             `json:"estimated_cost_dollars" jsonschema:"minimum=1"`
@@ -106,8 +107,13 @@ func (r *Recipe) ComputeHash() string {
 	lo.Must(io.WriteString(fnv, r.DrinkPairing))
 	// Reflection keeps presence detection aligned with RecipeProperties when fields
 	// are added. The payload below remains explicit because its field order is part
-	// of the recipe identity contract.
-	if !reflect.ValueOf(r.Properties).IsZero() {
+	// of the recipe identity contract. Empty equipment lists are equivalent to
+	// missing equipment in older cached recipes.
+	properties := r.Properties
+	if len(properties.SpecialEquipment) == 0 {
+		properties.SpecialEquipment = nil
+	}
+	if !reflect.ValueOf(properties).IsZero() {
 		values := []string{
 			strconv.Itoa(r.Properties.TotalMinutes),
 			strconv.Itoa(r.Properties.Servings),
@@ -123,6 +129,12 @@ func (r *Recipe) ComputeHash() string {
 			lo.Must(io.WriteString(fnv, value))
 		}
 		lo.Must(io.WriteString(fnv, "|"))
+	}
+	if len(r.Properties.SpecialEquipment) > 0 {
+		// JSON preserves boundaries even when equipment names contain delimiters.
+		equipment := lo.Must(json.Marshal(r.Properties.SpecialEquipment))
+		lo.Must(io.WriteString(fnv, "|special-equipment-v1|"))
+		lo.Must(fnv.Write(equipment))
 	}
 	return base64.URLEncoding.EncodeToString(fnv.Sum(nil))
 }
@@ -151,6 +163,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 
 # Recipe Requirements
 - User instructions override defaults unless they make a recipe unsafe, uncookable, or impossible with the available ingredients.
+- Prefer ordinary kitchen tools and avoid requiring specialty equipment unless the user requests it or it is necessary for the requested dish.
 - Unless the user asks for vegetarian or vegan food, include a protein plus at least one vegetable and/or starch.
 - Include pastas, noodles, stir-fries, stews, braises, curries, casseroles, or other compositions when they fit the ingredients.
 - Prioritize sale ingredients by value and quality. Only use prices from the input; never invent prices.
@@ -168,6 +181,7 @@ Create a practical, flavorful recipe using the provided sale ingredients, season
 - properties.estimated_cost_dollars: provide one integer estimate of the total recipe cost in US dollars, rounded to the nearest dollar. Use only prices from the input and do not add costs for unpriced ingredients.
 - properties.calories_per_serving: provide a reasonable integer calorie estimate for one serving.
 - properties.cooking_methods: include every cooking method used, choosing only stovetop, oven, grill, slow_cooker, air_fryer, no_cook, or other. Use other only when the primary cooking method is outside the named choices, such as smoking, pressure cooking, or sous vide. Do not include no_cook with another method.
+- properties.special_equipment: list every specialty tool or vessel required by the instructions, including a food processor, mortar and pestle, pressure cooker, or Dutch oven when used. Use short, readable names. Include other specialty equipment when required, but omit ordinary knives, bowls, pots, and pans and equipment mentioned only as an optional alternative. Return an empty array when none is required.
 - health: use one short sentence only when explaining a deliberate dietary or nutritional ingredient swap and its practical tradeoff; otherwise return an empty string. For example, brown rice adds fiber but takes longer to cook, while gluten-free pasta accommodates gluten avoidance but may soften faster. Do not imply that gluten-free food is inherently healthier.
 - ingredients: for catalog ingredients chosen from the TSV, set id to the exact ProductId. Use the catalog match even for common pantry staples such as garlic; leave id empty only when the ingredient is not present in the TSV. Keep cooking water (including reserved pasta water) out of ingredients; give its amount where needed in instructions. Set quantity to the total amount needed across the entire recipe, not the catalog package size or sale size. Do not include prices; the app will add known store prices after generation.
 - instructions: use as many clear steps as the work requires; start with prep such as preheating, chopping, slicing, dicing, mixing, or make-ahead work before active cooking; do not rely on prep details from the ingredient list alone; end with plating; do not include prices; do not prefix steps with numbers. Each step should cover one coherent task or component whose actions are naturally done together. Keep immediate actions on the same ingredient in the same step. Do not combine unrelated work to limit the number of steps. Put unrelated prep or components in separate steps.
@@ -179,6 +193,7 @@ Every time a step first uses an ingredient, including a pantry ingredient, state
 # Quality Checks
 Before responding, ensure recipe is cookable, realistic, non-contradictory, correctly priced, safe, and visually appealing after plating.
 Ensure properties.total_minutes reflects the total time implied by every instruction step, including prep, resting, and passive cooking time.
+Ensure properties.special_equipment includes all required specialty equipment used in the instructions.
 Ensure the four numeric properties are positive integers and cooking_methods agrees with the instructions.
 Cross-check every ingredient mention in instruction prose and bullets for an exact step-level amount, and cross-check those amounts against the total quantity in ingredients.
 Do not include these checks in the output.`
@@ -191,6 +206,7 @@ func responseToRecipe(ctx context.Context, category, model, promptCacheKey strin
 	}
 	recipe.WineStyles = normalizeRecipeWineStyles(recipe.WineStyles)
 	recipe.Properties.CookingMethods = lo.Uniq(recipe.Properties.CookingMethods)
+	recipe.Properties.SpecialEquipment = lo.Uniq(recipe.Properties.SpecialEquipment)
 	if strings.TrimSpace(resp.ID) == "" {
 		return nil, fmt.Errorf("failed to get response ID")
 	}
