@@ -298,9 +298,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 	// Location lookups write their cache asynchronously, beyond HTTP response completion.
 	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
-	imageJobs := recipes.RecipeExtras{recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen()), recipes.NewMockWineGenerator(cacheStore)}
-	backgroundJobs := imageJobs.Background()
-	t.Cleanup(backgroundJobs.Wait)
+	postJobs := recipes.PostRecipeJobs{recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen()), recipes.NewMockWineGenerator(cacheStore)}
+	backgroundJobs := postJobs.Background()
 	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), backgroundJobs)
 	centroids := locations.LoadCentroids()
 	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
@@ -323,7 +322,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, imageJobs, recipes.NewImageStore(cacheStore), recipes.NewMockImageGen(), mockAuth, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, backgroundJobs, recipes.NewImageStore(cacheStore), recipes.NewMockImageGen(), mockAuth, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}

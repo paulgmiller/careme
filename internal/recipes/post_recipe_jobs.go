@@ -61,28 +61,29 @@ func (w *recipeWineGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe)
 	return nil
 }
 
-// RecipeExtras runs independent recipe completion workers concurrently.
-type RecipeExtras []postRecipe
+// PostRecipeJobs runs independent recipe completion workers concurrently.
+type PostRecipeJobs []postRecipe
 
-func (e RecipeExtras) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+func (e PostRecipeJobs) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
 	_, err := parallelism.MapWithErrors(e, func(job postRecipe) (struct{}, error) { return struct{}{}, job.RecipeReady(ctx, recipe) })
 	return err
 }
 
-func (e RecipeExtras) Background() *backgroundRecipeExtras {
-	return &backgroundRecipeExtras{RecipeExtras: e}
+// Background also runs currentl but just logs erros and doesn't block
+func (e PostRecipeJobs) Background() *backgroundPostRecipeJobs {
+	return &backgroundPostRecipeJobs{PostRecipeJobs: e}
 }
 
-type backgroundRecipeExtras struct {
-	RecipeExtras
+type backgroundPostRecipeJobs struct {
+	PostRecipeJobs
 	wg sync.WaitGroup
 }
 
-func (b *backgroundRecipeExtras) Wait() { b.wg.Wait() }
-func (b *backgroundRecipeExtras) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+func (b *backgroundPostRecipeJobs) Wait() { b.wg.Wait() }
+func (b *backgroundPostRecipeJobs) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
 	b.wg.Go(func() {
-		if err := b.RecipeExtras.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
-			slog.ErrorContext(ctx, "failed to prepare recipe extras", "error", err)
+		if err := b.PostRecipeJobs.RecipeReady(context.WithoutCancel(ctx), recipe); err != nil {
+			slog.ErrorContext(ctx, "failed to run post-recipe jobs", "error", err)
 		}
 	})
 	return nil

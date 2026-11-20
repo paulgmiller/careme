@@ -20,7 +20,7 @@ type postRecipeFunc func(context.Context, ai.Recipe) error
 
 func (f postRecipeFunc) RecipeReady(ctx context.Context, r ai.Recipe) error { return f(ctx, r) }
 
-func TestRecipeExtrasRunIndependently(t *testing.T) {
+func TestPostRecipeJobsRunIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		imageStarted, wineStarted, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 		imageErr := errors.New("image failed")
@@ -31,13 +31,13 @@ func TestRecipeExtrasRunIndependently(t *testing.T) {
 		}})
 		wine := postRecipeFunc(func(context.Context, ai.Recipe) error { close(wineStarted); <-release; return nil })
 		done := make(chan error, 1)
-		go func() { done <- RecipeExtras{images, wine}.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}) }()
+		go func() { done <- PostRecipeJobs{images, wine}.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}) }()
 		<-imageStarted
 		<-wineStarted
 		synctest.Wait()
 		select {
 		case <-done:
-			t.Fatal("blocking extras returned before jobs finished")
+			t.Fatal("blocking post-recipe jobs returned before jobs finished")
 		default:
 		}
 		close(release)
@@ -67,23 +67,23 @@ func TestWineCompletionUsesOriginParamsAndCachesOptionalFailure(t *testing.T) {
 	require.Equal(t, 1, calls)
 }
 
-func TestBackgroundRecipeExtrasReturnBeforeWineCompletes(t *testing.T) {
+func TestBackgroundPostRecipeJobsReturnBeforeWineCompletes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		started, release := make(chan struct{}), make(chan struct{})
 		images := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
 			return &ai.GeneratedImage{Body: strings.NewReader("image")}, nil
 		}})
-		extras := RecipeExtras{images, postRecipeFunc(func(context.Context, ai.Recipe) error { close(started); <-release; return nil })}.Background()
-		require.NoError(t, extras.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}))
+		postJobs := PostRecipeJobs{images, postRecipeFunc(func(context.Context, ai.Recipe) error { close(started); <-release; return nil })}.Background()
+		require.NoError(t, postJobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}))
 		<-started
 		close(release)
-		extras.Wait()
+		postJobs.Wait()
 	})
 }
 
-func TestRecipeExtrasCollectsEveryWorkerError(t *testing.T) {
+func TestPostRecipeJobsCollectsEveryWorkerError(t *testing.T) {
 	first, second := errors.New("first worker failed"), errors.New("second worker failed")
-	jobs := RecipeExtras{
+	jobs := PostRecipeJobs{
 		postRecipeFunc(func(context.Context, ai.Recipe) error { return first }),
 		postRecipeFunc(func(context.Context, ai.Recipe) error { return nil }),
 		postRecipeFunc(func(context.Context, ai.Recipe) error { return second }),
@@ -91,5 +91,5 @@ func TestRecipeExtrasCollectsEveryWorkerError(t *testing.T) {
 	err := jobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"})
 	require.ErrorIs(t, err, first)
 	require.ErrorIs(t, err, second)
-	require.NoError(t, RecipeExtras{}.RecipeReady(t.Context(), ai.Recipe{}))
+	require.NoError(t, PostRecipeJobs{}.RecipeReady(t.Context(), ai.Recipe{}))
 }

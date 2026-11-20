@@ -112,8 +112,8 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
-	imageJobs := recipes.RecipeExtras{recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiClient), recipes.NewRecipeWineGenerator(cacheStore, aiClient, staples)}
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore), imageJobs)
+	postJobs := recipes.PostRecipeJobs{recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiClient), recipes.NewRecipeWineGenerator(cacheStore, aiClient, staples)}
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore), postJobs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}

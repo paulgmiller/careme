@@ -553,6 +553,9 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// TODO: Move single-recipe regeneration orchestration into the generator, including
+// origin/parent metadata, persistence, and the RecipeReady hook, so the handler
+// only needs to wait for background work during shutdown.
 func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, currentUser *utypes.User, recipe ai.Recipe, instructions []string, previous ai.ResponseRef) {
 	s.wg.Go(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)

@@ -60,13 +60,13 @@ type generatorService struct {
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
-	extras       postRecipe
+	postJobs     postRecipe
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, extras postRecipe) (*generatorService, error) {
-	if extras == nil {
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, postJobs postRecipe) (*generatorService, error) {
+	if postJobs == nil {
 		return nil, fmt.Errorf("post-recipe processor is required")
 	}
 	if aiClient == nil {
@@ -90,7 +90,7 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		staples:      staples,
 		statusWriter: statuses,
 		saver:        recipeSaver,
-		extras:       extras,
+		postJobs:     postJobs,
 	}, nil
 }
 
@@ -192,7 +192,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
-			if err := g.extras.RecipeReady(ctx, *final); err != nil {
+			if err := g.postJobs.RecipeReady(ctx, *final); err != nil {
 				return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
@@ -285,7 +285,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		if err := g.extras.RecipeReady(ctx, *final); err != nil {
+		if err := g.postJobs.RecipeReady(ctx, *final); err != nil {
 			return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
