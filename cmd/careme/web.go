@@ -99,7 +99,7 @@ func runServer(cfg *config.Config, addr string) error {
 			recipes.NewMockWineGenerator(cache),
 		}
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc,
-			status.NewStore(cache), postJobs) //no background for post jobs
+			status.NewStore(cache), postJobs) // no background for post jobs
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 

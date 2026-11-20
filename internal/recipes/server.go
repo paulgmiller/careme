@@ -58,7 +58,7 @@ type server struct {
 	storage            *users.Storage
 	generator          generator
 	locServer          locServer
-	//should generation have this?
+	// should generation have this?
 	wg             sync.WaitGroup
 	clerk          auth.AuthClient
 	critiques      critiqueStore

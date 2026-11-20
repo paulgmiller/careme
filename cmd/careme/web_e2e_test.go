@@ -299,8 +299,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 	cacheStore := cache.NewInMemoryCache()
 	userStorage := users.NewStorage(cacheStore)
 	postJobs := recipes.PostRecipeJobs{recipes.NewRecipeImageGenerator(recipes.NewImageStore(cacheStore), recipes.NewMockImageGen()), recipes.NewMockWineGenerator(cacheStore)}
-	backgroundJobs := postJobs.Background()
-	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), backgroundJobs)
+
+	generator := recipes.NewMockGenerator(recipes.IO(cacheStore), critique.NewMock(cacheStore), status.NewStore(cacheStore), postJobs.Background())
 	centroids := locations.LoadCentroids()
 	locationBackends, err := providerregistry.NewFactory(cfg).NewLocationBackends(centroids)
 	if err != nil {
@@ -322,7 +322,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	locationServer.Register(appRoutes, mockAuth)
 	utfactory := users.FakeUnsubscribeTokenFactory()
 	users.NewHandler(userStorage, locationStorage, mockAuth, utfactory, "http://example.com").Register(appRoutes)
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, backgroundJobs, recipes.NewImageStore(cacheStore), recipes.NewMockImageGen(), mockAuth, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cacheStore, recipes.NewImageStore(cacheStore), recipes.NewMockImageGen(), mockAuth, cartTestShoppingMerger{}, providerregistry.NewFactory(cfg).NewOrderViewBuilder(cacheStore))
 	if err != nil {
 		t.Fatal(err)
 	}
