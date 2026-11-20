@@ -52,7 +52,7 @@ def skip_reason(repo, entry, root, cutoff):
     cwd = Path.cwd().resolve()
     if path == primary or path == repo or path == cwd or path in cwd.parents:
         return "main or current checkout"
-    if root not in path.parents:
+    if path.parent != root or not path.name.startswith("careme_"):
         return "outside cleanup scope"
     if "locked" in entry or "prunable" in entry or not path.is_dir() or path.is_symlink():
         return "locked, missing, or symlinked"
@@ -73,7 +73,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="remove eligible worktrees")
     parser.add_argument("--days", type=int, default=7, help="minimum inactive days (default: 7)")
-    parser.add_argument("--root", type=Path, default=Path.home() / "src" / "careme", help="directory containing worktrees (default: ~/src/careme)")
+    parser.add_argument("--root", type=Path, default=Path.home(), help="parent of careme_* directories (default: home)")
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")
