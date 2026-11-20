@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"careme/internal/ai"
@@ -15,70 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestGenerationProgressUsesJobKind(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		timeout time.Duration
-	}{
-		{name: "interactive", timeout: 10 * time.Minute},
-		{name: "campaign", timeout: ai.FlexJobTimeout},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				c := cache.NewInMemoryCache()
-				writer, reader := NewStore(c), NewStore(c)
-				if tc.name == "interactive" {
-					require.NoError(t, writer.Start(t.Context(), "generation", "Planning"))
-				} else {
-					require.NoError(t, writer.StartBackground(t.Context(), "generation", "Planning"))
-				}
-				stored, err := reader.load(t.Context(), "generation")
-				require.NoError(t, err)
-				assert.Equal(t, tc.name == "campaign", stored.Kind == "background")
-
-				time.Sleep(tc.timeout - time.Minute)
-				require.NoError(t, writer.Plan(t.Context(), "generation", []ai.RecipePlan{{Cuisine: "Italian"}}))
-				require.NoError(t, writer.RecipeDraft(t.Context(), "generation", 0, "draft"))
-				require.NoError(t, writer.RecipeReady(t.Context(), "generation", 0, "reviewed"))
-				got, err := reader.Load(t.Context(), "generation")
-				require.NoError(t, err)
-				assert.Empty(t, got.Failed)
-				assert.True(t, got.Slots[0].Reviewed)
-
-				time.Sleep(time.Minute)
-				got, err = reader.Load(t.Context(), "generation")
-				require.NoError(t, err)
-				assert.Equal(t, "Recipe generation timed out.", got.Failed)
-				assert.Equal(t, "reviewed", got.Slots[0].RecipeHash)
-				require.ErrorContains(t, writer.Plan(t.Context(), "generation", nil), "Recipe generation timed out.")
-				require.ErrorContains(t, writer.RecipeDraft(t.Context(), "generation", 0, "late"), "Recipe generation timed out.")
-				require.ErrorContains(t, writer.RecipeReady(t.Context(), "generation", 0, "late"), "Recipe generation timed out.")
-			})
-		})
-	}
-}
-
-func TestGenerationProgressLongTimeoutPreservesTerminalStates(t *testing.T) {
-	for _, terminal := range []string{"failed", "completed"} {
-		t.Run(terminal, func(t *testing.T) {
-			store := NewStore(cache.NewInMemoryCache())
-			require.NoError(t, store.StartBackground(t.Context(), "generation", ""))
-			require.NoError(t, store.Plan(t.Context(), "generation", []ai.RecipePlan{{}}))
-			var reason string
-			if terminal == "failed" {
-				require.NoError(t, store.Fail(t.Context(), "generation", errors.New("upstream failed")))
-				reason = "upstream failed"
-			} else {
-				require.NoError(t, store.Complete(t.Context(), "generation", "result"))
-				reason = "completed with hash result"
-			}
-			require.ErrorContains(t, store.Plan(t.Context(), "generation", nil), reason)
-			require.ErrorContains(t, store.RecipeDraft(t.Context(), "generation", 0, "late"), reason)
-			require.ErrorContains(t, store.RecipeReady(t.Context(), "generation", 0, "late"), reason)
-		})
-	}
-}
 
 func TestIDIsStableAndURLSafe(t *testing.T) {
 	t.Parallel()

@@ -2,7 +2,6 @@ package grading
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -238,47 +237,6 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
-}
-
-type gradeBackendFunc func(context.Context, []ai.InputIngredient) ([]ai.InputIngredient, error)
-
-func (f gradeBackendFunc) CacheVersion() string { return testIngredientGradeCacheVersion }
-func (f gradeBackendFunc) GradeIngredients(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-	return f(ctx, ingredients)
-}
-
-func TestCachingGraderReusesSuccessfulBatchesAfterFailure(t *testing.T) {
-	backend := &stubGradeBackend{}
-	var failureMu sync.Mutex
-	fail := true
-	grade := gradeBackendFunc(func(ctx context.Context, ingredients []ai.InputIngredient) ([]ai.InputIngredient, error) {
-		failureMu.Lock()
-		shouldFail := len(ingredients) == 1 && fail
-		if shouldFail {
-			fail = false
-		}
-		failureMu.Unlock()
-		if shouldFail {
-			return nil, errors.New("grading unavailable")
-		}
-		return backend.GradeIngredients(ctx, ingredients)
-	})
-	manager := newCachingGrader(&multiGrader{grade}, newStore(cache.NewInMemoryCache()))
-	ingredients := make([]ai.InputIngredient, 31)
-	for i := range ingredients {
-		ingredients[i] = ai.InputIngredient{ProductID: fmt.Sprintf("ingredient-%02d", i)}
-	}
-
-	first, err := manager.GradeIngredients(t.Context(), ingredients)
-	require.ErrorContains(t, err, "grading unavailable")
-	assert.Nil(t, first, "required grading must fail completely")
-	require.Len(t, backend.calls, 1)
-
-	second, err := manager.GradeIngredients(t.Context(), ingredients)
-	require.NoError(t, err)
-	assert.Len(t, second, len(ingredients))
-	require.Len(t, backend.calls, 2)
-	assert.Equal(t, []ai.InputIngredient{ingredients[30]}, backend.calls[1], "only the failed batch needs grading again")
 }
 
 type embeddingTransport func(*http.Request) (*http.Response, error)

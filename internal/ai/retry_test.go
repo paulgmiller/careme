@@ -303,7 +303,7 @@ func TestOpenAIRetryHeadersNotLoggedForOtherStatuses(t *testing.T) {
 		require.NoError(t, err)
 		assert.Same(t, resp, got)
 	}
-	assert.NotContains(t, output.String(), "OpenAI returned retry instructions")
+	assert.Empty(t, output.String())
 }
 
 func TestOpenAIRetryInstructionsLoggedOncePerAttempt(t *testing.T) {

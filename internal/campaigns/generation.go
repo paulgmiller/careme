@@ -16,7 +16,6 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
-	"careme/internal/recipes/status"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -35,17 +34,11 @@ type recipeStore interface {
 	SaveShoppingList(context.Context, *ai.ShoppingList, string) error
 }
 
-type generationStatusStore interface {
-	StartBackground(context.Context, string, string) error
-	Fail(context.Context, string, error) error
-}
-
 // service runs advertised recipe generation independently of the web server.
 type service struct {
 	locations advertisedLocationStore
 	generator recipeGenerator
 	store     recipeStore
-	statuses  generationStatusStore
 	wait      func()
 }
 
@@ -83,16 +76,15 @@ func NewService(cfg *config.Config, providers providerFactory) (*service, error)
 	aiConfig.ServiceTier = "flex"
 	client := ai.NewClient(aiConfig, httpClient, prompts.NewCacheRecorder(c))
 	critiquer := critique.NewManager(cfg, c, httpClient)
-	statuses := status.NewStore(c)
 	store := recipes.IO(c)
 	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), client)
-	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, imageJobs)
+	generator, err := recipes.NewGenerator(client, critiquer, staples, recipes.NoProgress{}, store, imageJobs)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}
 	return &service{
 		locations: locationStore, generator: generator, store: store,
-		statuses: statuses, wait: critiquer.Wait,
+		wait: critiquer.Wait,
 	}, nil
 }
 
@@ -138,17 +130,7 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
-	if err := s.statuses.StartBackground(ctx, hash, status.InitialMessage); err != nil {
-		return fmt.Errorf("start campaign status: %w", err)
-	}
-	err = s.prepare(ctx, p)
-	if err != nil {
-		if statusErr := s.statuses.Fail(ctx, hash, err); statusErr != nil {
-			return errors.Join(err, fmt.Errorf("record campaign failure: %w", statusErr))
-		}
-		return err
-	}
-	return nil
+	return s.prepare(ctx, p)
 }
 
 func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error {

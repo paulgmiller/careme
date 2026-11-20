@@ -85,6 +85,7 @@ func TestGradeIngredientsUsesLunaWithoutReasoning(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(body), `"model":"`+openai.ChatModelGPT6Luna+`"`)
 		assert.Contains(t, string(body), `"reasoning":{"effort":"none"}`)
+		assert.Contains(t, string(body), `"service_tier":"default"`)
 
 		return &http.Response{
 			StatusCode: http.StatusOK,

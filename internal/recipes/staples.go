@@ -191,7 +191,8 @@ func (s *cachedStaplesService) FetchStaples(ctx context.Context, p *GeneratorPar
 	defer span.End()
 	graded, err := s.grader.GradeIngredients(ctx, ingredients)
 	if err != nil {
-		return nil, fmt.Errorf("grade fetched staples for %s: %w", locationID, err)
+		slog.ErrorContext(ctx, "failed to grade cached staples", "error", err)
+		return nil, err
 	}
 
 	if err := s.cache.SaveIngredients(ctx, lochash, graded); err != nil {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"careme/internal/ai"
@@ -89,7 +88,7 @@ func testService() (*service, *campaignGeneratorStub, *campaignImageStub, *statu
 	g.images = recipes.NewRecipeImageGenerator(images.ImageStore, images)
 	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
-		statuses: statuses, wait: func() {},
+		wait: func() {},
 	}, g, images, statuses
 }
 
@@ -99,29 +98,6 @@ var campaignTestTime = time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
 var generatedCampaignLocationIDs = []string{
 	"wholefoods_10216", "70100023", "70100658",
 	"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery",
-}
-
-func TestCampaignPublishesAfterLongFlexRetries(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		s, _, _, statuses := testService()
-		s.generator = campaignGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
-			time.Sleep(21 * time.Minute)
-			if err := statuses.Plan(ctx, p.Hash(), []ai.RecipePlan{{Cuisine: "Italian"}}); err != nil {
-				return nil, err
-			}
-			time.Sleep(16 * time.Minute)
-			recipe := ai.Recipe{Title: "Slow Flex dinner", Instructions: []string{"Cook dinner."}}
-			if err := statuses.RecipeDraft(ctx, p.Hash(), 0, recipe.ComputeHash()); err != nil {
-				return nil, err
-			}
-			if err := statuses.RecipeReady(ctx, p.Hash(), 0, recipe.ComputeHash()); err != nil {
-				return nil, err
-			}
-			return &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, nil
-		})
-		c := AdvertisedRecipeLocations()["westlake_wf"]
-		require.NoError(t, s.generateLocation(t.Context(), c, campaignTestTime))
-	})
 }
 
 func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
@@ -167,9 +143,8 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
-		state, err := statuses.Load(t.Context(), p.Hash())
-		require.NoError(t, err)
-		assert.Contains(t, state.Failed, "flex unavailable")
+		_, err := statuses.Load(t.Context(), p.Hash())
+		require.ErrorIs(t, err, cache.ErrNotFound, "background failures must not create interactive status")
 	}
 	g.err = nil
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))

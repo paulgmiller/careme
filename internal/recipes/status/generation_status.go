@@ -39,7 +39,6 @@ type payload struct {
 	Slots     []Slot    `json:"slots,omitempty"`
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
-	Kind      string    `json:"kind,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Redirect  string    `json:"redirect,omitempty"`
 }
@@ -51,11 +50,7 @@ func (p payload) failed() string {
 	if p.Error != "" {
 		return p.Error
 	}
-	timeout := recipeGenerationTimeout
-	if p.Kind == "background" {
-		timeout = ai.FlexJobTimeout
-	}
-	if time.Since(p.StartedAt) >= timeout {
+	if time.Since(p.StartedAt) >= recipeGenerationTimeout {
 		return "Recipe generation timed out."
 	}
 
@@ -88,21 +83,11 @@ func NewStore(c cache.Cache) *Store {
 	return &Store{cache: c, now: time.Now}
 }
 
-// Start creates or resets interactive generation progress.
+// Start  creates or resets an existing
+// TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash, message string) error {
-	return ss.start(ctx, hash, message, "")
-}
-
-// StartBackground creates or resets campaign/mail progress using the Flex job budget.
-// Persisting the kind lets web readers recognize background jobs as well.
-func (ss *Store) StartBackground(ctx context.Context, hash, message string) error {
-	return ss.start(ctx, hash, message, "background")
-}
-
-func (ss *Store) start(ctx context.Context, hash, message, kind string) error {
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
-		Kind:      kind,
 		Message:   message,
 	})
 }
@@ -166,8 +151,8 @@ func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) e
 	if err != nil {
 		return err
 	}
-	if err := stored.running(hash); err != nil {
-		return err
+	if stored.failed() != "" || stored.Redirect != "" {
+		return fmt.Errorf("generation %s is no longer running", hash)
 	}
 	stored.Slots = make([]Slot, len(plans))
 	for i, plan := range plans {
@@ -193,8 +178,8 @@ func (ss *Store) publishRecipe(ctx context.Context, hash string, index int, reci
 	if err != nil {
 		return err
 	}
-	if err := stored.running(hash); err != nil {
-		return err
+	if stored.failed() != "" || stored.Redirect != "" {
+		return fmt.Errorf("generation %s is no longer running", hash)
 	}
 	if index < 0 || index >= len(stored.Slots) || recipeHash == "" {
 		return fmt.Errorf("invalid ready recipe slot %d", index)
@@ -202,16 +187,6 @@ func (ss *Store) publishRecipe(ctx context.Context, hash string, index int, reci
 	stored.Slots[index].RecipeHash = recipeHash
 	stored.Slots[index].Reviewed = reviewed
 	return ss.save(ctx, hash, stored)
-}
-
-func (p payload) running(hash string) error {
-	if p.Redirect != "" {
-		return fmt.Errorf("generation %s is no longer running: completed with hash %s", hash, p.Redirect)
-	}
-	if failure := p.failed(); failure != "" {
-		return fmt.Errorf("generation %s is no longer running: %s", hash, failure)
-	}
-	return nil
 }
 
 func (ss *Store) Load(ctx context.Context, hash string) (Status, error) {

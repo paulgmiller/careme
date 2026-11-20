@@ -50,6 +50,15 @@ type statusWriter interface {
 	Update(ctx context.Context, hash string, message string) error
 }
 
+// NoProgress disables interactive progress for campaign/mail jobs, whose lifetime
+// is controlled by their job context rather than the interactive status timeout.
+type NoProgress struct{}
+
+func (NoProgress) Plan(context.Context, string, []ai.RecipePlan) error    { return nil }
+func (NoProgress) RecipeReady(context.Context, string, int, string) error { return nil }
+func (NoProgress) RecipeDraft(context.Context, string, int, string) error { return nil }
+func (NoProgress) Update(context.Context, string, string) error           { return nil }
+
 type postRecipe interface {
 	RecipeReady(context.Context, ai.Recipe) error
 }
