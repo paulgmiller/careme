@@ -59,11 +59,7 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 	var shopping map[string]any
 	_ = json.Unmarshal(shoppingSchemaJSON, &shopping)
 
-	opts := []option.RequestOption{option.WithAPIKey(cfg.APIKey)}
-	if httpClient != nil {
-		opts = append(opts, option.WithHTTPClient(httpClient))
-	}
-	aiClient := openai.NewClient(opts...)
+	aiClient := newOpenAIClient(cfg.APIKey, httpClient, 2)
 
 	return &client{
 		serviceTier:    cfg.ServiceTier,

@@ -5,33 +5,28 @@ retries for Flex Responses API calls. Campaigns and mail select Flex.
 
 ## Retry settings
 
-Flex calls use `option.WithMaxRetries(math.MaxInt)` and
-`option.WithMaxRetryDelay(time.Hour)`, with a one-hour child context bounding all
-attempts and waits. The caller's earlier deadline or cancellation still wins.
-These are client options passed to `Responses.New`; `ResponseNewParams` describes
-the API request body and does not configure retries.
+All recipe/menu and ingredient-grading Responses calls share OpenAI client
+construction, native SDK retries, retry observation, and provider-error
+reporting. Images and readiness use the same client construction and observer.
+The injected HTTP client is copied and its transport is instrumented without
+changing its timeout, redirect policy, or cookies.
 
-The SDK owns retry decisions and backoff. Its retry headers take precedence over
-exponential backoff. With the pinned `openai-go/v3 v3.96.0`, this means:
+Standard recipe/menu calls, images, readiness, and Standard fallback allow the
+SDK's usual two retries. Ingredient grading allows four retries. Flex calls use
+`option.WithMaxRetries(math.MaxInt)` and `option.WithMaxRetryDelay(time.Hour)`,
+with a one-hour child context bounding all attempts and waits. An earlier caller
+deadline or cancellation wins. Request options configure retries separately from
+the `ResponseNewParams` API body.
 
-- Without retry headers, exponential delays can grow beyond five minutes, up to
-  the one-hour cap. There is no separate five-minute polling cap.
-- The extended budget applies to all SDK-retryable failures, including connection
-  errors, 408, 409, 429, and 5xx. Other failures do not have a separate short retry
-  budget. The SDK honors `x-should-retry` overrides.
-- A server-directed wait exceeding one hour stops retries immediately and returns
-  the API error. It does not trigger Standard fallback.
+The SDK owns retry decisions and backoff. Retry headers take precedence over
+exponential backoff. The extended Flex budget covers connection errors, 408,
+409, 429, and 5xx, respecting `X-Should-Retry` overrides. Exponential waits may
+grow up to one hour. A server-directed wait exceeding one hour stops Flex
+retries immediately and preserves the API error without Standard fallback.
 
-One per-call `retryObserver` middleware tracks attempts and last status and logs
-each attempt at most once, at INFO. Calls using other tiers, including
-Standard fallback, use the SDK's default retry settings.
-
-The same middleware logs HTTP 429 responses with retry headers at INFO as
-`OpenAI returned retry instructions`. Fields include the raw `retry_after`
-(seconds or HTTP date), `retry_after_ms`, `status`, `attempt`, `x_should_retry`,
-and `request_id`. These logs appear even when a server-directed wait exceeds the
-SDK's cap and no retry follows. They observe headers without changing SDK retry
-decisions or consuming the response body.
+One per-call observer logs retry attempts and HTTP 429 retry instructions at
+INFO. Other HTTP failures include model, status, attempt, request ID, and retry
+headers without consuming the body. Recipe/menu and grading share these logs.
 
 ## API error diagnostics
 
@@ -63,27 +58,18 @@ one-hour Flex budget plus ten minutes for fallback and remaining work. This
 70-minute deadline covers the whole location or delivery. Each Flex response has
 its own one-hour budget, limited by the time remaining under that parent deadline.
 
-Campaign and email progress records persist an `expires_at` matching that job
-budget, capped by an earlier caller deadline. Polling and recipe publication use
-the stored expiry, including from other web or worker processes. Interactive
-generation and legacy records without an explicit expiry retain the ten-minute
-timeout. Publication errors include the failure, timeout, or completed result.
+Campaign and email progress records store `kind: "background"`. Polling and
+publication derive a 70-minute timeout from that kind, including in other web or
+worker processes. Interactive and legacy records use ten minutes. Publication
+errors include the failure, timeout, or completed result.
 
 ## Ingredient grading
 
 Ingredient grading uses Standard tier with a separate 90-second budget per batch,
 including all attempts and waits. An earlier caller deadline or cancellation
-wins. `go-retryablehttp` owns up to four retries, with its default exponential
-backoff and `Retry-After` handling for 429 and 503 responses. SDK retries are
-disabled for this client so attempts do not multiply. `Retry-After-Ms` takes
-precedence when supplied. The provider's
-`X-Should-Retry` override is respected, and 408 and 409 responses are retryable.
-Injected HTTP client settings and transports are preserved, with OpenTelemetry
-instrumentation around each attempt.
-
-Retry attempts use the shared HTTP retry logger with source
-`openai_ingredient_grading`. Failed responses log the model, status, request ID,
-and retry instructions at INFO. Final API errors retain the SDK error and add
-the same provider diagnostics as recipe responses. Exhausted grading fails the
+wins. The shared SDK retry path allows four retries. Grading is always Standard,
+including when campaign/mail recipe generation uses Flex. Retry observations
+use the same `openai` source and provider diagnostics as recipe/menu requests.
+Exhausted grading fails the
 generation; successful batches remain cached for the next attempt. The staples
 layer adds store context without logging the same failure a second time.

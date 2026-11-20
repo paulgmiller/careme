@@ -26,7 +26,7 @@ func TestIngredientGradingRetriesTransientFailures(t *testing.T) {
 		retryAfterMs string
 		wantWait     time.Duration
 	}{
-		{name: "503 recovers after four retries", status: http.StatusServiceUnavailable, failures: 4, wantWait: 15 * time.Second},
+		{name: "503 recovers after four retries", status: http.StatusServiceUnavailable, failures: 4},
 		{name: "429 retry instructions", status: http.StatusTooManyRequests, failures: 1, retryAfter: "20", wantWait: 20 * time.Second},
 		{name: "503 retry instructions", status: http.StatusServiceUnavailable, failures: 1, retryAfter: "30", wantWait: 30 * time.Second},
 		{name: "millisecond retry instructions take precedence", status: http.StatusServiceUnavailable, failures: 1, retryAfter: "30", retryAfterMs: "2500", wantWait: 2500 * time.Millisecond},
@@ -66,7 +66,13 @@ func TestIngredientGradingRetriesTransientFailures(t *testing.T) {
 				require.Len(t, graded, 1)
 				assert.Equal(t, 8, graded[0].Grade.Score)
 				assert.Equal(t, tc.failures+1, calls)
-				assert.Equal(t, tc.wantWait, time.Since(start))
+				if tc.retryAfter != "" || tc.retryAfterMs != "" {
+					assert.Equal(t, tc.wantWait, time.Since(start))
+				} else {
+					// SDK delays are 0.5, 1, 2, 4 seconds, with up to 25% jitter.
+					assert.GreaterOrEqual(t, time.Since(start), 5625*time.Millisecond)
+					assert.LessOrEqual(t, time.Since(start), 7500*time.Millisecond)
+				}
 			})
 		})
 	}
@@ -182,8 +188,8 @@ func TestIngredientGradingLogsRetriesAndProviderDetails(t *testing.T) {
 		_, err := grader.GradeIngredients(t.Context(), []InputIngredient{{ProductID: "ingredient-1", Description: "private-test-description"}})
 		require.NoError(t, err)
 	})
-	assert.Contains(t, logs.String(), `msg="Retrying HTTP request"`)
-	assert.Contains(t, logs.String(), "source=openai_ingredient_grading")
+	assert.Contains(t, logs.String(), `msg="Retried HTTP request"`)
+	assert.Contains(t, logs.String(), "source=openai")
 	assert.Contains(t, logs.String(), "attempt=2")
 	assert.Contains(t, logs.String(), "status=503")
 	assert.Contains(t, logs.String(), "request_id=req-grading")

@@ -27,7 +27,7 @@ func TestShoppingProgressRendersCampaignRecipesAfterTenMinutes(t *testing.T) {
 		p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now())
 		require.NoError(t, s.SaveParams(t.Context(), p))
 		statuses := s.generationStatuses.(*status.Store)
-		require.NoError(t, statuses.StartWithTimeout(t.Context(), p.Hash(), status.InitialMessage, ai.FlexJobTimeout))
+		require.NoError(t, statuses.StartBackground(t.Context(), p.Hash(), status.InitialMessage))
 		time.Sleep(21 * time.Minute)
 		require.NoError(t, statuses.Plan(t.Context(), p.Hash(), []ai.RecipePlan{{Cuisine: "Italian"}}))
 		recipe := ai.Recipe{Title: "Beans after Flex retries", OriginHash: p.Hash()}

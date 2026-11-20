@@ -10,15 +10,18 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
 )
 
-const defaultIngredientGradeModel = openai.ChatModelGPT6Luna
+const (
+	defaultIngredientGradeModel = openai.ChatModelGPT6Luna
+	ingredientGradeTimeout      = 90 * time.Second
+)
 
 // should we have category spefic grading prompts?
 const ingredientGradeRubric = `
@@ -162,11 +165,7 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	aiClient := openai.NewClient(
-		option.WithAPIKey(apiKey),
-		option.WithHTTPClient(ingredientGradeHTTPClient(httpClient, model)),
-		option.WithMaxRetries(0), // go-retryablehttp owns the bounded grading retries.
-	)
+	aiClient := newOpenAIClient(apiKey, httpClient, 4)
 
 	return &ingredientGrader{
 		oai:          aiClient,
@@ -211,9 +210,9 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 	ctx, cancel := context.WithTimeout(ctx, ingredientGradeTimeout)
 	defer cancel()
-	resp, err := g.oai.Responses.New(ctx, params)
+	resp, err := newResponse(ctx, g.oai, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to grade ingredients: %w", responseError(params, err))
+		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage, string(resp.ServiceTier)))
 

@@ -1,7 +1,6 @@
 package status
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenerationProgressUsesPersistedTimeout(t *testing.T) {
+func TestGenerationProgressUsesJobKind(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		timeout time.Duration
@@ -32,11 +31,11 @@ func TestGenerationProgressUsesPersistedTimeout(t *testing.T) {
 				if tc.name == "interactive" {
 					require.NoError(t, writer.Start(t.Context(), "generation", "Planning"))
 				} else {
-					require.NoError(t, writer.StartWithTimeout(t.Context(), "generation", "Planning", tc.timeout))
+					require.NoError(t, writer.StartBackground(t.Context(), "generation", "Planning"))
 				}
 				stored, err := reader.load(t.Context(), "generation")
 				require.NoError(t, err)
-				assert.Equal(t, tc.timeout, stored.ExpiresAt.Sub(stored.StartedAt))
+				assert.Equal(t, tc.name == "campaign", stored.Kind == "background")
 
 				time.Sleep(tc.timeout - time.Minute)
 				require.NoError(t, writer.Plan(t.Context(), "generation", []ai.RecipePlan{{Cuisine: "Italian"}}))
@@ -60,31 +59,11 @@ func TestGenerationProgressUsesPersistedTimeout(t *testing.T) {
 	}
 }
 
-func TestGenerationProgressHonorsEarlierCallerDeadline(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		store := NewStore(cache.NewInMemoryCache())
-		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-		defer cancel()
-		require.NoError(t, store.StartWithTimeout(ctx, "generation", "", ai.FlexJobTimeout))
-		time.Sleep(time.Minute)
-		got, err := store.Load(t.Context(), "generation")
-		require.NoError(t, err)
-		assert.Equal(t, "Recipe generation timed out.", got.Failed)
-	})
-}
-
-func TestGenerationProgressRequiresPositiveTimeout(t *testing.T) {
-	store := NewStore(cache.NewInMemoryCache())
-	for _, timeout := range []time.Duration{0, -time.Second} {
-		require.ErrorContains(t, store.StartWithTimeout(t.Context(), "generation", "", timeout), "timeout must be positive")
-	}
-}
-
 func TestGenerationProgressLongTimeoutPreservesTerminalStates(t *testing.T) {
 	for _, terminal := range []string{"failed", "completed"} {
 		t.Run(terminal, func(t *testing.T) {
 			store := NewStore(cache.NewInMemoryCache())
-			require.NoError(t, store.StartWithTimeout(t.Context(), "generation", "", ai.FlexJobTimeout))
+			require.NoError(t, store.StartBackground(t.Context(), "generation", ""))
 			require.NoError(t, store.Plan(t.Context(), "generation", []ai.RecipePlan{{}}))
 			var reason string
 			if terminal == "failed" {

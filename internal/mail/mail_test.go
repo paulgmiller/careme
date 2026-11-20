@@ -153,13 +153,13 @@ type capturingMailGenerator struct {
 
 type fakeGenerationStatusStore struct {
 	startedHash string
-	timeout     time.Duration
+	background  bool
 	failedErr   error
 }
 
-func (f *fakeGenerationStatusStore) StartWithTimeout(_ context.Context, hash, _ string, timeout time.Duration) error {
+func (f *fakeGenerationStatusStore) StartBackground(_ context.Context, hash, _ string) error {
 	f.startedHash = hash
-	f.timeout = timeout
+	f.background = true
 	return nil
 }
 
@@ -636,7 +636,7 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 	}, recipes.DefaultParams(location, time.Now()))
 	require.NoError(t, err)
 	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
-	assert.Equal(t, ai.FlexJobTimeout, generationStatuses.timeout)
+	assert.True(t, generationStatuses.background)
 	assert.Contains(t, g.params.Directive, "Always meat")
 }
 

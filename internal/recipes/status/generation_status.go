@@ -39,7 +39,7 @@ type payload struct {
 	Slots     []Slot    `json:"slots,omitempty"`
 	Message   string    `json:"message,omitempty"`
 	StartedAt time.Time `json:"started_at"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"`
+	Kind      string    `json:"kind,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Redirect  string    `json:"redirect,omitempty"`
 }
@@ -51,12 +51,11 @@ func (p payload) failed() string {
 	if p.Error != "" {
 		return p.Error
 	}
-	expiresAt := p.ExpiresAt
-	if expiresAt.IsZero() {
-		// Statuses written before explicit expiries used the interactive timeout.
-		expiresAt = p.StartedAt.Add(recipeGenerationTimeout)
+	timeout := recipeGenerationTimeout
+	if p.Kind == "background" {
+		timeout = ai.FlexJobTimeout
 	}
-	if !time.Now().Before(expiresAt) {
+	if time.Since(p.StartedAt) >= timeout {
 		return "Recipe generation timed out."
 	}
 
@@ -89,25 +88,21 @@ func NewStore(c cache.Cache) *Store {
 	return &Store{cache: c, now: time.Now}
 }
 
-// Start creates or resets progress with the interactive generation timeout.
+// Start creates or resets interactive generation progress.
 func (ss *Store) Start(ctx context.Context, hash, message string) error {
-	return ss.StartWithTimeout(ctx, hash, message, recipeGenerationTimeout)
+	return ss.start(ctx, hash, message, "")
 }
 
-// StartWithTimeout creates or resets progress with the caller's generation budget.
-// The expiry is persisted so readers in other processes use the same deadline.
-func (ss *Store) StartWithTimeout(ctx context.Context, hash, message string, timeout time.Duration) error {
-	if timeout <= 0 {
-		return fmt.Errorf("generation timeout must be positive")
-	}
-	startedAt := ss.now().UTC()
-	expiresAt := startedAt.Add(timeout)
-	if deadline, ok := ctx.Deadline(); ok && deadline.Before(expiresAt) {
-		expiresAt = deadline.UTC()
-	}
+// StartBackground creates or resets campaign/mail progress using the Flex job budget.
+// Persisting the kind lets web readers recognize background jobs as well.
+func (ss *Store) StartBackground(ctx context.Context, hash, message string) error {
+	return ss.start(ctx, hash, message, "background")
+}
+
+func (ss *Store) start(ctx context.Context, hash, message, kind string) error {
 	return ss.save(ctx, hash, payload{
-		StartedAt: startedAt,
-		ExpiresAt: expiresAt,
+		StartedAt: ss.now().UTC(),
+		Kind:      kind,
 		Message:   message,
 	})
 }
