@@ -403,7 +403,9 @@ var mockRecipes = []ai.Recipe{
 func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	originHash := p.Hash()
 	// Keep the planning stage observable in local mock mode.
-	time.Sleep(100 * time.Millisecond)
+	if err := mockGenerationDelay(ctx); err != nil {
+		return nil, err
+	}
 
 	// Select 3 random recipes from the pool of 20
 	// Create a new random generator with current time as seed
@@ -435,7 +437,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 		selectedRecipes = append(selectedRecipes, s)
 	}
 
-	plan := &ai.MenuPlan{}
+	plan := &ai.MenuPlan{ResponseID: uuid.NewString()}
 	categories := []ai.MealCategory{ai.MealCategoryHealthy, ai.MealCategoryFancy, ai.MealCategoryLocal, ai.MealCategoryDifferent}
 	for _, recipe := range selectedRecipes[:len(selectedRecipes)-len(p.Saved)] {
 		plan.Plans = append(plan.Plans, ai.RecipePlan{Cuisine: recipe.Title, AnchorIngredient: recipe.Ingredients[0].Name, Category: categories[len(plan.Plans)%len(categories)]})
@@ -443,27 +445,18 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	if err := m.statuses.Plan(ctx, originHash, plan.Plans); err != nil {
 		return nil, err
 	}
-	for i, recipe := range selectedRecipes {
-		if m.saver != nil {
-			if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
-				return nil, err
-			}
-		}
-		if m.critiquer != nil {
-			if _, err := m.critiquer.CritiqueRecipe(ctx, recipe); err != nil {
-				return nil, err
-			}
-		}
-		if i < len(plan.Plans) {
-			if err := m.postJobs.RecipeReady(ctx, recipe, p.Location.ID, p.Date); err != nil {
-				return nil, err
-			}
-			time.Sleep(100 * time.Millisecond)
-			if err := m.statuses.RecipeReady(ctx, originHash, i, recipe.ComputeHash()); err != nil {
-				return nil, err
-			}
-		}
+	g := generatorService{
+		aiClient:     mockMenuClient{mock: m},
+		critiquer:    mockGenerationCritiquer{critiquer: m.critiquer},
+		saver:        m.saver,
+		statusWriter: m.statuses,
+		postJobs:     m.postJobs,
 	}
+	generated, err := g.generatePlannedRecipes(ctx, p, plan, map[string]ai.InputIngredient{})
+	if err != nil {
+		return nil, err
+	}
+	selectedRecipes = append(generated, p.Saved...)
 
 	return &ai.ShoppingList{
 		Recipes: selectedRecipes,
@@ -472,17 +465,15 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 }
 
 func (m mock) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
-	_ = ctx
-	_ = instructions
-	_ = previous
-	recipe := mockRecipes[0]
-	recipe.Title = "Fresh " + recipe.Title
-	recipe.ResponseID = uuid.NewString()
-	if err := m.postJobs.RecipeReady(ctx, recipe, params.Location.ID, params.Date); err != nil {
+	recipe, err := (mockMenuClient{mock: m}).Regenerate(ctx, instructions, previous)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.postJobs.RecipeReady(ctx, *recipe, params.Location.ID, params.Date); err != nil {
 		return nil, err
 	}
 
-	return &recipe, nil
+	return recipe, nil
 }
 
 func (m mock) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {

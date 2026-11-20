@@ -26,6 +26,8 @@ type Slot struct {
 	Plan       ai.RecipePlan `json:"plan"`
 	RecipeHash string        `json:"recipe_hash,omitempty"`
 	Reviewed   bool          `json:"reviewed,omitempty"`
+	Revision   int           `json:"revision"`
+	Replacing  bool          `json:"replacing,omitempty"`
 }
 
 type Status struct {
@@ -72,8 +74,8 @@ func IsValidID(id string) bool {
 }
 
 type Store struct {
-	// only upodate, and recipe ready use mutex. Rest have single caller.
-	// Need to replace with etags
+	// The generation owner serializes all status mutations. Other replicas write
+	// immutable slot decisions, never this status payload.
 	mu    sync.Mutex
 	cache cache.Cache
 	now   func() time.Time
@@ -86,6 +88,9 @@ func NewStore(c cache.Cache) *Store {
 // Start  creates or resets an existing
 // TODO take a cache option so we can do this oon not exists.
 func (ss *Store) Start(ctx context.Context, hash, message string) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
 	return ss.save(ctx, hash, payload{
 		StartedAt: ss.now().UTC(),
 		Message:   message,
@@ -93,6 +98,9 @@ func (ss *Store) Start(ctx context.Context, hash, message string) error {
 }
 
 func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
 	if err == nil {
 		return fmt.Errorf("generation failure is required")
 	}
@@ -109,8 +117,6 @@ func (ss *Store) Fail(ctx context.Context, hash string, err error) error {
 }
 
 func (ss *Store) Update(ctx context.Context, hash, message string) error {
-	// this is kind of a joke since it only protects same process updates but that happens during recipe generatipm
-	// should be using etags
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
@@ -123,6 +129,9 @@ func (ss *Store) Update(ctx context.Context, hash, message string) error {
 }
 
 func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
 	newHash = strings.TrimSpace(newHash)
 	if newHash == "" {
 		return fmt.Errorf("completed generation hash is required")
@@ -147,6 +156,9 @@ func (ss *Store) Complete(ctx context.Context, hash, newHash string) error {
 
 // Plan publishes placeholders before any recipe workers start.
 func (ss *Store) Plan(ctx context.Context, hash string, plans []ai.RecipePlan) error {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
 	stored, err := ss.load(ctx, hash)
 	if err != nil {
 		return err
@@ -186,6 +198,7 @@ func (ss *Store) publishRecipe(ctx context.Context, hash string, index int, reci
 	}
 	stored.Slots[index].RecipeHash = recipeHash
 	stored.Slots[index].Reviewed = reviewed
+	stored.Slots[index].Replacing = false
 	return ss.save(ctx, hash, stored)
 }
 
@@ -193,6 +206,18 @@ func (ss *Store) Load(ctx context.Context, hash string) (Status, error) {
 	stored, err := ss.load(ctx, hash)
 	if err != nil {
 		return Status{}, err
+	}
+	for index := range stored.Slots {
+		slot := &stored.Slots[index]
+		decision, err := ss.loadDecision(ctx, hash, stored.StartedAt, index, slot.Revision)
+		if err != nil {
+			return Status{}, err
+		}
+		if decision.Kind == "replace" {
+			slot.RecipeHash = ""
+			slot.Reviewed = false
+			slot.Replacing = true
+		}
 	}
 	return Status{
 		Slots:    stored.Slots,

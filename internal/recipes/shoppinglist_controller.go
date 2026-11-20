@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ func (s *server) registerShoppingListRoutes(mux routing.Registrar) {
 	mux.HandleFunc("GET /recipes", s.handleRecipes)
 	mux.HandleFunc("POST /recipes", s.handleGenerate)
 	mux.HandleFunc("POST /recipes/{hash}/retry", s.handleRetryGeneration)
+	mux.HandleFunc("POST /recipes/{hash}/slots/{index}/replace", s.handleReplaceMeal)
 	mux.HandleFunc("POST /recipes/{hash}/regenerate", s.handleRegenerate)
 	mux.HandleFunc("POST /recipes/{hash}/finalize", s.handleFinalize)
 }
@@ -90,7 +92,11 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	newHash := p.Hash()
 
-	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
+	if err := s.SaveParams(ctx, p); err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			redirectToHash(w, r, newHash)
+			return
+		}
 		slog.ErrorContext(ctx, "failed to save params for regeneration", "hash", newHash, "error", err)
 		http.Error(w, "failed to prepare regeneration", http.StatusInternalServerError)
 		return
@@ -587,12 +593,66 @@ func (s *server) handleRetryGeneration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.kickgeneration(ctx, p, userID); err != nil {
+	if progress, err := s.generationStatuses.Load(ctx, hash); err == nil && progress.Failed == "" {
+		redirectToHash(w, r, hash, QueryArgHelp)
+		return
+	} else if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		http.Error(w, "failed to check recipe generation", http.StatusInternalServerError)
+		return
+	}
+	retry := *p
+	retry.RetryOf = hash
+	newHash := retry.Hash()
+	if err := s.SaveParams(ctx, &retry); err != nil {
+		if errors.Is(err, ErrAlreadyExists) {
+			redirectToHash(w, r, newHash, QueryArgHelp)
+			return
+		}
+		http.Error(w, "failed to prepare recipe retry", http.StatusInternalServerError)
+		return
+	}
+	if err := s.kickgeneration(ctx, &retry, userID); err != nil {
 		slog.ErrorContext(ctx, "failed to start recipe regeneration", "hash", hash, "error", err)
 		http.Error(w, "failed to start recipe regeneration", http.StatusInternalServerError)
 		return
 	}
-	redirectToHashWithConversion(w, r, hash, templates.RecipeGenerationConversion)
+	redirectToHashWithConversion(w, r, newHash, templates.RecipeGenerationConversion)
+}
+
+func (s *server) handleReplaceMeal(w http.ResponseWriter, r *http.Request) {
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	index, indexErr := strconv.Atoi(r.PathValue("index"))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	revision, revisionErr := strconv.Atoi(r.FormValue("revision"))
+	if hash == "" || indexErr != nil || revisionErr != nil || index < 0 || revision < 0 {
+		http.Error(w, "invalid meal slot", http.StatusBadRequest)
+		return
+	}
+	if err := s.generationStatuses.RequestReplacement(r.Context(), hash, index, revision); err != nil {
+		switch {
+		case errors.Is(err, status.ErrSlotCompleted), errors.Is(err, status.ErrInvalidSlot):
+			// A stale card refreshes to the current revision or completed recipe.
+		case errors.Is(err, cache.ErrNotFound):
+			http.Error(w, "meal plan not found", http.StatusNotFound)
+			return
+		default:
+			slog.ErrorContext(r.Context(), "request meal replacement", "hash", hash, "error", err)
+			http.Error(w, "Could not replace this meal. Try again, chef", http.StatusInternalServerError)
+			return
+		}
+	}
+	if !httpx.IsHTMX(r) {
+		redirectToHash(w, r, hash)
+		return
+	}
+	refresh := r.Clone(r.Context())
+	refresh.Method = http.MethodGet
+	refresh.URL = &url.URL{Path: "/recipes", RawQuery: url.Values{queryArgHash: {hash}}.Encode()}
+	refresh.Header.Set("HX-Target", "shopping-content")
+	s.handleRecipes(w, refresh)
 }
 
 // best effort attempt to set favorite store if non is thre
@@ -640,11 +700,13 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 	}
 	ctx = context.WithoutCancel(ctx)
 	s.wg.Go(func() {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
 		slog.InfoContext(ctx, "generating cached recipes", "params", p.String(), "hash", hash)
 		shoppingList, err := s.generator.GenerateRecipes(ctx, p)
 		if err != nil {
 			slog.ErrorContext(ctx, "generate error", "error", err)
-			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
+			if statusErr := s.generationStatuses.Fail(context.WithoutCancel(ctx), hash, err); statusErr != nil {
 				slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", hash, "error", statusErr)
 			}
 			return

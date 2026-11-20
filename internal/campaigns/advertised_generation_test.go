@@ -3,6 +3,7 @@ package campaigns
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -137,7 +138,7 @@ func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {
 	assert.Equal(t, len(g.params), images.calls)
 }
 
-func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
+func TestRunOnceReportsFailuresWithoutRestartingExistingParams(t *testing.T) {
 	s, g, _, statuses := testService()
 	g.err = errors.New("flex unavailable")
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
@@ -148,8 +149,13 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 		assert.Contains(t, state.Failed, "flex unavailable")
 	}
 	g.err = nil
-	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
-	assert.Len(t, g.params, 2*len(generatedCampaignLocationIDs))
+	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "generation already admitted; shopping list is not ready")
+	assert.Len(t, g.params, len(generatedCampaignLocationIDs))
+	for _, p := range g.params {
+		state, err := statuses.Load(t.Context(), p.Hash())
+		require.NoError(t, err)
+		assert.Contains(t, state.Failed, "flex unavailable")
+	}
 }
 
 func TestGenerateDoesNotTreatCacheFailureAsMiss(t *testing.T) {
@@ -303,4 +309,61 @@ func TestCachedCampaignPreservesGenerationStatus(t *testing.T) {
 	assert.Equal(t, before, after)
 	assert.Empty(t, generator.params)
 	assert.Zero(t, images.calls)
+}
+
+func TestCampaignDoesNotRestartAdmittedGeneration(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(fmt.Sprint("failed=", failed), func(t *testing.T) {
+			s, g, _, statuses := testService()
+			p := recipes.DefaultParams(&locations.Location{ID: "70100023"}, time.Now())
+			require.NoError(t, s.store.SaveParams(t.Context(), p))
+			require.NoError(t, s.statuses.Start(t.Context(), p.Hash(), "existing owner"))
+			if failed {
+				require.NoError(t, s.statuses.Fail(t.Context(), p.Hash(), errors.New("existing failure")))
+			}
+			before, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			require.ErrorContains(t, s.generate(t.Context(), p), "generation already admitted; shopping list is not ready")
+			after, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Empty(t, g.params)
+		})
+	}
+}
+
+type completedCampaignAdmission struct {
+	recipeStore
+	list *ai.ShoppingList
+}
+
+func (s completedCampaignAdmission) SaveParams(ctx context.Context, p *recipes.GeneratorParams) error {
+	if err := s.SaveShoppingList(ctx, s.list, p.Hash()); err != nil {
+		return err
+	}
+	return recipes.ErrAlreadyExists
+}
+
+func TestCampaignCompletedReusePreservesStatus(t *testing.T) {
+	for _, completedDuringAdmission := range []bool{false, true} {
+		t.Run(fmt.Sprint("completion race=", completedDuringAdmission), func(t *testing.T) {
+			s, g, images, statuses := testService()
+			p := recipes.DefaultParams(&locations.Location{ID: "70100023"}, time.Now())
+			list := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Existing meal"}}}
+			require.NoError(t, s.statuses.Start(t.Context(), p.Hash(), "original progress"))
+			if completedDuringAdmission {
+				s.store = completedCampaignAdmission{recipeStore: s.store, list: list}
+			} else {
+				require.NoError(t, s.store.SaveShoppingList(t.Context(), list, p.Hash()))
+			}
+			before, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			require.NoError(t, s.generate(t.Context(), p))
+			after, err := statuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Empty(t, g.params)
+			assert.Zero(t, images.calls)
+		})
+	}
 }
