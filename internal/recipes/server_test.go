@@ -1391,10 +1391,6 @@ func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureKickgenerationGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	panic("unexpected call to PickAWine")
-}
-
 func (c *captureKickgenerationGenerator) Ready(ctx context.Context) error {
 	return nil
 }
@@ -1569,13 +1565,6 @@ type captureQuestionGenerator struct {
 	lastResponseID  string
 	lastResponse    ai.ResponseRef
 	regenerateCalls int
-	lastWinePick    struct {
-		recipeTitle string
-		date        time.Time
-	}
-	wineRecommendation string
-	winePickCalls      int
-	panicOnWine        bool
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -1603,20 +1592,6 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
 	}, nil
-}
-
-func (c *captureQuestionGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	if c.panicOnWine {
-		panic("unexpected call to PickAWine")
-	}
-	_ = location
-	c.winePickCalls++
-	c.lastWinePick.recipeTitle = recipe.Title
-	c.lastWinePick.date = date
-	if c.wineRecommendation != "" {
-		return &ai.WineSelection{Commentary: c.wineRecommendation, Wines: []ai.Ingredient{}}, nil
-	}
-	return &ai.WineSelection{Commentary: "Try a chilled sauvignon blanc.", Wines: []ai.Ingredient{}}, nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -2141,9 +2116,7 @@ func TestHandleSaveRecipeDoesNotStartExtras(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
-	g := &captureQuestionGenerator{
-		wineRecommendation: "Bright enough for dinner.",
-	}
+	g := &captureQuestionGenerator{}
 	ig := &countingImageGenerator{
 		imageBody: []byte("saved-image-bytes"),
 	}
@@ -2180,7 +2153,9 @@ func TestHandleSaveRecipeDoesNotStartExtras(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
-	assert.Equal(t, 0, g.winePickCalls)
+	hasWine, err := s.wineExists(t.Context(), recipeHash)
+	require.NoError(t, err)
+	assert.False(t, hasWine)
 	assert.Equal(t, 0, ig.imageCalls)
 
 	exists, err := s.images.Exists(t.Context(), recipeHash)

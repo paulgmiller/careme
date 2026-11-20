@@ -3,7 +3,6 @@ package recipes
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -26,11 +25,11 @@ func TestPostRecipeJobsRunIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		imageStarted, wineStarted, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 		imageErr := errors.New("image failed")
-		images := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
+		images := postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error {
 			close(imageStarted)
 			<-release
-			return nil, imageErr
-		}})
+			return imageErr
+		})
 		wine := postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { close(wineStarted); <-release; return nil })
 		done := make(chan error, 1)
 		go func() {
@@ -74,10 +73,8 @@ func TestWineCompletionUsesExplicitInputsAndCachesOptionalFailure(t *testing.T) 
 func TestBackgroundPostRecipeJobsReturnBeforeWineCompletes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		started, release := make(chan struct{}), make(chan struct{})
-		images := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
-			return &ai.GeneratedImage{Body: strings.NewReader("image")}, nil
-		}})
-		postJobs := PostRecipeJobs{images, postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { close(started); <-release; return nil })}.Background()
+
+		postJobs := PostRecipeJobs{postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { close(started); <-release; return nil })}.Background()
 		require.NoError(t, postJobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}, "70100023", time.Time{}))
 		<-started
 		close(release)

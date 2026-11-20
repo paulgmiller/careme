@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -81,13 +80,7 @@ func (rio recipeio) waitForWine(ctx context.Context, recipe ai.Recipe) (*ai.Wine
 func pickWine(ctx context.Context, client aiClient, staples staplesService, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	ctx, span := tracer.Start(ctx, "recipes.pickawine")
 	defer span.End()
-	var styles []string
-	for _, style := range recipe.WineStyles {
-		style = strings.TrimSpace(style)
-		if style != "" {
-			styles = append(styles, style)
-		}
-	}
+	styles := normalizedWineStyles(recipe.WineStyles)
 
 	if len(styles) == 0 {
 		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
@@ -150,9 +143,8 @@ type mockWineGenerator struct{ recipeio }
 
 func NewMockWineGenerator(c cache.Cache) *mockWineGenerator { return &mockWineGenerator{IO(c)} }
 func (w *mockWineGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe, location string, date time.Time) error {
-	selection, err := (mock{}).pickAWine(ctx, location, recipe, date)
-	if err != nil {
-		return err
-	}
-	return w.saveWine(ctx, recipe.ComputeHash(), selection)
+	return w.saveWine(ctx, recipe.ComputeHash(), &ai.WineSelection{
+		Wines:      []ai.Ingredient{},
+		Commentary: fmt.Sprintf("Mock wine pick for %s: try a medium-bodied red.", recipe.Title),
+	})
 }
