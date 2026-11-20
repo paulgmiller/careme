@@ -455,7 +455,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 			}
 		}
 		if i < len(plan.Plans) {
-			if err := m.postJobs.RecipeReady(ctx, recipe); err != nil {
+			if err := m.postJobs.RecipeReady(ctx, recipe, p.Location.ID, p.Date); err != nil {
 				return nil, err
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -497,7 +497,7 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 	}, nil
 }
 
-func (m mock) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (m mock) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	_ = ctx
 	_ = location
 	_ = date

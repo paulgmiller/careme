@@ -64,7 +64,7 @@ func NewRecipeImageGenerator(images ImageStore, imagegen ImageGen) *recipeImageG
 }
 
 // RecipeReady generates and caches the completed recipe's image before returning.
-func (s *recipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe) error {
+func (s *recipeImageGenerator) RecipeReady(ctx context.Context, recipe ai.Recipe, locationID string, date time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Minute)
 	defer cancel()
 	hash := recipe.ComputeHash()

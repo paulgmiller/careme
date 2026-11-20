@@ -1223,7 +1223,6 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 		ResponseID:   "resp-original",
 	}
 	originalHash := original.ComputeHash()
-	params.Saved = []ai.Recipe{original}
 	require.NoError(t, s.SaveParams(t.Context(), params))
 	require.NoError(t, s.SaveRecipe(t.Context(), original))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, shoppingListHash))
@@ -1392,7 +1391,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureKickgenerationGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	panic("unexpected call to PickAWine")
 }
 
@@ -1605,7 +1604,7 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	}, nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureQuestionGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	if c.panicOnWine {
 		panic("unexpected call to PickAWine")
 	}
@@ -3258,7 +3257,7 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "generated-image", string(data))
 	}()
-	require.NoError(t, s.RecipeReady(t.Context(), recipe))
+	require.NoError(t, s.RecipeReady(t.Context(), recipe, "70100023", time.Time{}))
 	select {
 	case <-ig.started:
 	case <-time.After(5 * time.Second):

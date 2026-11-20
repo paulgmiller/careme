@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"careme/internal/cache"
 
@@ -27,5 +28,5 @@ func (imageTestProvider) GenerateStepImage(context.Context, ai.Recipe, int) (*ai
 func TestBlockingRecipeCompletionReturnsImageFailure(t *testing.T) {
 	failure := errors.New("image unavailable")
 	worker := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) { return nil, failure }})
-	require.ErrorIs(t, worker.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}), failure)
+	require.ErrorIs(t, worker.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}, "70100023", time.Time{}), failure)
 }

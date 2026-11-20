@@ -21,7 +21,7 @@ type wineTestGenerator struct {
 	pick func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error)
 }
 
-func (g wineTestGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (g wineTestGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	return g.pick(ctx, location, recipe, date)
 }
 
@@ -44,7 +44,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 		recipe.OriginHash = p.Hash()
 		started, release := make(chan struct{}), make(chan struct{})
 		var calls atomic.Int32
-		producer.generator = wineTestGenerator{generator: producer.generator, pick: func(ctx context.Context, _ string, _ ai.Recipe, _ time.Time) (*ai.WineSelection, error) {
+		picker := wineTestGenerator{generator: producer.generator, pick: func(ctx context.Context, _ string, _ ai.Recipe, _ time.Time) (*ai.WineSelection, error) {
 			calls.Add(1)
 			close(started)
 			select {
@@ -57,7 +57,7 @@ func TestFinalizePollsWineProducedByAnotherServer(t *testing.T) {
 			}
 			return &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Selected red", Quantity: "750mL"}, {ProductID: "backup", Name: "Backup"}}}, nil
 		}}
-		producer.startWineForTest(t.Context(), recipe)
+		producer.startWineForTest(t.Context(), recipe, picker, p.Location.ID, p.Date)
 		<-started
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
@@ -110,11 +110,11 @@ func TestFinalizeStopsWaitingWhenWineFailsOnAnotherServer(t *testing.T) {
 		recipe := p.Saved[0]
 		recipe.OriginHash = p.Hash()
 		release := make(chan struct{})
-		producer.generator = wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
+		picker := wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
 			<-release
 			return nil, errors.New("failed to parse wine selection: invalid character 'T' looking for beginning of value")
 		}}
-		producer.startWineForTest(t.Context(), recipe)
+		producer.startWineForTest(t.Context(), recipe, picker, p.Location.ID, p.Date)
 		finalized := make(chan error, 1)
 		go func() { finalized <- s.finalizeShoppingPurchases(t.Context(), p.Hash()) }()
 		synctest.Wait()
@@ -176,7 +176,7 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 				recipe := p.Saved[0]
 				recipe.OriginHash = p.Hash()
 				calls := 0
-				producer.generator = wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
+				picker := wineTestGenerator{generator: producer.generator, pick: func(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error) {
 					calls++
 					if scenario == "generation failure" && calls == 1 {
 						return nil, errors.New("wine generation failed")
@@ -189,7 +189,7 @@ func TestFinalizeEmptyOrFailedWinePicksProceedWithoutWine(t *testing.T) {
 				if scenario == "empty cached result" {
 					require.NoError(t, s.saveWine(t.Context(), recipe.ComputeHash(), &ai.WineSelection{Wines: []ai.Ingredient{}, Commentary: "No matches."}))
 				} else {
-					producer.startWineForTest(t.Context(), recipe)
+					producer.startWineForTest(t.Context(), recipe, picker, p.Location.ID, p.Date)
 					producer.Wait()
 				}
 				started := time.Now()
@@ -324,6 +324,9 @@ func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T)
 	}
 }
 
-func (s *server) startWineForTest(ctx context.Context, recipe ai.Recipe) {
-	s.wg.Go(func() { worker := recipeWineGenerator{s.recipeio, s.generator}; _ = worker.RecipeReady(ctx, recipe) })
+func (s *server) startWineForTest(ctx context.Context, recipe ai.Recipe, picker winePicker, locationID string, date time.Time) {
+	s.wg.Go(func() {
+		worker := testWineWorker(s.recipeio, picker, locationID, date)
+		_ = worker.RecipeReady(ctx, recipe, locationID, date)
+	})
 }

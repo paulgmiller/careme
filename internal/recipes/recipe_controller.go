@@ -575,7 +575,12 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
 			return
 		}
-		_ = s.RecipeReady(ctx, *replacement)
+		params, err := s.ParamsFromCache(ctx, recipe.OriginHash)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to load regeneration parameters", "job", id, "error", err)
+			return
+		}
+		_ = s.RecipeReady(ctx, *replacement, params.Location.ID, params.Date)
 		_, err = s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,

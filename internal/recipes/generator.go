@@ -51,7 +51,7 @@ type statusWriter interface {
 }
 
 type postRecipe interface {
-	RecipeReady(context.Context, ai.Recipe) error
+	RecipeReady(context.Context, ai.Recipe, string, time.Time) error
 }
 
 type generatorService struct {
@@ -92,45 +92,6 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		saver:        recipeSaver,
 		postJobs:     postJobs,
 	}, nil
-}
-
-func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	return pickWine(ctx, g.aiClient, g.staples, location, recipe, date)
-}
-
-func pickWine(ctx context.Context, client aiClient, staples staplesService, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	ctx, span := tracer.Start(ctx, "recipes.pickawine")
-	defer span.End()
-	var styles []string
-	for _, style := range recipe.WineStyles {
-		style = strings.TrimSpace(style)
-		if style != "" {
-			styles = append(styles, style)
-		}
-	}
-
-	if len(styles) == 0 {
-		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
-	}
-
-	wines, err := staples.FetchWines(ctx, location, styles, date)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(wines) == 0 {
-		return &ai.WineSelection{Commentary: "no wines found", Wines: []ai.Ingredient{}}, nil
-	}
-	wines = lo.UniqBy(wines, func(i ai.InputIngredient) string {
-		return i.ProductID
-	})
-
-	selection, err := client.PickWine(ctx, recipe, wines)
-	if err != nil {
-		return nil, err
-	}
-	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
-	return selection, nil
 }
 
 func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -192,7 +153,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			if err != nil {
 				return nil, err
 			}
-			if err := g.postJobs.RecipeReady(ctx, *final); err != nil {
+			if err := g.postJobs.RecipeReady(ctx, *final, p.Location.ID, p.Date); err != nil {
 				return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
@@ -285,7 +246,7 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
-		if err := g.postJobs.RecipeReady(ctx, *final); err != nil {
+		if err := g.postJobs.RecipeReady(ctx, *final, p.Location.ID, p.Date); err != nil {
 			return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {

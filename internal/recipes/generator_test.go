@@ -552,7 +552,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, rio)
 
-	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
+	got, err := pickWine(t.Context(), g.aiClient, g.staples, location, ai.Recipe{
 		Title:      "Roast Chicken",
 		WineStyles: []string{style},
 	}, cacheDate)
@@ -598,7 +598,7 @@ func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 	rio := IO(cache.NewFileCache(t.TempDir()))
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: staplesStub}, nil, nil)
 
-	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
+	got, err := pickWine(t.Context(), g.aiClient, g.staples, "wholefoods_10216", ai.Recipe{
 		Title:      "Salmon",
 		WineStyles: []string{"Pinot Noir"},
 	}, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC))

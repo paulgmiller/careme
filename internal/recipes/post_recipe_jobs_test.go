@@ -16,9 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type postRecipeFunc func(context.Context, ai.Recipe) error
+type postRecipeFunc func(context.Context, ai.Recipe, string, time.Time) error
 
-func (f postRecipeFunc) RecipeReady(ctx context.Context, r ai.Recipe) error { return f(ctx, r) }
+func (f postRecipeFunc) RecipeReady(ctx context.Context, r ai.Recipe, locationID string, date time.Time) error {
+	return f(ctx, r, locationID, date)
+}
 
 func TestPostRecipeJobsRunIndependently(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -29,9 +31,11 @@ func TestPostRecipeJobsRunIndependently(t *testing.T) {
 			<-release
 			return nil, imageErr
 		}})
-		wine := postRecipeFunc(func(context.Context, ai.Recipe) error { close(wineStarted); <-release; return nil })
+		wine := postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { close(wineStarted); <-release; return nil })
 		done := make(chan error, 1)
-		go func() { done <- PostRecipeJobs{images, wine}.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}) }()
+		go func() {
+			done <- PostRecipeJobs{images, wine}.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}, "70100023", time.Time{})
+		}()
 		<-imageStarted
 		<-wineStarted
 		synctest.Wait()
@@ -45,10 +49,10 @@ func TestPostRecipeJobsRunIndependently(t *testing.T) {
 	})
 }
 
-func TestWineCompletionUsesOriginParamsAndCachesOptionalFailure(t *testing.T) {
+func TestWineCompletionUsesExplicitInputsAndCachesOptionalFailure(t *testing.T) {
 	rio := IO(cache.NewInMemoryCache())
 	p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
-	require.NoError(t, rio.SaveParams(t.Context(), p))
+	// Parameters need not be cached: completion receives store and date directly.
 	recipe := ai.Recipe{Title: "Dinner", OriginHash: p.Hash(), WineStyles: []string{"Red"}}
 	calls := 0
 	picker := wineTestGenerator{pick: func(_ context.Context, location string, r ai.Recipe, date time.Time) (*ai.WineSelection, error) {
@@ -58,12 +62,12 @@ func TestWineCompletionUsesOriginParamsAndCachesOptionalFailure(t *testing.T) {
 		assert.Equal(t, recipe, r)
 		return nil, errors.New("wine unavailable")
 	}}
-	worker := recipeWineGenerator{rio, picker}
-	require.NoError(t, worker.RecipeReady(t.Context(), recipe))
+	worker := testWineWorker(rio, picker, p.Location.ID, p.Date)
+	require.NoError(t, worker.RecipeReady(t.Context(), recipe, p.Location.ID, p.Date))
 	selection, err := rio.wineFromCache(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.Empty(t, selection.Wines)
-	require.NoError(t, worker.RecipeReady(t.Context(), recipe))
+	require.NoError(t, worker.RecipeReady(t.Context(), recipe, p.Location.ID, p.Date))
 	require.Equal(t, 1, calls)
 }
 
@@ -73,8 +77,8 @@ func TestBackgroundPostRecipeJobsReturnBeforeWineCompletes(t *testing.T) {
 		images := NewRecipeImageGenerator(NewImageStore(cache.NewInMemoryCache()), imageTestProvider{generate: func(context.Context, ai.Recipe) (*ai.GeneratedImage, error) {
 			return &ai.GeneratedImage{Body: strings.NewReader("image")}, nil
 		}})
-		postJobs := PostRecipeJobs{images, postRecipeFunc(func(context.Context, ai.Recipe) error { close(started); <-release; return nil })}.Background()
-		require.NoError(t, postJobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}))
+		postJobs := PostRecipeJobs{images, postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { close(started); <-release; return nil })}.Background()
+		require.NoError(t, postJobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}, "70100023", time.Time{}))
 		<-started
 		close(release)
 		postJobs.Wait()
@@ -84,12 +88,28 @@ func TestBackgroundPostRecipeJobsReturnBeforeWineCompletes(t *testing.T) {
 func TestPostRecipeJobsCollectsEveryWorkerError(t *testing.T) {
 	first, second := errors.New("first worker failed"), errors.New("second worker failed")
 	jobs := PostRecipeJobs{
-		postRecipeFunc(func(context.Context, ai.Recipe) error { return first }),
-		postRecipeFunc(func(context.Context, ai.Recipe) error { return nil }),
-		postRecipeFunc(func(context.Context, ai.Recipe) error { return second }),
+		postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { return first }),
+		postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { return nil }),
+		postRecipeFunc(func(context.Context, ai.Recipe, string, time.Time) error { return second }),
 	}
-	err := jobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"})
+	err := jobs.RecipeReady(t.Context(), ai.Recipe{Title: "Dinner"}, "70100023", time.Time{})
 	require.ErrorIs(t, err, first)
 	require.ErrorIs(t, err, second)
-	require.NoError(t, PostRecipeJobs{}.RecipeReady(t.Context(), ai.Recipe{}))
+	require.NoError(t, PostRecipeJobs{}.RecipeReady(t.Context(), ai.Recipe{}, "70100023", time.Time{}))
+}
+
+func TestPostRecipeJobsForwardInputs(t *testing.T) {
+	recipe := ai.Recipe{Title: "Dinner"}
+	date := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	job := postRecipeFunc(func(_ context.Context, got ai.Recipe, location string, gotDate time.Time) error {
+		assert.Equal(t, recipe, got)
+		assert.Equal(t, "store", location)
+		assert.Equal(t, date, gotDate)
+		return nil
+	})
+	jobs := PostRecipeJobs{job}
+	require.NoError(t, jobs.RecipeReady(t.Context(), recipe, "store", date))
+	background := jobs.Background()
+	require.NoError(t, background.RecipeReady(t.Context(), recipe, "store", date))
+	background.Wait()
 }

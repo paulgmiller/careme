@@ -88,7 +88,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	var generator recipes.ExtGenerator
 	var completion interface {
-		RecipeReady(context.Context, ai.Recipe) error
+		RecipeReady(context.Context, ai.Recipe, string, time.Time) error
 		Wait()
 	}
 	var imageProvider recipes.ImageGen
