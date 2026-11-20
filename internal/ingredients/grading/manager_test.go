@@ -2,6 +2,7 @@ package grading
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,7 @@ type stubGradeBackend struct {
 	calls             [][]ai.InputIngredient
 	leaveLastUngraded bool
 	omitLastOnce      bool
+	failProductOnce   string
 }
 
 func (s *stubGradeBackend) CacheVersion() string {
@@ -35,7 +37,14 @@ func (s *stubGradeBackend) GradeIngredients(_ context.Context, ingredients []ai.
 	s.mu.Lock()
 	s.calls = append(s.calls, append([]ai.InputIngredient(nil), ingredients...))
 	callCount := len(s.calls)
+	fail := len(ingredients) > 0 && s.failProductOnce != "" && ingredients[0].ProductID == s.failProductOnce
+	if fail {
+		s.failProductOnce = ""
+	}
 	s.mu.Unlock()
+	if fail {
+		return nil, errors.New("grading unavailable")
+	}
 	var out []ai.InputIngredient
 	for _, ingredient := range ingredients {
 		ingredient.Grade = &ai.IngredientGrade{
@@ -237,6 +246,26 @@ func TestMultiGraderBatchesUniqueIngredientsInChunksOf30(t *testing.T) {
 	callSizes := []int{len(backend.calls[0]), len(backend.calls[1]), len(backend.calls[2])}
 	slices.Sort(callSizes)
 	assert.Equal(t, []int{5, 30, 30}, callSizes)
+}
+
+func TestCachingGraderReusesSuccessfulBatchesAfterFailure(t *testing.T) {
+	backend := &stubGradeBackend{failProductOnce: "ingredient-30"}
+	manager := newCachingGrader(&multiGrader{backend}, newStore(cache.NewInMemoryCache()))
+	ingredients := make([]ai.InputIngredient, 31)
+	for i := range ingredients {
+		ingredients[i] = ai.InputIngredient{ProductID: fmt.Sprintf("ingredient-%02d", i)}
+	}
+
+	first, err := manager.GradeIngredients(t.Context(), ingredients)
+	require.ErrorContains(t, err, "grading unavailable")
+	assert.Nil(t, first, "required grading must fail completely")
+	require.Len(t, backend.calls, 2)
+
+	second, err := manager.GradeIngredients(t.Context(), ingredients)
+	require.NoError(t, err)
+	assert.Len(t, second, len(ingredients))
+	require.Len(t, backend.calls, 3)
+	assert.Equal(t, []ai.InputIngredient{ingredients[30]}, backend.calls[2], "only the failed batch needs grading again")
 }
 
 type embeddingTransport func(*http.Request) (*http.Response, error)

@@ -162,11 +162,11 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
-	if httpClient != nil {
-		opts = append(opts, option.WithHTTPClient(httpClient))
-	}
-	aiClient := openai.NewClient(opts...)
+	aiClient := openai.NewClient(
+		option.WithAPIKey(apiKey),
+		option.WithHTTPClient(ingredientGradeHTTPClient(httpClient, model)),
+		option.WithMaxRetries(0), // go-retryablehttp owns the bounded grading retries.
+	)
 
 	return &ingredientGrader{
 		oai:          aiClient,
@@ -199,17 +199,21 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
 
-	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model:        g.model,
+		ServiceTier:  responses.ResponseNewParamsServiceTierDefault,
 		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
 		Text: scheme(g.schema),
-	})
+	}
+	ctx, cancel := context.WithTimeout(ctx, ingredientGradeTimeout)
+	defer cancel()
+	resp, err := g.oai.Responses.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
+		return nil, fmt.Errorf("failed to grade ingredients: %w", responseError(params, err))
 	}
 	slog.InfoContext(ctx, "Ingredient grading usage", "ai_category", aiCategoryIngredientGrading, "model", g.model, responseUsageLogAttr(g.model, resp.Usage, string(resp.ServiceTier)))
 

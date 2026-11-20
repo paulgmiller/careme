@@ -62,3 +62,28 @@ Campaign locations and email deliveries share `ai.FlexJobTimeout`, equal to the
 one-hour Flex budget plus ten minutes for fallback and remaining work. This
 70-minute deadline covers the whole location or delivery. Each Flex response has
 its own one-hour budget, limited by the time remaining under that parent deadline.
+
+Campaign and email progress records persist an `expires_at` matching that job
+budget, capped by an earlier caller deadline. Polling and recipe publication use
+the stored expiry, including from other web or worker processes. Interactive
+generation and legacy records without an explicit expiry retain the ten-minute
+timeout. Publication errors include the failure, timeout, or completed result.
+
+## Ingredient grading
+
+Ingredient grading uses Standard tier with a separate 90-second budget per batch,
+including all attempts and waits. An earlier caller deadline or cancellation
+wins. `go-retryablehttp` owns up to four retries, with its default exponential
+backoff and `Retry-After` handling for 429 and 503 responses. SDK retries are
+disabled for this client so attempts do not multiply. `Retry-After-Ms` takes
+precedence when supplied. The provider's
+`X-Should-Retry` override is respected, and 408 and 409 responses are retryable.
+Injected HTTP client settings and transports are preserved, with OpenTelemetry
+instrumentation around each attempt.
+
+Retry attempts use the shared HTTP retry logger with source
+`openai_ingredient_grading`. Failed responses log the model, status, request ID,
+and retry instructions at INFO. Final API errors retain the SDK error and add
+the same provider diagnostics as recipe responses. Exhausted grading fails the
+generation; successful batches remain cached for the next attempt. The staples
+layer adds store context without logging the same failure a second time.

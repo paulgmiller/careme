@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	utypes "careme/internal/users/types"
@@ -19,6 +20,36 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestShoppingProgressRendersCampaignRecipesAfterTenMinutes(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newTestServer(t)
+		p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test Store"}, time.Now())
+		require.NoError(t, s.SaveParams(t.Context(), p))
+		statuses := s.generationStatuses.(*status.Store)
+		require.NoError(t, statuses.StartWithTimeout(t.Context(), p.Hash(), status.InitialMessage, ai.FlexJobTimeout))
+		time.Sleep(21 * time.Minute)
+		require.NoError(t, statuses.Plan(t.Context(), p.Hash(), []ai.RecipePlan{{Cuisine: "Italian"}}))
+		recipe := ai.Recipe{Title: "Beans after Flex retries", OriginHash: p.Hash()}
+		require.NoError(t, s.SaveRecipe(t.Context(), recipe))
+		require.NoError(t, statuses.RecipeReady(t.Context(), p.Hash(), 0, recipe.ComputeHash()))
+
+		for _, fragment := range []bool{false, true} {
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+			if fragment {
+				req.Header.Set("HX-Request", "true")
+				req.Header.Set("HX-Target", "shopping-content")
+			}
+			rr := httptest.NewRecorder()
+			s.handleRecipes(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Empty(t, rr.Header().Get("HX-Redirect"))
+			assert.Contains(t, rr.Body.String(), recipe.Title)
+			assert.Contains(t, rr.Body.String(), `/recipe/`+recipe.ComputeHash()+`/save`)
+			assert.NotContains(t, rr.Body.String(), "Recipe generation timed out.")
+		}
+	})
+}
 
 func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	t.Parallel()
