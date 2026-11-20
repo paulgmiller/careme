@@ -478,9 +478,6 @@ func (m mock) RegenerateRecipe(ctx context.Context, params *generatorParams, ins
 	recipe := mockRecipes[0]
 	recipe.Title = "Fresh " + recipe.Title
 	recipe.ResponseID = uuid.NewString()
-	if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
-		return nil, err
-	}
 	if err := m.postJobs.RecipeReady(ctx, recipe, params.Location.ID, params.Date); err != nil {
 		return nil, err
 	}

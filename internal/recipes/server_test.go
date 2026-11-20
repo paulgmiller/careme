@@ -1204,7 +1204,7 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
-	generator := &captureQuestionGenerator{saver: IO(cacheStore)}
+	generator := &captureQuestionGenerator{}
 	s := newTestServer(t,
 		withTestCache(cacheStore),
 		withTestStorage(storage),
@@ -1379,7 +1379,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
@@ -1565,7 +1565,6 @@ func TestSpinRendersGenerationProgress(t *testing.T) {
 }
 
 type captureQuestionGenerator struct {
-	saver           recipeSaver
 	lastQuestion    string
 	lastResponseID  string
 	lastResponse    ai.ResponseRef
@@ -1583,7 +1582,7 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	c.regenerateCalls++
 	c.lastResponse = previous
 	recipe := ai.Recipe{
@@ -1592,11 +1591,6 @@ func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, origina
 		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
 		Instructions: []string{"Cook the steak.", "Serve."},
 		ResponseID:   "resp-regenerated",
-	}
-	recipe.OriginHash = original.OriginHash
-	recipe.ParentHash = original.ComputeHash()
-	if err := c.saver.SaveRecipe(ctx, recipe); err != nil {
-		return nil, err
 	}
 	return &recipe, nil
 }

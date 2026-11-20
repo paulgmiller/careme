@@ -1554,54 +1554,46 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 	}
 }
 
-type recipeSaverFunc struct {
-	recipeio
-	save func(context.Context, ai.Recipe) error
-}
-
-func (f recipeSaverFunc) SaveRecipe(ctx context.Context, recipe ai.Recipe) error {
-	return f.save(ctx, recipe)
-}
-
-func TestRegenerateRecipePersistsBeforeCompletion(t *testing.T) {
-	for _, failureStage := range []string{"", "save", "completion"} {
-		t.Run("failure="+failureStage, func(t *testing.T) {
+func TestRegenerateRecipeRunsCompletionWithoutPersisting(t *testing.T) {
+	for _, failCompletion := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "completion failure"}[failCompletion], func(t *testing.T) {
 			p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
-			original := ai.Recipe{Title: "Original", OriginHash: p.Hash()}
 			replacement := &ai.Recipe{Title: "Replacement", ResponseID: "response"}
-			rio := IO(cache.NewInMemoryCache())
-			failure := errors.New("operation failed")
-			saver := recipeSaverFunc{rio, func(ctx context.Context, recipe ai.Recipe) error {
-				if failureStage == "save" {
-					return failure
-				}
-				return rio.SaveRecipe(ctx, recipe)
-			}}
+			saver := &captureRecipeSaver{}
 			client := &sequenceAIClient{regenerateResponses: []*ai.Recipe{replacement}}
 			g := newTestGenerator(t, client, nil, nil, nil, saver)
+			failure := errors.New("completion failed")
 			completed := false
-			g.postJobs = postRecipeFunc(func(ctx context.Context, recipe ai.Recipe, location string, date time.Time) error {
+			g.postJobs = postRecipeFunc(func(_ context.Context, recipe ai.Recipe, location string, date time.Time) error {
 				completed = true
-				persisted, err := rio.SingleFromCache(ctx, recipe.ComputeHash())
-				require.NoError(t, err)
-				assert.Equal(t, original.OriginHash, persisted.OriginHash)
-				assert.Equal(t, original.ComputeHash(), persisted.ParentHash)
+				assert.Equal(t, *replacement, recipe)
 				assert.Equal(t, p.Location.ID, location)
 				assert.True(t, p.Date.Equal(date))
-				if failureStage == "completion" {
+				if failCompletion {
 					return failure
 				}
 				return nil
 			})
 			got, err := g.RegenerateRecipe(t.Context(), p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
-			if failureStage != "" {
+			if failCompletion {
 				require.ErrorIs(t, err, failure)
 				assert.Nil(t, got)
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, replacement, got)
 			}
-			assert.Equal(t, failureStage != "save", completed)
+			assert.True(t, completed)
+			assert.Empty(t, saver.recipes, "the controller owns persistence after setting provenance")
 		})
 	}
+}
+
+func TestMockRegenerationLeavesPersistenceToController(t *testing.T) {
+	saver := &captureRecipeSaver{}
+	generator := NewMockGenerator(saver, &captureCritiqueService{}, noopstatuswriter{}, noopRecipeImages{})
+	p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
+	recipe, err := generator.RegenerateRecipe(t.Context(), p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+	require.NoError(t, err)
+	require.NotNil(t, recipe)
+	assert.Empty(t, saver.recipes)
 }
