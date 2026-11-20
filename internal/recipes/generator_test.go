@@ -1593,7 +1593,7 @@ func TestRegenerateRecipePersistsBeforeCompletion(t *testing.T) {
 				}
 				return nil
 			})
-			got, err := g.RegenerateRecipe(t.Context(), original, p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+			got, err := g.RegenerateRecipe(t.Context(), p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
 			if failureStage != "" {
 				require.ErrorIs(t, err, failure)
 				assert.Nil(t, got)

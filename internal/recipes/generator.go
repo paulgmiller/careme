@@ -288,7 +288,7 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
-func (g *generatorService) RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (g *generatorService) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	r, err := g.aiClient.Regenerate(ctx, instructions, previous)
 	if err != nil {
 		return nil, err

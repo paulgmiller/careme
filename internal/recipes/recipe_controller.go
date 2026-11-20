@@ -568,7 +568,7 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 			return
 		}
 
-		replacement, err := s.generator.RegenerateRecipe(ctx, recipe, params, instructions, previous)
+		replacement, err := s.generator.RegenerateRecipe(ctx, params, instructions, previous)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return
