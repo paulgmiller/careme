@@ -471,13 +471,22 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
-func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (m mock) RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	_ = ctx
 	_ = instructions
 	_ = previous
 	recipe := mockRecipes[0]
 	recipe.Title = "Fresh " + recipe.Title
 	recipe.ResponseID = uuid.NewString()
+	recipe.OriginHash = original.OriginHash
+	recipe.ParentHash = original.ComputeHash()
+	if err := m.saver.SaveRecipe(ctx, recipe); err != nil {
+		return nil, err
+	}
+	if err := m.postJobs.RecipeReady(ctx, recipe, params.Location.ID, params.Date); err != nil {
+		return nil, err
+	}
+
 	return &recipe, nil
 }
 

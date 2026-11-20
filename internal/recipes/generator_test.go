@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -1549,6 +1550,58 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			require.Len(t, published.Slots, 1)
 			assert.Equal(t, revised.ComputeHash(), published.Slots[0].RecipeHash)
 			assert.True(t, published.Slots[0].Reviewed)
+		})
+	}
+}
+
+type recipeSaverFunc struct {
+	recipeio
+	save func(context.Context, ai.Recipe) error
+}
+
+func (f recipeSaverFunc) SaveRecipe(ctx context.Context, recipe ai.Recipe) error {
+	return f.save(ctx, recipe)
+}
+
+func TestRegenerateRecipePersistsBeforeCompletion(t *testing.T) {
+	for _, failureStage := range []string{"", "save", "completion"} {
+		t.Run("failure="+failureStage, func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
+			original := ai.Recipe{Title: "Original", OriginHash: p.Hash()}
+			replacement := &ai.Recipe{Title: "Replacement", ResponseID: "response"}
+			rio := IO(cache.NewInMemoryCache())
+			failure := errors.New("operation failed")
+			saver := recipeSaverFunc{rio, func(ctx context.Context, recipe ai.Recipe) error {
+				if failureStage == "save" {
+					return failure
+				}
+				return rio.SaveRecipe(ctx, recipe)
+			}}
+			client := &sequenceAIClient{regenerateResponses: []*ai.Recipe{replacement}}
+			g := newTestGenerator(t, client, nil, nil, nil, saver)
+			completed := false
+			g.postJobs = postRecipeFunc(func(ctx context.Context, recipe ai.Recipe, location string, date time.Time) error {
+				completed = true
+				persisted, err := rio.SingleFromCache(ctx, recipe.ComputeHash())
+				require.NoError(t, err)
+				assert.Equal(t, original.OriginHash, persisted.OriginHash)
+				assert.Equal(t, original.ComputeHash(), persisted.ParentHash)
+				assert.Equal(t, p.Location.ID, location)
+				assert.True(t, p.Date.Equal(date))
+				if failureStage == "completion" {
+					return failure
+				}
+				return nil
+			})
+			got, err := g.RegenerateRecipe(t.Context(), original, p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+			if failureStage != "" {
+				require.ErrorIs(t, err, failure)
+				assert.Nil(t, got)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, replacement, got)
+			}
+			assert.Equal(t, failureStage != "save", completed)
 		})
 	}
 }

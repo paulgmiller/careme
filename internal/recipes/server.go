@@ -23,7 +23,7 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
+	RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error)
 }
 
@@ -50,7 +50,6 @@ type statusStore interface {
 }
 
 type recipeCompletion interface {
-	postRecipe
 	Wait()
 }
 

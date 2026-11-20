@@ -288,10 +288,18 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
-func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (g *generatorService) RegenerateRecipe(ctx context.Context, original ai.Recipe, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	r, err := g.aiClient.Regenerate(ctx, instructions, previous)
 	if err != nil {
 		return nil, err
+	}
+	r.OriginHash = original.OriginHash
+	r.ParentHash = original.ComputeHash()
+	if err := g.saver.SaveRecipe(ctx, *r); err != nil {
+		return nil, fmt.Errorf("save regenerated recipe: %w", err)
+	}
+	if err := g.postJobs.RecipeReady(ctx, *r, params.Location.ID, params.Date); err != nil {
+		return nil, fmt.Errorf("complete regenerated recipe: %w", err)
 	}
 	// don't block
 	g.critiquer.CritiqueRecipeInBackground(ctx, *r)

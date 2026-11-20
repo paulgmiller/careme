@@ -37,23 +37,33 @@ type (
 	winePicker interface {
 		pickAWine(context.Context, string, ai.Recipe, time.Time) (*ai.WineSelection, error)
 	}
-	testWineAI struct {
-		aiClient
-		picker   winePicker
+	testWineInputs struct {
 		location string
 		date     time.Time
+	}
+	testWineAI struct {
+		aiClient
+		picker winePicker
+		inputs *testWineInputs
 	}
 )
 
 func (w testWineAI) PickWine(ctx context.Context, recipe ai.Recipe, _ []ai.InputIngredient) (*ai.WineSelection, error) {
-	return w.picker.pickAWine(ctx, w.location, recipe, w.date)
+	return w.picker.pickAWine(ctx, w.inputs.location, recipe, w.inputs.date)
 }
 
-type testWineStaples struct{ staplesService }
+type testWineStaples struct {
+	staplesService
+	inputs *testWineInputs
+}
 
-func (testWineStaples) FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error) {
+func (w testWineStaples) FetchWines(_ context.Context, location string, _ []string, date time.Time) ([]ai.InputIngredient, error) {
+	w.inputs.location = location
+	w.inputs.date = date
 	return []ai.InputIngredient{{ProductID: "wine"}}, nil
 }
-func testWineWorker(rio recipeio, picker winePicker, location string, date time.Time) recipeWineGenerator {
-	return recipeWineGenerator{rio, testWineAI{picker: picker, location: location, date: date}, testWineStaples{}}
+
+func testWineWorker(rio recipeio, picker winePicker) recipeWineGenerator {
+	inputs := &testWineInputs{}
+	return recipeWineGenerator{rio, testWineAI{picker: picker, inputs: inputs}, testWineStaples{inputs: inputs}}
 }

@@ -553,34 +553,28 @@ func (s *server) handleFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TODO: Move single-recipe regeneration orchestration into the generator, including
-// origin/parent metadata, persistence, and the RecipeReady hook, so the handler
-// only needs to wait for background work during shutdown.
 func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, currentUser *utypes.User, recipe ai.Recipe, instructions []string, previous ai.ResponseRef) {
 	s.wg.Go(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 		defer cancel()
 
-		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
+		params, err := s.ParamsFromCache(ctx, recipe.OriginHash)
+		if err != nil {
+			err = fmt.Errorf("load regeneration parameters: %w", err)
+			slog.ErrorContext(ctx, "failed to load regeneration parameters", "job", id, "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, id, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record regeneration failure", "job", id, "error", statusErr)
+			}
+			return
+		}
+
+		replacement, err := s.generator.RegenerateRecipe(ctx, recipe, params, instructions, previous)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return
 		}
-		// TODO generate a new shoppinglist? only if ingredients changed or user asked?
-		replacement.OriginHash = recipe.OriginHash
 		oldHash := recipe.ComputeHash()
-		replacement.ParentHash = oldHash
 		newHash := replacement.ComputeHash()
-		if err := s.SaveRecipe(ctx, *replacement); err != nil {
-			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
-			return
-		}
-		params, err := s.ParamsFromCache(ctx, recipe.OriginHash)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load regeneration parameters", "job", id, "error", err)
-			return
-		}
-		_ = s.RecipeReady(ctx, *replacement, params.Location.ID, params.Date)
 		_, err = s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,

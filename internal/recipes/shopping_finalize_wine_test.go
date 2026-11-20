@@ -326,7 +326,7 @@ func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T)
 
 func (s *server) startWineForTest(ctx context.Context, recipe ai.Recipe, picker winePicker, locationID string, date time.Time) {
 	s.wg.Go(func() {
-		worker := testWineWorker(s.recipeio, picker, locationID, date)
+		worker := testWineWorker(s.recipeio, picker)
 		_ = worker.RecipeReady(ctx, recipe, locationID, date)
 	})
 }

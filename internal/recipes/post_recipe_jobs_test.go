@@ -62,7 +62,7 @@ func TestWineCompletionUsesExplicitInputsAndCachesOptionalFailure(t *testing.T) 
 		assert.Equal(t, recipe, r)
 		return nil, errors.New("wine unavailable")
 	}}
-	worker := testWineWorker(rio, picker, p.Location.ID, p.Date)
+	worker := testWineWorker(rio, picker)
 	require.NoError(t, worker.RecipeReady(t.Context(), recipe, p.Location.ID, p.Date))
 	selection, err := rio.wineFromCache(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
