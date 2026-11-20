@@ -308,6 +308,17 @@ only persisted VariantIDs, without guessing a mapping for old product IDs.
 Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. The full wine candidate catalog uses the existing
 `ingredients/wines/` cache keyed by normalized recipe styles, store, and date.
+Kroger additionally caches its broad red/white catalog at
+`ingredients/wines/catalog-red-white-v1/wines/<hash>`, where the hash uses an
+empty style plus store and date. Targeted style searches are cached separately
+at `ingredients/wines/style-search-v1/wines/<hash>` using the existing normalized
+style-set hash. These two sources are fetched concurrently, merged by product ID
+with targeted matches first, and saved to the existing combined candidate key.
+Thus different recipe styles reuse the broad catalog, while shopping finalization
+can enrich any selected fallback wine. Each broad term retains the existing
+300-product search window. Providers without a broad catalog keep their existing
+query and cache behavior.
+
 Shopping finalization reads that catalog using the saved list’s store and date
 and each recipe’s styles; no additional per-recipe catalog is stored. Candidate
 cache-write failures return errors before generation returns a successful selection. Finalization polls

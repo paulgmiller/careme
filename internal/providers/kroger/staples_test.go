@@ -414,3 +414,26 @@ func TestFrozenProductDetection(t *testing.T) {
 		})
 	}
 }
+
+func TestStaplesProviderFetchWineCatalogSearchesRedAndWhite(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		q := req.URL.Query()
+		mu.Lock()
+		terms = append(terms, q.Get("filter.term"))
+		mu.Unlock()
+		if q.Get("filter.locationId") != "70500874" || q.Get("filter.fulfillment") != "ais" || q.Get("filter.limit") != "50" {
+			return jsonResponse(req, http.StatusBadRequest, `{}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"data":[{"productId":"wine","description":"Wine","categories":["Adult Beverage"],"items":[{"itemId":"wine-upc","size":"750mL","price":{"regular":12.99}}]}]}`), nil
+	})}
+	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
+	require.NoError(t, err)
+	got, err := (staplesProvider{client: client}).FetchWineCatalog(t.Context(), "70500874")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.ElementsMatch(t, []string{"red wine", "white wine"}, terms)
+	assert.Equal(t, "wine-upc", got[0].VariantID)
+	assert.Equal(t, []string{"Adult Beverage"}, got[0].Categories)
+}

@@ -101,6 +101,11 @@ func PantryCategories() []string {
 	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
 }
 
+// FetchWineCatalog returns broad red and white searches, each capped by Kroger's search window.
+func (p staplesProvider) FetchWineCatalog(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
+	return p.FetchWines(ctx, locationID, []string{"red wine", "white wine"})
+}
+
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, style, false)
