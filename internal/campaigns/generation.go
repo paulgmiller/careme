@@ -36,7 +36,7 @@ type recipeStore interface {
 }
 
 type generationStatusStore interface {
-	Start(context.Context, string, string) error
+	StartBackground(context.Context, string, string) error
 	Fail(context.Context, string, error) error
 }
 
@@ -138,7 +138,7 @@ func (s *service) generate(ctx context.Context, p *recipes.GeneratorParams) erro
 	if !errors.Is(err, cache.ErrNotFound) {
 		return fmt.Errorf("read campaign shopping list: %w", err)
 	}
-	if err := s.statuses.Start(ctx, hash, status.InitialMessage); err != nil {
+	if err := s.statuses.StartBackground(ctx, hash, status.InitialMessage); err != nil {
 		return fmt.Errorf("start campaign status: %w", err)
 	}
 	err = s.prepare(ctx, p)

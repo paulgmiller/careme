@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"careme/internal/ai"
@@ -98,6 +99,29 @@ var campaignTestTime = time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
 var generatedCampaignLocationIDs = []string{
 	"wholefoods_10216", "70100023", "70100658",
 	"mnfoodclub_delivery", "tcfarm_delivery", "nelsongrassfarm_delivery",
+}
+
+func TestCampaignPublishesAfterLongFlexRetries(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s, _, _, statuses := testService()
+		s.generator = campaignGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+			time.Sleep(21 * time.Minute)
+			if err := statuses.Plan(ctx, p.Hash(), []ai.RecipePlan{{Cuisine: "Italian"}}); err != nil {
+				return nil, err
+			}
+			time.Sleep(16 * time.Minute)
+			recipe := ai.Recipe{Title: "Slow Flex dinner", Instructions: []string{"Cook dinner."}}
+			if err := statuses.RecipeDraft(ctx, p.Hash(), 0, recipe.ComputeHash()); err != nil {
+				return nil, err
+			}
+			if err := statuses.RecipeReady(ctx, p.Hash(), 0, recipe.ComputeHash()); err != nil {
+				return nil, err
+			}
+			return &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, nil
+		})
+		c := AdvertisedRecipeLocations()["westlake_wf"]
+		require.NoError(t, s.generateLocation(t.Context(), c, campaignTestTime))
+	})
 }
 
 func TestRunOnceGeneratesAndCachesAdvertisedRecipesAndImages(t *testing.T) {

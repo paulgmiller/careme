@@ -62,7 +62,7 @@ type generator interface {
 }
 
 type generationStatusStore interface {
-	Start(ctx context.Context, hash string, message string) error
+	StartBackground(ctx context.Context, hash string, message string) error
 	Fail(ctx context.Context, hash string, err error) error
 }
 
@@ -278,7 +278,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
 		}
-		if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
+		if err := m.generationStatuses.StartBackground(ctx, paramsHash, ""); err != nil {
 			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
 		}
 

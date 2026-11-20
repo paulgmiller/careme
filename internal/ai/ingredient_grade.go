@@ -10,15 +10,18 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/invopop/jsonschema"
 	openai "github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/samber/lo"
 )
 
-const defaultIngredientGradeModel = openai.ChatModelGPT6Luna
+const (
+	defaultIngredientGradeModel = openai.ChatModelGPT6Luna
+	ingredientGradeTimeout      = 90 * time.Second
+)
 
 // should we have category spefic grading prompts?
 const ingredientGradeRubric = `
@@ -162,11 +165,7 @@ func NewIngredientGrader(apiKey, model string, httpClient *http.Client) *ingredi
 	if model == "" {
 		model = defaultIngredientGradeModel
 	}
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
-	if httpClient != nil {
-		opts = append(opts, option.WithHTTPClient(httpClient))
-	}
-	aiClient := openai.NewClient(opts...)
+	aiClient := newOpenAIClient(apiKey, httpClient, 4)
 
 	return &ingredientGrader{
 		oai:          aiClient,
@@ -199,15 +198,19 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 		return nil, fmt.Errorf("failed to build ingredient grading prompt: %w", err)
 	}
 
-	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model:        g.model,
+		ServiceTier:  responses.ResponseNewParamsServiceTierDefault,
 		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{user(prompt)},
 		},
 		Text: scheme(g.schema),
-	})
+	}
+	ctx, cancel := context.WithTimeout(ctx, ingredientGradeTimeout)
+	defer cancel()
+	resp, err := newResponse(ctx, g.oai, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to grade ingredients: %w", err)
 	}
