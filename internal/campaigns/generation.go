@@ -85,8 +85,8 @@ func NewService(cfg *config.Config, providers providerFactory) (*service, error)
 	critiquer := critique.NewManager(cfg, c, httpClient)
 	statuses := status.NewStore(c)
 	store := recipes.IO(c)
-	imageJobs := recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), client)
-	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, imageJobs)
+	postJobs := recipes.PostRecipeJobs{recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), client), recipes.NewRecipeWineGenerator(c, client, staples)}
+	generator, err := recipes.NewGenerator(client, critiquer, staples, statuses, store, postJobs)
 	if err != nil {
 		return nil, fmt.Errorf("create campaign generator: %w", err)
 	}

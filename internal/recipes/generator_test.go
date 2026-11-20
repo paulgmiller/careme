@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -552,7 +553,7 @@ func TestPickAWine_UsesCachedIngredientsForStyleDateAndLocation(t *testing.T) {
 	}
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: &captureWineStaplesProvider{}}, nil, rio)
 
-	got, err := g.PickAWine(t.Context(), location, ai.Recipe{
+	got, err := pickWine(t.Context(), g.aiClient, g.staples, location, ai.Recipe{
 		Title:      "Roast Chicken",
 		WineStyles: []string{style},
 	}, cacheDate)
@@ -598,7 +599,7 @@ func TestPickAWine_PassesRecipeWineStylesToStaplesService(t *testing.T) {
 	rio := IO(cache.NewFileCache(t.TempDir()))
 	g := newTestGenerator(t, aiStub, nil, &cachedStaplesService{cache: rio, provider: staplesStub}, nil, nil)
 
-	got, err := g.PickAWine(t.Context(), "wholefoods_10216", ai.Recipe{
+	got, err := pickWine(t.Context(), g.aiClient, g.staples, "wholefoods_10216", ai.Recipe{
 		Title:      "Salmon",
 		WineStyles: []string{"Pinot Noir"},
 	}, time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC))
@@ -1295,7 +1296,7 @@ func TestGenerateRecipes_RegenerateRetriesLowScoringRecipesOnce(t *testing.T) {
 	g := newTestGenerator(t, aiStub, critiquer, seededStaples(t, params), noopstatuswriter{}, nil)
 
 	images := make(chan ai.Recipe, 2)
-	g.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
+	g.postJobs = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
 	got, err := g.GenerateRecipes(t.Context(), params)
 	require.Len(t, images, 1, "only the final replacement needs a new image")
 	assert.Equal(t, "Ready Dinner", (<-images).Title)
@@ -1551,4 +1552,48 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 			assert.True(t, published.Slots[0].Reviewed)
 		})
 	}
+}
+
+func TestRegenerateRecipeRunsCompletionWithoutPersisting(t *testing.T) {
+	for _, failCompletion := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "completion failure"}[failCompletion], func(t *testing.T) {
+			p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
+			replacement := &ai.Recipe{Title: "Replacement", ResponseID: "response"}
+			saver := &captureRecipeSaver{}
+			client := &sequenceAIClient{regenerateResponses: []*ai.Recipe{replacement}}
+			g := newTestGenerator(t, client, nil, nil, nil, saver)
+			failure := errors.New("completion failed")
+			completed := false
+			g.postJobs = postRecipeFunc(func(_ context.Context, recipe ai.Recipe, location string, date time.Time) error {
+				completed = true
+				assert.Equal(t, *replacement, recipe)
+				assert.Equal(t, p.Location.ID, location)
+				assert.True(t, p.Date.Equal(date))
+				if failCompletion {
+					return failure
+				}
+				return nil
+			})
+			got, err := g.RegenerateRecipe(t.Context(), p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+			if failCompletion {
+				require.ErrorIs(t, err, failure)
+				assert.Nil(t, got)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, replacement, got)
+			}
+			assert.True(t, completed)
+			assert.Empty(t, saver.recipes, "the controller owns persistence after setting provenance")
+		})
+	}
+}
+
+func TestMockRegenerationLeavesPersistenceToController(t *testing.T) {
+	saver := &captureRecipeSaver{}
+	generator := NewMockGenerator(saver, &captureCritiqueService{}, noopstatuswriter{}, noopRecipeImages{})
+	p := DefaultParams(&locations.Location{ID: "70100023", Name: "Store"}, time.Now())
+	recipe, err := generator.RegenerateRecipe(t.Context(), p, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+	require.NoError(t, err)
+	require.NotNil(t, recipe)
+	assert.Empty(t, saver.recipes)
 }

@@ -1223,7 +1223,6 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 		ResponseID:   "resp-original",
 	}
 	originalHash := original.ComputeHash()
-	params.Saved = []ai.Recipe{original}
 	require.NoError(t, s.SaveParams(t.Context(), params))
 	require.NoError(t, s.SaveRecipe(t.Context(), original))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, shoppingListHash))
@@ -1380,7 +1379,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
@@ -1392,7 +1391,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context
 	panic("unexpected call to GenerateRecipeImage")
 }
 
-func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureKickgenerationGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	panic("unexpected call to PickAWine")
 }
 
@@ -1583,16 +1582,17 @@ func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *gener
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	c.regenerateCalls++
 	c.lastResponse = previous
-	return &ai.Recipe{
+	recipe := ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
 		Description:  "Updated after questions.",
 		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
 		Instructions: []string{"Cook the steak.", "Serve."},
 		ResponseID:   "resp-regenerated",
-	}, nil
+	}
+	return &recipe, nil
 }
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
@@ -1605,7 +1605,7 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 	}, nil
 }
 
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (c *captureQuestionGenerator) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	if c.panicOnWine {
 		panic("unexpected call to PickAWine")
 	}
@@ -2137,7 +2137,7 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), `/save"`)
 }
 
-func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
+func TestHandleSaveRecipeDoesNotStartExtras(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -2180,13 +2180,8 @@ func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
-	assert.Equal(t, 1, g.winePickCalls)
+	assert.Equal(t, 0, g.winePickCalls)
 	assert.Equal(t, 0, ig.imageCalls)
-
-	wine, err := s.wineFromCache(t.Context(), recipeHash)
-	require.NoError(t, err)
-	require.NotNil(t, wine)
-	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
 
 	exists, err := s.images.Exists(t.Context(), recipeHash)
 	require.NoError(t, err)
@@ -3253,9 +3248,10 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	s := newTestServer(t,
 		withImageGenerator(ig),
 	)
+	jobs := PostRecipeJobs{NewRecipeImageGenerator(s.images, ig)}.Background()
 	defer func() {
 		close(ig.release)
-		s.Wait()
+		jobs.Wait()
 		body, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, body.Close()) }()
@@ -3263,7 +3259,7 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "generated-image", string(data))
 	}()
-	require.NoError(t, s.RecipeReady(t.Context(), recipe))
+	require.NoError(t, jobs.RecipeReady(t.Context(), recipe, "70100023", time.Time{}))
 	select {
 	case <-ig.started:
 	case <-time.After(5 * time.Second):
@@ -3272,4 +3268,18 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	exists, err := s.images.Exists(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+func TestSingleRecipeRegenerationMissingParamsFailsBeforeAI(t *testing.T) {
+	generator := &captureQuestionGenerator{}
+	s := newTestServer(t, withTestGenerator(generator))
+	recipe := ai.Recipe{Title: "Dinner", OriginHash: "missing-origin"}
+	jobID := status.ID(recipe.ComputeHash(), "previous")
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID, ""))
+	s.kickSingleRecipeRegeneration(t.Context(), jobID, &utypes.User{ID: "user"}, recipe, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+	s.Wait()
+	progress, err := s.generationStatuses.Load(t.Context(), jobID)
+	require.NoError(t, err)
+	assert.Contains(t, progress.Failed, "load regeneration parameters")
+	assert.Zero(t, generator.regenerateCalls)
 }

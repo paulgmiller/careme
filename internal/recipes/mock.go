@@ -14,18 +14,18 @@ import (
 )
 
 type mock struct {
-	saver        recipeSaver
-	critiquer    mockRecipeCritiquer
-	statuses     statusWriter
-	recipeImages postRecipe
+	saver     recipeSaver
+	critiquer mockRecipeCritiquer
+	statuses  statusWriter
+	postJobs  postRecipe
 }
 
 type mockRecipeCritiquer interface {
 	CritiqueRecipe(ctx context.Context, recipe ai.Recipe) (*ai.RecipeCritique, error)
 }
 
-func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, recipeImages postRecipe) mock {
-	return mock{saver: saver, critiquer: critiquer, statuses: statuses, recipeImages: recipeImages}
+func NewMockGenerator(saver recipeSaver, critiquer mockRecipeCritiquer, statuses statusWriter, postJobs postRecipe) mock {
+	return mock{saver: saver, critiquer: critiquer, statuses: statuses, postJobs: postJobs}
 }
 
 func NewMockImageGen() mock {
@@ -455,7 +455,7 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 			}
 		}
 		if i < len(plan.Plans) {
-			if err := m.recipeImages.RecipeReady(ctx, recipe); err != nil {
+			if err := m.postJobs.RecipeReady(ctx, recipe, p.Location.ID, p.Date); err != nil {
 				return nil, err
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -471,13 +471,17 @@ func (m mock) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.Shop
 	}, nil
 }
 
-func (m mock) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (m mock) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	_ = ctx
 	_ = instructions
 	_ = previous
 	recipe := mockRecipes[0]
 	recipe.Title = "Fresh " + recipe.Title
 	recipe.ResponseID = uuid.NewString()
+	if err := m.postJobs.RecipeReady(ctx, recipe, params.Location.ID, params.Date); err != nil {
+		return nil, err
+	}
+
 	return &recipe, nil
 }
 
@@ -497,7 +501,7 @@ func (m mock) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.Ge
 	}, nil
 }
 
-func (m mock) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
+func (m mock) pickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
 	_ = ctx
 	_ = location
 	_ = date
