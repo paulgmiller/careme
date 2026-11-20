@@ -124,16 +124,10 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 
 	data.Title = recipe.Title
 	data.Description = fmt.Sprintf("%s Recipe for %s on %s.", recipe.Description, data.Location.Name, data.Date)
-	if recipe.Title != "" {
-		imagePath := "/favicon.ico"
-		if input.hasRecipeImage {
-			imagePath = "/recipe/" + recipeHash + "/image"
-		}
-		data.Social = &templates.SocialPreview{
-			Title:       recipe.Title,
-			Description: recipe.Description,
-			ImagePath:   imagePath,
-		}
+	data.Social = &templates.SocialPreview{
+		Path:      "/recipe/" + recipeHash,
+		ImageHash: recipeHash,
+		ImageAlt:  "Generated image of " + recipe.Title,
 	}
 
 	return data, nil

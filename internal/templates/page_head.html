@@ -2,21 +2,30 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>{{.Title}} | Careme</title>
-  <meta name="description" content="{{.Description}}" />
+  <meta name="description" content="{{$.Description}}" />
 
   {{with .Social}}
+  {{$image := SmallImage .ImageHash}}
   <!-- Open Graph meta tags for social sharing (WhatsApp, Facebook, etc.) -->
-  <meta property="og:title" content="{{.Title}}" />
-  <meta property="og:description" content="{{.Description}}" />
-  <meta property="og:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  <meta property="og:title" content="{{$.Title}}" />
+  <meta property="og:description" content="{{$.Description}}" />
+  <meta property="og:url" content="{{PublicOrigin}}{{.Path}}" />
+  {{with $image}}
+  <meta property="og:image" content="{{.URL}}" />
+  {{if .Type}}<meta property="og:image:type" content="{{.Type}}" />{{end}}
+  {{if .Width}}<meta property="og:image:width" content="{{.Width}}" />{{end}}
+  {{if .Height}}<meta property="og:image:height" content="{{.Height}}" />{{end}}
+  {{end}}
+  <meta property="og:image:alt" content="{{.ImageAlt}}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Careme" />
 
   <!-- Twitter Card meta tags -->
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="{{.Title}}" />
-  <meta name="twitter:description" content="{{.Description}}" />
-  <meta name="twitter:image" content="{{PublicOrigin}}{{.ImagePath}}" />
+  <meta name="twitter:title" content="{{$.Title}}" />
+  <meta name="twitter:description" content="{{$.Description}}" />
+  <meta name="twitter:image" content="{{$image.URL}}" />
+  <meta name="twitter:image:alt" content="{{.ImageAlt}}" />
   {{end}}
 
   {{template "app_head" .Style}}

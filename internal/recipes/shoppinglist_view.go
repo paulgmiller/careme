@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -144,18 +145,13 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
-	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
-	if len(recipeViews) > 0 {
+	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Date)
+	if len(input.list.Recipes) > 0 {
+		recipe := input.list.Recipes[0]
 		data.Social = &templates.SocialPreview{
-			Title:       recipeViews[0].Title,
-			Description: recipeViews[0].Description,
-			ImagePath:   "/favicon.ico",
-		}
-		for _, recipe := range recipeViews {
-			if recipe.HasImage {
-				data.Social.ImagePath = "/recipe/" + recipe.Hash + "/image"
-				break
-			}
+			Path:      "/recipes?h=" + url.QueryEscape(input.hash),
+			ImageHash: recipe.ComputeHash(),
+			ImageAlt:  "Generated image of " + recipe.Title,
 		}
 	}
 
@@ -205,7 +201,7 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 	return views, nil
 }
 
-func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
+func shoppingListMetaDescription(recipes []ai.Recipe, date string) string {
 	titles := make([]string, 0, len(recipes))
 	for _, recipe := range recipes {
 		title := strings.TrimSpace(recipe.Title)
@@ -214,9 +210,9 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 		}
 	}
 	if len(titles) == 0 {
-		return fmt.Sprintf("Recipes for %s on %s.", locationName, date)
+		return date + "."
 	}
-	return fmt.Sprintf("Recipes for %s on %s: %s.", locationName, date, strings.Join(titles, ", "))
+	return fmt.Sprintf("%s: %s.", date, strings.Join(titles, ", "))
 }
 
 type shoppingFinalizeView struct {

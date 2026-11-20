@@ -302,8 +302,8 @@ func TestFormatShoppingListHTML_HidesShoppingListBeforeBuild(t *testing.T) {
 	html := assertHTTPSuccess(t, w)
 
 	isValidHTML(t, html)
-	if !strings.Contains(html, `<meta name="description" content="Recipes for Store on 2026-01-25: Added Bowl, Maybe Pasta." />`) {
-		t.Error("shopping list HTML should include all recipe titles, location, and date in the meta description")
+	if !strings.Contains(html, `<meta name="description" content="2026-01-25: Added Bowl, Maybe Pasta." />`) {
+		t.Error("shopping list HTML should include the date and all recipe titles in the meta description")
 	}
 	assert.NotContains(t, html, `id="shopping-list-section"`)
 	assert.NotContains(t, html, "/shopping-quantities")
