@@ -558,21 +558,31 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 90*time.Second)
 		defer cancel()
 
-		replacement, err := s.generator.RegenerateRecipe(ctx, instructions, previous)
+		params, err := s.ParamsFromCache(ctx, recipe.OriginHash)
+		if err != nil {
+			err = fmt.Errorf("load regeneration parameters: %w", err)
+			slog.ErrorContext(ctx, "failed to load regeneration parameters", "job", id, "error", err)
+			if statusErr := s.generationStatuses.Fail(ctx, id, err); statusErr != nil {
+				slog.ErrorContext(ctx, "failed to record regeneration failure", "job", id, "error", statusErr)
+			}
+			return
+		}
+
+		replacement, err := s.generator.RegenerateRecipe(ctx, params, instructions, previous)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed generation", "job", id, "error", err)
 			return
 		}
-		// TODO generate a new shoppinglist? only if ingredients changed or user asked?
 		replacement.OriginHash = recipe.OriginHash
 		oldHash := recipe.ComputeHash()
 		replacement.ParentHash = oldHash
-		newHash := replacement.ComputeHash()
 		if err := s.SaveRecipe(ctx, *replacement); err != nil {
 			slog.ErrorContext(ctx, "failed to save", "job", id, "error", err)
 			return
 		}
-		replaced, err := s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
+
+		newHash := replacement.ComputeHash()
+		_, err = s.storage.ReplaceRecipe(currentUser, oldHash, utypes.Recipe{
 			Title:     replacement.Title,
 			Hash:      newHash,
 			CreatedAt: time.Now(),
@@ -580,13 +590,6 @@ func (s *server) kickSingleRecipeRegeneration(ctx context.Context, id string, cu
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to replace", "job", id, "error", err)
 			return
-		}
-		if replaced {
-			if params, err := s.ParamsFromCache(ctx, recipe.OriginHash); err != nil {
-				slog.ErrorContext(ctx, "couldn't look up params", "hash", newHash, "origin", recipe.OriginHash)
-			} else {
-				s.startSavedRecipeBackgroundGeneration(ctx, newHash, *replacement, params.Location.ID, params.Date)
-			}
 		}
 		if err := s.generationStatuses.Complete(ctx, id, newHash); err != nil {
 			slog.ErrorContext(ctx, "failed to complete recipe regeneration job", "job_id", id, "new_hash", newHash, "error", err)

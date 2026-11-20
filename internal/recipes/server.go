@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"careme/internal/ai"
 	"careme/internal/auth"
@@ -24,9 +23,8 @@ type locServer interface {
 
 type generator interface {
 	GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error)
-	RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
+	RegenerateRecipe(ctx context.Context, p *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error)
 	AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error)
-	PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error)
 }
 
 type ExtGenerator = generator
@@ -60,11 +58,12 @@ type server struct {
 	storage            *users.Storage
 	generator          generator
 	locServer          locServer
-	wg                 sync.WaitGroup
-	clerk              auth.AuthClient
-	critiques          critiqueStore
-	shoppingMerger     ShoppingQuantityMerger
-	orderView          orderViewBuilder
+	// should generation have this?
+	wg             sync.WaitGroup
+	clerk          auth.AuthClient
+	critiques      critiqueStore
+	shoppingMerger ShoppingQuantityMerger
+	orderView      orderViewBuilder
 }
 
 type critiqueStore interface {
@@ -73,7 +72,7 @@ type critiqueStore interface {
 
 // NewHandler returns an http.Handler serving the recipe endpoints under /recipes.
 // cache must be connected to generator or this will not work. Should we enfroce that by getting cache from generator?
-func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, imageCache cache.Cache, clerkClient auth.AuthClient, imagegen ImageGen, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
+func NewHandler(cfg *config.Config, storage *users.Storage, generator generator, locServer locServer, c cache.ListCache, images ImageStore, imagegen ImageGen, clerkClient auth.AuthClient, shoppingMerger ShoppingQuantityMerger, orderView orderViewBuilder) (*server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("recipe config is required")
 	}
@@ -82,7 +81,7 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 	}
 	s := &server{
 		recipeio:           IO(c),
-		images:             NewImageStore(imageCache),
+		images:             images,
 		imagegen:           imagegen,
 		generationStatuses: status.NewStore(c),
 		cfg:                cfg,

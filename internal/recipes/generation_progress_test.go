@@ -77,6 +77,8 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 				return &ai.RecipeCritique{OverallScore: 10}, nil
 			}}
 			generator := newTestGenerator(t, client, critiquer, fixedStaplesService{}, progress, rio)
+			images := make(chan ai.Recipe, 2)
+			generator.postJobs = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
 			done := make(chan error, 1)
 			go func() { _, err := generator.GenerateRecipes(t.Context(), p); done <- err }()
 			select {
@@ -99,10 +101,23 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			recipe, err := rio.SingleFromCache(t.Context(), got.Slots[1].RecipeHash)
 			require.NoError(t, err)
 			assert.Equal(t, "Fast", recipe.Title)
+			select {
+			case image := <-images:
+				assert.Equal(t, "Fast", image.Title, "start the finished recipe's image while another recipe is still under review")
+			case <-time.After(5 * time.Second):
+				t.Fatal("finished recipe did not start its image")
+			}
+			select {
+			case <-done:
+				t.Fatal("shopping list completed while a recipe was still under review")
+			default:
+			}
+
 			// Release in a defer so failed assertions also unblock the worker.
 			t.Cleanup(func() {
 				require.NoError(t, <-done)
 				assert.Len(t, progress.ready, 2, "unchanged recipes should each be published once")
+				assert.Equal(t, "Slow", (<-images).Title)
 				final, err := progress.Load(t.Context(), p.Hash())
 				require.NoError(t, err)
 				assert.True(t, final.Slots[0].Reviewed)

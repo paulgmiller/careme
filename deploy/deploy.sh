@@ -55,6 +55,11 @@ wholefoods_scrape_schedule="0 6 * * 0"
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
   instacart_env_yaml='
+            - name: INSTACART_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: instacart
+                  key: INSTACART_API_KEY
             - name: INSTACART_BASE_URL
               value: "https://connect.dev.instacart.tools"'
   order_stub_env_yaml='

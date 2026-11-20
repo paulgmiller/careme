@@ -275,10 +275,15 @@ func TestStaplesKeepsStarchesAndAllowsFrozenShellfishOnly(t *testing.T) {
 		assert.NotContains(t, req.URL.Query(), "filter.brand")
 		var body string
 		switch term {
-		case "Meat & Seafood":
+		case "sausage":
 			body = `{"data":[
    {"productId":"italian","brand":"Isernio's","description":"Mild Italian Sausage","categories":["Meat & Seafood"],"items":[{"itemId":"italian-upc","price":{"regular":5}}]},
    {"productId":"salmon","description":"Frozen salmon fillets","categories":["Meat & Seafood"],"items":[{"itemId":"salmon-upc","price":{"regular":8}}]}
+  ]}`
+		case "turkey":
+			body = `{"data":[
+   {"productId":"turkey","description":"Fresh whole turkey","categories":["Meat & Seafood"],"items":[{"itemId":"turkey-upc","price":{"regular":2}}]},
+   {"productId":"frozen-turkey","description":"Whole frozen turkey","categories":["Meat & Seafood"],"items":[{"itemId":"frozen-turkey-upc","price":{"regular":1}}]}
   ]}`
 		case "shellfish":
 			body = `{"data":[{"productId":"shrimp","description":"Frozen raw shrimp","categories":["Frozen"],"items":[{"itemId":"shrimp-upc","price":{"regular":8}}]}]}`
@@ -299,10 +304,10 @@ func TestStaplesKeepsStarchesAndAllowsFrozenShellfishOnly(t *testing.T) {
 		ids = append(ids, row.ProductID)
 		assert.Equal(t, row.ProductID+"-upc", row.VariantID)
 	}
-	assert.ElementsMatch(t, []string{"italian", "shrimp", "rice", "pasta"}, ids)
+	assert.ElementsMatch(t, []string{"italian", "turkey", "shrimp", "rice", "pasta"}, ids)
 	mu.Lock()
 	defer mu.Unlock()
-	assert.ElementsMatch(t, []string{"fresh vegetables", "fresh produce", "beef", "chicken", "fish", "pork", "shellfish", "lamb", "grains", "pasta", "Meat & Seafood", "Dairy & Eggs"}, terms)
+	assert.ElementsMatch(t, []string{"fresh vegetables", "fresh produce", "beef", "chicken", "turkey", "sausage", "fish", "pork", "shellfish", "lamb", "grains", "pasta", "Dairy & Eggs"}, terms)
 	assert.Contains(t, terms, "grains")
 	assert.Contains(t, terms, "pasta")
 }

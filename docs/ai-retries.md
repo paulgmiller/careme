@@ -33,6 +33,23 @@ and `request_id`. These logs appear even when a server-directed wait exceeds the
 SDK's cap and no retry follows. They observe headers without changing SDK retry
 decisions or consuming the response body.
 
+## API error diagnostics
+
+The SDK's `Error()` returns only an HTTP status summary. Responses API failures
+explicitly add the requested model and service tier, OpenAI's `X-Request-Id`, and
+the provider error's `type`, `code`, `param`, and `message` to the returned error.
+These details survive wrapping and joined campaign errors, so they appear in
+Grafana's `exception_message`. The original SDK error remains available through
+`errors.As`. Requests, headers, and raw response bodies are not dumped; provider
+messages are included verbatim and can quote rejected input values.
+
+In Grafana Explore, select the application logs datasource and use
+`{service_name="careme"} |= "campaign generation failed"`. Inspect
+`exception_message` for the rejected parameter and provider explanation, and keep
+the request ID for provider support. The diagnostics require deploying this
+change and observing a new failure; older status-only logs cannot recover the
+provider message.
+
 ## Fallback and job deadlines
 
 If the Flex deadline expires after a 429 while the parent context remains active,

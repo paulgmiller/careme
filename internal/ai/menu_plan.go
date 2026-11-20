@@ -220,7 +220,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	cacheKey := storeDayPromptCacheKey(location.ID, date.Format("2006-01-02"))
 
 	params := responses.ResponseNewParams{
-		Model:        c.model,
+		Model:        c.menuModel,
 		Reasoning:    responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:  c.serviceTier,
 		Instructions: openai.String(menuPlanSystemMessage),
@@ -238,7 +238,7 @@ func (c *client) CreateMenuPlan(ctx context.Context, location *locationtypes.Loc
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
 
-	return responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp, cacheKey)
+	return responseToMenuPlan(ctx, aiCategoryMenu, c.menuModel, resp, cacheKey)
 }
 
 func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, previous ResponseRef, count int) (*MenuPlan, error) {
@@ -251,7 +251,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 	promptMessages := buildRegenerateMenuPlanMessages(instructions, count)
 
 	params := responses.ResponseNewParams{
-		Model:              c.model,
+		Model:              c.menuModel,
 		Reasoning:          responses.ReasoningParam{Effort: responses.ReasoningEffortMedium},
 		ServiceTier:        c.serviceTier,
 		PreviousResponseID: openai.String(previous.ID),
@@ -271,7 +271,7 @@ func (c *client) RegenerateMenuPlan(ctx context.Context, instructions []string, 
 		return nil, fmt.Errorf("failed to regenerate menu plan: %w", err)
 	}
 	c.recordRecipePrompt(ctx, resp.ID, params, promptMessages)
-	return responseToMenuPlan(ctx, aiCategoryMenu, c.model, resp, previous.PromptCacheKey)
+	return responseToMenuPlan(ctx, aiCategoryMenu, c.menuModel, resp, previous.PromptCacheKey)
 }
 
 func responseToMenuPlan(ctx context.Context, category, model string, resp *responses.Response, cacheKey string) (*MenuPlan, error) {

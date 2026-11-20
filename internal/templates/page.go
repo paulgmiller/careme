@@ -27,9 +27,9 @@ func NewPage(ctx context.Context) Page {
 }
 
 // SocialPreview describes the optional link preview used by social networks.
-// ImagePath is relative to the configured public origin.
+// Path is relative to the configured public origin; ImageHash identifies the recipe image.
 type SocialPreview struct {
-	Title       string
-	Description string
-	ImagePath   string
+	Path      string
+	ImageHash string
+	ImageAlt  string
 }

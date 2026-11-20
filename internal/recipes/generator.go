@@ -50,17 +50,25 @@ type statusWriter interface {
 	Update(ctx context.Context, hash string, message string) error
 }
 
+type postRecipe interface {
+	RecipeReady(context.Context, ai.Recipe, string, time.Time) error
+}
+
 type generatorService struct {
 	aiClient     aiClient
 	critiquer    recipeCritiquer
 	staples      staplesService
 	statusWriter statusWriter
 	saver        recipeSaver
+	postJobs     postRecipe
 }
 
 var tracer = otel.Tracer("careme/internal/recipes")
 
-func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver) (*generatorService, error) {
+func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesService, statuses statusWriter, recipeSaver recipeSaver, postJobs postRecipe) (*generatorService, error) {
+	if postJobs == nil {
+		return nil, fmt.Errorf("post-recipe processor is required")
+	}
 	if aiClient == nil {
 		return nil, fmt.Errorf("ai client is required")
 	}
@@ -82,42 +90,8 @@ func NewGenerator(aiClient aiClient, critiquer recipeCritiquer, staples staplesS
 		staples:      staples,
 		statusWriter: statuses,
 		saver:        recipeSaver,
+		postJobs:     postJobs,
 	}, nil
-}
-
-func (g *generatorService) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	ctx, span := tracer.Start(ctx, "recipes.pickawine")
-	defer span.End()
-	var styles []string
-	for _, style := range recipe.WineStyles {
-		style = strings.TrimSpace(style)
-		if style != "" {
-			styles = append(styles, style)
-		}
-	}
-
-	if len(styles) == 0 {
-		return &ai.WineSelection{Commentary: "no wines styles for recipe", Wines: []ai.Ingredient{}}, nil
-	}
-
-	wines, err := g.staples.FetchWines(ctx, location, styles, date)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(wines) == 0 {
-		return &ai.WineSelection{Commentary: "no wines found", Wines: []ai.Ingredient{}}, nil
-	}
-	wines = lo.UniqBy(wines, func(i ai.InputIngredient) string {
-		return i.ProductID
-	})
-
-	selection, err := g.aiClient.PickWine(ctx, recipe, wines)
-	if err != nil {
-		return nil, err
-	}
-	enrichIngredientsMetadata(selection.Wines, inputIngredientMap(wines))
-	return selection, nil
 }
 
 func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
@@ -178,6 +152,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 			final, err := g.critiqueAndMaybeRetryRecipe(ctx, hash, recipe, ingMap)
 			if err != nil {
 				return nil, err
+			}
+			if err := g.postJobs.RecipeReady(ctx, *final, p.Location.ID, p.Date); err != nil {
+				return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
 			}
 			if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 				slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
@@ -269,6 +246,9 @@ func (g *generatorService) GenerateRecipes(ctx context.Context, p *generatorPara
 		if err != nil {
 			return nil, err
 		}
+		if err := g.postJobs.RecipeReady(ctx, *final, p.Location.ID, p.Date); err != nil {
+			return nil, fmt.Errorf("complete recipe %q: %w", final.Title, err)
+		}
 		if err := g.statusWriter.RecipeReady(ctx, hash, index, final.ComputeHash()); err != nil {
 			slog.ErrorContext(ctx, "failed to publish reviewed recipe", "hash", hash, "index", index, "error", err)
 		}
@@ -308,10 +288,13 @@ func (g *generatorService) replacementMenuPlan(ctx context.Context, p *generator
 	return plan, nil
 }
 
-func (g *generatorService) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (g *generatorService) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	r, err := g.aiClient.Regenerate(ctx, instructions, previous)
 	if err != nil {
 		return nil, err
+	}
+	if err := g.postJobs.RecipeReady(ctx, *r, params.Location.ID, params.Date); err != nil {
+		return nil, fmt.Errorf("complete regenerated recipe: %w", err)
 	}
 	// don't block
 	g.critiquer.CritiqueRecipeInBackground(ctx, *r)

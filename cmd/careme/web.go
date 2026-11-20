@@ -87,14 +87,19 @@ func runServer(cfg *config.Config, addr string) error {
 	}
 
 	var generator recipes.ExtGenerator
-	var imageGen recipes.ImageGen
+	var imageProvider recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
 	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
 		mc := critique.NewMock(cache)
-		generator = recipes.NewMockGenerator(recipes.IO(cache), mc, status.NewStore(cache))
-		imageGen = recipes.NewMockImageGen()
+		imageProvider = recipes.NewMockImageGen()
+		postJobs := recipes.PostRecipeJobs{
+			recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), recipes.NewMockImageGen()),
+			recipes.NewMockWineGenerator(cache),
+		}
+		generator = recipes.NewMockGenerator(recipes.IO(cache), mc,
+			status.NewStore(cache), postJobs) // no background for post jobs
 		marketExtractor = farmersmarket.MockExtractor{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
@@ -104,7 +109,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 		aiclient := ai.NewClient(cfg.AI, aiHTTPClient, prompts.NewCacheRecorder(cache))
 		shoppingMerger = aiclient
-		imageGen = aiclient
+		imageProvider = aiclient
 		marketExtractor = aiclient
 		ro.add(aiclient)
 		backends, err := providers.NewStaplesBackends()
@@ -114,11 +119,17 @@ func runServer(cfg *config.Config, addr string) error {
 		staples := recipes.NewCachedStaplesService(backends, cache, grader)
 		watchdogServer.Add("staples", recipes.NewStaplesWatchdog(locationStorage, staples), 6.*time.Hour)
 		ss := status.NewStore(cache)
-		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss, recipes.IO(cache))
+		postJobs := recipes.PostRecipeJobs{
+			recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiclient),
+			recipes.NewRecipeWineGenerator(cache, aiclient, staples),
+		}.Background()
+
+		generator, err = recipes.NewGenerator(aiclient, critiquer, staples, ss,
+			recipes.IO(cache), postJobs)
 		if err != nil {
 			return fmt.Errorf("failed to create recipe generator: %w", err)
 		}
-		waiters = append(waiters, critiquer)
+		waiters = append(waiters, critiquer, postJobs)
 	}
 	watchdogServer.Register(infraRoutes)
 
@@ -145,7 +156,7 @@ func runServer(cfg *config.Config, addr string) error {
 	if err := providers.RegisterOrders(appRoutes, providerregistry.OrderOptions{Cache: cache, Auth: authClient}); err != nil {
 		return fmt.Errorf("register ordering: %w", err)
 	}
-	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, imageCache, authClient, imageGen, shoppingMerger, providers.NewOrderViewBuilder(cache))
+	recipeHandler, err := recipes.NewHandler(cfg, userStorage, generator, locationStorage, cache, recipes.NewImageStore(imageCache), imageProvider, authClient, shoppingMerger, providers.NewOrderViewBuilder(cache))
 	if err != nil {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}

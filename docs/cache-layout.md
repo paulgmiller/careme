@@ -287,9 +287,10 @@ catalog by cosine similarity. It does not search other stores or filter by grade
 - The former generic `ordering_transfers/` prefix is no longer read or written. Kroger uses the provider-specific transfer layout above.
 
 Kroger query changes (#927): the original search terms now accept all brands,
-with additional meat/seafood and dairy/eggs searches. The existing JSON
+with additional turkey, sausage, and dairy/eggs searches. Targeted turkey and
+sausage replace the former meat/seafood search. The existing JSON
 staple-definition signature changes automatically, refreshing store catalogs
-and dependent recipe hashes with the updated frozen-product selection. The
+and dependent recipe hashes with the updated query selection. The
 `ingredients/` prefix and `item-upc-v1/` marker stay unchanged, as do finalized
 shopping snapshots.
 

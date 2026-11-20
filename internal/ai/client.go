@@ -25,7 +25,8 @@ type client struct {
 	wineSchema            map[string]any
 	menuSchema            map[string]any
 	shoppingSchema        map[string]any
-	model                 openai.ResponsesModel
+	recipeModel           openai.ResponsesModel
+	menuModel             openai.ResponsesModel
 	imageModel            openai.ImageModel
 	wineModel             string
 	oai                   openai.Client
@@ -33,7 +34,6 @@ type client struct {
 }
 
 func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder PromptRecorder) *client {
-	model := strings.TrimSpace(cfg.RecipeModel)
 	imageModel := strings.TrimSpace(cfg.ImageModel)
 	if promptRecorder == nil {
 		promptRecorder = noopPromptRecorder{}
@@ -72,7 +72,8 @@ func NewClient(cfg config.AIConfig, httpClient *http.Client, promptRecorder Prom
 		wineSchema:     wine,
 		menuSchema:     menu,
 		shoppingSchema: shopping,
-		model:          model,
+		recipeModel:    strings.TrimSpace(cfg.RecipeModel),
+		menuModel:      strings.TrimSpace(cfg.MenuModel),
 		imageModel:     imageModel,
 		wineModel:      defaultWineModel,
 		promptRecorder: promptRecorder,

@@ -51,7 +51,9 @@ Each generated case contains one recipe plan, the menu response ID, and its prom
 
 ## Recipe generation
 
-The [2026-09-29 GPT-6.1 Sol comparison](recipe-generation/gpt61-sol-comparison-2026-09-29.md) records fresh recipe and menu runs against GPT-6 Sol and the new shared default.
+The [2026-11-17 GPT-6.2 Sol comparison](recipe-generation/gpt62-sol-comparison-2026-11-17.md) compares GPT-6.2 Sol with a fresh GPT-6.1 Sol baseline on the current recipe and menu suites.
+
+The [2026-09-29 GPT-6.1 Sol comparison](recipe-generation/gpt61-sol-comparison-2026-09-29.md) compares GPT-6.1 Sol with GPT-6 Sol on recipe and menu runs.
 
 The [2026-09-22 GPT-6 Sol rollout](recipe-generation/gpt6-sol-rollout-2026-09-22.md) records recipe and menu results and compares the eight shared recipe cases with the recorded Astra baseline. The [2026-09-07 model comparison](recipe-generation/README.md) records earlier Astra, GPT-5.6 Sol, and Luna results.
 
@@ -73,7 +75,7 @@ Direct Promptfoo runs accept `RECIPE_EVAL_REASONING_EFFORT`; provider `config.re
 
 Promptfoo's **cost** column reports estimated recipe-generation USD, matching its generation-only latency column. Exported JSON also includes `metadata.generationCostUSD`, `metadata.judgeCostUSD`, and `metadata.totalCostUSD` for generation and judging together. The provider gets cost directly from `GenerateRecipeWithCost` and `CritiqueRecipeWithCost`; it does not intercept HTTP responses. Token counts, including reasoning and cache tokens, remain in the AI usage logs and are not exported in new eval results. Promptfoo token totals are therefore unavailable, not zero-cost usage.
 
-Generation cost uses the application's standard short-context price table, including cache reads and writes; GPT-6 Sol and GPT-6.1 Sol pricing are included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
+Generation cost uses the application's standard short-context price table, including cache reads and writes; GPT-6 Sol, GPT-6.1 Sol, and GPT-6.2 Sol pricing are included. Judge cost uses OpenRouter's reported `usage.cost`. These are successful-response costs, not a billing reconciliation: failed requests and account-specific discounts are not accounted for. Unknown model pricing, missing required usage/cost, or generation input above 272,000 tokens fails the eval explicitly. Prior reports were produced before cost capture and do not contain these fields.
 
 The suite requires `AI_API_KEY` and `OPENROUTER_API_KEY`, loaded through the existing configuration/kage path. Each case makes one generation call and one call to the production critiquer. `config.judge_model` pins Gemini for every candidate. The judge sees only the newly generated recipe, with response IDs and provenance removed. Its full critique, model, and timestamp are retained in response metadata. `critique-quality` reports the score divided by ten and passes at 8/10; judge errors fail the evaluation.
 
@@ -199,6 +201,27 @@ precedence. The selected model is recorded in `metadata.requestedModel`.
 The provider uses the production menu model (currently `gpt-6.1-sol`) with medium
 reasoning and requires `AI_API_KEY` and `OPENROUTER_API_KEY` through the existing
 configuration path. Each case makes a menu generation call and a separate judge call.
+
+Both the `menu-plan` and `recipe-generation` suites run every case against two
+providers: `service_tier=default` for web requests and `service_tier=flex` for
+campaigns and mail. Before changing production models, SDK, or request options,
+run the affected suite without the eval cache. For a small menu compatibility
+check across both tiers:
+
+```sh
+./task.sh evals EVAL=menu-plan -- --no-cache --filter-pattern 'One quick seasonal chicken dinner' --output /tmp/menu-plan-tiers.json
+```
+
+These providers send the actual production requests, including reasoning,
+schema, and prompt-cache options. A candidate can be checked with `MODEL=...`
+before rollout. In November 2026, GPT-6.2 Sol passed
+regular-tier evals but rejected campaign requests because it did not support Flex;
+menu planning was rolled back to GPT-6.1 Sol. Mocked Go tests cannot verify live
+model/tier compatibility, and cached eval results cannot establish it either.
+Quality assertions apply to both tiers; the 20-second menu and 60-second recipe
+latency limits apply only to default-tier requests. Provider `config.service_tier`
+selects the tier, recorded as `metadata.requestedServiceTier`. Flex capacity
+retries can make live evals take longer. Both suites require the judge key.
 
 The suite checks requested plan count, catalog membership for every anchor and
 side, and no repeated ingredient across anchor/side slots (ignoring case and
