@@ -1754,7 +1754,7 @@ func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/question"); got != want {
+	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash"); got != want {
 		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
 	}
 }

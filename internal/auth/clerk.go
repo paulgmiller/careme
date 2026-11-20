@@ -120,6 +120,12 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 		clearCookie(w, "__session")
 		clearCookie(w, "__clerk_db_jwt") // common in dev flows
 		clearCookie(w, "__client")       // if present in your setup
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			// Let the handler apply its signed-out behavior without converting a
+			// POST into a GET against a POST-only route or losing its form body.
+			handler.ServeHTTP(w, r)
+			return
+		}
 		http.Redirect(w, r, r.RequestURI, http.StatusFound)
 	}))
 

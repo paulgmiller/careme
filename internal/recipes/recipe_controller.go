@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -258,7 +259,8 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, ok := s.clerk.GetUserIDFromRequest(r)
 	if !ok {
-		redirectToSignIn(w, r, http.StatusUnauthorized)
+		w.Header().Set("HX-Redirect", signInPath("/recipe/"+url.PathEscape(hash)))
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 

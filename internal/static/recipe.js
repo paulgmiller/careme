@@ -1,3 +1,28 @@
+function initializeQuestionDraft() {
+  const question = document.getElementById("question");
+  if (!question) return;
+  const form = question.form;
+  const key = `recipe-question:${form.getAttribute("action")}`;
+  // Storage can be unavailable in private browsing or when it is full.
+  try {
+    question.value = window.sessionStorage.getItem(key) || question.value;
+  } catch { /* The form remains usable without draft storage. */ }
+
+  const save = () => {
+    try {
+      window.sessionStorage.setItem(key, question.value);
+    } catch { /* Keep the question in the form if storage is unavailable. */ }
+  };
+  question.addEventListener("input", save);
+  form.addEventListener("htmx:beforeRequest", save);
+  form.addEventListener("htmx:afterRequest", (event) => {
+    if (!event.detail.successful || event.detail.xhr.getResponseHeader("HX-Redirect")) return;
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch { /* Storage is optional. */ }
+  });
+}
+
 function renderStars(selectedStars) {
   const selected = Number(selectedStars) || 0;
   const buttons = document.querySelectorAll("#star-rating [data-star]");
@@ -154,6 +179,7 @@ function initializeIngredients() {
 
 
 document.addEventListener("DOMContentLoaded", () => {
+  initializeQuestionDraft();
   initializeStarRating();
   initializeRecipeSteps();
   initializeIngredients();

@@ -2,18 +2,70 @@ package auth
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"careme/internal/config"
 	"careme/internal/templates"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	"github.com/clerk/clerk-sdk-go/v2/clerktest"
+	"github.com/clerk/clerk-sdk-go/v2/jwks"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 )
+
+func TestExpiredSessionPreservesPostForSignedOutHandler(t *testing.T) {
+	token, publicKey := clerktest.GenerateJWT(t, map[string]any{
+		"sub": "user_expired", "sid": "sess_expired", "exp": time.Now().Add(-time.Hour).Unix(),
+	}, t.Name())
+	keys := jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: publicKey, KeyID: t.Name(), Algorithm: "RS256", Use: "sig"}}}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/jwks", r.URL.Path)
+		require.NoError(t, json.NewEncoder(w).Encode(keys))
+	}))
+	t.Cleanup(api.Close)
+	client := &clerkClient{jwksClient: jwks.NewClient(&clerk.ClientConfig{BackendConfig: clerk.BackendConfig{
+		URL: &api.URL, HTTPClient: api.Client(), Key: new("sk_test"),
+	}})}
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			called := false
+			handler := client.WithAuthHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				_, signedIn := client.GetUserIDFromRequest(r)
+				require.False(t, signedIn)
+				require.Equal(t, http.MethodPost, r.Method)
+				require.Equal(t, "Can I swap the protein?", r.FormValue("question"))
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			r := httptest.NewRequest(method, "/recipe/hash/question", strings.NewReader(url.Values{"question": {"Can I swap the protein?"}}.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.Header.Set("HX-Request", "true")
+			r.AddCookie(&http.Cookie{Name: "__session", Value: token})
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if method == http.MethodPost {
+				require.True(t, called)
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+				require.Empty(t, w.Header().Get("Location"))
+			} else {
+				require.False(t, called)
+				require.Equal(t, http.StatusFound, w.Code)
+				require.Equal(t, "/recipe/hash/question", w.Header().Get("Location"))
+			}
+			require.Len(t, w.Result().Cookies(), 3)
+			for _, cookie := range w.Result().Cookies() {
+				require.Negative(t, cookie.MaxAge)
+			}
+		})
+	}
+}
 
 func TestGetUserIDFromRequest(t *testing.T) {
 	t.Parallel()
