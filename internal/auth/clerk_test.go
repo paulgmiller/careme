@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExpiredSessionPreservesPostForSignedOutHandler(t *testing.T) {
+func TestExpiredSessionPreservesCookiesAndRequest(t *testing.T) {
 	token, publicKey := clerktest.GenerateJWT(t, map[string]any{
 		"sub": "user_expired", "sid": "sess_expired", "exp": time.Now().Add(-time.Hour).Unix(),
 	}, t.Name())
@@ -40,8 +40,10 @@ func TestExpiredSessionPreservesPostForSignedOutHandler(t *testing.T) {
 				called = true
 				_, signedIn := client.GetUserIDFromRequest(r)
 				require.False(t, signedIn)
-				require.Equal(t, http.MethodPost, r.Method)
-				require.Equal(t, "Can I swap the protein?", r.FormValue("question"))
+				require.Equal(t, method, r.Method)
+				if method == http.MethodPost {
+					require.Equal(t, "Can I swap the protein?", r.FormValue("question"))
+				}
 				w.WriteHeader(http.StatusUnauthorized)
 			}))
 			r := httptest.NewRequest(method, "/recipe/hash/question", strings.NewReader(url.Values{"question": {"Can I swap the protein?"}}.Encode()))
@@ -50,19 +52,10 @@ func TestExpiredSessionPreservesPostForSignedOutHandler(t *testing.T) {
 			r.AddCookie(&http.Cookie{Name: "__session", Value: token})
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, r)
-			if method == http.MethodPost {
-				require.True(t, called)
-				require.Equal(t, http.StatusUnauthorized, w.Code)
-				require.Empty(t, w.Header().Get("Location"))
-			} else {
-				require.False(t, called)
-				require.Equal(t, http.StatusFound, w.Code)
-				require.Equal(t, "/recipe/hash/question", w.Header().Get("Location"))
-			}
-			require.Len(t, w.Result().Cookies(), 3)
-			for _, cookie := range w.Result().Cookies() {
-				require.Negative(t, cookie.MaxAge)
-			}
+			require.True(t, called)
+			require.Equal(t, http.StatusUnauthorized, w.Code)
+			require.Empty(t, w.Header().Get("Location"))
+			require.Empty(t, w.Result().Cookies())
 		})
 	}
 }

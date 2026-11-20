@@ -499,7 +499,7 @@ func TestSpinTemplateIncludesClerkRefreshWhenEnabled(t *testing.T) {
 	if !strings.Contains(rendered, `data-clerk-publishable-key="pk_test_123"`) {
 		t.Fatalf("spinner page should include Clerk bootstrap script, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `!serverSignedIn && clerkSignedIn`) {
+	if !strings.Contains(rendered, `data-server-signed-in="false"`) || !strings.Contains(rendered, `session.js`) {
 		t.Fatalf("spinner page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 	if !strings.Contains(rendered, data.StatusMessage) {
@@ -549,7 +549,7 @@ func TestFarmersMarketTemplateRendersWithoutErrorField(t *testing.T) {
 	if strings.Contains(rendered, `.Error`) {
 		t.Fatalf("farmers market page should not reference an Error field, body: %s", rendered)
 	}
-	if !strings.Contains(rendered, `const serverSignedIn =`) || !strings.Contains(rendered, `true`) {
+	if !strings.Contains(rendered, `data-server-signed-in="true"`) || !strings.Contains(rendered, `session.js`) {
 		t.Fatalf("farmers market page should pass server sign-in state to Clerk refresh logic, body: %s", rendered)
 	}
 }

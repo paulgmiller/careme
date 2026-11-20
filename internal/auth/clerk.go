@@ -114,20 +114,10 @@ func (c *clerkClient) GetUserIDFromRequest(r *http.Request) (string, bool) {
 
 // WithClerkHTTP wraps the http.Handler with Clerk's authentication middleware
 func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
-	purgeAndRedirect := clerkhttp.AuthorizationFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("authorization failure, purging cookies and redirecting")
-		// Clear any existing Clerk cookies by setting them to expired
-		clearCookie(w, "__session")
-		clearCookie(w, "__clerk_db_jwt") // common in dev flows
-		clearCookie(w, "__client")       // if present in your setup
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			// Let the handler apply its signed-out behavior without converting a
-			// POST into a GET against a POST-only route or losing its form body.
-			handler.ServeHTTP(w, r)
-			return
-		}
-		http.Redirect(w, r, r.RequestURI, http.StatusFound)
-	}))
+	// Failed verification applies signed-out behavior to this request. Do not
+	// erase browser cookies: Clerk can refresh an expired token, and a late
+	// response must not clear a newer token installed by another request.
+	onFailure := clerkhttp.AuthorizationFailureHandler(handler)
 
 	useSessionCookie := clerkhttp.AuthorizationJWTExtractor(func(r *http.Request) string {
 		if c, err := r.Cookie("__session"); err == nil {
@@ -137,7 +127,7 @@ func (c *clerkClient) WithAuthHTTP(handler http.Handler) http.Handler {
 	})
 
 	wrapped := clerkhttp.WithHeaderAuthorization(
-		purgeAndRedirect,
+		onFailure,
 		useSessionCookie,
 		clerkhttp.JWKSClient(c.jwksClient),
 	)(handler)
