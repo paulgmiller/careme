@@ -88,7 +88,7 @@ func testService() (*service, *campaignGeneratorStub, *campaignImageStub, *statu
 	g.images = recipes.NewRecipeImageGenerator(images.ImageStore, images)
 	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
-		statuses: statuses, wait: func() {},
+		wait: func() {},
 	}, g, images, statuses
 }
 
@@ -143,9 +143,8 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
-		state, err := statuses.Load(t.Context(), p.Hash())
-		require.NoError(t, err)
-		assert.Contains(t, state.Failed, "flex unavailable")
+		_, err := statuses.Load(t.Context(), p.Hash())
+		require.ErrorIs(t, err, cache.ErrNotFound, "background failures must not create interactive status")
 	}
 	g.err = nil
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))
