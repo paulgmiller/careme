@@ -368,11 +368,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 	// TODO(pm): Revisit route shape for hash-based recipe lists. `h` is a derived key from
 	// query params, so `/recipes?h=...` is defensible; decide later if we also want a
 	// canonical path form like `/recipes/{h}` or just a redirect alias.
-	if normalizedHash, ok := legacyHashToCurrent(hashParam, legacyRecipeHashSeed); ok {
-		slog.InfoContext(ctx, "redirecting legacy hash to canonical hash", "legacy_hash", hashParam, "hash", normalizedHash)
-		redirectToHash(w, r, normalizedHash, QueryArgHelp)
-		return
-	}
 	slist, err := s.FromCache(ctx, hashParam) // ideally should memory cache this so lots of reloads don't constantly go out to azure
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
