@@ -19,6 +19,7 @@ import (
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/singleflight"
 )
 
 // StaplesBackend is the provider contract consumed by recipe sourcing.
@@ -53,6 +54,27 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
 	defer span.End()
 	return provider.FetchStaples(ctx, locationID)
+}
+
+// Backends may normalize styles when their wine catalog is independent of them.
+func (p routingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
+	backend, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	if normalizer, ok := backend.(interface{ WineCacheStyles([]string) []string }); ok {
+		return normalizer.WineCacheStyles(styles), nil
+	}
+	return styles, nil
+}
+
+func (p dedupingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
+	if normalizer, ok := p.provider.(interface {
+		wineCacheStyles(string, []string) ([]string, error)
+	}); ok {
+		return normalizer.wineCacheStyles(locationID, styles)
+	}
+	return styles, nil
 }
 
 func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
@@ -123,17 +145,11 @@ type staplesFetcher interface {
 	FetchStaples(ctx context.Context, p *GeneratorParams) ([]ai.InputIngredient, error)
 }
 
-// wineCatalogProvider supplies a store-wide supplement to recipe-style searches.
-type wineCatalogProvider interface {
-	IsID(string) bool
-	FetchWineCatalog(context.Context, string) ([]ai.InputIngredient, error)
-}
-
 type cachedStaplesService struct {
-	wineCatalogProviders []wineCatalogProvider
-	provider             staplesProvider
-	cache                ingredientio
-	grader               grader
+	wineFetches singleflight.Group
+	provider    staplesProvider
+	cache       ingredientio
+	grader      grader
 }
 
 type staplesProvider interface {
@@ -166,18 +182,11 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 
 func NewCachedStaplesService(backends []StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
 	provider := NewStaplesProvider(backends)
-	var catalogs []wineCatalogProvider
-	for _, backend := range backends {
-		if catalog, ok := backend.(wineCatalogProvider); ok {
-			catalogs = append(catalogs, catalog)
-		}
-	}
 	rio := IO(c)
 	return &cachedStaplesService{
-		provider:             provider,
-		wineCatalogProviders: catalogs,
-		cache:                rio,
-		grader:               grader,
+		provider: provider,
+		cache:    rio,
+		grader:   grader,
 	}
 }
 
@@ -287,60 +296,55 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	if len(styles) == 0 {
 		return nil, nil
 	}
-	key := wineStylesCacheKey(styles, locationID, date)
-	for _, provider := range s.wineCatalogProviders {
-		if provider.IsID(locationID) {
-			return s.fetchWinesWithCatalog(ctx, provider, locationID, styles, date, key)
+	cacheStyles := styles
+	if normalizer, ok := s.provider.(interface {
+		wineCacheStyles(string, []string) ([]string, error)
+	}); ok {
+		var err error
+		cacheStyles, err = normalizer.wineCacheStyles(locationID, styles)
+		if err != nil {
+			return nil, err
 		}
 	}
-	return s.cachedWines(ctx, key, func() ([]ai.InputIngredient, error) {
-		return s.provider.FetchWines(ctx, locationID, styles)
+	cacheKey := wineStylesCacheKey(cacheStyles, locationID, date)
+	result, err, _ := s.wineFetches.Do(cacheKey, func() (any, error) {
+		return s.fetchWineCandidates(ctx, cacheKey, locationID, styles, date)
 	})
-}
-
-func (s *cachedStaplesService) fetchWinesWithCatalog(ctx context.Context, provider wineCatalogProvider, locationID string, styles []string, date time.Time, key string) ([]ai.InputIngredient, error) {
-	// Keep query caches separate from the combined snapshot used by shopping finalization.
-	catalogKey := "wines/catalog-red-white-v1/" + wineIngredientsCacheKey("", locationID, date)
-	searchKey := "wines/style-search-v1/" + key
-	wines, err := parallelism.Flatten([]func() ([]ai.InputIngredient, error){
-		func() ([]ai.InputIngredient, error) {
-			return s.cachedWines(ctx, searchKey, func() ([]ai.InputIngredient, error) {
-				return s.provider.FetchWines(ctx, locationID, styles)
-			})
-		},
-		func() ([]ai.InputIngredient, error) {
-			return s.cachedWines(ctx, catalogKey, func() ([]ai.InputIngredient, error) {
-				return provider.FetchWineCatalog(ctx, locationID)
-			})
-		},
-	}, func(fetch func() ([]ai.InputIngredient, error)) ([]ai.InputIngredient, error) { return fetch() })
 	if err != nil {
 		return nil, err
 	}
-	wines, err = dedupeInputIngredients(wines)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.cache.SaveIngredients(ctx, key, wines); err != nil {
-		return nil, fmt.Errorf("cache combined wines for %s: %w", locationID, err)
+	wines := result.([]ai.InputIngredient)
+	// Finalization uses recipe styles to find ordering metadata, independent of
+	// whether the provider's source catalog varies with those styles.
+	snapshotKey := wineStylesCacheKey(styles, locationID, date)
+	if snapshotKey != cacheKey {
+		if err := s.cache.SaveIngredients(ctx, snapshotKey, wines); err != nil {
+			return nil, fmt.Errorf("cache wine snapshot for %s: %w", locationID, err)
+		}
 	}
 	return wines, nil
 }
 
-func (s *cachedStaplesService) cachedWines(ctx context.Context, key string, fetch func() ([]ai.InputIngredient, error)) ([]ai.InputIngredient, error) {
-	wines, err := s.cache.IngredientsFromCache(ctx, key)
+func (s *cachedStaplesService) fetchWineCandidates(ctx context.Context, cacheKey, locationID string, styles []string, date time.Time) ([]ai.InputIngredient, error) {
+	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "styles", styles)
+
+	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)
 	if err == nil {
+		logger.InfoContext(ctx, "serving cached wines", "count", len(wines))
 		return wines, nil
 	}
 	if !errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("read wine candidates %s: %w", key, err)
+		logger.ErrorContext(ctx, "failed to read cached wines", "error", err)
 	}
-	wines, err = fetch()
+
+	wines, err = s.provider.FetchWines(ctx, locationID, styles)
 	if err != nil {
-		return nil, fmt.Errorf("fetch wine candidates %s: %w", key, err)
+		return nil, fmt.Errorf("failed to fetch wines for %q: %w", strings.Join(styles, ", "), err)
 	}
-	if err := s.cache.SaveIngredients(ctx, key, wines); err != nil {
-		return nil, fmt.Errorf("cache wine candidates %s: %w", key, err)
+	logger.InfoContext(ctx, "found wines", "count", len(wines))
+
+	if err := s.cache.SaveIngredients(ctx, cacheKey, wines); err != nil {
+		return nil, fmt.Errorf("cache wines for %s: %w", locationID, err)
 	}
 	return wines, nil
 }

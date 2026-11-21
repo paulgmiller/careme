@@ -108,6 +108,9 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
+// WineCacheStyles ignores recipe styles because FetchWines returns a fixed catalog.
+func (p staplesProvider) WineCacheStyles(_ []string) []string { return nil }
+
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	summary, err := p.storeSummary(ctx, locationID)
 	if err != nil {

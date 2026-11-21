@@ -70,6 +70,9 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 }
 
 // FetchWines fetches every page of wines and wine alternatives.
+// WineCacheStyles ignores recipe styles because FetchWines returns a fixed catalog.
+func (p staplesProvider) WineCacheStyles(_ []string) []string { return nil }
+
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(locationID) {
 		return nil, fmt.Errorf("invalid MNFoodClub location ID %q", locationID)

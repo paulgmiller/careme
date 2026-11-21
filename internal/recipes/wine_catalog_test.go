@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -84,109 +84,104 @@ func TestWineRecommendationReadsOriginalCachePath(t *testing.T) {
 	assert.Equal(t, "Original pairing.", selection.Commentary)
 }
 
-// The catalog and targeted searches run concurrently, so record calls under a lock.
-type catalogWineBackend struct {
-	mu           sync.Mutex
-	catalogCalls int
-	styleCalls   int
-	catalogErr   error
-	styleErr     error
+// A fixed-catalog backend models providers whose queries ignore recipe styles.
+type fixedWineCatalogBackend struct {
+	mu    sync.Mutex
+	calls int
 }
 
-func (*catalogWineBackend) IsID(id string) bool { return id == "70500874" || id == "70100023" }
-func (*catalogWineBackend) FetchStaples(context.Context, string) ([]ai.InputIngredient, error) {
+func (*fixedWineCatalogBackend) IsID(id string) bool {
+	return id == "wholefoods_1" || id == "wholefoods_2"
+}
+func (*fixedWineCatalogBackend) WineCacheStyles([]string) []string { return nil }
+func (*fixedWineCatalogBackend) FetchStaples(context.Context, string) ([]ai.InputIngredient, error) {
 	return nil, errors.New("unexpected staples fetch")
 }
 
-func (b *catalogWineBackend) FetchWineCatalog(context.Context, string) ([]ai.InputIngredient, error) {
+func (b *fixedWineCatalogBackend) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.catalogCalls++
-	return []ai.InputIngredient{{ProductID: "shared", VariantID: "broad-upc"}, {ProductID: "fallback", VariantID: "fallback-upc"}}, b.catalogErr
+	b.calls++
+	return []ai.InputIngredient{{ProductID: "wine", VariantID: "wine-upc", Description: "Catalog wine"}}, nil
 }
 
-func (b *catalogWineBackend) FetchWines(_ context.Context, _ string, styles []string) ([]ai.InputIngredient, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.styleCalls++
-	if strings.EqualFold(styles[0], "missing") {
-		return nil, b.styleErr
-	}
-	return []ai.InputIngredient{{ProductID: "shared", VariantID: "style-upc"}, {ProductID: strings.ToLower(styles[0]), VariantID: "targeted-upc"}}, b.styleErr
-}
-
-func TestWineCatalogReusedAcrossStylesAndCombinedSnapshotSaved(t *testing.T) {
-	backend := &catalogWineBackend{}
+func TestFixedWineCatalogReusedAcrossRecipeStyles(t *testing.T) {
+	backend := &fixedWineCatalogBackend{}
 	store := cache.NewInMemoryCache()
 	s := NewCachedStaplesService([]StaplesBackend{backend}, store, &stubIngredientGrader{})
 	date := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
-	for _, style := range []string{"Pinot Noir", "Albariño", " pinot noir "} {
-		got, err := s.FetchWines(t.Context(), "70500874", []string{style}, date)
+	for _, style := range []string{"Pinot Noir", "Albariño", "Chardonnay"} {
+		got, err := s.FetchWines(t.Context(), "wholefoods_1", []string{style}, date)
 		require.NoError(t, err)
-		require.Len(t, got, 3)
-		assert.Equal(t, "style-upc", got[0].VariantID, "targeted results win duplicate IDs")
-		assert.Equal(t, "fallback", got[2].ProductID)
-		persisted, err := IO(store).IngredientsFromCache(t.Context(), wineStylesCacheKey([]string{style}, "70500874", date))
+		require.Len(t, got, 1)
+		persisted, err := IO(store).IngredientsFromCache(t.Context(), wineStylesCacheKey([]string{style}, "wholefoods_1", date))
 		require.NoError(t, err)
-		assert.Equal(t, got, persisted, "shopping finalization can enrich targeted and fallback selections")
+		assert.Equal(t, got, persisted, "each recipe retains ordering metadata")
 	}
-	assert.Equal(t, 1, backend.catalogCalls)
-	assert.Equal(t, 2, backend.styleCalls)
+	assert.Equal(t, 1, backend.calls)
+	// The canonical cache also survives a new service instance.
+	s = NewCachedStaplesService([]StaplesBackend{backend}, store, &stubIngredientGrader{})
+	_, err := s.FetchWines(t.Context(), "wholefoods_1", []string{"Barbera"}, date)
+	require.NoError(t, err)
+	assert.Equal(t, 1, backend.calls)
 	for _, tc := range []struct {
 		location string
 		date     time.Time
-	}{
-		{"70100023", date}, {"70500874", date.AddDate(0, 0, 1)},
-	} {
+	}{{"wholefoods_2", date}, {"wholefoods_1", date.AddDate(0, 0, 1)}} {
 		_, err := s.FetchWines(t.Context(), tc.location, []string{"Pinot Noir"}, tc.date)
 		require.NoError(t, err)
 	}
-	assert.Equal(t, 3, backend.catalogCalls, "broad catalog is isolated by store and date")
+	assert.Equal(t, 3, backend.calls, "store and date remain isolated")
 }
 
-func TestWineCatalogSuppliesFallbackWhenStyleHasNoMatches(t *testing.T) {
-	backend := &catalogWineBackend{}
+func TestFixedWineCatalogConcurrentStylesShareFetch(t *testing.T) {
+	backend := &fixedWineCatalogBackend{}
 	s := NewCachedStaplesService([]StaplesBackend{backend}, cache.NewInMemoryCache(), &stubIngredientGrader{})
-	got, err := s.FetchWines(t.Context(), "70500874", []string{"Missing"}, time.Now())
-	require.NoError(t, err)
-	assert.Equal(t, []ai.InputIngredient{{ProductID: "shared", VariantID: "broad-upc"}, {ProductID: "fallback", VariantID: "fallback-upc"}}, got)
-}
-
-func TestWineCatalogRequiresBothSources(t *testing.T) {
-	for _, source := range []string{"catalog", "style"} {
-		t.Run(source, func(t *testing.T) {
-			backend := &catalogWineBackend{}
-			failure := errors.New("provider failed")
-			if source == "catalog" {
-				backend.catalogErr = failure
-			} else {
-				backend.styleErr = failure
-			}
-			store := cache.NewInMemoryCache()
-			s := NewCachedStaplesService([]StaplesBackend{backend}, store, &stubIngredientGrader{})
-			date := time.Now()
-			got, err := s.FetchWines(t.Context(), "70500874", []string{"Pinot Noir"}, date)
-			require.ErrorIs(t, err, failure)
-			assert.Nil(t, got)
-			_, err = IO(store).IngredientsFromCache(t.Context(), wineStylesCacheKey([]string{"Pinot Noir"}, "70500874", date))
-			assert.ErrorIs(t, err, cache.ErrNotFound)
-		})
+	date := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	start := make(chan struct{})
+	errors := make(chan error, 12)
+	for i := range 12 {
+		go func() {
+			<-start
+			_, err := s.FetchWines(t.Context(), "wholefoods_1", []string{fmt.Sprintf("style-%d", i)}, date)
+			errors <- err
+		}()
 	}
+	close(start)
+	for range 12 {
+		require.NoError(t, <-errors)
+	}
+	assert.Equal(t, 1, backend.calls)
 }
 
-type failingCombinedWineCache struct{ ingredientio }
+func TestStyleSensitiveWineCatalogsRemainSeparate(t *testing.T) {
+	backend := &stubStaplesProvider{ids: map[string]bool{"store": true}, ingredients: []ai.InputIngredient{{ProductID: "wine"}}}
+	s := NewCachedStaplesService([]StaplesBackend{backend}, cache.NewInMemoryCache(), &stubIngredientGrader{})
+	date := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	for _, style := range []string{"Pinot Noir", "Chardonnay", "Pinot Noir"} {
+		_, err := s.FetchWines(t.Context(), "store", []string{style}, date)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 2, backend.calls)
+}
 
-func (c failingCombinedWineCache) SaveIngredients(ctx context.Context, key string, wines []ai.InputIngredient) error {
-	if !strings.Contains(strings.TrimPrefix(key, "wines/"), "/") {
-		return errors.New("combined catalog write failed")
+type failingWineSnapshotCache struct {
+	ingredientio
+	key string
+}
+
+func (c failingWineSnapshotCache) SaveIngredients(ctx context.Context, key string, wines []ai.InputIngredient) error {
+	if key == c.key {
+		return errors.New("snapshot write failed")
 	}
 	return c.ingredientio.SaveIngredients(ctx, key, wines)
 }
 
-func TestWineCatalogRequiresCombinedSnapshotWrite(t *testing.T) {
-	s := NewCachedStaplesService([]StaplesBackend{&catalogWineBackend{}}, cache.NewInMemoryCache(), &stubIngredientGrader{})
-	s.cache = failingCombinedWineCache{s.cache}
-	got, err := s.FetchWines(t.Context(), "70500874", []string{"Pinot Noir"}, time.Now())
-	require.ErrorContains(t, err, "combined catalog write failed")
+func TestFixedWineCatalogRequiresRecipeSnapshot(t *testing.T) {
+	date := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	s := NewCachedStaplesService([]StaplesBackend{&fixedWineCatalogBackend{}}, cache.NewInMemoryCache(), &stubIngredientGrader{})
+	s.cache = failingWineSnapshotCache{s.cache, wineStylesCacheKey([]string{"Pinot Noir"}, "wholefoods_1", date)}
+	got, err := s.FetchWines(t.Context(), "wholefoods_1", []string{"Pinot Noir"}, date)
+	require.ErrorContains(t, err, "snapshot write failed")
 	assert.Nil(t, got)
 }

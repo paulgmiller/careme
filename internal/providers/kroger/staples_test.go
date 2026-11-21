@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/kroger/products"
 
@@ -125,13 +126,13 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	provider := staplesProvider{client: client}
+	provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
 	require.NoError(t, err)
-	assert.Len(t, got, 2)
+	assert.Len(t, got, 4)
 	mu.Lock()
 	defer mu.Unlock()
-	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc"}, terms)
+	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc", "red wine", "white wine"}, terms)
 }
 
 func TestStaplesProvider_FetchPantry_UsesPantrySearchTerms(t *testing.T) {
@@ -333,7 +334,7 @@ func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
 				return jsonResponse(req, http.StatusBadRequest, `{"errors":{"reason":"page failed"}}`), nil
 			})}))
 			require.NoError(t, err)
-			provider := staplesProvider{client: client}
+			provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
 			var rows []ai.InputIngredient
 			switch tc.name {
 			case "staples":
@@ -430,7 +431,7 @@ func TestStaplesProviderFetchWineCatalogSearchesRedAndWhite(t *testing.T) {
 	})}
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
 	require.NoError(t, err)
-	got, err := (staplesProvider{client: client}).FetchWineCatalog(t.Context(), "70500874")
+	got, err := (newStaplesProviderWithCache(client, cache.NewInMemoryCache())).fetchWineCatalog(t.Context(), "70500874", time.Now())
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.ElementsMatch(t, []string{"red wine", "white wine"}, terms)
