@@ -154,10 +154,16 @@ func (rio recipeio) ParamsExist(ctx context.Context, p *generatorParams) (bool, 
 	return rio.Cache.Exists(ctx, paramsCachePrefix+p.Hash())
 }
 
+// SaveShoppingList keeps the first completed result for a request hash.
+// Later publishers receive cache.ErrAlreadyExists; edits and finalization use new hashes.
 func (rio recipeio) SaveShoppingList(ctx context.Context, shoppingList *ai.ShoppingList, hash string) error {
 	// we could actually nuke out the rest of recipes and lazily load but not yet. Storage is cheap?
 	shoppingJSON := lo.Must(json.Marshal(shoppingList))
-	if err := rio.Cache.Put(ctx, ShoppingListCachePrefix+hash, string(shoppingJSON), cache.Unconditional()); err != nil {
+	if err := rio.Cache.Put(ctx, ShoppingListCachePrefix+hash, string(shoppingJSON), cache.IfNoneMatch()); err != nil {
+		if errors.Is(err, cache.ErrAlreadyExists) {
+			slog.InfoContext(ctx, "shopping list already exists; keeping first completed result", "hash", hash)
+			return err
+		}
 		slog.ErrorContext(ctx, "failed to cache shopping list document", "hash", hash, "error", err)
 		return err
 	}

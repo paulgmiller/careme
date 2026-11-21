@@ -114,6 +114,14 @@ func TestFinalizeRetriesMergeFailure(t *testing.T) {
 	assert.Equal(t, 1, merger.calls)
 	_, err = s.cachedShoppingPurchases(t.Context(), p.Hash())
 	require.NoError(t, err)
+	first, err := s.FromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	rr = finalizeShoppingRequest(s, hash)
+	require.Equal(t, http.StatusOK, rr.Code, "repeated finalization must accept the existing snapshot")
+	second, err := s.FromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+	assert.Equal(t, 1, merger.calls)
 }
 
 func TestShoppingPurchaseCacheRetainsFinalizedSnapshot(t *testing.T) {

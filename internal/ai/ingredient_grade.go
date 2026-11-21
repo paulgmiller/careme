@@ -200,7 +200,9 @@ func (g *ingredientGrader) GradeIngredients(ctx context.Context, ingredients []I
 	}
 
 	resp, err := g.oai.Responses.New(ctx, responses.ResponseNewParams{
-		Model:        g.model,
+		Model: g.model,
+		// TODO: Reuse the recipe/menu Flex retry handling before enabling Flex grading.
+		ServiceTier:  responses.ResponseNewParamsServiceTierDefault,
 		Reasoning:    noReasoning(),
 		Instructions: openai.String(ingredientGradeSystemInstruction),
 		Input: responses.ResponseNewParamsInputUnion{

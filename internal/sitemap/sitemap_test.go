@@ -153,10 +153,6 @@ func TestHandleSitemapIncludesRecipePagesWithFeedback(t *testing.T) {
 		Address: "123 Test St",
 	}, start)
 	shoppingListHash := params.Hash()
-	if err := cacheStore.Put(context.Background(), recipes.ShoppingListCachePrefix+shoppingListHash, `{"mock":"shopping-list"}`, cache.Unconditional()); err != nil {
-		t.Fatalf("failed to save shopping list: %v", err)
-	}
-
 	list := recipes.IO(cacheStore)
 	recipe := ai.Recipe{
 		Title:        "Feedback Soup",

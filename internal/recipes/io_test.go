@@ -289,3 +289,71 @@ func TestParamsStoreDatesRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestSaveShoppingListFirstWriterWins(t *testing.T) {
+	for _, backend := range []string{"memory", "file"} {
+		t.Run(backend, func(t *testing.T) {
+			for _, winner := range []string{"Standard dinner", "Flex dinner"} {
+				t.Run(winner, func(t *testing.T) {
+					var c cache.Cache = cache.NewInMemoryCache()
+					if backend == "file" {
+						c = cache.NewFileCache(t.TempDir())
+					}
+					rio := IO(c)
+					first := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: winner}}}
+					second := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Later dinner"}}}
+					require.NoError(t, rio.SaveShoppingList(t.Context(), first, "shared"))
+					require.ErrorIs(t, rio.SaveShoppingList(t.Context(), second, "shared"), cache.ErrAlreadyExists)
+					saved, err := rio.FromCache(t.Context(), "shared")
+					require.NoError(t, err)
+					assert.Equal(t, first, saved)
+					require.NoError(t, rio.SaveShoppingList(t.Context(), second, "new-selection"))
+					saved, err = rio.FromCache(t.Context(), "new-selection")
+					require.NoError(t, err)
+					assert.Equal(t, second, saved, "new hashes still allow regeneration and finalization")
+				})
+			}
+		})
+	}
+}
+
+func TestSaveShoppingListConcurrentPublishers(t *testing.T) {
+	for _, backend := range []string{"memory", "file"} {
+		t.Run(backend, func(t *testing.T) {
+			var c cache.Cache = cache.NewInMemoryCache()
+			if backend == "file" {
+				c = cache.NewFileCache(t.TempDir())
+			}
+			rio := IO(c)
+			type result struct {
+				title string
+				err   error
+			}
+			results := make(chan result, 12)
+			start := make(chan struct{})
+			for i := range 12 {
+				go func() {
+					<-start
+					title := fmt.Sprintf("Dinner %d", i)
+					err := rio.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{{Title: title}}}, "shared")
+					results <- result{title, err}
+				}()
+			}
+			close(start)
+			var winner string
+			for range 12 {
+				result := <-results
+				if result.err == nil {
+					assert.Empty(t, winner, "only one publisher may win")
+					winner = result.title
+				} else {
+					assert.ErrorIs(t, result.err, cache.ErrAlreadyExists)
+				}
+			}
+			require.NotEmpty(t, winner)
+			saved, err := rio.FromCache(t.Context(), "shared")
+			require.NoError(t, err)
+			assert.Equal(t, winner, saved.Recipes[0].Title)
+		})
+	}
+}
