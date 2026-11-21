@@ -3,8 +3,10 @@ package recipes
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"careme/internal/ai"
@@ -162,4 +164,55 @@ func TestGenerationHandlesProgressWriteFailures(t *testing.T) {
 			assert.Equal(t, "Dinner", list.Recipes[0].Title)
 		})
 	}
+}
+
+// Simulate capacity waits in both menu planning and recipe generation.
+type slowBackgroundAIClient struct{ *captureGenerateAIClient }
+
+func (c slowBackgroundAIClient) CreateMenuPlan(ctx context.Context, location *locations.Location, ingredients []ai.InputIngredient, instructions []string, date time.Time, lastRecipes []string, count int) (*ai.MenuPlan, error) {
+	time.Sleep(21 * time.Minute)
+	return c.captureGenerateAIClient.CreateMenuPlan(ctx, location, ingredients, instructions, date, lastRecipes, count)
+}
+
+func (c slowBackgroundAIClient) GenerateRecipe(ctx context.Context, instructions []string, menu ai.ResponseRef) (*ai.Recipe, error) {
+	time.Sleep(16 * time.Minute)
+	return c.captureGenerateAIClient.GenerateRecipe(ctx, instructions, menu)
+}
+
+func TestBackgroundGenerationIgnoresInteractiveStatusTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := cache.NewInMemoryCache()
+		rio := IO(c)
+		p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
+		interactive := status.NewStore(c)
+		require.NoError(t, interactive.Start(t.Context(), p.Hash(), "Existing interactive progress"))
+		recipe := ai.Recipe{Title: "Slow Flex dinner", Instructions: []string{"Cook dinner."}, ResponseID: "recipe-response"}
+		client := slowBackgroundAIClient{&captureGenerateAIClient{shoppingList: &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}}}
+		critiquer := &captureCritiqueService{fn: func(ai.Recipe) (*ai.RecipeCritique, error) {
+			return &ai.RecipeCritique{OverallScore: 10}, nil
+		}}
+		g := newTestGenerator(t, client, critiquer, fixedStaplesService{}, NoProgress{}, rio)
+		ctx, cancel := context.WithTimeout(t.Context(), ai.FlexJobTimeout)
+		defer cancel()
+		started := time.Now()
+		list, err := g.GenerateRecipes(ctx, p)
+		require.NoError(t, err)
+		require.NoError(t, ctx.Err())
+		assert.Equal(t, 37*time.Minute, time.Since(started))
+		require.Len(t, list.Recipes, 1)
+		assert.Equal(t, recipe.Title, list.Recipes[0].Title)
+		assert.Equal(t, []string{list.Plan.ResponseID}, client.generateMenuResponseIDs)
+		require.NoError(t, rio.SaveShoppingList(ctx, list, p.Hash()))
+		saved, err := rio.FromCache(ctx, p.Hash())
+		require.NoError(t, err)
+		assert.Equal(t, recipe.Title, saved.Recipes[0].Title)
+		progress, err := interactive.Load(ctx, p.Hash())
+		require.NoError(t, err)
+		assert.Equal(t, "Recipe generation timed out.", progress.Failed)
+		assert.Equal(t, "Existing interactive progress", progress.Message)
+		assert.Empty(t, progress.Slots, "background generation must leave interactive progress alone")
+		w := httptest.NewRecorder()
+		formatShoppingListHTMLForTest(ctx, p, *saved, true, recipeSelection{}, w)
+		assert.Contains(t, assertHTTPSuccess(t, w), recipe.Title)
+	})
 }

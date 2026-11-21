@@ -28,7 +28,6 @@ import (
 	"careme/internal/recipes"
 	"careme/internal/recipes/critique"
 	"careme/internal/recipes/prompts"
-	"careme/internal/recipes/status"
 	"careme/internal/users"
 
 	utypes "careme/internal/users/types"
@@ -61,11 +60,6 @@ type generator interface {
 	GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error)
 }
 
-type generationStatusStore interface {
-	Start(ctx context.Context, hash string, message string) error
-	Fail(ctx context.Context, hash string, err error) error
-}
-
 type userStore interface {
 	List(ctx context.Context) ([]utypes.User, error)
 	GetByEmail(email string) (*utypes.User, error)
@@ -75,7 +69,6 @@ type mailer struct {
 	cache              cache.Cache
 	userStorage        userStore
 	generator          generator // interface requires making params public
-	generationStatuses generationStatusStore
 	locServer          locServer
 	client             emailClient
 	publicOrigin       string
@@ -108,12 +101,11 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 		return nil, fmt.Errorf("failed to create staples backends: %w", err)
 	}
 	staples := recipes.NewCachedStaplesService(backends, cacheStore, ig)
-	generationStatuses := status.NewStore(cacheStore)
 	aiConfig := cfg.AI
 	aiConfig.ServiceTier = "flex"
 	aiClient := ai.NewClient(aiConfig, aiHTTPClient, prompts.NewCacheRecorder(cacheStore))
 	postJobs := recipes.PostRecipeJobs{recipes.NewRecipeImageGenerator(recipes.NewImageStore(imageCache), aiClient), recipes.NewRecipeWineGenerator(cacheStore, aiClient, staples)}
-	generator, err := recipes.NewGenerator(aiClient, mc, staples, generationStatuses, recipes.IO(cacheStore), postJobs)
+	generator, err := recipes.NewGenerator(aiClient, mc, staples, recipes.NoProgress{}, recipes.IO(cacheStore), postJobs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create recipe generator: %w", err)
 	}
@@ -139,7 +131,6 @@ func NewMailer(cfg *config.Config, providers providerFactory) (*mailer, error) {
 		cache:              cacheStore,
 		userStorage:        userStorage,
 		generator:          generator,
-		generationStatuses: generationStatuses,
 		locServer:          locationserver,
 		client:             sendgrid.NewSendClient(sendgridkey),
 		publicOrigin:       cfg.ResolvedPublicOrigin(),
@@ -278,24 +269,22 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 				return fmt.Errorf("save recipe params %q: %w", paramsHash, err)
 			}
 		}
-		if err := m.generationStatuses.Start(ctx, paramsHash, ""); err != nil {
-			return fmt.Errorf("start generation status %q: %w", paramsHash, err)
-		}
 
 		// can orphan recipes here with crash or shutdown. Params should have a start time
 
 		shoppingList, err = m.generator.GenerateRecipes(ctx, p)
 		if err != nil {
-			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record recipe generation failure", "hash", paramsHash, "error", statusErr)
-			}
 			return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
 		}
 		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
-			if statusErr := m.generationStatuses.Fail(ctx, paramsHash, err); statusErr != nil {
-				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", paramsHash, "error", statusErr)
+			if !errors.Is(err, cache.ErrAlreadyExists) {
+				return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
 			}
-			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
+			// Another worker finished first. Email the same list the shared link serves.
+			shoppingList, err = rio.FromCache(ctx, paramsHash)
+			if err != nil {
+				return fmt.Errorf("load winning shopping list %q: %w", paramsHash, err)
+			}
 		}
 	}
 	if len(shoppingList.Recipes) == 0 {
