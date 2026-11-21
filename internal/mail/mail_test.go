@@ -637,3 +637,39 @@ func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
 		})
 	}
 }
+
+type mailGeneratorFunc func(context.Context, *recipes.GeneratorParams) (*ai.ShoppingList, error)
+
+func (f mailGeneratorFunc) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	return f(ctx, p)
+}
+
+func TestDeliverEmailUsesWinningShoppingList(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	rio := recipes.IO(c)
+	sender := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+	winner := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Winning interactive dinner"}}}
+	m := &mailer{
+		cache: c,
+		generator: mailGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+			// An interactive request finishes while this mail job is generating.
+			if err := rio.SaveShoppingList(ctx, winner, p.Hash()); err != nil {
+				return nil, err
+			}
+			return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Losing mail dinner"}}}, nil
+		}),
+		client:             sender,
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+	p := recipes.DefaultParams(testMailLocation(), time.Now())
+	require.NoError(t, m.deliverEmail(t.Context(), utypes.User{ID: "user-1", Email: []string{"u1@example.com"}}, p))
+	require.NotNil(t, sender.last)
+	assert.Contains(t, sender.last.Content[1].Value, "Winning interactive dinner")
+	for _, content := range sender.last.Content {
+		assert.NotContains(t, content.Value, "Losing mail dinner")
+	}
+	saved, err := rio.FromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	assert.Equal(t, winner, saved)
+}

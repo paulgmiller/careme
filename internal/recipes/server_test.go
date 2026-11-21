@@ -125,12 +125,13 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Planning your meals…")
 			},
 		},
-		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
+		{name: "status missing", wantText: status.InitialMessage, setup: func(testing.TB, *server, string) {}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestServer(t, withTestStatusStore(newFakeStatusStore()))
+			t.Cleanup(s.wg.Wait)
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			tt.setup(t, s, p.Hash())
@@ -193,7 +194,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	assert.NotContains(t, status.Failed, "first attempt failed")
 }
 
-func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
+func TestHandleRecipesLocationStartsInteractiveGeneration(t *testing.T) {
 	t.Parallel()
 	location := &locations.Location{
 		ID:      "70100023",
@@ -224,11 +225,13 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 	s.handleRecipes(followRR, followReq)
 
 	require.Equal(t, http.StatusOK, followRR.Code)
-	assert.Contains(t, followRR.Body.String(), "Try again, chef")
+	assert.Contains(t, followRR.Body.String(), status.InitialMessage)
+	assert.NotContains(t, followRR.Body.String(), "Try again, chef")
+	s.wg.Wait()
 	select {
 	case <-generator.called:
-		t.Fatal("GET location redirect should not start generation")
 	default:
+		t.Fatal("GET should start interactive generation when only background params exist")
 	}
 }
 
@@ -3272,4 +3275,69 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	exists, err := s.images.Exists(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+type shoppingRaceGenerator struct {
+	*captureKickgenerationGenerator
+	generate func(context.Context, *generatorParams) (*ai.ShoppingList, error)
+}
+
+func (f shoppingRaceGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+	return f.generate(ctx, p)
+}
+
+func TestInteractiveRequestRacesBackgroundGeneration(t *testing.T) {
+	for _, first := range []string{"interactive", "background"} {
+		t.Run(first, func(t *testing.T) {
+			started := make(chan struct{})
+			release := make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			s := newTestServer(t, withTestGenerator(shoppingRaceGenerator{&captureKickgenerationGenerator{}, func(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+				close(started)
+				<-release
+				return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Interactive dinner"}}}, nil
+			}}))
+			t.Cleanup(func() { unblock(); s.wg.Wait() })
+			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Store"}, time.Now())
+			// This is the only shared state left by an unfinished campaign/mail job.
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+			rr := httptest.NewRecorder()
+			s.handleRecipes(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Contains(t, rr.Body.String(), status.InitialMessage)
+			assert.NotContains(t, rr.Body.String(), "Try again, chef")
+			select {
+			case <-started:
+			case <-time.After(time.Second):
+				t.Fatal("interactive generation did not start")
+			}
+			// Another viewer shares the active interactive attempt.
+			second := httptest.NewRecorder()
+			s.handleRecipes(second, req)
+			require.Equal(t, http.StatusOK, second.Code)
+			background := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Background dinner"}}}
+			want := "Interactive dinner"
+			if first == "background" {
+				require.NoError(t, s.SaveShoppingList(t.Context(), background, p.Hash()))
+				want = "Background dinner"
+			}
+			unblock()
+			s.wg.Wait()
+			if first == "interactive" {
+				require.ErrorIs(t, s.SaveShoppingList(t.Context(), background, p.Hash()), cache.ErrAlreadyExists)
+			}
+			saved, err := s.FromCache(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, want, saved.Recipes[0].Title)
+			progress, err := s.generationStatuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Empty(t, progress.Failed, "losing the publication race is not a generation failure")
+			page := httptest.NewRecorder()
+			s.handleRecipes(page, req)
+			require.Equal(t, http.StatusOK, page.Code)
+			assert.Contains(t, page.Body.String(), want)
+		})
+	}
 }

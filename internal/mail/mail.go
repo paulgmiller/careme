@@ -277,7 +277,14 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 			return fmt.Errorf("generate recipes for user %q: %w", user.ID, err)
 		}
 		if err := rio.SaveShoppingList(ctx, shoppingList, paramsHash); err != nil {
-			return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
+			if !errors.Is(err, cache.ErrAlreadyExists) {
+				return fmt.Errorf("save shopping list %q: %w", paramsHash, err)
+			}
+			// Another worker finished first. Email the same list the shared link serves.
+			shoppingList, err = rio.FromCache(ctx, paramsHash)
+			if err != nil {
+				return fmt.Errorf("load winning shopping list %q: %w", paramsHash, err)
+			}
 		}
 	}
 	if len(shoppingList.Recipes) == 0 {

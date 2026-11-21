@@ -145,7 +145,7 @@ func (s *service) prepare(ctx context.Context, p *recipes.GeneratorParams) error
 	if len(list.Recipes) == 0 {
 		return fmt.Errorf("campaign shopping list contains no recipes")
 	}
-	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil {
+	if err := s.store.SaveShoppingList(ctx, list, p.Hash()); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		return fmt.Errorf("save campaign shopping list: %w", err)
 	}
 

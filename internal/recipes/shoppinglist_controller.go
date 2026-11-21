@@ -174,7 +174,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		Recipes: p.Saved,
 		Plan:    currentList.Plan,
 	}
-	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
+	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
 		return
@@ -271,7 +271,18 @@ func (s *server) notFound(ctx context.Context, w http.ResponseWriter, r *http.Re
 	progress, err := s.generationStatuses.Load(ctx, hash)
 	if err != nil {
 		if errors.Is(err, cache.ErrNotFound) {
-			progress.Failed = "Recipe generation did not start."
+			// Campaign/mail may have saved params while Flex is still running.
+			// Start interactive generation now; the first completed list wins.
+			userID, ok := s.clerk.GetUserIDFromRequest(r)
+			if !ok {
+				userID = guestUser.ID
+			}
+			if err := s.kickgeneration(ctx, p, userID); err != nil {
+				slog.ErrorContext(ctx, "failed to start interactive generation", "hash", hash, "error", err)
+				http.Error(w, "Unable to start your recipes. Try again, chef", http.StatusInternalServerError)
+				return
+			}
+			progress.Message = status.InitialMessage
 		} else {
 			slog.ErrorContext(ctx, "failed to load generation progress", "hash", hash, "error", err)
 			// A failed poll leaves existing cards intact; the next poll retries.
@@ -533,9 +544,8 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
-			// Another request with these content-addressed params owns the generation.
-			// Redirecting lets this user poll for that shared result; only the owner
-			// records it in their recent shopping lists when generation completes.
+			// The GET serves the completed list or existing interactive progress.
+			// If only background params exist, it starts interactive generation.
 			slog.InfoContext(ctx, "params already existed redirecting", "hash", p.Hash())
 			redirectToHash(w, r, p.Hash(), QueryArgHelp)
 			return
@@ -650,7 +660,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 			return
 		}
 
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
 				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", hash, "error", statusErr)
