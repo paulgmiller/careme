@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"careme/internal/ai"
+	"careme/internal/cache"
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/providers/kroger/products"
 
@@ -125,13 +126,13 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	provider := staplesProvider{client: client}
+	provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
 	require.NoError(t, err)
-	assert.Len(t, got, 2)
+	assert.Len(t, got, 4)
 	mu.Lock()
 	defer mu.Unlock()
-	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc"}, terms)
+	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc", "red wine", "white wine"}, terms)
 }
 
 func TestStaplesProvider_FetchPantry_UsesPantrySearchTerms(t *testing.T) {
@@ -333,7 +334,7 @@ func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
 				return jsonResponse(req, http.StatusBadRequest, `{"errors":{"reason":"page failed"}}`), nil
 			})}))
 			require.NoError(t, err)
-			provider := staplesProvider{client: client}
+			provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
 			var rows []ai.InputIngredient
 			switch tc.name {
 			case "staples":
@@ -413,4 +414,27 @@ func TestFrozenProductDetection(t *testing.T) {
 			assert.Equal(t, tc.want, isFrozenProduct(products.ProductsProductModel{Description: new(tc.description), Categories: &tc.categories}))
 		})
 	}
+}
+
+func TestStaplesProviderFetchWineCatalogSearchesRedAndWhite(t *testing.T) {
+	var mu sync.Mutex
+	var terms []string
+	baseClient := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		q := req.URL.Query()
+		mu.Lock()
+		terms = append(terms, q.Get("filter.term"))
+		mu.Unlock()
+		if q.Get("filter.locationId") != "70500874" || q.Get("filter.fulfillment") != "ais" || q.Get("filter.limit") != "50" {
+			return jsonResponse(req, http.StatusBadRequest, `{}`), nil
+		}
+		return jsonResponse(req, http.StatusOK, `{"data":[{"productId":"wine","description":"Wine","categories":["Adult Beverage"],"items":[{"itemId":"wine-upc","size":"750mL","price":{"regular":12.99}}]}]}`), nil
+	})}
+	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
+	require.NoError(t, err)
+	got, err := (newStaplesProviderWithCache(client, cache.NewInMemoryCache())).fetchWineCatalog(t.Context(), "70500874", time.Now())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.ElementsMatch(t, []string{"red wine", "white wine"}, terms)
+	assert.Equal(t, "wine-upc", got[0].VariantID)
+	assert.Equal(t, []string{"Adult Beverage"}, got[0].Categories)
 }

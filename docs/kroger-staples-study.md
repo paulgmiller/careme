@@ -1,5 +1,36 @@
 # Kroger staples queries
 
+## Broad wine search comparison
+
+Measured November 18, 2026 against the live Products API with
+`filter.fulfillment=ais`, `filter.limit=50`, and offsets 0 through 250.
+The API schema caps the start offset at 250 and the page size at 50, giving
+a 300-product search window. Each search below returned six full pages.
+
+| Search term | QFC 70500874 reported total | Fred Meyer 70100023 reported total | Fetchable per store |
+| --- | ---: | ---: | ---: |
+| `red wine` | 526 | 562 | 300 |
+| `white wine` | 473 | 481 | 300 |
+
+Totals come from each response's `meta.pagination.total`, before ingredient
+filtering or product-ID deduplication. They are search matches, which can
+overlap or include products other than drinking wine. Both terms exceed the
+search window at both stores, so replacing recipe-style searches with just
+these two terms would truncate results. The provider now uses these capped
+broad searches as a shared store/date catalog and supplements them with cached
+recipe-style searches, merging both sources by product ID.
+Inventory and search ranking can change these counts.
+
+An exclusion-syntax probe at QFC on the same date found that neither `-` nor
+`NOT` excluded styles: `red wine -cabernet` and `red wine NOT cabernet` each
+reported 160 matches and returned Cabernet in all 50 first-page descriptions.
+The plain `red wine` query returned Cabernet in 19 of its first 50 descriptions.
+`red wine -cabernet -merlot -pinot` returned no products. These forms cannot
+provide a remainder query after separate style searches; local deduplication
+would not recover products outside the broad query's 300-result window.
+
+## Staples search terms
+
 The provider retains the original search terms, removes brand filtering, and
 adds `turkey`, `sausage`, and `Dairy & Eggs`. Targeted turkey and sausage searches
 replace the broader `Meat & Seafood` search following the comparison below.
