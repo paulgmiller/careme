@@ -37,7 +37,7 @@ func (advertisedLocationStoreStub) GetLocationByID(ctx context.Context, id strin
 
 type campaignGeneratorStub struct {
 	images interface {
-		RecipeReady(context.Context, ai.Recipe) error
+		RecipeReady(context.Context, ai.Recipe, string, time.Time) error
 	}
 	mu       sync.Mutex
 	params   []*recipes.GeneratorParams
@@ -54,7 +54,7 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 		return nil, g.err
 	}
 	recipe := ai.Recipe{Title: "Dinner at " + p.Location.ID, Instructions: []string{"Cook dinner."}}
-	if err := g.images.RecipeReady(ctx, recipe); err != nil {
+	if err := g.images.RecipeReady(ctx, recipe, p.Location.ID, p.Date); err != nil {
 		return nil, err
 	}
 	return &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, nil

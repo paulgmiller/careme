@@ -80,7 +80,7 @@ func TestGenerationPublishesRecipesBeforeReviewInPlanOrder(t *testing.T) {
 			}}
 			generator := newTestGenerator(t, client, critiquer, fixedStaplesService{}, progress, rio)
 			images := make(chan ai.Recipe, 2)
-			generator.recipeImages = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
+			generator.postJobs = recipeImageStarterFunc(func(_ context.Context, recipe ai.Recipe) { images <- recipe })
 			done := make(chan error, 1)
 			go func() { _, err := generator.GenerateRecipes(t.Context(), p); done <- err }()
 			select {
