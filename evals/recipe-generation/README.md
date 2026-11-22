@@ -18,6 +18,31 @@ The cost column reports generation USD. JSON output also records `metadata.gener
 
 Before the cost-only client refactor, on 2026-09-08, a one-case live check with `MODEL=gpt-5.6-luna REASONING_EFFORT=low -- --no-cache --filter-first-n 1` verified the exported reasoning and cost fields. Generation cost was $0.0061969, judge cost $0.032064, total $0.0382609; generation took 22.809s and used 323 reasoning tokens. The recipe scored 7/10 and failed only the quality assertion. This checks the reporting integration, not a repeated model comparison. Evaluation ID: `eval-dAr-2026-09-08T16:13:45`.
 
+## Web search and recipe critique scores — 2026-11-18 (UTC)
+
+Web search did not improve the average critique score in this run. GPT-6.1 Sol
+generated one recipe per case at medium reasoning in each condition, using the
+same ten saved menu fixtures and the same Gemini 3.1 Pro Preview judge.
+Promptfoo caching was disabled. Search was enabled through the Responses API
+web search tool in a temporary source copy. All ten search-enabled cases used it,
+with 13 calls in total.
+
+| Metric | Web search off | Web search on |
+| --- | ---: | ---: |
+| Mean critique score out of 10 | 8.8 | 8.6 |
+| Cases scoring at least 8/10 | 9/10 | 9/10 |
+| Cases passing all assertions | 9/10 | 9/10 |
+| Median generation time | 43.9 s | 43.6 s |
+| Estimated generation cost | $0.48 | $0.67 |
+
+Three cases gained one point, five lost one point, and two were unchanged.
+Sichuan Chicken & Bok Choy Stir-Fry rose from 6/10 to 7/10 and was the only
+case below the quality threshold in both runs. The comparison used one sample
+per case, so the size and direction of the score change remain uncertain.
+
+Promptfoo eval IDs were `eval-zpN-2026-11-18T06:18:10` with search off
+and `eval-JUi-2026-11-18T07:01:39` with search on.
+
 ## Recipe model comparison — 2026-09-07
 
 Sol had the highest judged quality; Astra passed the most complete cases because it stayed within the generation latency budget. Luna was fastest but failed six quality checks. This run does not support replacing Sol or Astra with Luna for recipe generation.
