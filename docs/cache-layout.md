@@ -308,17 +308,20 @@ only persisted VariantIDs, without guessing a mapping for old product IDs.
 Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. The full wine candidate catalog uses the existing
 `ingredients/wines/` cache keyed by normalized recipe styles, store, and date.
-Kroger's provider internally caches the broad red/white catalog in the existing
-`recipes` container at `kroger/wines/red-white-v1/<store ID>/<UTC lookup date>`.
-This cache uses the current lookup day, since the API returns live inventory,
-not inventory for a requested shopping date. `FetchWines` combines that catalog
-with parallel recipe-style searches, keeping targeted matches first; the normal
-recipe cache deduplicates and saves the combined candidates under its existing
-store/shopping-date/style key. Different style sets reuse the provider's broad
-catalog across requests and provider instances. Each broad term retains its
-300-product search window. The recipe layer has no separate catalog contract.
-The former `ingredients/wines/catalog-red-white-v1/wines/<hash>` and
-`ingredients/wines/style-search-v1/wines/<hash>` caches are no longer used.
+Kroger's combined provider depends on the shared cached wine provider, wired to
+raw Kroger searches. Red/white results use the normal `ingredients/wines/<hash>`
+key for `["red wine", "white wine"]`, store, and current UTC lookup date. This
+source returns live inventory, independently of the recipe's shopping date.
+The combined provider queries recipe styles directly and gets broad candidates
+through the cached raw provider, avoiding recursive combined queries. Targeted
+matches come first; the outer recipe cache deduplicates and saves the combined
+candidates under the existing store/shopping-date/style key. Both source and
+combined caches use the shared serialization, request coalescing, and storage
+implementation; Kroger has no separate cache implementation. Each broad search
+retains its 300-product window.
+The former `kroger/wines/red-white-v1/<store ID>/<UTC lookup date>`,
+`ingredients/wines/catalog-red-white-v1/wines/<hash>`, and
+`ingredients/wines/style-search-v1/wines/<hash>` entries are no longer used.
 
 Whole Foods, ALDI, Publix, MN Food Club, Local Yokels, Imperfect Foods, and
 Smith Brothers Farms declare that their wine candidates do not depend on recipe

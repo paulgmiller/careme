@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"careme/internal/brightdata"
+	"careme/internal/cache"
 	"careme/internal/farmersmarket"
 	"careme/internal/providers/albertsons"
 	"careme/internal/providers/aldi"
@@ -52,10 +53,16 @@ func (f Factory) NewStaplesBackends() ([]recipes.StaplesBackend, error) {
 
 	// Kroger uses its public API, without the Bright Data proxy.
 	httpClient := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	krogerBackend, err := kroger.NewStaplesProvider(cfg, httpClient)
+	krogerSearches, err := kroger.NewStaplesProvider(cfg, httpClient)
 	if err != nil {
 		return nil, fmt.Errorf("create kroger staples provider: %w", err)
 	}
+	wineCache, err := cache.EnsureCache("recipes")
+	if err != nil {
+		return nil, fmt.Errorf("create wine cache: %w", err)
+	}
+	krogerCatalog := recipes.NewCachedWineProvider([]recipes.StaplesBackend{krogerSearches}, wineCache)
+	krogerBackend := kroger.WithWineCatalog(krogerSearches, krogerCatalog)
 	farmersMarketProvider, err := farmersmarket.NewStaplesProvider()
 	if err != nil {
 		return nil, fmt.Errorf("create farmers market staples provider: %w", err)

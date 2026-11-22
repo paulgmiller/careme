@@ -82,6 +82,8 @@ func (p staplesProvider) FetchStaples(ctx context.Context, id string) ([]ai.Inpu
 	return append(ingredients, produceBoxIngredients()...), nil
 }
 
+func (p staplesProvider) WineCacheStyles(styles []string) []string { return nil }
+
 func (p staplesProvider) FetchWines(_ context.Context, id string, _ []string) ([]ai.InputIngredient, error) {
 	if !p.IsID(id) {
 		return nil, fmt.Errorf("invalid Full Circle location ID %q", id)

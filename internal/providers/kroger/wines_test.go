@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"testing"
@@ -12,15 +11,21 @@ import (
 
 	"careme/internal/cache"
 	"careme/internal/providers/kroger/products"
+	"careme/internal/recipes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func wineTestProvider(t *testing.T, c cache.Cache, handler func(*http.Request) (*http.Response, error)) *staplesProvider {
+func wineTestProvider(t *testing.T, c cache.Cache, handler func(*http.Request) (*http.Response, error)) *wineStaplesProvider {
 	t.Helper()
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(&http.Client{Transport: roundTripperFunc(handler)}))
 	require.NoError(t, err)
-	return newStaplesProviderWithCache(client, c)
+	return cachedWineTestProvider(client, c)
+}
+
+func cachedWineTestProvider(client *products.ClientWithResponses, c cache.Cache) *wineStaplesProvider {
+	raw := &staplesProvider{client: client}
+	return WithWineCatalog(raw, recipes.NewCachedWineProvider([]recipes.StaplesBackend{raw}, c))
 }
 
 func wineTestResponse(req *http.Request) (*http.Response, error) {
@@ -88,42 +93,67 @@ func TestWineCatalogFetchRequiresBothSources(t *testing.T) {
 	}
 }
 
-type failingCatalogCache struct {
-	cache.Cache
-	readErr, writeErr error
+type failingCatalogCache struct{ cache.Cache }
+
+func (c failingCatalogCache) Put(context.Context, string, string, cache.PutOptions) error {
+	return errors.New("catalog write failed")
 }
 
-func (c failingCatalogCache) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	if c.readErr != nil {
-		return nil, c.readErr
-	}
-	return c.Cache.Get(ctx, key)
+func TestWineCatalogRequiresSharedCacheWrite(t *testing.T) {
+	provider := wineTestProvider(t, failingCatalogCache{cache.NewInMemoryCache()}, wineTestResponse)
+	wines, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir"})
+	require.ErrorContains(t, err, "catalog write failed")
+	assert.Nil(t, wines)
 }
 
-func (c failingCatalogCache) Put(ctx context.Context, key, value string, opts cache.PutOptions) error {
-	if c.writeErr != nil {
-		return c.writeErr
+func TestSharedCacheWrapsRawAndCombinedWineQueries(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]int{}
+	store := cache.NewInMemoryCache()
+	combined := wineTestProvider(t, store, func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		calls[req.URL.Query().Get("filter.term")]++
+		mu.Unlock()
+		return wineTestResponse(req)
+	})
+	outer := recipes.NewCachedWineProvider([]recipes.StaplesBackend{combined}, store)
+	date := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	for _, style := range []string{"Pinot Noir", "Albariño", "Pinot Noir"} {
+		wines, err := outer.FetchWines(t.Context(), "70500874", []string{style}, date)
+		require.NoError(t, err)
+		require.Len(t, wines, 3)
+		assert.Equal(t, style, wines[0].ProductID)
+		assert.Equal(t, style+"-upc", wines[0].VariantID)
 	}
-	return c.Cache.Put(ctx, key, value, opts)
+	assert.Equal(t, map[string]int{"Pinot Noir": 1, "Albariño": 1, "red wine": 1, "white wine": 1}, calls)
 }
 
-func TestWineCatalogRequiresReadableWritableCache(t *testing.T) {
-	for _, stage := range []string{"read", "decode", "write"} {
-		t.Run(stage, func(t *testing.T) {
-			date := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
-			c := failingCatalogCache{Cache: cache.NewInMemoryCache()}
-			switch stage {
-			case "read":
-				c.readErr = errors.New("read failed")
-			case "write":
-				c.writeErr = errors.New("write failed")
-			case "decode":
-				require.NoError(t, c.Put(t.Context(), wineCatalogCacheKey("70500874", date), "{", cache.Unconditional()))
-			}
-			provider := wineTestProvider(t, c, wineTestResponse)
-			wines, err := provider.fetchWineCatalog(t.Context(), "70500874", date)
-			require.ErrorContains(t, err, "Kroger wine catalog")
-			assert.Nil(t, wines)
-		})
+func TestSharedBroadCatalogCoalescesConcurrentRecipeStyles(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]int{}
+	store := cache.NewInMemoryCache()
+	combined := wineTestProvider(t, store, func(req *http.Request) (*http.Response, error) {
+		mu.Lock()
+		calls[req.URL.Query().Get("filter.term")]++
+		mu.Unlock()
+		return wineTestResponse(req)
+	})
+	outer := recipes.NewCachedWineProvider([]recipes.StaplesBackend{combined}, store)
+	date := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	start := make(chan struct{})
+	errs := make(chan error, 12)
+	for i := range 12 {
+		go func() {
+			<-start
+			_, err := outer.FetchWines(t.Context(), "70500874", []string{fmt.Sprintf("style-%d", i)}, date)
+			errs <- err
+		}()
 	}
+	close(start)
+	for range 12 {
+		require.NoError(t, <-errs)
+	}
+	assert.Equal(t, 1, calls["red wine"])
+	assert.Equal(t, 1, calls["white wine"])
+	assert.Len(t, calls, 14)
 }

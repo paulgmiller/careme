@@ -113,6 +113,8 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
+func (p staplesProvider) WineCacheStyles(styles []string) []string { return styles }
+
 func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	client, storeID, err := p.clientForLocation(locationID)
 	if err != nil {

@@ -24,6 +24,9 @@ import (
 
 // StaplesBackend is the provider contract consumed by recipe sourcing.
 type StaplesBackend interface {
+	// WineCacheStyles returns the styles that distinguish this backend's catalogs.
+	// Return nil when all recipe styles use the same catalog.
+	WineCacheStyles([]string) []string
 	IsID(string) bool
 	FetchStaples(context.Context, string) ([]ai.InputIngredient, error)
 	FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error)
@@ -56,25 +59,17 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	return provider.FetchStaples(ctx, locationID)
 }
 
-// Backends may normalize styles when their wine catalog is independent of them.
+// Use the selected backend's declared cache policy.
 func (p routingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
 	backend, err := p.providerForLocation(locationID)
 	if err != nil {
 		return nil, err
 	}
-	if normalizer, ok := backend.(interface{ WineCacheStyles([]string) []string }); ok {
-		return normalizer.WineCacheStyles(styles), nil
-	}
-	return styles, nil
+	return backend.WineCacheStyles(styles), nil
 }
 
 func (p dedupingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
-	if normalizer, ok := p.provider.(interface {
-		wineCacheStyles(string, []string) ([]string, error)
-	}); ok {
-		return normalizer.wineCacheStyles(locationID, styles)
-	}
-	return styles, nil
+	return p.provider.wineCacheStyles(locationID, styles)
 }
 
 func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
@@ -153,6 +148,7 @@ type cachedStaplesService struct {
 }
 
 type staplesProvider interface {
+	wineCacheStyles(string, []string) ([]string, error)
 	FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error)
 	FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error)
 }
@@ -178,6 +174,15 @@ func dedupeInputIngredients(ingredients []ai.InputIngredient) ([]ai.InputIngredi
 		deduped = append(deduped, ingredient)
 	}
 	return deduped, nil
+}
+
+type wineFetcher interface {
+	FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error)
+}
+
+// NewCachedWineProvider exposes the shared wine cache without a grading dependency.
+func NewCachedWineProvider(backends []StaplesBackend, c cache.Cache) wineFetcher {
+	return &cachedStaplesService{provider: NewStaplesProvider(backends), cache: IO(c)}
 }
 
 func NewCachedStaplesService(backends []StaplesBackend, c cache.Cache, grader grader) *cachedStaplesService {
@@ -296,15 +301,9 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	if len(styles) == 0 {
 		return nil, nil
 	}
-	cacheStyles := styles
-	if normalizer, ok := s.provider.(interface {
-		wineCacheStyles(string, []string) ([]string, error)
-	}); ok {
-		var err error
-		cacheStyles, err = normalizer.wineCacheStyles(locationID, styles)
-		if err != nil {
-			return nil, err
-		}
+	cacheStyles, err := s.provider.wineCacheStyles(locationID, styles)
+	if err != nil {
+		return nil, err
 	}
 	cacheKey := wineStylesCacheKey(cacheStyles, locationID, date)
 	result, err, _ := s.wineFetches.Do(cacheKey, func() (any, error) {

@@ -1548,3 +1548,7 @@ func TestGenerateRecipesPublishesSlotBeforeCritique(t *testing.T) {
 		})
 	}
 }
+
+func (*captureWineStaplesProvider) wineCacheStyles(_ string, styles []string) ([]string, error) {
+	return styles, nil
+}

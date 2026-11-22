@@ -36,6 +36,8 @@ func (p *staplesProvider) FetchStaples(ctx context.Context, locationID string) (
 	return ingredients, nil
 }
 
+func (p *staplesProvider) WineCacheStyles([]string) []string { return nil }
+
 func (p *staplesProvider) FetchWines(context.Context, string, []string) ([]ai.InputIngredient, error) {
 	return nil, nil
 }

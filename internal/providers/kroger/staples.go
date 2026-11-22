@@ -3,7 +3,6 @@ package kroger
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hash"
 	"log/slog"
@@ -14,14 +13,12 @@ import (
 	"unicode"
 
 	"careme/internal/ai"
-	"careme/internal/cache"
 	"careme/internal/config"
 	"careme/internal/ingredients/cachekey"
 	"careme/internal/parallelism"
 	"careme/internal/providers/kroger/products"
 
 	"github.com/samber/lo"
-	"golang.org/x/sync/singleflight"
 )
 
 var defaultStaplesSignature = string(lo.Must(json.Marshal(defaultStaples())))
@@ -57,9 +54,7 @@ func (p identityProvider) IsID(locationID string) bool {
 // internal?
 type staplesProvider struct {
 	identityProvider
-	client         *products.ClientWithResponses
-	cache          cache.Cache
-	catalogFetches *singleflight.Group
+	client *products.ClientWithResponses
 }
 
 func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*staplesProvider, error) {
@@ -67,15 +62,23 @@ func NewStaplesProvider(cfg *config.Config, httpClient *http.Client) (*staplesPr
 	if err != nil {
 		return nil, err
 	}
-	cacheStore, err := cache.EnsureCache("recipes")
-	if err != nil {
-		return nil, fmt.Errorf("create Kroger wine catalog cache: %w", err)
-	}
-	return newStaplesProviderWithCache(client, cacheStore), nil
+	return &staplesProvider{client: client}, nil
 }
 
-func newStaplesProviderWithCache(client *products.ClientWithResponses, c cache.Cache) *staplesProvider {
-	return &staplesProvider{client: client, cache: c, catalogFetches: &singleflight.Group{}}
+// wineCatalog uses the shared cached provider, which wraps raw Kroger searches.
+type wineCatalog interface {
+	FetchWines(context.Context, string, []string, time.Time) ([]ai.InputIngredient, error)
+}
+
+type wineStaplesProvider struct {
+	*staplesProvider
+	catalog wineCatalog
+}
+
+// WithWineCatalog combines targeted searches with a shared cached broad catalog.
+// The catalog must wrap the raw provider, so broad searches cannot recurse.
+func WithWineCatalog(provider *staplesProvider, catalog wineCatalog) *wineStaplesProvider {
+	return &wineStaplesProvider{staplesProvider: provider, catalog: catalog}
 }
 
 func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([]ai.InputIngredient, error) {
@@ -114,9 +117,11 @@ func PantryCategories() []string {
 	return lo.Map(pantryFilters(), func(filter staplesFilter, _ int) string { return filter.Term })
 }
 
-func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) WineCacheStyles(styles []string) []string { return styles }
+
+func (p wineStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	wines, err := parallelism.Flatten([]func() ([]ai.InputIngredient, error){
-		func() ([]ai.InputIngredient, error) { return p.searchWineStyles(ctx, locationID, styles) },
+		func() ([]ai.InputIngredient, error) { return p.staplesProvider.FetchWines(ctx, locationID, styles) },
 		func() ([]ai.InputIngredient, error) { return p.fetchWineCatalog(ctx, locationID, time.Now()) },
 	}, func(fetch func() ([]ai.InputIngredient, error)) ([]ai.InputIngredient, error) { return fetch() })
 	if err != nil {
@@ -125,51 +130,11 @@ func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styl
 	return wines, nil
 }
 
-func wineCatalogCacheKey(locationID string, date time.Time) string {
-	return "kroger/wines/red-white-v1/" + locationID + "/" + date.UTC().Format("2006-01-02")
+func (p wineStaplesProvider) fetchWineCatalog(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {
+	return p.catalog.FetchWines(ctx, locationID, []string{"red wine", "white wine"}, date.UTC())
 }
 
-// The API returns current inventory, so the broad catalog uses the lookup day,
-// independently of a recipe's shopping date or requested styles.
-func (p staplesProvider) fetchWineCatalog(ctx context.Context, locationID string, date time.Time) ([]ai.InputIngredient, error) {
-	key := wineCatalogCacheKey(locationID, date)
-	result, err, _ := p.catalogFetches.Do(key, func() (any, error) {
-		return p.loadWineCatalog(ctx, locationID, key)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result.([]ai.InputIngredient), nil
-}
-
-func (p staplesProvider) loadWineCatalog(ctx context.Context, locationID, key string) ([]ai.InputIngredient, error) {
-	reader, err := p.cache.Get(ctx, key)
-	if err == nil {
-		defer func() { _ = reader.Close() }()
-		var wines []ai.InputIngredient
-		if err := json.NewDecoder(reader).Decode(&wines); err != nil {
-			return nil, fmt.Errorf("decode Kroger wine catalog %s: %w", key, err)
-		}
-		return wines, nil
-	}
-	if !errors.Is(err, cache.ErrNotFound) {
-		return nil, fmt.Errorf("read Kroger wine catalog %s: %w", key, err)
-	}
-	wines, err := p.searchWineStyles(ctx, locationID, []string{"red wine", "white wine"})
-	if err != nil {
-		return nil, fmt.Errorf("fetch Kroger wine catalog for %s: %w", locationID, err)
-	}
-	body, err := json.Marshal(wines)
-	if err != nil {
-		return nil, fmt.Errorf("encode Kroger wine catalog for %s: %w", locationID, err)
-	}
-	if err := p.cache.Put(ctx, key, string(body), cache.Unconditional()); err != nil {
-		return nil, fmt.Errorf("cache Kroger wine catalog for %s: %w", locationID, err)
-	}
-	return wines, nil
-}
-
-func (p staplesProvider) searchWineStyles(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
+func (p staplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
 	return parallelism.Flatten(styles, func(style string) ([]ai.InputIngredient, error) {
 		ingredients, err := searchIngredients(ctx, p.client, locationID, style, false)
 		if err != nil {

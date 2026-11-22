@@ -126,10 +126,10 @@ func TestStaplesProvider_FetchWines_UsesEachStyleAsSearchTerm(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
+	provider := cachedWineTestProvider(client, cache.NewInMemoryCache())
 	got, err := provider.FetchWines(t.Context(), "70500874", []string{"Pinot Noir", "Sauvignon Blanc"})
 	require.NoError(t, err)
-	assert.Len(t, got, 4)
+	assert.Len(t, got, 3, "the shared cache deduplicates broad matches")
 	mu.Lock()
 	defer mu.Unlock()
 	assert.ElementsMatch(t, []string{"Pinot Noir", "Sauvignon Blanc", "red wine", "white wine"}, terms)
@@ -334,7 +334,7 @@ func TestCatalogFetchesRejectLaterPageFailures(t *testing.T) {
 				return jsonResponse(req, http.StatusBadRequest, `{"errors":{"reason":"page failed"}}`), nil
 			})}))
 			require.NoError(t, err)
-			provider := newStaplesProviderWithCache(client, cache.NewInMemoryCache())
+			provider := cachedWineTestProvider(client, cache.NewInMemoryCache())
 			var rows []ai.InputIngredient
 			switch tc.name {
 			case "staples":
@@ -431,9 +431,9 @@ func TestStaplesProviderFetchWineCatalogSearchesRedAndWhite(t *testing.T) {
 	})}
 	client, err := products.NewClientWithResponses("https://kroger.test", products.WithHTTPClient(baseClient))
 	require.NoError(t, err)
-	got, err := (newStaplesProviderWithCache(client, cache.NewInMemoryCache())).fetchWineCatalog(t.Context(), "70500874", time.Now())
+	got, err := (cachedWineTestProvider(client, cache.NewInMemoryCache())).fetchWineCatalog(t.Context(), "70500874", time.Now())
 	require.NoError(t, err)
-	require.Len(t, got, 2)
+	require.Len(t, got, 1, "the shared catalog deduplicates products")
 	assert.ElementsMatch(t, []string{"red wine", "white wine"}, terms)
 	assert.Equal(t, "wine-upc", got[0].VariantID)
 	assert.Equal(t, []string{"Adult Beverage"}, got[0].Categories)

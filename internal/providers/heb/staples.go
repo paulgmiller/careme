@@ -153,6 +153,8 @@ func (p staplesProvider) FetchStaples(ctx context.Context, locationID string) ([
 	})
 }
 
+func (p staplesProvider) WineCacheStyles(styles []string) []string { return nil }
+
 func (p staplesProvider) FetchWines(_ context.Context, locationID string, _ []string) ([]ai.InputIngredient, error) {
 	return nil, fmt.Errorf("wine lookup is not supported for location %q", locationID)
 }

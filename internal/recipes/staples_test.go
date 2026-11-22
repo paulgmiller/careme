@@ -403,3 +403,12 @@ func TestWatchdogUsesStoreLocalDateForCacheKey(t *testing.T) {
 		t.Fatalf("expected no cache for UTC day, got err=%v", err)
 	}
 }
+
+func (*stubStaplesProvider) WineCacheStyles(styles []string) []string { return styles }
+func (*stubStaplesProvider) wineCacheStyles(_ string, styles []string) ([]string, error) {
+	return styles, nil
+}
+
+func (*stubRoutingStaplesProvider) wineCacheStyles(_ string, styles []string) ([]string, error) {
+	return styles, nil
+}
