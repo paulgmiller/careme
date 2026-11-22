@@ -19,6 +19,7 @@ import (
 
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/singleflight"
 )
 
 // StaplesBackend is the provider contract consumed by recipe sourcing.
@@ -53,6 +54,27 @@ func (p routingStaplesProvider) FetchStaples(ctx context.Context, locationID str
 	span.SetAttributes(attribute.String("backend", fmt.Sprintf("%T", provider)))
 	defer span.End()
 	return provider.FetchStaples(ctx, locationID)
+}
+
+// Backends may normalize styles when their wine catalog is independent of them.
+func (p routingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
+	backend, err := p.providerForLocation(locationID)
+	if err != nil {
+		return nil, err
+	}
+	if normalizer, ok := backend.(interface{ WineCacheStyles([]string) []string }); ok {
+		return normalizer.WineCacheStyles(styles), nil
+	}
+	return styles, nil
+}
+
+func (p dedupingStaplesProvider) wineCacheStyles(locationID string, styles []string) ([]string, error) {
+	if normalizer, ok := p.provider.(interface {
+		wineCacheStyles(string, []string) ([]string, error)
+	}); ok {
+		return normalizer.wineCacheStyles(locationID, styles)
+	}
+	return styles, nil
 }
 
 func (p routingStaplesProvider) FetchWines(ctx context.Context, locationID string, styles []string) ([]ai.InputIngredient, error) {
@@ -124,9 +146,10 @@ type staplesFetcher interface {
 }
 
 type cachedStaplesService struct {
-	provider staplesProvider
-	cache    ingredientio
-	grader   grader
+	wineFetches singleflight.Group
+	provider    staplesProvider
+	cache       ingredientio
+	grader      grader
 }
 
 type staplesProvider interface {
@@ -273,10 +296,36 @@ func (s *cachedStaplesService) FetchWines(ctx context.Context, locationID string
 	if len(styles) == 0 {
 		return nil, nil
 	}
-	// TODO: Let providers normalize wine cache styles. Whole Foods ignores recipe
-	// styles and always fetches red-wine/white-wine/sparkling, so style-based keys
-	// currently create duplicate cache entries for the same candidate set.
-	cacheKey := wineStylesCacheKey(styles, locationID, date)
+	cacheStyles := styles
+	if normalizer, ok := s.provider.(interface {
+		wineCacheStyles(string, []string) ([]string, error)
+	}); ok {
+		var err error
+		cacheStyles, err = normalizer.wineCacheStyles(locationID, styles)
+		if err != nil {
+			return nil, err
+		}
+	}
+	cacheKey := wineStylesCacheKey(cacheStyles, locationID, date)
+	result, err, _ := s.wineFetches.Do(cacheKey, func() (any, error) {
+		return s.fetchWineCandidates(ctx, cacheKey, locationID, styles, date)
+	})
+	if err != nil {
+		return nil, err
+	}
+	wines := result.([]ai.InputIngredient)
+	// Finalization uses recipe styles to find ordering metadata, independent of
+	// whether the provider's source catalog varies with those styles.
+	snapshotKey := wineStylesCacheKey(styles, locationID, date)
+	if snapshotKey != cacheKey {
+		if err := s.cache.SaveIngredients(ctx, snapshotKey, wines); err != nil {
+			return nil, fmt.Errorf("cache wine snapshot for %s: %w", locationID, err)
+		}
+	}
+	return wines, nil
+}
+
+func (s *cachedStaplesService) fetchWineCandidates(ctx context.Context, cacheKey, locationID string, styles []string, date time.Time) ([]ai.InputIngredient, error) {
 	logger := slog.With("location", locationID, "date", date.Format("2006-01-02"), "styles", styles)
 
 	wines, err := s.cache.IngredientsFromCache(ctx, cacheKey)

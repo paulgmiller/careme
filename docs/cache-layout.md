@@ -308,6 +308,26 @@ only persisted VariantIDs, without guessing a mapping for old product IDs.
 Wine recommendations retain their existing ingredient-shaped JSON and
 `wine_recommendations/` keys. The full wine candidate catalog uses the existing
 `ingredients/wines/` cache keyed by normalized recipe styles, store, and date.
+Kroger's provider internally caches the broad red/white catalog in the existing
+`recipes` container at `kroger/wines/red-white-v1/<store ID>/<UTC lookup date>`.
+This cache uses the current lookup day, since the API returns live inventory,
+not inventory for a requested shopping date. `FetchWines` combines that catalog
+with parallel recipe-style searches, keeping targeted matches first; the normal
+recipe cache deduplicates and saves the combined candidates under its existing
+store/shopping-date/style key. Different style sets reuse the provider's broad
+catalog across requests and provider instances. Each broad term retains its
+300-product search window. The recipe layer has no separate catalog contract.
+The former `ingredients/wines/catalog-red-white-v1/wines/<hash>` and
+`ingredients/wines/style-search-v1/wines/<hash>` caches are no longer used.
+
+Whole Foods, ALDI, Publix, MN Food Club, Local Yokels, Imperfect Foods, and
+Smith Brothers Farms declare that their wine candidates do not depend on recipe
+styles. Their source catalog uses the existing `ingredients/wines/<hash>` key
+with an empty style set plus store and shopping date. Concurrent requests for the
+same key share a single fetch within a service instance. Each requested style set
+also receives the existing recipe-style candidate snapshot for finalization.
+Kroger and Albertsons retain style-sensitive combined catalog keys.
+
 Shopping finalization reads that catalog using the saved list’s store and date
 and each recipe’s styles; no additional per-recipe catalog is stored. Candidate
 cache-write failures return errors before generation returns a successful selection. Finalization polls
