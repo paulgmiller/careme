@@ -377,3 +377,14 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
+
+## Published About-page updates
+
+The `recipes` container also stores published Buffer content under `updates/`:
+`updates/feed.json` is the selected carousel index; `updates/<Buffer post ID>/index.md`
+is a Hugo-compatible page bundle; images/videos use content-hashed filenames in
+the same bundle. `cmd/bufferexport` writes media and Markdown first, then replaces
+the index. Old bundles are retained. `/updates/` serves these public posts from
+private storage via `internal/updates`, with 5-minute caching for the manifest
+and Markdown and immutable caching for content-hashed media. No Buffer credentials
+or drafts are stored in these blobs.

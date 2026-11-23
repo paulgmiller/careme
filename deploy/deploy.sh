@@ -7,6 +7,7 @@ mail_manifest_path="deploy/cronjob-careme-mail.yaml"
 advertised_recipes_manifest_path="deploy/cronjob-careme-advertised-recipes.yaml"
 cron_manifest_paths=(
   "${advertised_recipes_manifest_path}"
+  "deploy/cronjob-careme-buffer-export.yaml"
   "deploy/cronjob-aldi-scrape.yaml"
   "deploy/cronjob-albertsons-scrape.yaml"
   "deploy/cronjob-albertsons-reese84.yaml"
@@ -51,6 +52,7 @@ heb_reese84_schedule="0 */6 * * *"
 publix_scrape_schedule="30 6 * * 0"
 publix_abck_schedule="15 */6 * * *"
 wholefoods_scrape_schedule="0 6 * * 0"
+buffer_export_schedule="0 6 * * *"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
@@ -113,6 +115,7 @@ export HEB_REESE84_SCHEDULE="${heb_reese84_schedule}"
 export PUBLIX_SCRAPE_SCHEDULE="${publix_scrape_schedule}"
 export PUBLIX_ABCK_SCHEDULE="${publix_abck_schedule}"
 export WHOLEFOODS_SCRAPE_SCHEDULE="${wholefoods_scrape_schedule}"
+export BUFFER_EXPORT_SCHEDULE="${buffer_export_schedule}"
 
 if ! deployed_image="$(kubectl get deployment/careme -n "${namespace}" -o jsonpath='{.spec.template.spec.containers[?(@.name=="careme")].image}')"; then
   echo "error: could not get the image used by deployment/careme in namespace '${namespace}'" >&2
@@ -178,7 +181,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${INSTACART_ENV_YAML} ${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE}' | {
+  git show "${ref}:${manifest_path}" | envsubst '${INSTACART_ENV_YAML} ${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE} ${BUFFER_EXPORT_SCHEDULE}' | {
     if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
       kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
     else

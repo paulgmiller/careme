@@ -83,8 +83,8 @@ func TestRequiredSecrets(t *testing.T) {
 					continue
 				}
 				for _, c := range template.Spec.Containers {
-					// These are the deployed binaries calling config.Load*.
-					// Scraper images use their own configuration.
+					// Application images use config.Load*. Exporter and stub
+					// images have smaller explicit secret requirements.
 					image, _, _ := strings.Cut(strings.Split(path.Base(c.Image), "@")[0], ":")
 					var secrets []string
 					switch image {
@@ -92,6 +92,8 @@ func TestRequiredSecrets(t *testing.T) {
 						secrets = fullSecrets
 					case "careme-ingredientreview":
 						secrets = providerSecrets
+					case "careme-bufferexport":
+						secrets = []string{"buffer", "storage"}
 					case "mnfoodclubstub":
 						secrets = []string{"roachkey"}
 					default:
@@ -111,6 +113,7 @@ func TestRequiredSecrets(t *testing.T) {
 			}
 		})
 	}
+	assert.Positive(t, checked["careme-bufferexport"], "no Buffer export workloads checked")
 	assert.Positive(t, checked["mnfoodclubstub"], "no Food Club stub workloads checked")
 	assert.Positive(t, checked["careme"], "no full-config workloads checked")
 	assert.Positive(t, checked["careme-ingredientreview"], "no provider-config workloads checked")

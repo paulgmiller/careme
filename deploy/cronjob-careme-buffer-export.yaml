@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: careme-buffer-export
+  labels:
+    app: careme-buffer-export
+spec:
+  schedule: "${BUFFER_EXPORT_SCHEDULE}"
+  timeZone: "America/Los_Angeles"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app: careme-buffer-export
+            job: careme-buffer-export
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          containers:
+            - name: careme-buffer-export
+              image: ghcr.io/paulgmiller/careme-bufferexport:${IMAGE_TAG}
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: buffer
+                - secretRef:
+                    name: storage
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

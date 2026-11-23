@@ -426,3 +426,43 @@ LOCALYOKELS_LIVE=1 go test ./internal/providers/localyokels -run TestLiveLocalYo
 The catalog reader lives in `internal/localfoodmarketplace` for reuse by other
 Local Food Marketplace storefronts. Farmstand Local Foods uses the same endpoint
 and request format; it is not registered as a provider yet.
+
+## About page posts from Buffer
+
+The daily CronJob runs the exporter automatically. For a manual refresh, run
+`go run ./cmd/bufferexport`. It reads
+`buffer/BUFFER_API_KEY` plus the existing Azure storage credentials from kage
+(`secrets/envtest`, or `-secret-file PATH` / `KAGE_SECRET_FILE`). Only
+`posts:read` and `assets:read` are needed. Organization and Facebook channel IDs
+are configured explicitly in the command defaults; override them with
+`-organization-id` and `-channel-id` if necessary. No account discovery or write
+access to Buffer is used.
+
+The command exports the four newest sent posts to the existing Azure `recipes`
+container under `updates/`. Every post has a Hugo-compatible `index.md` (JSON
+front matter) and downloaded photos/videos. No media is checked into Git. All
+media must download and upload successfully before `updates/feed.json` changes.
+Old bundles remain archived. A repeat export reuses content-hashed media names.
+
+The About carousel reads `/updates/feed.json` and `/updates/<post-id>/<hash>.jpg`
+(or `.mp4`, etc.). Careme serves those paths from private Azure storage, with byte
+ranges for video playback and seeking. Browser requests require no Buffer key,
+Bluesky, HLS library, public container, or expiring SAS URLs. A successful export
+updates the feed without rebuilding or redeploying Careme.
+
+For a local/Hugo export, use `go run ./cmd/bufferexport -output /tmp/buffer-posts`.
+Bundles are written under `/tmp/buffer-posts/updates/`; copy that directory into
+Hugo's content tree. Video filenames and media types are listed in front matter,
+and Markdown includes a video link; the Hugo theme controls its video player.
+The carousel still shows one post at a time with Previous/Next controls.
+
+`deploy/cronjob-careme-buffer-export.yaml` runs daily at 6:00 AM Pacific
+(`0 6 * * *`, `America/Los_Angeles`) in both namespaces via `deploy/deploy.sh`.
+CI builds `ghcr.io/paulgmiller/careme-bufferexport` from `cmd/bufferexport` using
+the existing Dockerfile. The job imports only the namespace's `buffer` secret
+(containing `BUFFER_API_KEY`) and `storage` secret (Azure credentials). Ensure
+those secrets exist before deploying; kage's local files are not in the image.
+Runs cannot overlap, have a 15-minute deadline, and retry once on failure.
+The web server itself never calls Buffer. Tests:
+`go test ./cmd/bufferexport ./internal/updates` and
+`node internal/static/about-feed.test.mjs`.

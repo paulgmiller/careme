@@ -1,71 +1,12 @@
-const actor = "did:plc:qv4hafijvatyb773lcm6c6ru";
-
-function webURL(value) {
-  try {
-    const url = new URL(value);
-    return ["https:", "http:"].includes(url.protocol) ? url.href : null;
-  } catch {
-    return null;
-  }
+export async function loadCaremePosts(fetchPage) {
+  const response = await fetchPage("/updates/feed.json");
+  if (!response.ok) throw new Error(`Local feed returned ${response.status}`);
+  return response.json();
 }
 
-function linksIn(record) {
-  return (record.facets ?? []).flatMap(facet =>
-    facet.features.filter(feature => feature.$type === "app.bsky.richtext.facet#link")
-      .map(feature => feature.uri));
-}
-
-export function isCaremePost(item) {
-  const { post } = item;
-  if (item.reason || post.author.did !== actor || post.record.reply) return false;
-  // Require a real Careme link, not a mention in a personal post or a quoted post.
-  const links = [...linksIn(post.record), post.record.embed?.external?.uri];
-  return links.some(link => {
-    const url = webURL(link);
-    return url && ["careme.cooking", "www.careme.cooking"].includes(new URL(url).hostname);
-  });
-}
-
-export async function loadCaremePosts(fetchPage, limit = 4) {
-  const posts = new Map();
-  let cursor;
-  // Bound the work even if the account has a long stretch of personal posts.
-  for (let page = 0; page < 5; page++) {
-    const url = new URL("https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed");
-    url.searchParams.set("actor", actor);
-    url.searchParams.set("filter", "posts_no_replies");
-    url.searchParams.set("limit", "100");
-    if (cursor) url.searchParams.set("cursor", cursor);
-    const response = await fetchPage(url);
-    if (!response.ok) throw new Error(`Bluesky feed returned ${response.status}`);
-    const data = await response.json();
-    for (const item of data.feed) {
-      if (isCaremePost(item)) posts.set(item.post.uri, item.post);
-    }
-    if (posts.size >= limit || !data.cursor || data.cursor === cursor) break;
-    cursor = data.cursor;
-  }
-  return [...posts.values()].sort((a, b) =>
-    Date.parse(b.record.createdAt) - Date.parse(a.record.createdAt)).slice(0, limit);
-}
-
-// Bluesky facet offsets count UTF-8 bytes, rather than JavaScript characters.
-export function textParts(record) {
-  const bytes = new globalThis.TextEncoder().encode(record.text);
-  const decoder = new globalThis.TextDecoder();
-  const parts = [];
-  let offset = 0;
-  for (const facet of [...(record.facets ?? [])].sort((a, b) => a.index.byteStart - b.index.byteStart)) {
-    const link = facet.features.find(feature => feature.$type === "app.bsky.richtext.facet#link");
-    const href = link && webURL(link.uri);
-    if (!href) continue;
-    const { byteStart, byteEnd } = facet.index;
-    parts.push({ text: decoder.decode(bytes.slice(offset, byteStart)) });
-    parts.push({ text: decoder.decode(bytes.slice(byteStart, byteEnd)), href });
-    offset = byteEnd;
-  }
-  parts.push({ text: decoder.decode(bytes.slice(offset)) });
-  return parts;
+export function textParts(text) {
+  return text.split(/(https?:\/\/[^\s]+)/g).filter(Boolean).map(part =>
+    /^https?:\/\//.test(part) ? { text: part, href: part } : { text: part });
 }
 
 function element(tag, className, text) {
@@ -83,112 +24,67 @@ function externalLink(href, className, text) {
   return link;
 }
 
-// Bluesky serves video as HLS. Load the player only for a visible video post.
-export function attachVideo(video, playlist, onError, loadHls = () => import("https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.mjs")) {
-  let disposed = false;
-  let player;
-  const failed = () => { if (!disposed) onError(); };
-  video.addEventListener("error", failed);
-  const ready = (async () => {
-    if (video.canPlayType("application/vnd.apple.mpegurl") && "ManagedMediaSource" in window) {
-      video.src = playlist;
-      return;
-    }
-    const { default: Hls } = await loadHls();
-    if (disposed) return;
-    if (Hls.isSupported()) {
-      player = new Hls({ enableWorker: false });
-      player.on(Hls.Events.ERROR, (_event, data) => { if (data.fatal) failed(); });
-      player.loadSource(playlist);
-      player.attachMedia(video);
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = playlist;
-    } else {
-      failed();
-    }
-  })().catch(failed);
-  return {
-    ready,
-    dispose() {
-      disposed = true;
-      video.removeEventListener("error", failed);
-      video.pause();
-      player?.destroy();
-      video.removeAttribute("src");
-      video.load();
-    },
-  };
-}
-
 function renderPost(post) {
   const card = element("article", "min-w-0 overflow-hidden rounded-xl border border-brand-100 bg-white");
-  const postURL = `https://bsky.app/profile/${actor}/post/${post.uri.split("/").pop()}`;
   const body = element("div", "p-6");
   const date = element("time", "text-sm text-gray-500",
-    new Date(post.record.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }));
-  date.dateTime = post.record.createdAt;
+    new Date(post.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }));
+  date.dateTime = post.date;
   body.append(date);
   const text = element("p", "mt-3 whitespace-pre-wrap break-words leading-7 text-gray-700");
-  for (const part of textParts(post.record)) {
+  for (const part of textParts(post.text)) {
     text.append(part.href
       ? externalLink(part.href, "text-brand-700 underline underline-offset-4", part.text)
       : document.createTextNode(part.text));
   }
   body.append(text);
-  body.append(externalLink(postURL, "mt-4 inline-block text-sm font-semibold text-brand-700 underline underline-offset-4", "View post on Bluesky"));
   card.append(body);
-  const media = post.embed?.media ?? post.embed;
-  if (media?.playlist) {
+  const images = post.media.filter(media => media.type.startsWith("image/"));
+  const gallery = element("div", "grid grid-cols-2 gap-1 sm:flex");
+  for (const [index, image] of images.entries()) {
+    const lastOddImage = images.length % 2 === 1 && index === images.length - 1;
+    const link = externalLink("/updates/" + image.src, lastOddImage
+      ? "block min-w-0 col-span-2 sm:flex-1" : "block min-w-0 sm:flex-1");
+    link.setAttribute("aria-label", image.alt || "View full photo");
+    const img = element("img", "aspect-[4/3] max-h-80 w-full object-cover");
+    img.src = "/updates/" + image.src;
+    img.alt = image.alt;
+    img.loading = "lazy";
+    link.append(img);
+    gallery.append(link);
+  }
+  if (images.length) card.append(gallery);
+  for (const media of post.media.filter(media => media.type.startsWith("video/"))) {
     const video = element("video", "block max-h-[28rem] w-full bg-black");
     video.controls = true;
     video.playsInline = true;
     video.preload = "metadata";
-    video.poster = webURL(media.thumbnail) ?? "";
-    video.dataset.playlist = webURL(media.playlist);
-    video.setAttribute("aria-label", post.record.embed?.alt || "Careme cooking video");
+    const source = element("source", "");
+    source.src = "/updates/" + media.src;
+    source.type = media.type;
+    video.append(source);
+    video.setAttribute("aria-label", "Careme cooking video");
     const error = element("p", "p-4 text-sm text-gray-600");
     error.hidden = true;
     error.setAttribute("role", "status");
-    error.dataset.videoError = "";
+    video.addEventListener("error", () => {
+      error.textContent = "The video couldn’t load. Try refreshing the page, chef.";
+      error.hidden = false;
+    });
+    source.addEventListener("error", () => {
+      error.textContent = "The video couldn’t load. Try refreshing the page, chef.";
+      error.hidden = false;
+    });
     card.append(video, error);
-  } else if (media?.images?.length) {
-    const gallery = element("div", media.images.length > 2 ? "grid grid-cols-2 gap-1 sm:grid-cols-4" : "grid grid-cols-2 gap-1");
-    if (media.images.length === 1) gallery.className = "block";
-    for (const image of media.images) {
-      const source = webURL(image.fullsize);
-      if (!source) continue;
-      const link = externalLink(source, "block", undefined);
-      link.setAttribute("aria-label", image.alt || "View full photo");
-      const img = element("img", "aspect-[4/3] max-h-80 w-full object-cover");
-      img.src = source;
-      img.alt = image.alt;
-      img.loading = "lazy";
-      img.width = image.aspectRatio?.width ?? 1000;
-      img.height = image.aspectRatio?.height ?? 1000;
-      link.append(img);
-      gallery.append(link);
-    }
-    card.append(gallery);
   }
   return card;
 }
 
 export function mountFeed(posts, { feed, status, controls, previous, next, position }) {
   let index = 0;
-  let activeVideo;
   const showPost = () => {
-    activeVideo?.dispose();
-    activeVideo = undefined;
-    const card = renderPost(posts[index]);
-    feed.replaceChildren(card);
-    const video = card.querySelector("video");
-    if (video) {
-      activeVideo = attachVideo(video, video.dataset.playlist, () => {
-        const error = card.querySelector("[data-video-error]");
-        error.textContent = "The video couldn’t load. Use ‘View post on Bluesky’ to watch it there.";
-        error.hidden = false;
-      });
-    }
+    for (const video of feed.querySelectorAll("video")) video.pause();
+    feed.replaceChildren(renderPost(posts[index]));
     position.textContent = `Post ${index + 1} of ${posts.length}`;
     previous.disabled = index === 0;
     next.disabled = index === posts.length - 1;
