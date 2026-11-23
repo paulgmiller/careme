@@ -29,6 +29,7 @@ func TestCreatePreferredRetailerLink(t *testing.T) {
 		{"affiliate link", "aldi_F219", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
 		{"replace retailer", "publix_1083", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
 		{"H-E-B", "heb_22", "https://www.instacart.com/store/shopping_lists/123", "heb"},
+		{"Kroger numeric ID", "70500874", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
 		{"no chain prefix", "any-store", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
