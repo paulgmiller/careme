@@ -1412,7 +1412,7 @@ func (c *captureKickgenerationGenerator) LastParams() *generatorParams {
 	return &clone
 }
 
-func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
+func TestKickgeneration_AvoidsRecentlyCookedAndSavedRecipes(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
@@ -1451,8 +1451,8 @@ func TestKickgeneration_OnlyAvoidsRecentlyCookedRecipes(t *testing.T) {
 
 	captured := generator.LastParams()
 	require.NotNil(t, captured)
-	if got, want := captured.LastRecipes, []string{"Cooked Recently"}; !slices.Equal(got, want) {
-		t.Fatalf("expected only recently cooked recipes in avoid list, got %v", got)
+	if got, want := captured.LastRecipes, []string{"Cooked Recently", "Only Saved"}; !slices.Equal(got, want) {
+		t.Fatalf("expected recently cooked and saved recipes in avoid list, got %v", got)
 	}
 }
 

@@ -18,8 +18,6 @@ import (
 	"careme/internal/routing"
 	"careme/internal/templates"
 	utypes "careme/internal/users/types"
-
-	"github.com/samber/lo"
 )
 
 func (s *server) registerSelectionRoutes(mux routing.Registrar) {
@@ -93,7 +91,7 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 	if err != nil {
 		return nil, fmt.Errorf("load recipe: %w", err)
 	}
-	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
+	if err := s.storage.SetRecipeSaved(currentUser, userRecipe(*recipe), true /* saved */); err != nil {
 		return nil, fmt.Errorf("save recipe to user profile: %w", err)
 	}
 
@@ -145,12 +143,6 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.storage.RemoveRecipe(currentUser, recipeHash); err != nil {
-		slog.ErrorContext(ctx, "failed to remove recipe from storage", "hash", recipeHash, "error", err)
-		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
-		return
-	}
-
 	recipe, recipeErr := s.SingleFromCache(ctx, recipeHash)
 	if recipeErr != nil {
 		if errors.Is(recipeErr, cache.ErrNotFound) {
@@ -161,6 +153,12 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
+	if err := s.storage.SetRecipeSaved(currentUser, userRecipe(*recipe), false /* saved */); err != nil {
+		slog.ErrorContext(ctx, "failed to record dismissed recipe", "error", err)
+		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
+		return
+	}
+
 	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, selectionHash, false); err != nil {
 		slog.ErrorContext(ctx, "failed to render dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
@@ -227,35 +225,8 @@ func isSingleRecipeAction(r *http.Request) bool {
 	return strings.EqualFold(strings.TrimSpace(r.FormValue("source")), "recipe")
 }
 
-// saveRecipesToUserProfile adds saved recipes to the user's profile
-func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utypes.User, recipe ai.Recipe) error {
-	if currentUser == nil {
-		return fmt.Errorf("invalid user")
-	}
-
-	// Check if the recipe already exists in the user's last recipes
-	hash := recipe.ComputeHash()
-
-	_, exists := lo.Find(currentUser.LastRecipes, func(r utypes.Recipe) bool {
-		return r.Hash == hash
-	})
-	if exists {
-		return nil
-	}
-	newRecipe := utypes.Recipe{
-		Title:     recipe.Title,
-		Hash:      hash,
-		CreatedAt: time.Now(),
-	}
-	currentUser.LastRecipes = append(currentUser.LastRecipes, newRecipe)
-
-	// etag mismatch fun!
-	if err := s.storage.Update(currentUser); err != nil {
-		return fmt.Errorf("failed to update user with saved recipes: %w", err)
-	}
-	slog.InfoContext(ctx, "added saved recipe to user profile", "title", recipe.Title)
-
-	return nil
+func userRecipe(recipe ai.Recipe) utypes.Recipe {
+	return utypes.Recipe{Title: recipe.Title, Hash: recipe.ComputeHash(), CreatedAt: time.Now()}
 }
 
 func writeShoppingRecipeCard(writer io.Writer, recipe ai.Recipe, state shoppingRecipeInput) error {
