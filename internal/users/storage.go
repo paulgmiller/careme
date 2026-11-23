@@ -428,7 +428,8 @@ func (s *Storage) SetRecipeSaved(user *utypes.User, recipe utypes.Recipe, saved 
 }
 
 func pruneDismissedRecipes(user *utypes.User, now time.Time) {
-	cutoff := now.Add(-7 * 24 * time.Hour)
+	// Retain twice the cooldown window to leave a buffer around its boundary.
+	cutoff := now.Add(-2 * utypes.RecipeCooldownWindow)
 	user.DismissedRecipes = slices.DeleteFunc(user.DismissedRecipes, func(r utypes.Recipe) bool {
 		return !r.CreatedAt.After(cutoff)
 	})

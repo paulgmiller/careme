@@ -356,8 +356,8 @@ func TestRecipeHistoryTransitions(t *testing.T) {
 func TestDismissedHistoryPruning(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	old := utypes.Recipe{Title: "Old", Hash: "old", CreatedAt: now.Add(-8 * 24 * time.Hour)}
-	recent := utypes.Recipe{Title: "Recent", Hash: "recent", CreatedAt: now.Add(-time.Hour)}
+	old := utypes.Recipe{Title: "Old", Hash: "old", CreatedAt: now.Add(-15 * 24 * time.Hour)}
+	recent := utypes.Recipe{Title: "Recent", Hash: "recent", CreatedAt: now.Add(-8 * 24 * time.Hour)}
 	user := &utypes.User{
 		ID: "pruning", ShoppingDay: time.Saturday.String(), Email: []string{"pruning@example.com"},
 		LastRecipes: []utypes.Recipe{old}, DismissedRecipes: []utypes.Recipe{old, recent},
@@ -377,4 +377,18 @@ func TestDismissedHistoryPruning(t *testing.T) {
 	require.NoError(t, storage.Update(user))
 	require.Len(t, user.DismissedRecipes, 1)
 	assert.Equal(t, recent.Hash, user.DismissedRecipes[0].Hash)
+}
+
+func TestDismissedHistoryRetentionBoundary(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-2 * utypes.RecipeCooldownWindow)
+	user := &utypes.User{DismissedRecipes: []utypes.Recipe{
+		{Hash: "inside", CreatedAt: cutoff.Add(time.Nanosecond)},
+		{Hash: "boundary", CreatedAt: cutoff},
+		{Hash: "outside", CreatedAt: cutoff.Add(-time.Nanosecond)},
+	}}
+	pruneDismissedRecipes(user, now)
+	require.Len(t, user.DismissedRecipes, 1)
+	assert.Equal(t, "inside", user.DismissedRecipes[0].Hash)
 }

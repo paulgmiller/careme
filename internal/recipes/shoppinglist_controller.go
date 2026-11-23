@@ -635,10 +635,10 @@ func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback
 	hashes := lo.Map(cookedCandidates, func(r utypes.Recipe, _ int) string { return r.Hash })
 	cooked := fio.FeedbackByHash(ctx, hashes)
 	titles := lo.FilterMap(cookedCandidates, func(r utypes.Recipe, _ int) (string, bool) {
-		return r.Title, cooked[r.Hash].Cooked || r.CreatedAt.After(now.Add(-7*24*time.Hour))
+		return r.Title, cooked[r.Hash].Cooked || r.CreatedAt.After(now.Add(-utypes.RecipeCooldownWindow))
 	})
 	for _, recipe := range user.DismissedRecipes {
-		if recipe.CreatedAt.After(now.Add(-7 * 24 * time.Hour)) {
+		if recipe.CreatedAt.After(now.Add(-utypes.RecipeCooldownWindow)) {
 			titles = append(titles, recipe.Title)
 		}
 	}

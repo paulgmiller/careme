@@ -66,7 +66,7 @@ type userStore interface {
 }
 
 type mailer struct {
-	cache              cache.ListCache
+	cache              cache.Cache
 	userStorage        userStore
 	generator          generator // interface requires making params public
 	locServer          locServer
