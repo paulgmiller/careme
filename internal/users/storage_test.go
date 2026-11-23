@@ -356,8 +356,8 @@ func TestRecipeHistoryTransitions(t *testing.T) {
 func TestDismissedHistoryPruning(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	old := utypes.Recipe{Title: "Old", Hash: "old", CreatedAt: now.Add(-15 * 24 * time.Hour)}
-	recent := utypes.Recipe{Title: "Recent", Hash: "recent", CreatedAt: now.Add(-8 * 24 * time.Hour)}
+	old := utypes.Recipe{Title: "Old", Hash: "old", CreatedAt: now.Add(-17 * 24 * time.Hour)}
+	recent := utypes.Recipe{Title: "Recent", Hash: "recent", CreatedAt: now.Add(-7 * 24 * time.Hour)}
 	user := &utypes.User{
 		ID: "pruning", ShoppingDay: time.Saturday.String(), Email: []string{"pruning@example.com"},
 		LastRecipes: []utypes.Recipe{old}, DismissedRecipes: []utypes.Recipe{old, recent},

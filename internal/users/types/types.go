@@ -10,7 +10,7 @@ import (
 )
 
 // RecipeCooldownWindow is how long saves and dismissals discourage repeating a dish.
-const RecipeCooldownWindow = 7 * 24 * time.Hour
+const RecipeCooldownWindow = 8 * 24 * time.Hour
 
 type Recipe struct {
 	Title     string    `json:"id"`
