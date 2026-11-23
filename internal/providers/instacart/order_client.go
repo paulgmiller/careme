@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -154,6 +155,17 @@ func (c *orderClient) createLink(ctx context.Context, body []byte) (string, erro
 		reason := strings.ReplaceAll(err.Error(), c.apiKey, "[redacted]")
 		return "", fmt.Errorf("instacart returned an invalid shopping link (API %s): %s", c.baseURL, reason)
 	}
+	// Validation already parsed the URL. Log only allowlisted attribution fields;
+	// the path, fragment, and other query values can contain private handoff tokens.
+	u, _ := url.Parse(result.URL)
+	query := u.Query()
+	slog.InfoContext(ctx, "Instacart shopping link received",
+		"api_url", c.baseURL, "link_host", u.Hostname(),
+		"utm_campaign", query.Get("utm_campaign"),
+		"utm_medium", query.Get("utm_medium"),
+		"utm_source", query.Get("utm_source"),
+		"utm_term", query.Get("utm_term"),
+		"utm_content", query.Get("utm_content"))
 	return result.URL, nil
 }
 
