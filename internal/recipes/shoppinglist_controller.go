@@ -618,7 +618,7 @@ func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.F
 
 func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams, now time.Time) {
 	cookedCandidates := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-		return r.CreatedAt.After(now.AddDate(0, 0, -14))
+		return r.CreatedAt.After(now.Add(-utypes.CookedCooldownWindow))
 	})
 	hashes := lo.Map(cookedCandidates, func(r utypes.Recipe, _ int) string { return r.Hash })
 	cooked := fio.FeedbackByHash(ctx, hashes)
