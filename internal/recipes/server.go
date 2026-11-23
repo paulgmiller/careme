@@ -12,7 +12,6 @@ import (
 	"careme/internal/config"
 	"careme/internal/locations"
 	"careme/internal/recipes/critique"
-	"careme/internal/recipes/decisions"
 	"careme/internal/recipes/status"
 	"careme/internal/routing"
 	"careme/internal/users"
@@ -57,7 +56,6 @@ type server struct {
 	generationStatuses statusStore
 	cfg                *config.Config
 	storage            *users.Storage
-	decisionHistory    *decisions.Store
 	generator          generator
 	locServer          locServer
 	// should generation have this?
@@ -88,7 +86,6 @@ func NewHandler(cfg *config.Config, storage *users.Storage, generator generator,
 		generationStatuses: status.NewStore(c),
 		cfg:                cfg,
 		storage:            storage,
-		decisionHistory:    decisions.NewStore(c),
 		generator:          generator,
 		locServer:          locServer,
 		clerk:              clerkClient,

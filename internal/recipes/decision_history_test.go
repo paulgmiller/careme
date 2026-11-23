@@ -43,11 +43,13 @@ func TestAugmentParamsRecipeCooldowns(t *testing.T) {
 			require.NoError(t, s.SaveFeedback(t.Context(), r.Hash, feedback.Feedback{Cooked: true, UpdatedAt: now}))
 		}
 	}
-	for _, title := range []string{"Dismissed recently", "Saved recently"} {
-		require.NoError(t, s.decisionHistory.Record(t.Context(), user.ID, utypes.Recipe{Title: title, Hash: title, CreatedAt: now}))
+	user.DismissedRecipes = []utypes.Recipe{
+		{Title: "Dismissed recently", Hash: "dismissed", CreatedAt: now},
+		{Title: "Dismissed boundary", Hash: "boundary", CreatedAt: now.Add(-7 * 24 * time.Hour)},
+		{Title: "Dismissed old", Hash: "old", CreatedAt: now.Add(-8 * 24 * time.Hour)},
 	}
 	p := &generatorParams{}
-	require.NoError(t, augmentParamsFromUserAt(t.Context(), user, s.FeedbackIO, s.decisionHistory, p, now))
+	require.NoError(t, augmentParamsFromUserAt(t.Context(), user, s.FeedbackIO, p, now))
 	assert.ElementsMatch(t, []string{"Saved recently", "Cooked recently", "Dismissed recently"}, p.LastRecipes)
 	assert.Equal(t, user.Directive, p.Directive)
 }
@@ -55,8 +57,8 @@ func TestAugmentParamsRecipeCooldowns(t *testing.T) {
 type failedDecisionCache struct{ cache.ListCache }
 
 func (c failedDecisionCache) Put(ctx context.Context, key, value string, opts cache.PutOptions) error {
-	if strings.HasPrefix(key, "recipe_decisions/") {
-		return errors.New("decision storage unavailable")
+	if strings.HasPrefix(key, "users/") {
+		return errors.New("user storage unavailable")
 	}
 	return c.ListCache.Put(ctx, key, value, opts)
 }
@@ -66,10 +68,12 @@ func TestRecipeActionsRecordDecisions(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "success", true: "storage failure"}[fail], func(t *testing.T) {
 			var c cache.ListCache = cache.NewInMemoryCache()
-			if fail {
-				c = failedDecisionCache{c}
-			}
 			s := newTestServer(t, withTestCache(c))
+			_, err := s.storage.FromRequest(t.Context(), httptest.NewRequest(http.MethodGet, "/", nil), s.clerk)
+			require.NoError(t, err)
+			if fail {
+				s = newTestServer(t, withTestCache(failedDecisionCache{c}))
+			}
 			p := DefaultParams(&locations.Location{ID: "70000123"}, time.Now())
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			recipe := ai.Recipe{Title: "Pasta", Instructions: []string{"Cook."}, OriginHash: p.Hash()}
@@ -97,12 +101,14 @@ func TestRecipeActionsRecordDecisions(t *testing.T) {
 				} else {
 					assert.Empty(t, user.LastRecipes)
 				}
-				recent, err := s.decisionHistory.Recent(t.Context(), user.ID, time.Now())
-				require.NoError(t, err)
-				require.Len(t, recent, 1)
-				assert.Equal(t, recipe.Title, recent[0].Title)
+				if action == "save" {
+					assert.Empty(t, user.DismissedRecipes)
+				} else {
+					require.Len(t, user.DismissedRecipes, 1)
+					assert.Equal(t, recipe.Title, user.DismissedRecipes[0].Title)
+				}
 				params := &generatorParams{}
-				require.NoError(t, AugmentParamsFromUser(t.Context(), *user, s.FeedbackIO, s.decisionHistory, params))
+				require.NoError(t, AugmentParamsFromUser(t.Context(), *user, s.FeedbackIO, params))
 				assert.Equal(t, []string{recipe.Title}, params.LastRecipes)
 			}
 		})

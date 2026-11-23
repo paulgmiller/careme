@@ -30,6 +30,7 @@ type User struct {
 	CreatedAt        time.Time      `json:"created_at"`
 	PartnerID        string         `json:"partner_id,omitempty"`
 	PendingPartnerID string         `json:"pending_partner_id,omitempty"`
+	DismissedRecipes []Recipe       `json:"dismissed_recipes,omitempty"`
 	LastRecipes      []Recipe       `json:"last_recipes,omitempty"`
 	FavoriteStore    string         `json:"favorite_store,omitempty"`
 	ShoppingDay      string         `json:"shopping_day,omitempty"`

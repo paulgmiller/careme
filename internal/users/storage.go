@@ -83,6 +83,7 @@ func (s *Storage) GetByID(id string) (*utypes.User, error) {
 	if err := decoder.Decode(&user); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal user: %w", err)
 	}
+	pruneDismissedRecipes(&user, time.Now())
 	if err := normalizeShoppingLists(&user, time.Now()); err != nil {
 		return nil, fmt.Errorf("invalid user shopping lists: %w", err)
 	}
@@ -162,6 +163,7 @@ func (s *Storage) writeUser(user *utypes.User) error {
 	if err := user.Validate(); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
+	pruneDismissedRecipes(user, time.Now())
 	if err := normalizeShoppingLists(user, time.Now()); err != nil {
 		return fmt.Errorf("invalid user: %w", err)
 	}
@@ -316,7 +318,7 @@ func (s *Storage) unlinkPartner(currentUser *utypes.User) error {
 	return nil
 }
 
-func (s *Storage) RemoveRecipe(user *utypes.User, recipeHash string) (bool, error) {
+func (s *Storage) removeRecipe(user *utypes.User, recipeHash string) (bool, error) {
 	recipeHash = strings.TrimSpace(recipeHash)
 	if recipeHash == "" {
 		return false, fmt.Errorf("invalid recipe hash")
@@ -405,4 +407,29 @@ func normalizeShoppingLists(user *utypes.User, now time.Time) error {
 func normalizeEmail(email string) string {
 	// remove . from before @? or +<suffix?
 	return strings.TrimSpace(strings.ToLower(email))
+}
+
+// SetRecipeSaved records the latest save or dismissal in the user's recipe history.
+func (s *Storage) SetRecipeSaved(user *utypes.User, recipe utypes.Recipe, saved bool) error {
+	if user == nil {
+		return fmt.Errorf("user is required")
+	}
+	if strings.TrimSpace(recipe.Hash) == "" {
+		return fmt.Errorf("recipe hash is required")
+	}
+	user.LastRecipes = slices.DeleteFunc(user.LastRecipes, func(r utypes.Recipe) bool { return r.Hash == recipe.Hash })
+	user.DismissedRecipes = slices.DeleteFunc(user.DismissedRecipes, func(r utypes.Recipe) bool { return r.Hash == recipe.Hash })
+	if saved {
+		user.LastRecipes = append(user.LastRecipes, recipe)
+	} else {
+		user.DismissedRecipes = append(user.DismissedRecipes, recipe)
+	}
+	return s.Update(user)
+}
+
+func pruneDismissedRecipes(user *utypes.User, now time.Time) {
+	cutoff := now.Add(-7 * 24 * time.Hour)
+	user.DismissedRecipes = slices.DeleteFunc(user.DismissedRecipes, func(r utypes.Recipe) bool {
+		return !r.CreatedAt.After(cutoff)
+	})
 }

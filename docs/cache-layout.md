@@ -118,7 +118,6 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `recipe_images/` | WebP bytes for single-recipe dish images keyed by recipe hash in the dedicated `recipe-images` cache backend | `internal/recipes/image.go` (`SaveRecipeImage`) via `internal/recipes/server.go` (`POST /recipe/{hash}/image`) | `internal/recipes/image.go` (`RecipeImageFromCache`, `RecipeImageExists`) via `internal/recipes/server.go` (`GET /recipe/{hash}/image`, `handleSingle`) |
 | `recipes/steps/` in the `recipe-images` backend | Generated instruction sketch bytes keyed by `<recipe_hash>/<one-based_step_number>` | `internal/recipes/step_image_controller.go` after a signed-in step image request | Recipe page and public step image endpoint |
 | `wine_recommendations/` | JSON ingredient-shaped wine picks and commentary keyed by recipe hash | `internal/recipes/wine.go` (`SaveWine`) via `internal/recipes/server.go` (`handleWine`) | `internal/recipes/wine.go` (`WineFromCache`) via `internal/recipes/server.go` (`handleWine`) |
-| `recipe_decisions/` | JSON `users/types.Recipe` cooldown signals keyed by `<user_id>/<UTC YYYY-MM-DD>/<recipe_hash>`; saves and dismissals share the same seven-day rule, without recording taste preferences | `internal/recipes/decisions/store.go` (`Record`) from save/dismiss actions | `Recent` reads the eight UTC day partitions overlapping the last seven days and filters by action timestamp; expired records remain stored but are not scanned in later windows |
 | `recipe_selection/` | JSON `recipeSelection` (`saved_hashes`, `dismissed_hashes`, `updated_at`) keyed by `<user_id>/<origin_hash>` | `internal/recipes/selection.go` (`saveRecipeSelection`) via `internal/recipes/server.go` (`handleSaveRecipe`, `handleDismissRecipe`) | `internal/recipes/selection.go` (`loadRecipeSelection`) via `internal/recipes/server.go` (`handleRegenerate`, `handleFinalize`, `handleRecipes`) |
 | `recipe_thread/` | JSON `[]RecipeThreadEntry` (Q/A thread for a recipe hash) | `internal/recipes/thread.go` (`SaveThread`) | `internal/recipes/thread.go` (`ThreadFromCache`) |
 | `recipe_feedback/` | JSON `feedback.Feedback` (`cooked`, `stars`, `comment`, `updated_at`) per recipe hash | `internal/recipes/feedback.go` (`SaveFeedback`) using `internal/recipes/feedback/model.go` (`Marshal`) via `internal/recipes/server.go` (`handleFeedback`) | `internal/recipes/feedback.go` (`FeedbackFromCache`) using `internal/recipes/feedback/model.go` (`Decode`) and `internal/recipes/server.go` (`handleSingle`, `handleFeedback`) |
@@ -129,7 +128,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `locations/` in the `farmersmarket` backend | JSON shared farmers market metadata (`id`, submitted names, average lat/lon, nearest ZIP, photo count, timestamps) keyed by farmers market location ID | `internal/farmersmarket` upload handler/store | `internal/farmersmarket` location backend and upload merge logic |
 | `inventory/` in the `farmersmarket` backend | JSON `{cached_at, ingredients}` keyed by `<farmersmarket_location_id>/<YYYY-MM-DD>.json`; item brand is the visible farm/stall/store name when available, otherwise `Farmers market` | `internal/farmersmarket` upload handler/store after GPT image extraction | `internal/farmersmarket` staples provider reads the freshest cached list from the last 24 hours via recipe generation |
 | `analysis_jobs/` in the `farmersmarket` backend | JSON farmers market photo analysis progress (`user_id`, `state`, photo/ingredient counts, message, redirect URL, error, timestamps) keyed by random upload job ID | `internal/farmersmarket` htmx upload handler while photo analysis runs | `internal/farmersmarket` status polling endpoint so any web replica can render progress |
-| `users/` | JSON `users/types.User` by user ID, including up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
+| `users/` | JSON `users/types.User` by user ID, including saved recipe summaries in `last_recipes`, seven-day dismissal summaries in `dismissed_recipes`, up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 | `location-store-requests/` | JSON `{store_id, zip, requested_at}` for stores present in location search but not yet supported for staples | `internal/locations/locations.go` (`POST /locations/request-store`) | Operational triage from shared cache/blob storage |
 | `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/providers/aldi` cache helpers | `internal/providers/aldi` location backend |
@@ -186,7 +185,7 @@ Recipe hashes are used by or stored in:
 - `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
 - recipe-regeneration job identity.
 - `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
-- `users/<user_id>` entries in `last_recipes[].hash`.
+- `users/<user_id>` entries in `last_recipes[].hash` and `dismissed_recipes[].hash`.
 
 Compatibility implications:
 
@@ -198,6 +197,15 @@ Compatibility implications:
 - If the structured-property layout changes in the future, introduce an explicit marker such as `recipe-properties-v2` and document its migration behavior here.
 
 ## Notes
+
+Recipe cooldown history lives in `users/<user_id>`: `last_recipes` contains saved
+recipes and `dismissed_recipes` contains recent dismissals, using the same recipe
+summary shape. Saving or dismissing moves the recipe between these lists and
+refreshes its timestamp. Dismissals older than seven days are pruned on user
+reads and writes; saved recipes are retained. The former `recipe_decisions/`
+records are no longer read or written and can be removed. Menu-specific
+`recipe_selection/` records are retained independently for historical analysis;
+they capture the latest saved/dismissed state per menu, not an action log.
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
