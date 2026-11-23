@@ -31,8 +31,8 @@ func TestAugmentParamsRecipeCooldowns(t *testing.T) {
 		cooked bool
 	}{
 		{"Saved recently", 7*24*time.Hour - time.Nanosecond, false},
-		{"Saved boundary", 7 * 24 * time.Hour, false},
-		{"Saved old", 8 * 24 * time.Hour, false},
+		{"Saved boundary", 8 * 24 * time.Hour, false},
+		{"Saved old", 9 * 24 * time.Hour, false},
 		{"Cooked recently", 13 * 24 * time.Hour, true},
 		{"Cooked boundary", 14 * 24 * time.Hour, true},
 		{"Cooked old", 15 * 24 * time.Hour, true},
@@ -45,7 +45,7 @@ func TestAugmentParamsRecipeCooldowns(t *testing.T) {
 	}
 	user.DismissedRecipes = []utypes.Recipe{
 		{Title: "Dismissed recently", Hash: "dismissed", CreatedAt: now},
-		{Title: "Dismissed boundary", Hash: "boundary", CreatedAt: now.Add(-7 * 24 * time.Hour)},
+		{Title: "Dismissed boundary", Hash: "boundary", CreatedAt: now.Add(-8 * 24 * time.Hour)},
 		{Title: "Dismissed old", Hash: "old", CreatedAt: now.Add(-8 * 24 * time.Hour)},
 	}
 	p := &generatorParams{}
