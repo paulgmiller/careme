@@ -62,3 +62,13 @@ Campaign locations and email deliveries share `ai.FlexJobTimeout`, equal to the
 one-hour Flex budget plus ten minutes for fallback and remaining work. This
 70-minute deadline covers the whole location or delivery. Each Flex response has
 its own one-hour budget, limited by the time remaining under that parent deadline.
+
+
+Campaign and email generation use `recipes.NoProgress`: completed shopping lists
+and images are persisted, but these jobs do not publish interactive progress or
+use its ten-minute timeout. Their existing 70-minute context deadline still
+bounds generation, and failures are returned to the campaign/mail caller.
+
+Ingredient grading always requests Standard tier, including in campaign/mail
+jobs, and keeps the SDK's normal retries. If Flex grading is introduced later,
+reuse the recipe/menu Flex retry handling first.

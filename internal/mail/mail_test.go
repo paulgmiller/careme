@@ -161,21 +161,6 @@ type capturingMailGenerator struct {
 	err    error
 }
 
-type fakeGenerationStatusStore struct {
-	startedHash string
-	failedErr   error
-}
-
-func (f *fakeGenerationStatusStore) Start(_ context.Context, hash, _ string) error {
-	f.startedHash = hash
-	return nil
-}
-
-func (f *fakeGenerationStatusStore) Fail(_ context.Context, _ string, err error) error {
-	f.failedErr = err
-	return nil
-}
-
 func (g *capturingMailGenerator) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
 	g.ctx = ctx
 	g.params = p
@@ -267,16 +252,14 @@ func TestDeliverEmailRejectsShoppingListWithoutRecipes(t *testing.T) {
 	}
 }
 
-func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
+func TestDeliverEmailReturnsGenerationFailure(t *testing.T) {
 	fc := newFakeMailCache(t)
 	fc.missShoppingList = true
 	location := testMailLocation()
 	generationErr := errors.New("plan exploded")
-	generationStatuses := &fakeGenerationStatusStore{}
 	m := &mailer{
-		cache:              fc,
-		generator:          &capturingMailGenerator{err: generationErr},
-		generationStatuses: generationStatuses,
+		cache:     fc,
+		generator: &capturingMailGenerator{err: generationErr},
 	}
 
 	err := m.deliverEmail(context.Background(), utypes.User{
@@ -285,11 +268,8 @@ func TestDeliverEmailStartsStatusAndRecordsGenerationFailure(t *testing.T) {
 	if !errors.Is(err, generationErr) {
 		t.Fatalf("expected generation error, got %v", err)
 	}
-	if generationStatuses.startedHash == "" {
-		t.Fatal("expected generation status to be started")
-	}
-	if !errors.Is(generationStatuses.failedErr, generationErr) {
-		t.Fatalf("expected generation failure to be recorded, got %v", generationStatuses.failedErr)
+	for key := range fc.data {
+		assert.False(t, strings.HasPrefix(key, "generation_status/"), "mail must not publish interactive status")
 	}
 }
 
@@ -461,10 +441,8 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 	fc.missShoppingList = true
 	location := testMailLocation()
 	generator := &capturingMailGenerator{}
-	generationStatuses := &fakeGenerationStatusStore{}
 	m := &mailer{
-		cache:              fc,
-		generationStatuses: generationStatuses,
+		cache: fc,
 		locServer: &fakeMailLocServer{
 			location: location,
 		},
@@ -486,9 +464,6 @@ func TestSendEmail_GenerationContextIncludesMailSessionAndUserID(t *testing.T) {
 
 	if generator.ctx == nil {
 		t.Fatal("expected generator to be called")
-	}
-	if generationStatuses.startedHash == "" {
-		t.Fatal("expected generation status to be started before generating recipes")
 	}
 	sessionID, ok := logsetup.SessionIDFromContext(generator.ctx)
 	if !ok {
@@ -615,14 +590,12 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 	location := testMailLocation()
 
 	g := &capturingMailGenerator{}
-	generationStatuses := &fakeGenerationStatusStore{}
 	client := &fakeMailClient{
 		response: &rest.Response{StatusCode: 202, Body: "accepted"},
 	}
 	m := &mailer{
-		cache:              fc,
-		generationStatuses: generationStatuses,
-		generator:          g,
+		cache:     fc,
+		generator: g,
 
 		client:             client,
 		publicOrigin:       "https://careme.cooking",
@@ -643,7 +616,6 @@ func TestDeliverEmailKeepsDirectiveAndLastRecipes(t *testing.T) {
 		},
 	}, recipes.DefaultParams(location, time.Now()))
 	require.NoError(t, err)
-	assert.NotEmpty(t, generationStatuses.startedHash, "expected generation status to be started")
 	assert.Contains(t, g.params.Directive, "Always meat")
 }
 
@@ -674,4 +646,40 @@ func TestSendEmailUsesShoppingDayAt9AMBoundary(t *testing.T) {
 			})
 		})
 	}
+}
+
+type mailGeneratorFunc func(context.Context, *recipes.GeneratorParams) (*ai.ShoppingList, error)
+
+func (f mailGeneratorFunc) GenerateRecipes(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+	return f(ctx, p)
+}
+
+func TestDeliverEmailUsesWinningShoppingList(t *testing.T) {
+	c := cache.NewInMemoryCache()
+	rio := recipes.IO(c)
+	sender := &fakeMailClient{response: &rest.Response{StatusCode: 202}}
+	winner := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Winning interactive dinner"}}}
+	m := &mailer{
+		cache: c,
+		generator: mailGeneratorFunc(func(ctx context.Context, p *recipes.GeneratorParams) (*ai.ShoppingList, error) {
+			// An interactive request finishes while this mail job is generating.
+			if err := rio.SaveShoppingList(ctx, winner, p.Hash()); err != nil {
+				return nil, err
+			}
+			return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Losing mail dinner"}}}, nil
+		}),
+		client:             sender,
+		publicOrigin:       "https://careme.cooking",
+		unsubscribeFactory: users.FakeUnsubscribeTokenFactory(),
+	}
+	p := recipes.DefaultParams(testMailLocation(), time.Now())
+	require.NoError(t, m.deliverEmail(t.Context(), utypes.User{ID: "user-1", Email: []string{"u1@example.com"}}, p))
+	require.NotNil(t, sender.last)
+	assert.Contains(t, sender.last.Content[1].Value, "Winning interactive dinner")
+	for _, content := range sender.last.Content {
+		assert.NotContains(t, content.Value, "Losing mail dinner")
+	}
+	saved, err := rio.FromCache(t.Context(), p.Hash())
+	require.NoError(t, err)
+	assert.Equal(t, winner, saved)
 }

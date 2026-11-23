@@ -37,7 +37,7 @@ func (advertisedLocationStoreStub) GetLocationByID(ctx context.Context, id strin
 
 type campaignGeneratorStub struct {
 	images interface {
-		RecipeReady(context.Context, ai.Recipe) error
+		RecipeReady(context.Context, ai.Recipe, string, time.Time) error
 	}
 	mu       sync.Mutex
 	params   []*recipes.GeneratorParams
@@ -54,7 +54,7 @@ func (g *campaignGeneratorStub) GenerateRecipes(ctx context.Context, p *recipes.
 		return nil, g.err
 	}
 	recipe := ai.Recipe{Title: "Dinner at " + p.Location.ID, Instructions: []string{"Cook dinner."}}
-	if err := g.images.RecipeReady(ctx, recipe); err != nil {
+	if err := g.images.RecipeReady(ctx, recipe, p.Location.ID, p.Date); err != nil {
 		return nil, err
 	}
 	return &ai.ShoppingList{Recipes: []ai.Recipe{recipe}}, nil
@@ -88,7 +88,7 @@ func testService() (*service, *campaignGeneratorStub, *campaignImageStub, *statu
 	g.images = recipes.NewRecipeImageGenerator(images.ImageStore, images)
 	return &service{
 		locations: advertisedLocationStoreStub{}, generator: g, store: recipes.IO(c),
-		statuses: statuses, wait: func() {},
+		wait: func() {},
 	}, g, images, statuses
 }
 
@@ -143,9 +143,8 @@ func TestRunOnceReportsFailuresAndRetriesExistingParams(t *testing.T) {
 	require.ErrorContains(t, s.RunOnce(t.Context(), campaignTestTime), "flex unavailable")
 	require.Len(t, g.params, len(generatedCampaignLocationIDs))
 	for _, p := range g.params {
-		state, err := statuses.Load(t.Context(), p.Hash())
-		require.NoError(t, err)
-		assert.Contains(t, state.Failed, "flex unavailable")
+		_, err := statuses.Load(t.Context(), p.Hash())
+		require.ErrorIs(t, err, cache.ErrNotFound, "background failures must not create interactive status")
 	}
 	g.err = nil
 	require.NoError(t, s.RunOnce(t.Context(), campaignTestTime))

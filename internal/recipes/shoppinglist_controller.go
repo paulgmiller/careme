@@ -179,7 +179,7 @@ func (s *server) handleFinalize(w http.ResponseWriter, r *http.Request) {
 		Recipes: p.Saved,
 		Plan:    currentList.Plan,
 	}
-	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil {
+	if err := s.SaveShoppingList(ctx, shoppingList, newHash); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 		slog.ErrorContext(ctx, "failed to save finalized shopping list", "hash", newHash, "error", err)
 		http.Error(w, "failed to finalize recipes", http.StatusInternalServerError)
 		return
@@ -667,7 +667,7 @@ func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID 
 			return
 		}
 
-		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil {
+		if err := s.SaveShoppingList(ctx, shoppingList, hash); err != nil && !errors.Is(err, cache.ErrAlreadyExists) {
 			slog.ErrorContext(ctx, "save error", "error", err)
 			if statusErr := s.generationStatuses.Fail(ctx, hash, err); statusErr != nil {
 				slog.ErrorContext(ctx, "failed to record shopping list save failure", "hash", hash, "error", statusErr)

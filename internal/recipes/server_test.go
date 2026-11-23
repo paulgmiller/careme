@@ -118,6 +118,7 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 				require.NoError(t, s.generationStatuses.Fail(t.Context(), hash, errors.New("store returned 404")))
 			},
 		},
+		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
 		{
 			name:     "untimed legacy progress",
 			wantText: "Planning your meals…",
@@ -125,12 +126,12 @@ func TestNotFoundReportedErrorOrUnknownGenerationShowsExpectedPage(t *testing.T)
 				s.generationStatuses.(*fakeStatusStore).setProgress(hash, "Planning your meals…")
 			},
 		},
-		{name: "status missing", wantRetry: true, setup: func(testing.TB, *server, string) {}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestServer(t, withTestStatusStore(newFakeStatusStore()))
+			t.Cleanup(s.wg.Wait)
 			p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Now())
 			require.NoError(t, s.SaveParams(t.Context(), p))
 			tt.setup(t, s, p.Hash())
@@ -193,7 +194,7 @@ func TestHandleRetryGenerationKicksAndRedirects(t *testing.T) {
 	assert.NotContains(t, status.Failed, "first attempt failed")
 }
 
-func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
+func TestHandleRecipesLocationAsksBeforeInteractiveGeneration(t *testing.T) {
 	t.Parallel()
 	location := &locations.Location{
 		ID:      "70100023",
@@ -225,9 +226,11 @@ func TestHandleRecipesLocationRedirectsToHashAndThenNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, followRR.Code)
 	assert.Contains(t, followRR.Body.String(), "Try again, chef")
+	assert.Contains(t, followRR.Body.String(), `method="POST"`)
+	assert.Contains(t, followRR.Body.String(), `action="/recipes/`+p.Hash()+`/retry"`)
 	select {
 	case <-generator.called:
-		t.Fatal("GET location redirect should not start generation")
+		t.Fatal("GET must ask before starting interactive generation")
 	default:
 	}
 }
@@ -1223,7 +1226,6 @@ func TestHandleRegenerateSingleRecipe_ReplacesSavedRecipeWithoutChangingShopping
 		ResponseID:   "resp-original",
 	}
 	originalHash := original.ComputeHash()
-	params.Saved = []ai.Recipe{original}
 	require.NoError(t, s.SaveParams(t.Context(), params))
 	require.NoError(t, s.SaveRecipe(t.Context(), original))
 	require.NoError(t, s.SaveShoppingList(t.Context(), &ai.ShoppingList{Recipes: []ai.Recipe{original}}, shoppingListHash))
@@ -1380,7 +1382,7 @@ func (c *captureKickgenerationGenerator) GenerateRecipes(ctx context.Context, p 
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureKickgenerationGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	panic("unexpected call to RegenerateRecipe")
 }
 
@@ -1390,10 +1392,6 @@ func (c *captureKickgenerationGenerator) AskQuestion(ctx context.Context, questi
 
 func (c *captureKickgenerationGenerator) GenerateRecipeImage(ctx context.Context, recipe ai.Recipe) (*ai.GeneratedImage, error) {
 	panic("unexpected call to GenerateRecipeImage")
-}
-
-func (c *captureKickgenerationGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	panic("unexpected call to PickAWine")
 }
 
 func (c *captureKickgenerationGenerator) Ready(ctx context.Context) error {
@@ -1570,29 +1568,23 @@ type captureQuestionGenerator struct {
 	lastResponseID  string
 	lastResponse    ai.ResponseRef
 	regenerateCalls int
-	lastWinePick    struct {
-		recipeTitle string
-		date        time.Time
-	}
-	wineRecommendation string
-	winePickCalls      int
-	panicOnWine        bool
 }
 
 func (c *captureQuestionGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
 	return &ai.ShoppingList{}, nil
 }
 
-func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
+func (c *captureQuestionGenerator) RegenerateRecipe(ctx context.Context, params *generatorParams, instructions []string, previous ai.ResponseRef) (*ai.Recipe, error) {
 	c.regenerateCalls++
 	c.lastResponse = previous
-	return &ai.Recipe{
+	recipe := ai.Recipe{
 		Title:        "Updated Skirt Steak Dinner",
 		Description:  "Updated after questions.",
 		Ingredients:  []ai.Ingredient{{Name: "Skirt steak", Quantity: "1 lb"}},
 		Instructions: []string{"Cook the steak.", "Serve."},
 		ResponseID:   "resp-regenerated",
-	}, nil
+	}
+	return &recipe, nil
 }
 
 func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question string, previous ai.ResponseRef) (*ai.QuestionResponse, error) {
@@ -1603,20 +1595,6 @@ func (c *captureQuestionGenerator) AskQuestion(ctx context.Context, question str
 		Answer:     "Try chicken thighs at the same cook time.",
 		ResponseID: "resp-next",
 	}, nil
-}
-
-func (c *captureQuestionGenerator) PickAWine(ctx context.Context, location string, recipe ai.Recipe, date time.Time) (*ai.WineSelection, error) {
-	if c.panicOnWine {
-		panic("unexpected call to PickAWine")
-	}
-	_ = location
-	c.winePickCalls++
-	c.lastWinePick.recipeTitle = recipe.Title
-	c.lastWinePick.date = date
-	if c.wineRecommendation != "" {
-		return &ai.WineSelection{Commentary: c.wineRecommendation, Wines: []ai.Ingredient{}}, nil
-	}
-	return &ai.WineSelection{Commentary: "Try a chilled sauvignon blanc.", Wines: []ai.Ingredient{}}, nil
 }
 
 func (c *captureQuestionGenerator) Ready(ctx context.Context) error {
@@ -2137,13 +2115,11 @@ func TestHandleSaveRecipe_FromRecipePageReturnsSaveAction(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), `/save"`)
 }
 
-func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
+func TestHandleSaveRecipeDoesNotStartExtras(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	storage := users.NewStorage(cacheStore)
-	g := &captureQuestionGenerator{
-		wineRecommendation: "Bright enough for dinner.",
-	}
+	g := &captureQuestionGenerator{}
 	ig := &countingImageGenerator{
 		imageBody: []byte("saved-image-bytes"),
 	}
@@ -2180,13 +2156,10 @@ func TestHandleSaveRecipe_StartsWineWithoutImageGeneration(t *testing.T) {
 	require.Contains(t, rr.Body.String(), `/dismiss"`)
 
 	s.Wait()
-	assert.Equal(t, 1, g.winePickCalls)
-	assert.Equal(t, 0, ig.imageCalls)
-
-	wine, err := s.wineFromCache(t.Context(), recipeHash)
+	hasWine, err := s.wineExists(t.Context(), recipeHash)
 	require.NoError(t, err)
-	require.NotNil(t, wine)
-	assert.Equal(t, "Bright enough for dinner.", wine.Commentary)
+	assert.False(t, hasWine)
+	assert.Equal(t, 0, ig.imageCalls)
 
 	exists, err := s.images.Exists(t.Context(), recipeHash)
 	require.NoError(t, err)
@@ -3253,9 +3226,10 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	s := newTestServer(t,
 		withImageGenerator(ig),
 	)
+	jobs := PostRecipeJobs{NewRecipeImageGenerator(s.images, ig)}.Background()
 	defer func() {
 		close(ig.release)
-		s.Wait()
+		jobs.Wait()
 		body, err := s.images.FromCache(t.Context(), recipe.ComputeHash())
 		require.NoError(t, err)
 		defer func() { require.NoError(t, body.Close()) }()
@@ -3263,7 +3237,7 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "generated-image", string(data))
 	}()
-	require.NoError(t, s.RecipeReady(t.Context(), recipe))
+	require.NoError(t, jobs.RecipeReady(t.Context(), recipe, "70100023", time.Time{}))
 	select {
 	case <-ig.started:
 	case <-time.After(5 * time.Second):
@@ -3272,4 +3246,114 @@ func TestRecipeImagesGenerateInBackground(t *testing.T) {
 	exists, err := s.images.Exists(t.Context(), recipe.ComputeHash())
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+type shoppingRaceGenerator struct {
+	*captureKickgenerationGenerator
+	generate func(context.Context, *generatorParams) (*ai.ShoppingList, error)
+}
+
+func (f shoppingRaceGenerator) GenerateRecipes(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+	return f.generate(ctx, p)
+}
+
+func TestInteractiveRequestRacesBackgroundGeneration(t *testing.T) {
+	for _, first := range []string{"interactive", "background", "before confirmation"} {
+		t.Run(first, func(t *testing.T) {
+			started := make(chan struct{})
+			release := make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			location := &locations.Location{ID: "70000123", Name: "Store", ZipCode: "94105"}
+			s := newTestServer(t, withTestLocationServer(staticLocationLookup{location: location}), withTestGenerator(shoppingRaceGenerator{&captureKickgenerationGenerator{}, func(ctx context.Context, p *generatorParams) (*ai.ShoppingList, error) {
+				close(started)
+				<-release
+				return &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Interactive dinner"}}}, nil
+			}}))
+			t.Cleanup(func() { unblock(); s.wg.Wait() })
+			p := DefaultParams(location, time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC))
+			// This is the only shared state left by an unfinished campaign/mail job.
+			require.NoError(t, s.SaveParams(t.Context(), p))
+			req := httptest.NewRequest(http.MethodGet, "/recipes?h="+p.Hash(), nil)
+			rr := httptest.NewRecorder()
+			s.handleRecipes(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.Contains(t, rr.Body.String(), "Try again, chef")
+			assert.Contains(t, rr.Body.String(), `action="/recipes/`+p.Hash()+`/retry"`)
+			select {
+			case <-started:
+				t.Fatal("GET must not start generation")
+			default:
+			}
+			background := &ai.ShoppingList{Recipes: []ai.Recipe{{Title: "Background dinner"}}}
+			if first == "before confirmation" {
+				require.NoError(t, s.SaveShoppingList(t.Context(), background, p.Hash()))
+			}
+			confirm := func() *httptest.ResponseRecorder {
+				post := httptest.NewRequest(http.MethodPost, "/recipes/"+p.Hash()+"/retry", nil)
+				post.SetPathValue("hash", p.Hash())
+				response := httptest.NewRecorder()
+				s.handleRetryGeneration(response, post)
+				return response
+			}
+			response := confirm()
+			require.Equal(t, http.StatusSeeOther, response.Code)
+			redirect, err := url.Parse(response.Header().Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, p.Hash(), redirect.Query().Get(queryArgHash))
+			if first == "before confirmation" {
+				_, err := s.generationStatuses.Load(t.Context(), p.Hash())
+				require.ErrorIs(t, err, cache.ErrNotFound, "a ready result must not start interactive generation")
+				select {
+				case <-started:
+					t.Fatal("POST must reuse a background result that is already ready")
+				default:
+				}
+				return
+			}
+			select {
+			case <-started:
+			case <-time.After(time.Second):
+				t.Fatal("confirmed POST did not start interactive generation")
+			}
+			// Another viewer shares the active interactive attempt.
+			second := httptest.NewRecorder()
+			s.handleRecipes(second, req)
+			require.Equal(t, http.StatusOK, second.Code)
+			want := "Interactive dinner"
+			if first == "background" {
+				require.NoError(t, s.SaveShoppingList(t.Context(), background, p.Hash()))
+				want = "Background dinner"
+			}
+			unblock()
+			s.wg.Wait()
+			if first == "interactive" {
+				require.ErrorIs(t, s.SaveShoppingList(t.Context(), background, p.Hash()), cache.ErrAlreadyExists)
+			}
+			saved, err := s.FromCache(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Equal(t, want, saved.Recipes[0].Title)
+			progress, err := s.generationStatuses.Load(t.Context(), p.Hash())
+			require.NoError(t, err)
+			assert.Empty(t, progress.Failed, "losing the publication race is not a generation failure")
+			page := httptest.NewRecorder()
+			s.handleRecipes(page, req)
+			require.Equal(t, http.StatusOK, page.Code)
+			assert.Contains(t, page.Body.String(), want)
+		})
+	}
+}
+
+func TestSingleRecipeRegenerationMissingParamsFailsBeforeAI(t *testing.T) {
+	generator := &captureQuestionGenerator{}
+	s := newTestServer(t, withTestGenerator(generator))
+	recipe := ai.Recipe{Title: "Dinner", OriginHash: "missing-origin"}
+	jobID := status.ID(recipe.ComputeHash(), "previous")
+	require.NoError(t, s.generationStatuses.Start(t.Context(), jobID, ""))
+	s.kickSingleRecipeRegeneration(t.Context(), jobID, &utypes.User{ID: "user"}, recipe, []string{"make it vegetarian"}, ai.ResponseRef{ID: "previous"})
+	s.Wait()
+	progress, err := s.generationStatuses.Load(t.Context(), jobID)
+	require.NoError(t, err)
+	assert.Contains(t, progress.Failed, "load regeneration parameters")
+	assert.Zero(t, generator.regenerateCalls)
 }

@@ -67,7 +67,7 @@ func TestPickAWineRequiresCachedCandidateCatalog(t *testing.T) {
 	aiStub := &captureWineQuestionAIClient{selection: &ai.WineSelection{Wines: []ai.Ingredient{{ProductID: "wine", Name: "Red"}}}}
 	staples := &cachedStaplesService{cache: failingWineCatalogCache{IO(cache.NewInMemoryCache())}, provider: &captureWineStaplesProvider{responses: map[string][]ai.InputIngredient{"Red": {{ProductID: "wine", VariantID: "upc", Description: "Red"}}}}}
 	g := newTestGenerator(t, aiStub, nil, staples, nil, noopRecipeSaver{})
-	got, err := g.PickAWine(t.Context(), "70500874", ai.Recipe{Title: "Dinner", WineStyles: []string{"Red"}}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
+	got, err := pickWine(t.Context(), g.aiClient, g.staples, "70500874", ai.Recipe{Title: "Dinner", WineStyles: []string{"Red"}}, time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC))
 	require.ErrorContains(t, err, "catalog write failed")
 	assert.Nil(t, got)
 }

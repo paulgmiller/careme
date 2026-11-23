@@ -145,7 +145,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	}
 
 	data.Title = "Recipes for " + data.Location.Name
-	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Location.Name, data.Date)
+	data.Description = shoppingListMetaDescription(input.list.Recipes, data.Date)
 	if len(input.list.Recipes) > 0 {
 		recipe := input.list.Recipes[0]
 		data.Social = &templates.SocialPreview{
@@ -201,7 +201,7 @@ func shoppingRecipeViews(recipes []ai.Recipe, progress shoppingProgress, listHas
 	return views, nil
 }
 
-func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string) string {
+func shoppingListMetaDescription(recipes []ai.Recipe, date string) string {
 	titles := make([]string, 0, len(recipes))
 	for _, recipe := range recipes {
 		title := strings.TrimSpace(recipe.Title)
@@ -210,9 +210,9 @@ func shoppingListMetaDescription(recipes []ai.Recipe, locationName, date string)
 		}
 	}
 	if len(titles) == 0 {
-		return fmt.Sprintf("Recipes for %s on %s.", locationName, date)
+		return date + "."
 	}
-	return fmt.Sprintf("Recipes for %s on %s: %s.", locationName, date, strings.Join(titles, ", "))
+	return fmt.Sprintf("%s: %s.", date, strings.Join(titles, ", "))
 }
 
 type shoppingFinalizeView struct {
