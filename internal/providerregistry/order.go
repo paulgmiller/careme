@@ -103,12 +103,11 @@ func (f Factory) NewOrderViewBuilder(c cache.Cache) *orderViewBuilder {
 	return &orderViewBuilder{factory: f, cache: c}
 }
 
+// OrderView selects one destination; docs/ordering.md describes the future
+// collection-based interface for showing multiple independent handoffs.
 func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
 	if b.factory.config.Mocks.Enable {
 		return mockorder.OrderView(ctx, b.cache, input)
-	}
-	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
-		return kroger.OrderViewForUser(ctx, b.cache, input)
 	}
 	if mnfoodclub.NewIdentityProvider().IsID(input.Location.ID) && (b.factory.config.MNFoodClub.OrderAPIURL != "" || b.factory.config.MNFoodClub.OrderAccessToken != "") {
 		client, err := mnfoodclub.NewOrderClient(b.factory.config.MNFoodClub, newOrderHTTPClient())
@@ -117,12 +116,16 @@ func (b *orderViewBuilder) OrderView(ctx context.Context, input ordertypes.Order
 		}
 		return mnfoodclub.OrderViewForUser(ctx, b.cache, client, input)
 	}
-	instcartSupport := albertsons.NewIdentityProvider().IsID(input.Location.ID) ||
+	instacartSupport := kroger.NewIdentityProvider().IsID(input.Location.ID) ||
+		albertsons.NewIdentityProvider().IsID(input.Location.ID) ||
 		aldi.NewIdentityProvider().IsID(input.Location.ID) ||
 		heb.NewIdentityProvider().IsID(input.Location.ID) ||
 		publix.NewIdentityProvider().IsID(input.Location.ID)
-	if b.factory.config.Instacart.APIKey != "" && instcartSupport {
+	if b.factory.config.Instacart.APIKey != "" && instacartSupport {
 		return instacart.OrderViewForUser(ctx, b.cache, input)
+	}
+	if kroger.NewIdentityProvider().IsID(input.Location.ID) && b.factory.config.Kroger.CartTokenKey != "" {
+		return kroger.OrderViewForUser(ctx, b.cache, input)
 	}
 	return nil, nil
 }
