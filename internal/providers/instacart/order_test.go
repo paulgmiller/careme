@@ -65,6 +65,15 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 	started := time.Now()
 	calls := 0
 	store := cache.NewInMemoryCache()
+	// Links created from overwritten catalog names must not hide corrected requests.
+	require.NoError(t, store.Put(t.Context(), "instacart_order_transfers/mock-clerk-user-id/list-hash",
+		`{"transfer_id":"list-hash","status":"applied","cart_url":"https://www.instacart.com/old-list"}`, cache.Unconditional()))
+	view, err := OrderViewForUser(t.Context(), store, ordertypes.OrderViewInput{
+		UserID: "mock-clerk-user-id", ListKey: "list-hash", Items: orderInput().Items,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, orderTransferURL, view.TransferURL)
+	assert.Empty(t, view.ReviewCartURL)
 	handler := testHandler(t, store, transportFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
 		body, err := io.ReadAll(r.Body)

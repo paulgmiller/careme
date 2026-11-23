@@ -315,7 +315,7 @@ func TestFinalizeUsesWineCandidateCatalogForListStoreDateAndStyles(t *testing.T)
 			require.Len(t, items, 2)
 			if scenario == "cached" {
 				assert.Equal(t, "wine-upc", items[1].VariantID)
-				assert.Equal(t, "Catalog red", items[1].Name)
+				assert.Equal(t, "Picked red", items[1].Name)
 			} else {
 				assert.Empty(t, items[1].VariantID)
 				assert.Equal(t, "Picked red", items[1].Name)
