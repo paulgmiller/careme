@@ -34,7 +34,7 @@ func (h *orderHandler) Register(routes routing.Registrar) {
 }
 
 func orderTransferKey(userID, key string) string {
-	return "instacart_order_transfers/" + userID + "/" + key
+	return "instacart_order_transfers/v2/" + userID + "/" + key
 }
 
 func loadOrderTransfer(ctx context.Context, c cache.Cache, userID, key string) (ordertypes.Transfer, error) {
