@@ -87,11 +87,7 @@ func (s *server) handleRegenerate(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Dismissed = recipesNotSaved(currentList.Recipes, p.Saved)
 	}
-	if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p); err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
-		http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
-		return
-	}
+	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	newHash := p.Hash()
 
 	if err := s.SaveParams(ctx, p); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -355,11 +351,7 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		}
 		if currentUser != nil {
 			// need directive to get to right hash
-			if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p); err != nil {
-				slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
-				http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
-				return
-			}
+			AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 		}
 		if _, err := s.ParamsFromCache(ctx, p.Hash()); err != nil {
 			if errors.Is(err, cache.ErrNotFound) {
@@ -538,11 +530,7 @@ func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	s.setFavoriteStore(ctx, currentUser, p.Location)
 
-	if err := AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p); err != nil {
-		slog.ErrorContext(ctx, "failed to load recipe history", "error", err)
-		http.Error(w, "failed to load recipe history", http.StatusInternalServerError)
-		return
-	}
+	AugmentParamsFromUser(ctx, *currentUser, s.FeedbackIO, p)
 	if err := s.SaveParams(ctx, p); err != nil {
 		if errors.Is(err, ErrAlreadyExists) {
 			// Another request with these content-addressed params owns the generation.
@@ -624,11 +612,11 @@ func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User,
 	slog.InfoContext(ctx, "set favorite store from recipe generation", "user_id", currentUser.ID, "location_id", currentUser.FavoriteStore)
 }
 
-func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) error {
-	return augmentParamsFromUserAt(ctx, user, fio, p, time.Now())
+func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) {
+	augmentParamsFromUserAt(ctx, user, fio, p, time.Now())
 }
 
-func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams, now time.Time) error {
+func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams, now time.Time) {
 	cookedCandidates := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
 		return r.CreatedAt.After(now.AddDate(0, 0, -14))
 	})
@@ -644,7 +632,6 @@ func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback
 	}
 	p.LastRecipes = lo.Uniq(titles)
 	p.Directive = user.Directive
-	return nil
 }
 
 func (s *server) kickgeneration(ctx context.Context, p *generatorParams, userID string) error {

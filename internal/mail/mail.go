@@ -255,9 +255,7 @@ func (m *mailer) deliverEmail(ctx context.Context, user utypes.User, p *recipes.
 	span.SetAttributes(attribute.String("user.id", user.ID))
 
 	rio := recipes.IO(m.cache)
-	if err := recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p); err != nil {
-		return fmt.Errorf("load recipe history: %w", err)
-	}
+	recipes.AugmentParamsFromUser(ctx, user, rio.FeedbackIO, p)
 
 	paramsHash := p.Hash()
 	shoppingList, err := rio.FromCache(ctx, paramsHash)

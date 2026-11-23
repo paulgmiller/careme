@@ -49,7 +49,7 @@ func TestAugmentParamsRecipeCooldowns(t *testing.T) {
 		{Title: "Dismissed old", Hash: "old", CreatedAt: now.Add(-8 * 24 * time.Hour)},
 	}
 	p := &generatorParams{}
-	require.NoError(t, augmentParamsFromUserAt(t.Context(), user, s.FeedbackIO, p, now))
+	augmentParamsFromUserAt(t.Context(), user, s.FeedbackIO, p, now)
 	assert.ElementsMatch(t, []string{"Saved recently", "Cooked recently", "Dismissed recently"}, p.LastRecipes)
 	assert.Equal(t, user.Directive, p.Directive)
 }
@@ -108,7 +108,7 @@ func TestRecipeActionsRecordDecisions(t *testing.T) {
 					assert.Equal(t, recipe.Title, user.DismissedRecipes[0].Title)
 				}
 				params := &generatorParams{}
-				require.NoError(t, AugmentParamsFromUser(t.Context(), *user, s.FeedbackIO, params))
+				AugmentParamsFromUser(t.Context(), *user, s.FeedbackIO, params)
 				assert.Equal(t, []string{recipe.Title}, params.LastRecipes)
 			}
 		})

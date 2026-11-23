@@ -91,7 +91,7 @@ func (s *server) saveRecipeForUser(ctx context.Context, currentUser *utypes.User
 	if err != nil {
 		return nil, fmt.Errorf("load recipe: %w", err)
 	}
-	if err := s.saveRecipesToUserProfile(ctx, currentUser, *recipe); err != nil {
+	if err := s.storage.SetRecipeSaved(currentUser, userRecipe(*recipe), true /* saved */); err != nil {
 		return nil, fmt.Errorf("save recipe to user profile: %w", err)
 	}
 
@@ -153,7 +153,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
 	}
-	if err := s.storage.SetRecipeSaved(currentUser, userRecipe(*recipe), false); err != nil {
+	if err := s.storage.SetRecipeSaved(currentUser, userRecipe(*recipe), false /* saved */); err != nil {
 		slog.ErrorContext(ctx, "failed to record dismissed recipe", "error", err)
 		http.Error(w, "failed to dismiss recipe", http.StatusInternalServerError)
 		return
@@ -227,11 +227,6 @@ func isSingleRecipeAction(r *http.Request) bool {
 
 func userRecipe(recipe ai.Recipe) utypes.Recipe {
 	return utypes.Recipe{Title: recipe.Title, Hash: recipe.ComputeHash(), CreatedAt: time.Now()}
-}
-
-// saveRecipesToUserProfile adds saved recipes to the user's profile.
-func (s *server) saveRecipesToUserProfile(ctx context.Context, currentUser *utypes.User, recipe ai.Recipe) error {
-	return s.storage.SetRecipeSaved(currentUser, userRecipe(recipe), true)
 }
 
 func writeShoppingRecipeCard(writer io.Writer, recipe ai.Recipe, state shoppingRecipeInput) error {
