@@ -252,8 +252,17 @@ list hash, scoped to the authenticated Careme user. Reposts reuse the saved
 outcome without comparing the submitted payload. There are no query-string
 statuses, browser polling, extra recipe-handler interfaces, or multiple ordering
 forms. Existing native Kroger transfers and connections are retained, but do not
-control the Instacart option. Numeric Kroger store IDs add no retailer hint;
-shoppers choose their retailer on Instacart. The cache-bound view reads the saved
+control the Instacart option. New links include a `retailer_key` hint derived from
+the source chain: prefixed store IDs use their prefix, while numeric Kroger IDs
+use the stored chain name, lowercased with spaces replaced by hyphens (for example,
+`QFC` becomes `qfc` and `Fred Meyer` becomes `fred-meyer`). Kroger's `FRED` alias
+also maps to `fred-meyer`; a missing Kroger chain uses `kroger`. The QFC,
+Fred Meyer, and Kroger keys were checked against Instacart's nearby-retailers API.
+ALDI and Publix use `aldi` and `publix`; H-E-B's `heb` prefix maps to `h-e-b`.
+These keys were also verified with the nearby-retailers API.
+The hint is documented for recipe links; support on shopping-list links remains
+experimental. Existing cached links retain their saved URLs. Shoppers can change
+their retailer on Instacart. The cache-bound view reads the saved
 result and supplies the existing form, review link, or failure label. View
 rendering never calls Instacart.
 
