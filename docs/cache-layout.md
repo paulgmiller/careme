@@ -128,7 +128,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `locations/` in the `farmersmarket` backend | JSON shared farmers market metadata (`id`, submitted names, average lat/lon, nearest ZIP, photo count, timestamps) keyed by farmers market location ID | `internal/farmersmarket` upload handler/store | `internal/farmersmarket` location backend and upload merge logic |
 | `inventory/` in the `farmersmarket` backend | JSON `{cached_at, ingredients}` keyed by `<farmersmarket_location_id>/<YYYY-MM-DD>.json`; item brand is the visible farm/stall/store name when available, otherwise `Farmers market` | `internal/farmersmarket` upload handler/store after GPT image extraction | `internal/farmersmarket` staples provider reads the freshest cached list from the last 24 hours via recipe generation |
 | `analysis_jobs/` in the `farmersmarket` backend | JSON farmers market photo analysis progress (`user_id`, `state`, photo/ingredient counts, message, redirect URL, error, timestamps) keyed by random upload job ID | `internal/farmersmarket` htmx upload handler while photo analysis runs | `internal/farmersmarket` status polling endpoint so any web replica can render progress |
-| `users/` | JSON `users/types.User` by user ID, including up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
+| `users/` | JSON `users/types.User` by user ID, including saved recipe summaries in `last_recipes`, 14-day dismissal summaries in `dismissed_recipes`, up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 | `location-store-requests/` | JSON `{store_id, zip, requested_at}` for stores present in location search but not yet supported for staples | `internal/locations/locations.go` (`POST /locations/request-store`) | Operational triage from shared cache/blob storage |
 | `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/providers/aldi` cache helpers | `internal/providers/aldi` location backend |
@@ -185,7 +185,7 @@ Recipe hashes are used by or stored in:
 - `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
 - recipe-regeneration job identity.
 - `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
-- `users/<user_id>` entries in `last_recipes[].hash`.
+- `users/<user_id>` entries in `last_recipes[].hash` and `dismissed_recipes[].hash`.
 
 Compatibility implications:
 
@@ -197,6 +197,15 @@ Compatibility implications:
 - If the structured-property layout changes in the future, introduce an explicit marker such as `recipe-properties-v2` and document its migration behavior here.
 
 ## Notes
+
+Recipe cooldown history lives in `users/<user_id>`: `last_recipes` contains saved
+recipes and `dismissed_recipes` contains recent dismissals, using the same recipe
+summary shape. Saving or dismissing moves the recipe between these lists and
+refreshes its timestamp. Dismissals at least 14 days old (twice the seven-day cooldown window) are
+pruned on user reads and writes; saved recipes are retained. The former `recipe_decisions/`
+records are no longer read or written and can be removed. Menu-specific
+`recipe_selection/` records are retained independently for historical analysis;
+they capture the latest saved/dismissed state per menu, not an action log.
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.

@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -317,7 +318,7 @@ func TestStorageRemoveRecipesByHash(t *testing.T) {
 		t.Fatalf("Update() error: %v", err)
 	}
 
-	removed, err := storage.RemoveRecipe(user, "remove-hash")
+	removed, err := storage.removeRecipe(user, "remove-hash")
 	if err != nil {
 		t.Fatalf("RemoveRecipe() error: %v", err)
 	}
@@ -327,4 +328,67 @@ func TestStorageRemoveRecipesByHash(t *testing.T) {
 	if len(user.LastRecipes) != 1 || user.LastRecipes[0].Hash != keep.Hash {
 		t.Fatalf("RemoveRecipe() LastRecipes = %#v, want only keep recipe", user.LastRecipes)
 	}
+}
+
+func TestRecipeHistoryTransitions(t *testing.T) {
+	t.Parallel()
+	storage := NewStorage(cache.NewInMemoryCache())
+	now := time.Now().UTC().Round(0)
+	old := utypes.Recipe{Title: "Old saved recipe", Hash: "old", CreatedAt: now.Add(-90 * 24 * time.Hour)}
+	user := &utypes.User{ID: "history", ShoppingDay: time.Saturday.String(), Email: []string{"history@example.com"}, LastRecipes: []utypes.Recipe{old}}
+	for _, saved := range []bool{true, true, false, false, true} {
+		recipe := utypes.Recipe{Title: "Pasta", Hash: "pasta", CreatedAt: now}
+		require.NoError(t, storage.SetRecipeSaved(user, recipe, saved))
+		loaded, err := storage.GetByID(user.ID)
+		require.NoError(t, err)
+		if saved {
+			assert.Equal(t, []utypes.Recipe{recipe, old}, loaded.LastRecipes)
+			assert.Empty(t, loaded.DismissedRecipes)
+		} else {
+			assert.Equal(t, []utypes.Recipe{old}, loaded.LastRecipes)
+			assert.Equal(t, []utypes.Recipe{recipe}, loaded.DismissedRecipes)
+		}
+		user = loaded
+		now = now.Add(time.Second)
+	}
+}
+
+func TestDismissedHistoryPruning(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	old := utypes.Recipe{Title: "Old", Hash: "old", CreatedAt: now.Add(-17 * 24 * time.Hour)}
+	recent := utypes.Recipe{Title: "Recent", Hash: "recent", CreatedAt: now.Add(-7 * 24 * time.Hour)}
+	user := &utypes.User{
+		ID: "pruning", ShoppingDay: time.Saturday.String(), Email: []string{"pruning@example.com"},
+		LastRecipes: []utypes.Recipe{old}, DismissedRecipes: []utypes.Recipe{old, recent},
+	}
+	c := cache.NewInMemoryCache()
+	storage := NewStorage(c)
+	// Seed a legacy user directly so the read must prune expired dismissals.
+	body, err := json.Marshal(user)
+	require.NoError(t, err)
+	require.NoError(t, c.Put(t.Context(), userPrefix+user.ID, string(body), cache.Unconditional()))
+	loaded, err := storage.GetByID(user.ID)
+	require.NoError(t, err)
+	require.Len(t, loaded.LastRecipes, 1, "old saved recipes are retained")
+	require.Len(t, loaded.DismissedRecipes, 1)
+	assert.Equal(t, recent.Hash, loaded.DismissedRecipes[0].Hash)
+	// Writes also discard expired history from an already loaded user.
+	require.NoError(t, storage.Update(user))
+	require.Len(t, user.DismissedRecipes, 1)
+	assert.Equal(t, recent.Hash, user.DismissedRecipes[0].Hash)
+}
+
+func TestDismissedHistoryRetentionBoundary(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-2 * utypes.RecipeCooldownWindow)
+	user := &utypes.User{DismissedRecipes: []utypes.Recipe{
+		{Hash: "inside", CreatedAt: cutoff.Add(time.Nanosecond)},
+		{Hash: "boundary", CreatedAt: cutoff},
+		{Hash: "outside", CreatedAt: cutoff.Add(-time.Nanosecond)},
+	}}
+	pruneDismissedRecipes(user, now)
+	require.Len(t, user.DismissedRecipes, 1)
+	assert.Equal(t, "inside", user.DismissedRecipes[0].Hash)
 }
