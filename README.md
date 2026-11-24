@@ -437,27 +437,27 @@ are configured explicitly in the command defaults; override them with
 `-organization-id` and `-channel-id` if necessary. No account discovery or write
 access to Buffer is used.
 
-The command retains all imported sent posts in the existing Azure `recipes`
-container under `updates/`. New posts are always imported; only the four newest
-existing posts are refreshed each day. Older posts remain in the archive even
-if Buffer stops returning them. The public API has no guaranteed sort order, so
-metadata is read across all pages; older media is not downloaded again.
-`-limit N` changes the refresh window; `-limit 0` explicitly refreshes everything.
-The first run backfills every available post automatically. For an explicit full
-backfill/refresh against production, run:
+Each run replaces `updates/feed.json` in the Azure `recipes` container with the
+ten newest sent posts from the configured Facebook channel. There is no archive
+merge, backfill mode, or refresh-window setting. The public API has no guaranteed
+sort order, so metadata is read across all pages before selecting the newest ten;
+only those ten posts have their media downloaded.
+
+For a production refresh, run:
 
 ```sh
-go run ./cmd/bufferexport -limit 0 -secret-file secrets/envprod
+go run ./cmd/bufferexport -secret-file secrets/envprod
 ```
 
 Photos and videos use content-hashed filenames. Media is processed one file at a
 time through a temporary file, and already stored hashes are not uploaded again.
 Only after all required media succeeds does `updates/feed.json` change. A failed
-sync leaves the last good feed visible. No media is checked into Git; no Hugo
-Markdown is generated. Existing archive objects are never automatically deleted.
+sync leaves the last good feed visible. Existing media objects are never deleted.
+The former full-history manifest is preserved as a one-time `updates/archive.json`
+snapshot; the exporter does not read or maintain it. No media is checked into Git.
 
-The About page fetches `/updates/feed.json` once. This HTTP response contains only
-the latest ten posts; the underlying Azure manifest retains the full archive.
+The About page fetches `/updates/feed.json` once. The stored manifest contains
+up to ten posts and is served directly.
 A small browser carousel shows one post at a time and switches locally with
 Older/Newer controls. Only the current post's photos and videos are loaded.
 Careme serves media from private Azure storage under `/updates/<post-id>/<hash>`

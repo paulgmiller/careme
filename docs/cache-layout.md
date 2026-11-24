@@ -392,11 +392,11 @@ Shopping rows retain ingredient names and selected variant IDs under the existin
 ## Published About-page updates
 
 The `recipes` container also stores published Buffer content under `updates/`:
-`updates/feed.json` is the durable archive index; images/videos use content-hashed
-filenames under `updates/<Buffer post ID>/`. `cmd/bufferexport` imports new posts,
-refreshes the newest four, and publishes the merged index only after required
-media uploads succeed. Older posts and files are retained. The HTTP `/updates/feed.json` response
-contains only the latest ten posts for the browser carousel. `/updates/` serves archived content
-from private storage via `internal/updates`, with 5-minute caching for the index
-and immutable caching for content-hashed media. No Buffer
+`updates/feed.json` contains the ten newest published posts. Each export replaces
+this manifest only after all required media uploads succeed; there is no history
+merge or separate refresh window. Images/videos use content-hashed filenames under
+`updates/<Buffer post ID>/`; older media is left in place. The former full-history
+manifest is preserved once as `updates/archive.json` and is no longer maintained.
+`/updates/` serves these blobs from private storage via `internal/updates`, with
+5-minute caching for JSON and immutable caching for content-hashed media. No Buffer
 credentials or drafts are stored in these blobs.

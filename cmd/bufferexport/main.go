@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -53,12 +54,8 @@ type exporter struct {
 func main() {
 	organization := flag.String("organization-id", "69a67ba9800155d3c2ee9e08", "Buffer organization ID")
 	channel := flag.String("channel-id", "69c40b8daf47dacb6953dd1a", "Careme Facebook channel ID")
-	limit := flag.Int("limit", 4, "Refresh the newest N existing posts; 0 refreshes all (new posts are always imported)")
 	secretFile := flag.String("secret-file", "", "Optional kage encrypted secret file")
 	flag.Parse()
-	if *limit < 0 {
-		log.Fatal("limit must be nonnegative")
-	}
 	var err error
 	if *secretFile == "" {
 		err = kage.Load()
@@ -86,10 +83,10 @@ func main() {
 	retry.HTTPClient.Transport = otelhttp.NewTransport(http.DefaultTransport)
 	retry.HTTPClient.Timeout = time.Minute
 	e := exporter{client: retry.StandardClient(), endpoint: "https://api.buffer.com", key: key, store: store}
-	if err := e.run(context.Background(), *organization, *channel, *limit); err != nil {
+	if err := e.run(context.Background(), *organization, *channel); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Published the merged archive to updates/feed.json.")
+	fmt.Println("Published the latest ten posts to updates/feed.json.")
 }
 
 type postPage struct {
@@ -148,7 +145,7 @@ func (e exporter) fetch(ctx context.Context, organization, channel string) ([]bu
 	if len(posts) == 0 {
 		return nil, errors.New("no published posts returned; prior feed left unchanged")
 	}
-	return posts, nil
+	return posts[:min(10, len(posts))], nil
 }
 
 func (e exporter) fetchPage(ctx context.Context, query string) (postPage, error) {
@@ -188,27 +185,17 @@ func (e exporter) fetchPage(ctx context.Context, query string) (postPage, error)
 	return result.Data.Posts, nil
 }
 
-func (e exporter) run(ctx context.Context, organization, channel string, limit int) error {
-	// Buffer does not guarantee ordering: read metadata, but only sync media for
-	// new posts and the newest limit existing posts. Zero explicitly refreshes all.
+var validID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+func (e exporter) run(ctx context.Context, organization, channel string) error {
 	source, err := e.fetch(ctx, organization, channel)
 	if err != nil {
 		return err
 	}
-	previous, err := updates.ReadPosts(ctx, e.store)
-	if err != nil && !errors.Is(err, cache.ErrNotFound) {
-		return fmt.Errorf("read prior archive: %w", err)
-	}
-	byID := make(map[string]updates.Post, len(previous))
-	for _, p := range previous {
-		byID[p.ID] = p
-	}
-	for index, original := range source {
-		if !updates.ValidID(original.ID) {
+	posts := make([]updates.Post, 0, len(source))
+	for _, original := range source {
+		if !validID.MatchString(original.ID) {
 			return fmt.Errorf("invalid Buffer post ID %q", original.ID)
-		}
-		if _, exists := byID[original.ID]; exists && limit > 0 && index >= limit {
-			continue
 		}
 		exported := updates.Post{ID: original.ID, Text: original.Text, Date: original.date(), Media: []updates.Media{}}
 		for _, item := range original.Assets {
@@ -221,13 +208,8 @@ func (e exporter) run(ctx context.Context, organization, channel string, limit i
 			}
 			exported.Media = append(exported.Media, updates.Media{Src: src, Type: item.MimeType, Alt: item.Image.AltText})
 		}
-		byID[original.ID] = exported
+		posts = append(posts, exported)
 	}
-	posts := make([]updates.Post, 0, len(byID))
-	for _, p := range byID {
-		posts = append(posts, p)
-	}
-	updates.SortPosts(posts)
 	manifest, err := json.MarshalIndent(posts, "", "  ")
 	if err != nil {
 		return err

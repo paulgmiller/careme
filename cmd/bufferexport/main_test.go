@@ -55,7 +55,7 @@ func TestExportPublishedPostsAndLocalMedia(t *testing.T) {
 	defer server.Close()
 	endpoint = server.URL
 	e := exporter{client: server.Client(), endpoint: server.URL + "/graphql", key: "test-key", store: store}
-	require.NoError(t, e.run(context.Background(), "org", "facebook", 4))
+	require.NoError(t, e.run(context.Background(), "org", "facebook"))
 	var posts []updates.Post
 	require.NoError(t, json.Unmarshal(readStored(t, store, "updates/feed.json"), &posts))
 	require.Len(t, posts, 1)
@@ -92,7 +92,7 @@ func TestBufferErrorsPreservePriorFeed(t *testing.T) {
 			}))
 			defer server.Close()
 			e := exporter{client: server.Client(), endpoint: server.URL, key: "test-key", store: store}
-			require.ErrorContains(t, e.run(context.Background(), "org", "channel", 4), tc.want)
+			require.ErrorContains(t, e.run(context.Background(), "org", "channel"), tc.want)
 			assert.Equal(t, "[]", string(readStored(t, store, "updates/feed.json")))
 		})
 	}
@@ -141,7 +141,7 @@ func TestMediaFailuresPreservePriorFeed(t *testing.T) {
 				target = failedUpload{Cache: store}
 			}
 			e := exporter{client: server.Client(), endpoint: server.URL, key: "test-key", store: target}
-			require.ErrorContains(t, e.run(context.Background(), "org", "channel", 4), tc.want)
+			require.ErrorContains(t, e.run(context.Background(), "org", "channel"), tc.want)
 			assert.Equal(t, "[]", string(readStored(t, store, "updates/feed.json")))
 		})
 	}
@@ -169,11 +169,12 @@ func TestFetchPagesSelectsNewestAndDeduplicates(t *testing.T) {
 	assert.Equal(t, 2, requests)
 }
 
-// A failed old asset must not block daily sync, but a genuinely new old post
-// must still be imported. Buffer ordering is deliberately scrambled here.
-func TestArchiveMergeRefreshWindowAndBackfill(t *testing.T) {
+func TestRollingFeedReplacesPriorPostsAndOnlyDownloadsLatestTen(t *testing.T) {
 	ctx := context.Background()
 	store := cache.NewInMemoryCache()
+	// The exporter no longer reads or merges the previous manifest.
+	require.NoError(t, store.Put(ctx, "updates/feed.json", "old snapshot", cache.Unconditional()))
+	require.NoError(t, store.Put(ctx, "updates/old/photo.jpg", "keep old media", cache.Unconditional()))
 	var source []bufferPost
 	downloads := map[string]int{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -189,53 +190,27 @@ func TestArchiveMergeRefreshWindowAndBackfill(t *testing.T) {
 		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"posts": map[string]any{"edges": edges}}}))
 	}))
 	defer server.Close()
-	for i := 0; i < 7; i++ {
+	for i := 0; i < 12; i++ {
 		id := fmt.Sprintf("p%d", i)
-		source = append(source, bufferPost{ID: id, Text: "original", DueAt: time.Date(2026, 11, 1+i, 0, 0, 0, 0, time.UTC), Assets: []asset{{Source: server.URL + "/media/" + id, MimeType: "image/jpeg"}}})
+		source = append(source, bufferPost{ID: id, Text: "original", DueAt: time.Date(2026, 11, i+1, 0, 0, 0, 0, time.UTC), Assets: []asset{{Source: server.URL + "/media/" + id, MimeType: "image/jpeg"}}})
 	}
 	e := exporter{client: server.Client(), endpoint: server.URL, store: store}
-	require.NoError(t, e.run(ctx, "org", "channel", 4))
-	posts, err := updates.ReadPosts(ctx, store)
-	require.NoError(t, err)
-	require.Len(t, posts, 7, "initial import includes everything, not just four")
-	for i := range source {
-		source[i].Text = "edited"
-	}
-	source = source[1:] // p0 disappears upstream but must remain archived.
-	// A previously unseen older post is imported even outside the refresh window.
-	source = append(source, bufferPost{ID: "discovered", Text: "new old post", DueAt: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)})
-	require.NoError(t, e.run(ctx, "org", "channel", 4))
-	posts, err = updates.ReadPosts(ctx, store)
-	require.NoError(t, err)
-	require.Len(t, posts, 8)
-	for i, p := range posts {
-		if i < 4 {
-			assert.Equal(t, "edited", p.Text)
-		} else if p.ID != "discovered" {
-			assert.Equal(t, "original", p.Text)
-		}
-	}
-	assert.Equal(t, 1, downloads["/media/p0"])
-	assert.Equal(t, 1, downloads["/media/p1"])
-	assert.Equal(t, 1, downloads["/media/p2"])
-	assert.Equal(t, 2, downloads["/media/p3"])
-	// Zero explicitly refreshes all still available posts; removed p0 stays.
-	require.NoError(t, e.run(ctx, "org", "channel", 0))
-	posts, err = updates.ReadPosts(ctx, store)
-	require.NoError(t, err)
-	require.Len(t, posts, 8)
-	assert.Equal(t, 2, downloads["/media/p1"])
-	assert.Equal(t, 1, downloads["/media/p0"])
-}
-
-func TestCorruptArchiveIsNotOverwritten(t *testing.T) {
-	store := cache.NewInMemoryCache()
-	require.NoError(t, store.Put(context.Background(), "updates/feed.json", "broken", cache.Unconditional()))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"data":{"posts":{"edges":[{"node":{"id":"p1"}}]}}}`)
-	}))
-	defer server.Close()
-	e := exporter{client: server.Client(), endpoint: server.URL, store: store}
-	require.ErrorContains(t, e.run(context.Background(), "org", "channel", 4), "read prior archive")
-	assert.Equal(t, "broken", string(readStored(t, store, "updates/feed.json")))
+	require.NoError(t, e.run(ctx, "org", "channel"))
+	var posts []updates.Post
+	require.NoError(t, json.Unmarshal(readStored(t, store, "updates/feed.json"), &posts))
+	require.Len(t, posts, 10)
+	assert.Equal(t, "p11", posts[0].ID)
+	assert.Equal(t, "p2", posts[9].ID)
+	assert.Len(t, downloads, 10, "older media must not be downloaded")
+	assert.Zero(t, downloads["/media/p0"])
+	assert.Zero(t, downloads["/media/p1"])
+	assert.Equal(t, "keep old media", string(readStored(t, store, "updates/old/photo.jpg")))
+	// Upstream deletions disappear from the feed; edits are reflected on every run.
+	source = source[8:11]
+	source[2].Text = "edited"
+	require.NoError(t, e.run(ctx, "org", "channel"))
+	require.NoError(t, json.Unmarshal(readStored(t, store, "updates/feed.json"), &posts))
+	require.Len(t, posts, 3)
+	assert.Equal(t, "p10", posts[0].ID)
+	assert.Equal(t, "edited", posts[0].Text)
 }

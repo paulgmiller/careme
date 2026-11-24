@@ -2,9 +2,7 @@ package updates
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,26 +63,4 @@ func TestStorageErrorsAreReported(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/updates/feed.json", nil))
 	assert.Equal(t, http.StatusInternalServerError, response.Code)
-}
-
-func TestFeedOnlyReturnsLatestTenWithoutTruncatingArchive(t *testing.T) {
-	store := cache.NewInMemoryCache()
-	posts := make([]Post, 60)
-	for i := range posts {
-		posts[i].ID = fmt.Sprintf("post%d", i)
-	}
-	data, err := json.Marshal(posts)
-	require.NoError(t, err)
-	require.NoError(t, store.Put(context.Background(), Prefix+"feed.json", string(data), cache.Unconditional()))
-	response := httptest.NewRecorder()
-	Handler(store).ServeHTTP(response, httptest.NewRequest("GET", "/updates/feed.json", nil))
-	require.Equal(t, 200, response.Code)
-	var latest []Post
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &latest))
-	require.Len(t, latest, 10)
-	assert.Equal(t, "post0", latest[0].ID)
-	assert.Equal(t, "post9", latest[9].ID)
-	archived, err := ReadPosts(context.Background(), store)
-	require.NoError(t, err)
-	assert.Len(t, archived, 60)
 }
