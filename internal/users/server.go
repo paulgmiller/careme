@@ -209,7 +209,7 @@ func (s *server) handleRemoveUserRecipe(w http.ResponseWriter, r *http.Request) 
 	}
 
 	recipeHash := strings.TrimSpace(r.FormValue("hash"))
-	removed, err := s.storage.RemoveRecipe(currentUser, recipeHash)
+	removed, err := s.storage.removeRecipe(currentUser, recipeHash)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update user when removing recipe", "error", err)
 		http.Error(w, "unable to save preferences", http.StatusInternalServerError)

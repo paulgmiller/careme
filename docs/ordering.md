@@ -232,22 +232,39 @@ for future identity hints.
 ## Instacart shopping lists
 
 Set `INSTACART_API_KEY` to enable `POST /instacart/order-transfers`. The provider
-registry currently offers Instacart only for IDs recognized by the Albertsons
-provider, including Albertsons, Safeway, and Haggen. Whole Foods is excluded. Mock
+registry offers Instacart for Kroger, Albertsons family stores (including Safeway
+and Haggen), ALDI, H-E-B, and Publix. Configured Instacart replaces the native
+Kroger shopping option; without an Instacart key, configured native Kroger
+ordering remains available. Whole Foods is excluded. Mock
 mode still uses only the mock provider. Localhost and loopback `PUBLIC_ORIGIN`
 hosts always select `https://connect.dev.instacart.tools`, overriding an explicit
 production endpoint; use a development key locally. For other origins,
 `INSTACART_BASE_URL` defaults to `https://connect.instacart.com` and can explicitly
 select the development endpoint. `deploy/deploy.sh` explicitly sets the development
-endpoint for `caremetest` staging, which requires a development API key.
+endpoint for `caremetest` staging, which requires a development API key. Production
+uses the production endpoint. Both namespaces load `INSTACART_API_KEY` from their
+own `instacart` secret; provision a production key in the `careme` namespace
+before deploying.
 
 Instacart follows the same native form, sign-in return, conditional reservation,
 and saved `Transfer` flow as Kroger and MN Food Club. The key is the finalized
 list hash, scoped to the authenticated Careme user. Reposts reuse the saved
 outcome without comparing the submitted payload. There are no query-string
 statuses, browser polling, extra recipe-handler interfaces, or multiple ordering
-forms. The cache-bound view reads the saved result and supplies the existing
-form, review link, or failure label. View rendering never calls Instacart.
+forms. Existing native Kroger transfers and connections are retained, but do not
+control the Instacart option. New links include a `retailer_key` hint derived from
+the source chain: prefixed store IDs use their prefix, while numeric Kroger IDs
+use the stored chain name, lowercased with spaces replaced by hyphens (for example,
+`QFC` becomes `qfc` and `Fred Meyer` becomes `fred-meyer`). Kroger's `FRED` alias
+also maps to `fred-meyer`; a missing Kroger chain uses `kroger`. The QFC,
+Fred Meyer, and Kroger keys were checked against Instacart's nearby-retailers API.
+ALDI and Publix use `aldi` and `publix`; H-E-B's `heb` prefix maps to `h-e-b`.
+These keys were also verified with the nearby-retailers API.
+The hint is documented for recipe links; support on shopping-list links remains
+experimental. Existing cached links retain their saved URLs. Shoppers can change
+their retailer on Instacart. The cache-bound view reads the saved
+result and supplies the existing form, review link, or failure label. View
+rendering never calls Instacart.
 
 Both the creation button and saved link use “Shop on Instacart” with the official
 full-color carrot and approved dark CTA styling. Other providers retain their
@@ -255,9 +272,14 @@ existing controls.
 
 The API request creates a shopping-list page with every displayed item, including
 pantry ingredients and selected wines. The full Careme return URL is sent both
-in `instructions` and as `partner_linkback_url`. Names drive matching; source product and
-variant IDs and source-store package counts are not Instacart identifiers or
-measurements. Positive numeric recipe amounts with supported units become
+in `instructions` and as `partner_linkback_url`. Nonempty selected variant IDs
+are sent as `upcs`, alongside ingredient names. Among the providers currently
+routed to Instacart, only Kroger supplies variant IDs, populated from item UPCs.
+Thirteen-digit identifiers gain a leading zero to use the equivalent fourteen-digit
+GTIN representation; twelve- and fourteen-digit values retain their format.
+Instacart prioritizes UPC matching when supplied.
+Source product IDs are not sent as Instacart identifiers. Source-store package
+counts are not sent as measurements. Positive numeric recipe amounts with supported units become
 `line_item_measurements`. Other amounts remain display text, and every original
 amount is retained for review. No ingredient is omitted for an unknown unit.
 Unlike catalog-based providers, Instacart requires nonempty item names and allows
@@ -322,3 +344,20 @@ show “Add to cart failed.” without a form. Missing transfers keep Add to car
 Read or decoding errors fail the page request. There is no browser status fetch.
 The saved handoff remains after checkout or cart edits; this is transfer history,
 not a live cart read. A different finalized list has its own idempotency key.
+
+### Future multiple-destination UI
+
+The current view builder selects one destination. When adding multiple ordering
+links, return an ordered collection of destination views from the registry and
+pass it through the shopping-list and finalize-control views. Render one existing
+handoff form or saved link per destination, with provider names on review links
+and failures so the controls remain distinguishable. Keep eligibility and ordering
+in the registry rather than the template.
+
+Each destination must retain its own transfer state, provider cache prefix,
+authentication, and idempotency handling. A saved or failed Kroger transfer must
+not suppress the Instacart option, or vice versa. Preserve contextual errors for
+transfer-read failures rather than silently dropping destinations. Test mixed
+states, user isolation, empty purchasable lists, and finalize-control refreshes
+before offering multiple links. No transfer-cache migration is needed merely to
+render multiple destinations.

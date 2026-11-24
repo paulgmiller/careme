@@ -108,7 +108,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `instacart_order_transfers/` | Shared JSON `Transfer` keyed by Careme user ID and finalized-list idempotency key | Instacart order handler | Instacart order handler and cache-bound order view |
 | `kroger_order_transfers/` | Shared `orders/types.Transfer` results keyed by authenticated user and transfer ID | Kroger transfer POST and OAuth callback | Provider browser POST and OAuth callback |
 | `kroger_oauth_continuations/` | Posted request, user ID, idempotency key, and issued timestamp keyed by user and random OAuth state | Kroger authorization start | OAuth callback; accepted for ten minutes |
-| `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, product names, selected variant IDs, sizes, and aisle details for food only (wine picks are appended at page render) keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
+| `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, ingredient names, selected variant IDs, sizes, and aisle details for food and selected wine, keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -128,7 +128,7 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `locations/` in the `farmersmarket` backend | JSON shared farmers market metadata (`id`, submitted names, average lat/lon, nearest ZIP, photo count, timestamps) keyed by farmers market location ID | `internal/farmersmarket` upload handler/store | `internal/farmersmarket` location backend and upload merge logic |
 | `inventory/` in the `farmersmarket` backend | JSON `{cached_at, ingredients}` keyed by `<farmersmarket_location_id>/<YYYY-MM-DD>.json`; item brand is the visible farm/stall/store name when available, otherwise `Farmers market` | `internal/farmersmarket` upload handler/store after GPT image extraction | `internal/farmersmarket` staples provider reads the freshest cached list from the last 24 hours via recipe generation |
 | `analysis_jobs/` in the `farmersmarket` backend | JSON farmers market photo analysis progress (`user_id`, `state`, photo/ingredient counts, message, redirect URL, error, timestamps) keyed by random upload job ID | `internal/farmersmarket` htmx upload handler while photo analysis runs | `internal/farmersmarket` status polling endpoint so any web replica can render progress |
-| `users/` | JSON `users/types.User` by user ID, including up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
+| `users/` | JSON `users/types.User` by user ID, including saved recipe summaries in `last_recipes`, 14-day dismissal summaries in `dismissed_recipes`, up to two seven-day shopping-list pointers labeled with store names, an optional `partner_id`, and an optional incoming `pending_partner_id`; the reserved partner-sharing-disabled ID occupies the partner slot without identifying another user | `internal/users/storage.go` (`Update` and partner relationship operations) | `internal/users/storage.go` (`GetByID`, `List`, and partner lookup) |
 | `email2user/` | Plain text user ID keyed by normalized email | `internal/users/storage.go` (`FindOrCreateFromClerk`) | `internal/users/storage.go` (`GetByEmail`) |
 | `location-store-requests/` | JSON `{store_id, zip, requested_at}` for stores present in location search but not yet supported for staples | `internal/locations/locations.go` (`POST /locations/request-store`) | Operational triage from shared cache/blob storage |
 | `aldi/stores/` | JSON `aldi.StoreSummary` keyed by prefixed ALDI location ID | `cmd/aldi` and `internal/providers/aldi` cache helpers | `internal/providers/aldi` location backend |
@@ -185,11 +185,11 @@ Recipe hashes are used by or stored in:
 - `wine_recommendations/<hash>`, `recipe_thread/<hash>`, `recipe_feedback/<hash>`, and `recipe_critiques/<hash>`.
 - recipe-regeneration job identity.
 - `recipe_selection/<user_id>/<origin_hash>` values in `saved_hashes` and `dismissed_hashes`.
-- `users/<user_id>` entries in `last_recipes[].hash`.
+- `users/<user_id>` entries in `last_recipes[].hash` and `dismissed_recipes[].hash`.
 
 Compatibility implications:
 
-- Shopping purchase recommendations use `shopping_quantities/v7/`. Older quantity records are not read. Build merges and caches quantities before finalizing and redirecting; product names, optional selected variant IDs, sizes, and aisle details are saved with the merged list so page loads only read the cached result and never reload ingredient catalogs. The first successful merge is stored directly under the finalized shopping-list hash, which includes the selected recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to recipe product IDs before merging. Only cached staples for the saved plan’s store and date supply product sizes for food merging. Pantry and wine candidate catalogs are not read. The first wine pick from each saved recipe bypasses the merger and is appended unchanged to the cached list under Wine, with no buy calculation. Missing catalog snapshots leave needs unresolved; other cache errors stop the request.
+- Shopping purchase recommendations use `shopping_quantities/v7/`. Existing v7 records remain readable. New snapshots preserve ingredient names in `Name` for display and order matching, without overwriting them with catalog titles. Build combines food and the first selected wine from each recipe, merges quantities, and caches the prepared rows before redirecting. Selected variant IDs, sizes, and aisle details are saved so page loads never reload catalogs or call the quantity model. The first successful merge is stored directly under the finalized shopping-list hash, which includes recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to referenced product IDs before merging. Missing food catalog snapshots leave needs unresolved; other cache errors stop the request. Wine is optional only after its polling deadline expires.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.
@@ -197,6 +197,15 @@ Compatibility implications:
 - If the structured-property layout changes in the future, introduce an explicit marker such as `recipe-properties-v2` and document its migration behavior here.
 
 ## Notes
+
+Recipe cooldown history lives in `users/<user_id>`: `last_recipes` contains saved
+recipes and `dismissed_recipes` contains recent dismissals, using the same recipe
+summary shape. Saving or dismissing moves the recipe between these lists and
+refreshes its timestamp. Dismissals at least 14 days old (twice the seven-day cooldown window) are
+pruned on user reads and writes; saved recipes are retained. The former `recipe_decisions/`
+records are no longer read or written and can be removed. Menu-specific
+`recipe_selection/` records are retained independently for historical analysis;
+they capture the latest saved/dismissed state per menu, not an action log.
 
 - Cache backend selection is in `internal/cache/azure.go` (`MakeCache`).
 - Most app caches use the default cache created via `cache.MakeCache()` / `cache.EnsureCache("recipes")`.
@@ -377,3 +386,5 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
+
+Shopping rows retain ingredient names and selected variant IDs under the existing `shopping_quantities/v7/` prefix. Older snapshots retain their saved names; any former `CatalogName` fields are ignored when decoding. Instacart uses selected Kroger variant IDs as UPCs when creating new links. Existing links remain reusable under `instacart_order_transfers/`; no cache invalidation occurs.

@@ -78,8 +78,10 @@ func TestInstacartOrderViewMatchesSupportedChains(t *testing.T) {
 		{name: "unknown store", location: "unknown-store", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
 		{name: "Walmart", location: "walmart_123", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
 		{name: "MNFoodClub unconfigured", location: "mnfoodclub_delivery", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
-		{name: "Kroger unconfigured", location: "70500874", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}},
-		{name: "Kroger preferred", location: "70500874", cfg: config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/kroger/order-transfers"},
+		{name: "Kroger disabled", location: "70500874"},
+		{name: "Kroger native only", location: "70500874", cfg: config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}}, want: "/kroger/order-transfers"},
+		{name: "Kroger Instacart only", location: "70500874", cfg: config.Config{Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
+		{name: "Instacart preferred over Kroger", location: "70500874", cfg: config.Config{Kroger: config.KrogerConfig{CartTokenKey: "configured"}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/instacart/order-transfers"},
 		{name: "MNFoodClub preferred", location: "mnfoodclub_delivery", cfg: config.Config{MNFoodClub: config.MNFoodClubConfig{OrderAPIURL: "https://foodclub.test", OrderAccessToken: "key"}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/mnfoodclub/order-transfers"},
 		{name: "mock preferred", location: "safeway_1444", cfg: config.Config{Mocks: config.MockConfig{Enable: true}, Instacart: config.InstacartConfig{APIKey: "key"}}, want: "/mock/order-transfers"},
 	} {
@@ -104,11 +106,24 @@ func TestInstacartOrderViewMatchesSupportedChains(t *testing.T) {
 				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
 				assert.Contains(t, page.String(), `action="/instacart/order-transfers"`)
 				assert.Contains(t, page.String(), `>Shop on Instacart</span>`)
+				assert.NotContains(t, page.String(), `/kroger/order-transfers`)
 				require.NoError(t, options.Cache.Put(t.Context(), "instacart_order_transfers/viewer/list", `{"transfer_id":"list","status":"applied","cart_url":"https://www.instacart.com/list"}`, cache.Unconditional()))
 				view, err = builder.OrderView(t.Context(), input)
 				require.NoError(t, err)
 				assert.Equal(t, "https://www.instacart.com/list", view.ReviewCartURL)
 				assert.Empty(t, view.TransferURL)
+				page.Reset()
+				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+				assert.Contains(t, page.String(), `href="https://www.instacart.com/list"`)
+				assert.Contains(t, page.String(), `>Shop on Instacart</span>`)
+				require.NoError(t, options.Cache.Put(t.Context(), "instacart_order_transfers/viewer/list", `{"transfer_id":"list","status":"failed"}`, cache.Unconditional()))
+				view, err = builder.OrderView(t.Context(), input)
+				require.NoError(t, err)
+				assert.True(t, view.TransferFailed)
+				page.Reset()
+				require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_order_form", view))
+				assert.Contains(t, page.String(), `Add to cart failed.`)
+				assert.NotContains(t, page.String(), `/kroger/order-transfers`)
 			}
 		})
 	}
