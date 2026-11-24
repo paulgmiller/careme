@@ -16,7 +16,6 @@ import (
 
 	"careme/internal/config"
 	ordertypes "careme/internal/orders/types"
-	"careme/internal/providers/kroger"
 )
 
 const (
@@ -64,15 +63,13 @@ func (c *orderClient) create(ctx context.Context, input ordertypes.TransferReque
 		Instructions: []string{returnURL},
 		LandingPage:  landingPage{LinkbackURL: returnURL},
 	}
-	krogerStore := kroger.NewIdentityProvider().IsID(input.Location.ID)
 	for _, item := range input.Items {
 		display := item.Name
 		if item.Needed != "" {
 			display += " — " + item.Needed
 		}
 		line := lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)}
-		// Kroger's selected itemId is a UPC; other providers' variant IDs are not.
-		if krogerStore && item.VariantID != "" {
+		if item.VariantID != "" {
 			upc := item.VariantID
 			// Express GTIN-13 as GTIN-14 for Instacart's 12/14-digit UPC field.
 			if len(upc) == 13 {

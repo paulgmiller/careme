@@ -70,7 +70,6 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		assert.NotContains(t, string(body), "source-product")
-		assert.NotContains(t, string(body), "source-variant")
 		assert.NotContains(t, string(body), `"product_ids"`)
 		assert.NotContains(t, string(body), `"enable_pantry_items"`)
 		var payload shoppingList
@@ -84,7 +83,7 @@ func TestOrderPayloadAndSavedTransfer(t *testing.T) {
 		assert.Equal(t, []string{"https://careme.test/recipes?h=list-hash#shopping-finalize-controls"}, payload.Instructions)
 		assert.Equal(t, "https://careme.test/recipes?h=list-hash#shopping-finalize-controls", payload.LandingPage.LinkbackURL)
 		require.Len(t, payload.Items, 3)
-		assert.Equal(t, lineItem{Name: `Chicken & "herbs"`, DisplayText: `Chicken & "herbs" — 2 lbs`, Measurements: []measurement{{Quantity: 2, Unit: "pound"}}}, payload.Items[0])
+		assert.Equal(t, lineItem{Name: `Chicken & "herbs"`, DisplayText: `Chicken & "herbs" — 2 lbs`, UPCs: []string{"source-variant"}, Measurements: []measurement{{Quantity: 2, Unit: "pound"}}}, payload.Items[0])
 		assert.Equal(t, []measurement{{Quantity: 4.5, Unit: "tablespoon"}}, payload.Items[1].Measurements)
 		assert.Equal(t, lineItem{Name: "Wine", DisplayText: "Wine — 1 bottle"}, payload.Items[2])
 		return response(200, `{"products_link_url":"https://www.instacart.com/store/shopping_lists/1"}`), nil

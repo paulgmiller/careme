@@ -263,13 +263,14 @@ existing controls.
 
 The API request creates a shopping-list page with every displayed item, including
 pantry ingredients and selected wines. The full Careme return URL is sent both
-in `instructions` and as `partner_linkback_url`. For Kroger stores, selected
-variant IDs (Kroger item UPCs) are sent in `upcs`, alongside ingredient names.
+in `instructions` and as `partner_linkback_url`. Nonempty selected variant IDs
+are sent as `upcs`, alongside ingredient names. Among the providers currently
+routed to Instacart, only Kroger supplies variant IDs, populated from item UPCs.
 Thirteen-digit identifiers gain a leading zero to use the equivalent fourteen-digit
 GTIN representation; twelve- and fourteen-digit values retain their format.
 Instacart prioritizes UPC matching when supplied.
-Other providers' variant IDs and all source product IDs are not sent as Instacart
-identifiers. Source-store package counts are not sent as measurements. Positive numeric recipe amounts with supported units become
+Source product IDs are not sent as Instacart identifiers. Source-store package
+counts are not sent as measurements. Positive numeric recipe amounts with supported units become
 `line_item_measurements`. Other amounts remain display text, and every original
 amount is retained for review. No ingredient is omitted for an unknown unit.
 Unlike catalog-based providers, Instacart requires nonempty item names and allows
