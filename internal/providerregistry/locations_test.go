@@ -178,3 +178,19 @@ func TestInitializeLocationBackendsTimesOut(t *testing.T) {
 	require.ErrorContains(t, err, "failed to initialize location backend")
 	assert.Nil(t, backends)
 }
+
+func TestWalmartLocationDiscoveryDisabled(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("AZURE_STORAGE_ACCOUNT_NAME", "")
+	t.Setenv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY", "")
+	backends, err := NewFactory(&config.Config{
+		PublicOrigin: "https://careme.cooking",
+		// Nonempty credentials would previously enable Walmart discovery.
+		Walmart: config.WalmartConfig{ConsumerID: "test-consumer", PrivateKey: "unused-while-discovery-disabled"},
+	}).NewLocationBackends(locations.LoadCentroids())
+	require.NoError(t, err)
+	require.NotEmpty(t, backends)
+	for _, backend := range backends {
+		assert.False(t, backend.IsID("walmart_123"), "Walmart must not participate in location discovery")
+	}
+}

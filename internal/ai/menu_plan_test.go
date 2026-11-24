@@ -493,3 +493,15 @@ func TestMenuCategoryDistributionForCounts(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildMenuPlanMessagesAvoidsRecentDecisionsWithoutInferringTastes(t *testing.T) {
+	client := NewClient(testAIConfig(config.DefaultRecipeModel), nil, nil)
+	messages, err := client.buildMenuPlanMessages(&locationtypes.Location{State: "WA"}, nil, nil, time.Now(), []string{"Saved pasta", "Dismissed curry"}, 3)
+	require.NoError(t, err)
+	body := mustJSON(t, messages)
+	assert.Contains(t, body, "recently cooked, saved, or dismissed")
+	assert.Contains(t, body, "not to infer ingredient or cuisine preferences")
+	assert.Contains(t, body, "Saved pasta")
+	assert.Contains(t, body, "Dismissed curry")
+	assert.NotContains(t, body, "previously cooked")
+}

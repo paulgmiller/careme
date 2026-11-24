@@ -47,6 +47,35 @@ func TestPopulateOrderViewUsesDestinationPresentation(t *testing.T) {
 	assert.NotContains(t, page.String(), `name="store_id"`)
 }
 
+func TestShoppingOrderPreservesIngredientNameThroughCatalogAndCache(t *testing.T) {
+	s := newTestServer(t)
+	needed := "1 medium, yielding 1 teaspoon zest and 2 tablespoons juice"
+	s.shoppingMerger = shoppingMergerFunc(func(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		return []ai.ShoppingItem{{ProductID: "lemon", Name: "Organic lemon", Needed: needed, Buy: new(float64(1))}}, nil
+	})
+	require.NoError(t, s.mergeAndCacheShoppingList(t.Context(), "lemon-list",
+		[]ai.Ingredient{{ProductID: "lemon", Name: "Organic lemon", Quantity: needed}},
+		[]ai.InputIngredient{{ProductID: "lemon", VariantID: "lemon-upc", Description: "Fresh Organic Lemon - Each", Size: "1 each", AisleNumber: "Produce"}}))
+	purchases, err := s.cachedShoppingPurchases(t.Context(), "lemon-list")
+	require.NoError(t, err)
+	require.Len(t, purchases, 1)
+	require.Len(t, purchases[0].Items, 1)
+	view := shoppingListPageView{Hash: "lemon-list", Purchases: purchases}
+	view.User = &utypes.User{ID: "viewer"}
+	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+		require.Len(t, input.Items, 1)
+		assert.Equal(t, ai.ShoppingItem{ProductID: "lemon", VariantID: "lemon-upc", Name: "Organic lemon", Needed: needed, Buy: new(float64(1))}, input.Items[0])
+		return nil, nil
+	})
+	require.NoError(t, s.populateOrderView(httptest.NewRequest(http.MethodGet, "/recipes?h=lemon-list", nil), &view))
+	var page bytes.Buffer
+	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
+	assert.Contains(t, page.String(), "Buy 1 × 1 each")
+	assert.Contains(t, page.String(), needed)
+	assert.Contains(t, page.String(), "Organic lemon")
+	assert.NotContains(t, page.String(), "Fresh Organic Lemon - Each")
+}
+
 func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("cannot build destination form")} {
 		s := newTestServer(t)

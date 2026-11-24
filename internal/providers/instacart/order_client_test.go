@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/ai"
 	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
@@ -24,12 +25,17 @@ func response(status int, body string) *http.Response {
 }
 
 func TestCreatePreferredRetailerLink(t *testing.T) {
-	for _, tt := range []struct{ name, location, link, want string }{
-		{"plain link", "safeway_1444", "https://www.instacart.com/store/shopping_lists/123", "safeway"},
-		{"affiliate link", "aldi_F219", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
-		{"replace retailer", "publix_1083", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
-		{"H-E-B", "heb_22", "https://www.instacart.com/store/shopping_lists/123", "heb"},
-		{"no chain prefix", "any-store", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
+	for _, tt := range []struct{ name, location, chain, link, want string }{
+		{"plain link", "safeway_1444", "", "https://www.instacart.com/store/shopping_lists/123", "safeway"},
+		{"affiliate link", "aldi_F219", "", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
+		{"replace retailer", "publix_1083", "", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
+		{"H-E-B", "heb_22", "", "https://www.instacart.com/store/shopping_lists/123", "h-e-b"},
+		{"QFC", "70500874", "QFC", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1&retailer_key=pcc#items", "qfc"},
+		{"Fred Meyer", "70100123", " Fred Meyer ", "https://www.instacart.com/list", "fred-meyer"},
+		{"Fred alias", "70100123", "FRED", "https://www.instacart.com/list", "fred-meyer"},
+		{"Kroger", "01400123", "KROGER", "https://www.instacart.com/list", "kroger"},
+		{"Kroger without chain", "70500874", "", "https://www.instacart.com/list", "kroger"},
+		{"no chain prefix", "any-store", "QFC", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
@@ -43,6 +49,7 @@ func TestCreatePreferredRetailerLink(t *testing.T) {
 			require.NoError(t, err)
 			input := orderInput()
 			input.Location.ID = tt.location
+			input.Location.Chain = tt.chain
 			link, err := client.create(t.Context(), input)
 			require.NoError(t, err)
 			got, err := url.Parse(link)
@@ -53,6 +60,33 @@ func TestCreatePreferredRetailerLink(t *testing.T) {
 			assert.Equal(t, original.Query().Get("aff_id"), got.Query().Get("aff_id"))
 			assert.Equal(t, original.Query().Get("offer_id"), got.Query().Get("offer_id"))
 			assert.Equal(t, original.Fragment, got.Fragment)
+		})
+	}
+}
+
+func TestCreateSendsSelectedUPC(t *testing.T) {
+	for _, tc := range []struct{ location, upc, want string }{
+		{"70500874", "0000000094053", "00000000094053"},
+		{"70500874", "012345678905", "012345678905"},
+		{"70500874", "00012345678905", "00012345678905"},
+		{"safeway_1444", "0000000094053", "00000000094053"},
+	} {
+		t.Run(tc.location+"/"+tc.upc, func(t *testing.T) {
+			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+				var payload shoppingList
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+				require.Len(t, payload.Items, 2)
+				assert.Equal(t, "Organic lemon", payload.Items[0].Name)
+				assert.Equal(t, []string{tc.want}, payload.Items[0].UPCs)
+				assert.Empty(t, payload.Items[1].UPCs, "missing UPCs remain name-based")
+				return response(http.StatusOK, `{"products_link_url":"https://www.instacart.com/list"}`), nil
+			})})
+			require.NoError(t, err)
+			input := orderInput()
+			input.Location.ID = tc.location
+			input.Items = []ai.ShoppingItem{{ProductID: "source-product", VariantID: tc.upc, Name: "Organic lemon"}, {Name: "Garlic"}}
+			_, err = client.create(t.Context(), input)
+			require.NoError(t, err)
 		})
 	}
 }

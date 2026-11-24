@@ -20,8 +20,6 @@ func prepareShoppingItems(items []ai.ShoppingItem, products map[string]ai.InputI
 		row := shoppingPurchaseItem{ShoppingItem: item}
 		if product, ok := products[item.ProductID]; ok {
 			row.VariantID = product.VariantID
-			// Use the catalog's exact product description instead of the AI's item name.
-			row.Name = product.Description
 			row.Size = product.Size
 			row.Aisle = strings.TrimSpace(product.AisleNumber)
 		}

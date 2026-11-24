@@ -613,23 +613,24 @@ func (s *server) setFavoriteStore(ctx context.Context, currentUser *utypes.User,
 }
 
 func AugmentParamsFromUser(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams) {
-	recent := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
-		// magic number of days. Also should we include non feedback ones in shorter window
-		return r.CreatedAt.After(time.Now().AddDate(0, 0, -14))
-	})
-	hashes := make([]string, 0, len(recent))
-	for _, recipe := range recent {
-		hashes = append(hashes, recipe.Hash)
-	}
+	augmentParamsFromUserAt(ctx, user, fio, p, time.Now())
+}
 
-	// just checking exist enough?
+func augmentParamsFromUserAt(ctx context.Context, user utypes.User, fio feedback.FeedbackIO, p *generatorParams, now time.Time) {
+	cookedCandidates := lo.Filter(user.LastRecipes, func(r utypes.Recipe, _ int) bool {
+		return r.CreatedAt.After(now.Add(-utypes.CookedCooldownWindow))
+	})
+	hashes := lo.Map(cookedCandidates, func(r utypes.Recipe, _ int) string { return r.Hash })
 	cooked := fio.FeedbackByHash(ctx, hashes)
-
-	// doens't change hash
-	p.LastRecipes = lo.FilterMap(recent, func(r utypes.Recipe, _ int) (string, bool) {
-		return r.Title, cooked[r.Hash].Cooked
+	titles := lo.FilterMap(cookedCandidates, func(r utypes.Recipe, _ int) (string, bool) {
+		return r.Title, cooked[r.Hash].Cooked || r.CreatedAt.After(now.Add(-utypes.RecipeCooldownWindow))
 	})
-
+	for _, recipe := range user.DismissedRecipes {
+		if recipe.CreatedAt.After(now.Add(-utypes.RecipeCooldownWindow)) {
+			titles = append(titles, recipe.Title)
+		}
+	}
+	p.LastRecipes = lo.Uniq(titles)
 	p.Directive = user.Directive
 }
 

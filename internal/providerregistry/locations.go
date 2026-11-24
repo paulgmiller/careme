@@ -23,7 +23,6 @@ import (
 	"careme/internal/providers/mnfoodclub"
 	"careme/internal/providers/publix"
 	"careme/internal/providers/smithbrothersfarms"
-	"careme/internal/providers/walmart"
 	"careme/internal/providers/wegmans"
 	"careme/internal/providers/wholefoods"
 
@@ -48,7 +47,7 @@ func (f Factory) NewLocationBackends(centroids locations.CentroidByZip) ([]locat
 		func(context.Context) (locations.LocationBackend, error) {
 			return kroger.NewLocationBackendFromConfig(cfg, httpClient)
 		},
-		func(context.Context) (locations.LocationBackend, error) { return walmart.NewClient(cfg.Walmart) },
+		// TODO: Restore Walmart discovery when store details and inventory are supported.
 		func(ctx context.Context) (locations.LocationBackend, error) {
 			return aldi.NewLocationBackendFromConfig(ctx, cfg, centroids)
 		},

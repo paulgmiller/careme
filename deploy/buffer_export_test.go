@@ -69,6 +69,7 @@ esac
 			require.NoError(t, err, "deploy output: %s", output)
 			data, err := os.ReadFile(rendered)
 			require.NoError(t, err)
+			assert.NotContains(t, string(data), "${", "all deployment variables must be rendered")
 			decoder := yaml.NewDecoder(bytes.NewReader(data))
 			found := false
 			for {

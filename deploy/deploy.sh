@@ -23,7 +23,7 @@ public_origin="${PUBLIC_ORIGIN:-}"
 ingress_host="${INGRESS_HOST:-}"
 store_disable_env_yaml=""
 order_stub_env_yaml=""
-instacart_env_yaml=""
+instacart_base_url="https://connect.instacart.com"
 
 if [[ -z "${ingress_host}" ]]; then
   case "${namespace}" in
@@ -56,14 +56,7 @@ buffer_export_schedule="0 6 * * *"
 
 if [[ "${namespace}" == "caremetest" ]]; then
   manifest_paths=("${app_manifest_path}" "${cron_manifest_paths[@]}")
-  instacart_env_yaml='
-            - name: INSTACART_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: instacart
-                  key: INSTACART_API_KEY
-            - name: INSTACART_BASE_URL
-              value: "https://connect.dev.instacart.tools"'
+  instacart_base_url="https://connect.dev.instacart.tools"
   order_stub_env_yaml='
             - name: MNFOODCLUB_ORDER_API_URL
               value: "https://test.careme.cooking/mnfoodclub-stub"
@@ -105,7 +98,7 @@ export IMAGE_TAG="${commit_hash:0:${short_len}}"
 export PUBLIC_ORIGIN="${public_origin}"
 export INGRESS_HOST="${ingress_host}"
 export ORDER_STUB_ENV_YAML="${order_stub_env_yaml}"
-export INSTACART_ENV_YAML="${instacart_env_yaml}"
+export INSTACART_BASE_URL="${instacart_base_url}"
 export STORE_DISABLE_ENV_YAML="${store_disable_env_yaml}"
 export ADVERTISED_RECIPES_SCHEDULE="${advertised_recipes_schedule}"
 export ALDI_SCRAPE_SCHEDULE="${aldi_scrape_schedule}"
@@ -162,9 +155,9 @@ if [[ "${namespace}" == "caremetest" ]]; then
     echo "hint: deploy a ref that includes the deploy/deploy.yaml store disable placeholder change" >&2
     exit 1
   fi
-  if ! git show "${ref}:deploy/deploy.yaml" | grep -q '\${INSTACART_ENV_YAML}'; then
-    echo "error: ref '${ref}' does not contain caremetest Instacart env rendering" >&2
-    echo "hint: deploy a ref that includes the deploy/deploy.yaml Instacart placeholder change" >&2
+  if ! git show "${ref}:deploy/deploy.yaml" | grep -q '\${INSTACART_BASE_URL}'; then
+    echo "error: ref '${ref}' does not contain Instacart base URL rendering" >&2
+    echo "hint: deploy a ref that includes the deploy/deploy.yaml Instacart base URL placeholder change" >&2
     exit 1
   fi
   for cron_manifest_path in "${cron_manifest_paths[@]}"; do
@@ -181,7 +174,7 @@ echo "Deploying namespace: ${namespace}"
 echo "Using public origin: ${PUBLIC_ORIGIN}"
 echo "Using ingress host: ${INGRESS_HOST}"
 for manifest_path in "${manifest_paths[@]}"; do
-  git show "${ref}:${manifest_path}" | envsubst '${INSTACART_ENV_YAML} ${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE} ${BUFFER_EXPORT_SCHEDULE}' | {
+  git show "${ref}:${manifest_path}" | envsubst '${INSTACART_BASE_URL} ${ORDER_STUB_ENV_YAML} ${IMAGE_TAG} ${PUBLIC_ORIGIN} ${INGRESS_HOST} ${STORE_DISABLE_ENV_YAML} ${ADVERTISED_RECIPES_SCHEDULE} ${ALDI_SCRAPE_SCHEDULE} ${ALBERTSONS_SCRAPE_SCHEDULE} ${ALBERTSONS_REESE84_SCHEDULE} ${HEB_REESE84_SCHEDULE} ${PUBLIX_SCRAPE_SCHEDULE} ${PUBLIX_ABCK_SCHEDULE} ${WHOLEFOODS_SCRAPE_SCHEDULE} ${BUFFER_EXPORT_SCHEDULE}' | {
     if [[ "${manifest_path}" == "${advertised_recipes_manifest_path}" ]]; then
       kubectl patch --local -f - --type=merge -p "{\"spec\":{\"suspend\":${advertised_recipes_suspend}}}" -o yaml
     else

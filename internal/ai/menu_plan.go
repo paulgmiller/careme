@@ -315,7 +315,8 @@ func (c *client) buildMenuPlanMessages(location *locationtypes.Location, saleIng
 
 	if len(lastRecipes) > 0 {
 		var prevRecipesMsg strings.Builder
-		prevRecipesMsg.WriteString("Avoid recipes similar to these previously cooked:\n")
+		// TODO: Handle recently cooked, saved, and dismissed recipes slightly differently.
+		prevRecipesMsg.WriteString("Avoid recipes similar to these recently cooked, saved, or dismissed. Use this only to avoid repeating dishes, not to infer ingredient or cuisine preferences:\n")
 		for _, recipe := range lastRecipes {
 			fmt.Fprintf(&prevRecipesMsg, "%s\n", recipe)
 		}
