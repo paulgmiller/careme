@@ -14,6 +14,7 @@ import (
 	"careme/internal/cache"
 	"careme/internal/recipes/feedback"
 
+	"careme/internal/users/types"
 	utypes "careme/internal/users/types"
 )
 
@@ -156,10 +157,19 @@ var adminUserDetailPageTmpl = template.Must(template.New("admin-user-detail").Pa
   {{if .FavoriteStore}}<p><code>{{.FavoriteStore}}</code></p>{{else}}<p>No favorite store saved.</p>{{end}}
   <h2>Cooking preferences</h2>
   {{if .Directive}}<p style="white-space: pre-wrap">{{.Directive}}</p>{{else}}<p>No cooking preferences saved.</p>{{end}}
-  <h2>Saved recipes ({{len .Recipes}})</h2>
-  {{if .Recipes}}
-  <ul>{{range .Recipes}}<li>{{if .URL}}<a href="{{.URL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</li>{{end}}</ul>
-  {{else}}<p>No saved recipes.</p>{{end}}
+  <h2>Saved recipes ({{len .Saved}})</h2>
+  {{if .Saved}}
+  <ul>
+  {{range .Saved}}<li><a href="/recipe/{{.Hash}}">{{.Title}}</a></li>{{end}}
+  </ul>
+  {{end}}
+  <h2>Dismissed recipes ({{len .Dismissed}})</h2>
+  {{if .Dismissed}}
+  <ul>
+  {{range .Dismissed}}<li><a href="/recipe/{{.Hash}}">{{.Title}}</a></li>{{end}}
+  </ul>
+  {{end}}
+
 </body>
 </html>`))
 
@@ -188,22 +198,6 @@ func AdminUserDetailPage(storage *Storage) http.Handler {
 			return
 		}
 
-		type recipeView struct {
-			Title string
-			URL   string
-		}
-		recipes := make([]recipeView, 0, len(user.LastRecipes))
-		for _, recipe := range user.LastRecipes {
-			recipeURL := ""
-			if recipe.Hash != "" {
-				recipeURL = "/recipe/" + url.PathEscape(recipe.Hash)
-			}
-			recipes = append(recipes, recipeView{
-				Title: recipe.Title,
-				URL:   recipeURL,
-			})
-		}
-
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if err := adminUserDetailPageTmpl.Execute(w, struct {
@@ -211,8 +205,10 @@ func AdminUserDetailPage(storage *Storage) http.Handler {
 			Emails        []string
 			FavoriteStore string
 			Directive     string
-			Recipes       []recipeView
-		}{ID: user.ID, Emails: user.Email, FavoriteStore: user.FavoriteStore, Directive: user.Directive, Recipes: recipes}); err != nil {
+			Saved         []types.Recipe
+			Dismissed     []types.Recipe
+		}{ID: user.ID, Emails: user.Email, FavoriteStore: user.FavoriteStore,
+			Directive: user.Directive, Saved: user.LastRecipes, Dismissed: user.DismissedRecipes}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render admin user detail page", "user_id", id, "error", err)
 			http.Error(w, "unable to render user", http.StatusInternalServerError)
 		}
