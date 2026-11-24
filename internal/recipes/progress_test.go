@@ -188,7 +188,7 @@ func TestAddingRecipeAfterGenerationCompletionPreservesProfile(t *testing.T) {
 	// A save request loads the current profile after generation completes.
 	user, err := s.storage.GetByID(user.ID)
 	require.NoError(t, err)
-	require.NoError(t, s.saveRecipesToUserProfile(t.Context(), user, recipe))
+	require.NoError(t, s.storage.SetRecipeSaved(user, userRecipe(recipe), true /* saved */))
 	got, err := s.storage.GetByID(user.ID)
 	require.NoError(t, err)
 	require.Len(t, got.ShoppingLists, 1)

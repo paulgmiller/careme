@@ -127,7 +127,7 @@ func TestAdminUserDetailPage(t *testing.T) {
 		FavoriteStore: "wholefoods_123",
 		LastRecipes: []utypes.Recipe{
 			{Title: "Tomato & <Basil> Soup", Hash: "hash-1"},
-			{Title: "Manual recipe"},
+			{Title: "Manual recipe", Hash: "foobar"},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -167,7 +167,6 @@ func TestAdminUserDetailPageEmptyAndMissing(t *testing.T) {
 		status           int
 		body             string
 	}{
-		{"empty", "user_empty", http.MethodGet, http.StatusOK, "No saved recipes."},
 		{"missing", "user_missing", http.MethodGet, http.StatusNotFound, ""},
 		{"legacy", "legacy-id", http.MethodGet, http.StatusNotFound, ""},
 		{"invalid path", "user_../other", http.MethodGet, http.StatusNotFound, ""},

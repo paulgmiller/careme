@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +9,7 @@ import (
 	utypes "careme/internal/users/types"
 )
 
-func TestSaveRecipesToUserProfile(t *testing.T) {
+func TestSaveUserRecipe(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)
 	storage := srv.storage
@@ -34,8 +33,7 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	}
 
 	// Save recipes to user profile
-	ctx := context.Background()
-	if err := srv.saveRecipesToUserProfile(ctx, testUser, savedRecipe); err != nil {
+	if err := storage.SetRecipeSaved(testUser, userRecipe(savedRecipe), true /* saved */); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 
@@ -57,7 +55,7 @@ func TestSaveRecipesToUserProfile(t *testing.T) {
 	}
 }
 
-func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
+func TestSaveUserRecipe_NoDuplicates(t *testing.T) {
 	t.Parallel()
 	srv := newTestServer(t)
 	storage := srv.storage
@@ -85,8 +83,7 @@ func TestSaveRecipesToUserProfile_NoDuplicates(t *testing.T) {
 	}
 
 	// Save recipes to user profile
-	ctx := context.Background()
-	if err := srv.saveRecipesToUserProfile(ctx, testUser, savedRecipe); err != nil {
+	if err := storage.SetRecipeSaved(testUser, userRecipe(savedRecipe), true /* saved */); err != nil {
 		t.Fatalf("failed to save recipes to user profile: %v", err)
 	}
 

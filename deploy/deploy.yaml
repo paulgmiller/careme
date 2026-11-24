@@ -70,7 +70,13 @@ spec:
               value: "${PUBLIC_ORIGIN}"
             #${STORE_DISABLE_ENV_YAML}
             #${ORDER_STUB_ENV_YAML}
-            #${INSTACART_ENV_YAML}
+            - name: INSTACART_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: instacart
+                  key: INSTACART_API_KEY
+            - name: INSTACART_BASE_URL
+              value: "${INSTACART_BASE_URL}"
 
           volumeMounts:
             - name: recipes

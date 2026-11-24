@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// RecipeCooldownWindow is how long saves and dismissals discourage repeating a dish.
+const (
+	RecipeCooldownWindow = 8 * 24 * time.Hour
+	CookedCooldownWindow = 14 * 24 * time.Hour
+)
+
 type Recipe struct {
 	Title     string    `json:"id"`
 	Hash      string    `json:"hash"`
@@ -30,6 +36,7 @@ type User struct {
 	CreatedAt        time.Time      `json:"created_at"`
 	PartnerID        string         `json:"partner_id,omitempty"`
 	PendingPartnerID string         `json:"pending_partner_id,omitempty"`
+	DismissedRecipes []Recipe       `json:"dismissed_recipes,omitempty"`
 	LastRecipes      []Recipe       `json:"last_recipes,omitempty"`
 	FavoriteStore    string         `json:"favorite_store,omitempty"`
 	ShoppingDay      string         `json:"shopping_day,omitempty"`
