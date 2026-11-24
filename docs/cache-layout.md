@@ -105,10 +105,10 @@ Wine cache keys keep their existing calendar-date and style hashing formula.
 | `kroger_cart_tokens/` | AES-GCM encrypted Kroger OAuth tokens keyed by Careme user ID | Kroger order handler OAuth callback and refresh | Kroger order handler |
 | `mock_order_transfers/` | Shared cart-transfer results for all location IDs when mocks are enabled, keyed by authenticated user and idempotency key | Mock order POST | Mock order view builder and local cart-review route |
 | `mnfoodclub_order_transfers/` | Shared transfer results keyed by Careme user and form idempotency key; transfer_id is the partner ID | MN Food Club order POST and server-side status refresh | Provider form route and order view builder |
-| `instacart_order_transfers/v2/` | Shared JSON `Transfer` keyed by Careme user ID and finalized-list idempotency key | Instacart order handler | Instacart order handler and cache-bound order view |
+| `instacart_order_transfers/` | Shared JSON `Transfer` keyed by Careme user ID and finalized-list idempotency key | Instacart order handler | Instacart order handler and cache-bound order view |
 | `kroger_order_transfers/` | Shared `orders/types.Transfer` results keyed by authenticated user and transfer ID | Kroger transfer POST and OAuth callback | Provider browser POST and OAuth callback |
 | `kroger_oauth_continuations/` | Posted request, user ID, idempotency key, and issued timestamp keyed by user and random OAuth state | Kroger authorization start | OAuth callback; accepted for ten minutes |
-| `shopping_quantities/v8/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, ingredient names, separate catalog titles, selected variant IDs, sizes, and aisle details for food and selected wine, keyed directly by finalized shopping-list hash (`shopping_quantities/v8/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
+| `shopping_quantities/v7/` | JSON `[]shoppingPurchaseGroup` containing merged amounts, nullable buy quantities, ingredient names, separate catalog titles, selected variant IDs, sizes, and aisle details for food and selected wine, keyed directly by finalized shopping-list hash (`shopping_quantities/v7/<hash>`) | Finalize (Build Shopping List) handler | Shopping-list page handler (which posts displayed food and wine to Kroger) |
 | `ingredients/` | JSON `[]ai.InputIngredient` keyed by location hash for staple caches, or by location/date/normalized wine style set for wine candidate caches | `internal/recipes/io.go` (`SaveInputIngredients`, `SaveIngredients`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) | `internal/recipes/io.go` (`InputIngredientsFromCache`, `IngredientsFromCache`) via `internal/recipes/staples.go` (`FetchStaples`, `FetchWines`) and `internal/ingredients/server.go` |
 | `pantry/query-categories-v1/` | JSON `[]ai.InputIngredient` keyed by the store-day location hash; categories include each originating Kroger pantry search term. This version bypasses older pantry snapshots without query categories. | `internal/recipes/staples.go` (`FetchPantry`) | `internal/recipes/staples.go` (`FetchPantry`) |
 | `params/` | JSON `generatorParams` keyed by shopping hash; params no longer embed the resolved staple filter list | `internal/recipes/io.go` (`SaveParams`) | `internal/recipes/io.go` (`ParamsFromCache`) |
@@ -189,7 +189,7 @@ Recipe hashes are used by or stored in:
 
 Compatibility implications:
 
-- Shopping purchase recommendations use `shopping_quantities/v8/`. Older quantity records are not read; rebuild existing lists to create the new snapshot. Ingredient names are preserved in `Name` for display and order matching; exact retailer titles are stored separately in `CatalogName`. Build combines food and the first selected wine from each recipe, merges quantities, and caches the prepared rows before redirecting. Selected variant IDs, sizes, and aisle details are saved so page loads never reload catalogs or call the quantity model. The first successful merge is stored directly under the finalized shopping-list hash, which includes recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to referenced product IDs before merging. Missing food catalog snapshots leave needs unresolved; other cache errors stop the request. Wine is optional only after its polling deadline expires.
+- Shopping purchase recommendations use `shopping_quantities/v7/`. Existing v7 records remain readable. New snapshots preserve ingredient names in `Name` for order matching and store exact retailer titles separately in `CatalogName`. Shopping-list display uses `CatalogName` when present and falls back to `Name` for older snapshots or items without catalog metadata. Build combines food and the first selected wine from each recipe, merges quantities, and caches the prepared rows before redirecting. Selected variant IDs, sizes, and aisle details are saved so page loads never reload catalogs or call the quantity model. The first successful merge is stored directly under the finalized shopping-list hash, which includes recipes, store, and date. Later wine picks or catalog changes do not regenerate that snapshot. The catalog is filtered to referenced product IDs before merging. Missing food catalog snapshots leave needs unresolved; other cache errors stop the request. Wine is optional only after its polling deadline expires.
 - Recipes with no structured properties omit the structured-properties payload, preserving their legacy hash exactly.
 - Adding any structured property to an otherwise identical legacy recipe produces a new hash and therefore a new recipe identity.
 - Changing a structured-property value or cooking-method order also produces a new identity.
@@ -335,7 +335,7 @@ not during page rendering. Existing finalized snapshots remain immutable; latepi
 
 ### Instacart transfers
 
-- `instacart_order_transfers/v2/<user ID>/<idempotency key>` stores only the shared
+- `instacart_order_transfers/<user ID>/<idempotency key>` stores only the shared
   `Transfer`: finalized-list `transfer_id`, typed status, and generated shopping
   page URL as `cart_url`. Product acceptance is not confirmed by link creation,
   so no per-item acceptance quantities are stored.
@@ -378,4 +378,4 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
 
-Ingredient names for cross-provider ordering: `shopping_quantities/v8/` replaces v7 because v7 overwrote ingredient names with catalog titles. Old snapshots cannot recover the original names; rebuilding a list creates a v8 snapshot. Recipe cache keys are unchanged. Instacart handoffs use `instacart_order_transfers/v2/` so saved links containing the overwritten names are not reused. Other provider order caches are unchanged.
+Ingredient names for cross-provider ordering use an additive `CatalogName` field under the existing `shopping_quantities/v7/` prefix. No cache migration or invalidation is required. Older snapshots retain their saved names, and saved Instacart links remain reusable under `instacart_order_transfers/`. New lists preserve ingredient names separately from catalog titles.

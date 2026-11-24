@@ -289,7 +289,7 @@ is injected at construction, as with other ordering clients.
 Generated links expire after 7 days. Transfer records remain saved history and
 are not refreshed or recreated on page load. A different finalized list has its
 own handoff. Legacy `instacart_shopping_links/` records are no longer read; only
-shared transfers are persisted under `instacart_order_transfers/v2/`.
+shared transfers are persisted under `instacart_order_transfers/`.
 
 ## Local development and E2E tests
 

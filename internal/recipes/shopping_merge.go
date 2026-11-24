@@ -14,7 +14,7 @@ import (
 	"careme/internal/parallelism"
 )
 
-const shoppingQuantityCachePrefix = "shopping_quantities/v8/"
+const shoppingQuantityCachePrefix = "shopping_quantities/v7/"
 
 type ShoppingQuantityMerger interface {
 	MergeShoppingQuantities(context.Context, []ai.Ingredient, []ai.InputIngredient) ([]ai.ShoppingItem, error)

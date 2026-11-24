@@ -71,10 +71,9 @@ func TestShoppingOrderPreservesIngredientNameThroughCatalogAndCache(t *testing.T
 	require.NoError(t, s.populateOrderView(httptest.NewRequest(http.MethodGet, "/recipes?h=lemon-list", nil), &view))
 	var page bytes.Buffer
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
-	assert.Contains(t, page.String(), "Organic lemon")
 	assert.Contains(t, page.String(), "Buy 1 × 1 each")
 	assert.Contains(t, page.String(), needed)
-	assert.NotContains(t, page.String(), "Fresh Organic Lemon - Each")
+	assert.Contains(t, page.String(), "Fresh Organic Lemon - Each")
 }
 
 func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {
