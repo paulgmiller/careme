@@ -59,7 +59,8 @@
               <div class="mt-3 hidden rounded-xl border border-brand-100 bg-brand-50/50 p-4 peer-checked/favorite-store-notes:block">
                 <form method="POST" action="/recipes" class="flex flex-col gap-3">
                   <input type="hidden" name="location" value="{{.User.FavoriteStore}}" />
-                  <textarea name="instructions" rows="3" aria-label="Recipe instructions" placeholder="Example: No seafood, focus on quick weeknight meals."
+                  <textarea name="instructions" rows="1" aria-label="Recipe instructions" placeholder="Example: No seafood, focus on quick weeknight meals."
+                    style="field-sizing: content; min-height: 2.625rem; max-height: 12rem; overflow-y: auto;"
                     class="w-full rounded-lg border border-brand-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300"></textarea>
                   <div class="flex flex-wrap items-center gap-2">
                     <button type="submit"
