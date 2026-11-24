@@ -384,8 +384,8 @@ The `recipes` container also stores published Buffer content under `updates/`:
 `updates/feed.json` is the durable archive index; images/videos use content-hashed
 filenames under `updates/<Buffer post ID>/`. `cmd/bufferexport` imports new posts,
 refreshes the newest four, and publishes the merged index only after required
-media uploads succeed. Older posts and files are retained. `/updates/post` returns
-one server-rendered post with HTMX navigation. `/updates/` serves archived content
+media uploads succeed. Older posts and files are retained. The HTTP `/updates/feed.json` response
+contains only the latest ten posts for the browser carousel. `/updates/` serves archived content
 from private storage via `internal/updates`, with 5-minute caching for the index
-and post fragments and immutable caching for content-hashed media. No Buffer
+and immutable caching for content-hashed media. No Buffer
 credentials or drafts are stored in these blobs.

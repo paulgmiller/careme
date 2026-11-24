@@ -54,7 +54,6 @@ func main() {
 	organization := flag.String("organization-id", "69a67ba9800155d3c2ee9e08", "Buffer organization ID")
 	channel := flag.String("channel-id", "69c40b8daf47dacb6953dd1a", "Careme Facebook channel ID")
 	limit := flag.Int("limit", 4, "Refresh the newest N existing posts; 0 refreshes all (new posts are always imported)")
-	output := flag.String("output", "", "Write bundles to this directory instead of Azure (local testing)")
 	secretFile := flag.String("secret-file", "", "Optional kage encrypted secret file")
 	flag.Parse()
 	if *limit < 0 {
@@ -73,17 +72,12 @@ func main() {
 	if key == "" {
 		log.Fatal("configure buffer/BUFFER_API_KEY in kage or BUFFER_API_KEY in the environment")
 	}
-	var store cache.Cache
-	if *output != "" {
-		store = cache.NewFileCache(*output)
-	} else {
-		if os.Getenv("AZURE_STORAGE_ACCOUNT_NAME") == "" {
-			log.Fatal("Azure storage credentials are required; use -output for a local export")
-		}
-		store, err = cache.MakeCache()
-		if err != nil {
-			log.Fatal(err)
-		}
+	if os.Getenv("AZURE_STORAGE_ACCOUNT_NAME") == "" {
+		log.Fatal("Azure storage credentials are required")
+	}
+	store, err := cache.MakeCache()
+	if err != nil {
+		log.Fatal(err)
 	}
 	retry := retryablehttp.NewClient()
 	retry.Logger = nil
@@ -115,7 +109,7 @@ func (p bufferPost) date() time.Time {
 	return p.DueAt
 }
 
-func (e exporter) fetch(ctx context.Context, organization, channel string, limit int) ([]bufferPost, error) {
+func (e exporter) fetch(ctx context.Context, organization, channel string) ([]bufferPost, error) {
 	// The public API does not expose the website's sort argument. Read all pages,
 	// then select by publication date rather than depending on unspecified ordering.
 	byID := map[string]bufferPost{}
@@ -153,9 +147,6 @@ func (e exporter) fetch(ctx context.Context, organization, channel string, limit
 	})
 	if len(posts) == 0 {
 		return nil, errors.New("no published posts returned; prior feed left unchanged")
-	}
-	if limit > 0 && len(posts) > limit {
-		posts = posts[:limit]
 	}
 	return posts, nil
 }
@@ -200,7 +191,7 @@ func (e exporter) fetchPage(ctx context.Context, query string) (postPage, error)
 func (e exporter) run(ctx context.Context, organization, channel string, limit int) error {
 	// Buffer does not guarantee ordering: read metadata, but only sync media for
 	// new posts and the newest limit existing posts. Zero explicitly refreshes all.
-	source, err := e.fetch(ctx, organization, channel, 0)
+	source, err := e.fetch(ctx, organization, channel)
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,6 @@
 
   {{template "app_head" .Style}}
 
-  <script src="/static/htmx@2.0.10.js" defer></script>
   {{.ClarityScript}}
   {{.GoogleTagScript}}
 </head>
@@ -46,9 +45,28 @@
         <section id="updates" class="border-b border-brand-100 p-8" aria-labelledby="updates-heading">
           <h2 id="updates-heading" class="text-2xl font-bold text-brand-700">Latest from Careme</h2>
           <p class="mt-2 text-gray-600">See what’s cooking this week, with recipes and updates from Careme.</p>
-          <div id="careme-feed" class="mt-6" hx-get="/updates/post" hx-trigger="load" hx-request='{"timeout":15000}' hx-swap="outerHTML" aria-label="Careme posts">
-            <p class="text-sm text-gray-600" role="status">Loading the latest posts…</p>
-          </div>
+          <p id="careme-feed-status" class="mt-4 text-sm text-gray-600" role="status">Loading the latest posts…</p>
+          <div id="careme-feed" class="mt-6" aria-label="Careme posts" aria-live="polite" aria-busy="true"></div>
+          <nav id="careme-feed-controls" class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Browse Careme posts" hidden>
+            <button id="careme-feed-newer" type="button" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Newer</button>
+            <span id="careme-feed-position" class="text-sm text-gray-600"></span>
+            <button id="careme-feed-older" type="button" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Older</button>
+          </nav>
+          <template id="careme-post">
+            <article class="min-w-0 overflow-hidden rounded-xl border border-brand-100 bg-white">
+              <div class="p-6">
+                <time class="text-sm text-gray-500"></time>
+                <p class="mt-3 whitespace-pre-wrap break-words leading-7 text-gray-700"></p>
+              </div>
+              <div class="grid grid-cols-2 gap-1 sm:flex" data-photos></div>
+            </article>
+          </template>
+          <template id="careme-photo">
+            <a target="_blank" rel="noreferrer" class="block min-w-0 sm:flex-1 last:odd:col-span-2" aria-label="View full photo"><img alt="" loading="lazy" class="aspect-[4/3] max-h-80 w-full object-cover"></a>
+          </template>
+          <template id="careme-video">
+            <video controls playsinline preload="metadata" aria-label="Careme cooking video" class="block max-h-[28rem] w-full bg-black"><source><a>Watch video</a></video>
+          </template>
           <noscript><p class="mt-4 text-gray-600">Enable JavaScript to browse Careme posts here, or follow us below.</p></noscript>
           <script src="{{AssetPath}}about-feed.js" defer></script>
         </section>

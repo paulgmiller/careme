@@ -2,6 +2,7 @@ package updates
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -25,20 +26,6 @@ func Handler(store cache.Cache) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path == "/updates/post" {
-			posts, err := ReadPosts(r.Context(), store)
-			if errors.Is(err, cache.ErrNotFound) {
-				servePost(w, r, nil)
-				return
-			}
-			if err != nil {
-				slog.ErrorContext(r.Context(), "read published updates", "error", err)
-				http.Error(w, "could not load updates", http.StatusInternalServerError)
-				return
-			}
-			servePost(w, r, posts)
-			return
-		}
 		key := strings.TrimPrefix(r.URL.Path, "/")
 		if !strings.HasPrefix(key, Prefix) || path.Clean(key) != key {
 			http.NotFound(w, r)
@@ -59,6 +46,19 @@ func Handler(store cache.Cache) http.Handler {
 		if err != nil {
 			http.Error(w, "could not read update", http.StatusInternalServerError)
 			return
+		}
+		// The stored manifest retains all history; the page only fetches ten posts.
+		if key == Prefix+"feed.json" {
+			var posts []Post
+			if err := json.Unmarshal(data, &posts); err != nil {
+				http.Error(w, "could not read feed", http.StatusInternalServerError)
+				return
+			}
+			data, err = json.Marshal(posts[:min(10, len(posts))])
+			if err != nil {
+				http.Error(w, "could not encode feed", http.StatusInternalServerError)
+				return
+			}
 		}
 		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(key)))
 		w.Header().Set("Cache-Control", "public, max-age=300")

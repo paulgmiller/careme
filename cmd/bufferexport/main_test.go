@@ -162,9 +162,9 @@ func TestFetchPagesSelectsNewestAndDeduplicates(t *testing.T) {
 	}))
 	defer server.Close()
 	e := exporter{client: server.Client(), endpoint: server.URL, key: "test-key", store: cache.NewInMemoryCache()}
-	posts, err := e.fetch(context.Background(), "org", "channel", 1)
+	posts, err := e.fetch(context.Background(), "org", "channel")
 	require.NoError(t, err)
-	require.Len(t, posts, 1)
+	require.Len(t, posts, 2)
 	assert.Equal(t, "newer", posts[0].ID)
 	assert.Equal(t, 2, requests)
 }

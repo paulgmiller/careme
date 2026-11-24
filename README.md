@@ -457,15 +457,14 @@ Only after all required media succeeds does `updates/feed.json` change. A failed
 sync leaves the last good feed visible. No media is checked into Git; no Hugo
 Markdown is generated. Existing archive objects are never automatically deleted.
 
-The About page requests `/updates/post` and uses HTMX Older/Newer controls to
-fetch one post at a time by stable Buffer ID. The full archive stays server-side.
+The About page fetches `/updates/feed.json` once. This HTTP response contains only
+the latest ten posts; the underlying Azure manifest retains the full archive.
+A small browser carousel shows one post at a time and switches locally with
+Older/Newer controls. Only the current post's photos and videos are loaded.
 Careme serves media from private Azure storage under `/updates/<post-id>/<hash>`
-with byte ranges for native video playback and seeking. Browser requests need no
-Buffer key, Bluesky, HLS library, public container, or expiring SAS URLs. A sync
-updates the page without rebuilding or redeploying Careme.
-
-For a local export, use `go run ./cmd/bufferexport -output /tmp/buffer-posts`.
-Files are written under `/tmp/buffer-posts/updates/`.
+with byte ranges for native video playback and seeking. A sync updates the page
+without rebuilding or redeploying Careme. No HTMX or crawler-specific rendering
+is used for the feed. The exporter writes directly to Azure.
 
 `deploy/cronjob-careme-buffer-export.yaml` runs daily at 6:00 AM Pacific
 (`0 6 * * *`, `America/Los_Angeles`) in both namespaces via `deploy/deploy.sh`.
