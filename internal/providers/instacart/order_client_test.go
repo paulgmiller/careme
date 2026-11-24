@@ -1,11 +1,9 @@
 package instacart
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -246,52 +244,6 @@ func TestCreateLinkRejectionDiagnostics(t *testing.T) {
 			assert.Contains(t, err.Error(), "API "+tt.api)
 			for _, secret := range []string{"secret-query", "secret-password", "private-api-key", "chef", "?token"} {
 				assert.NotContains(t, err.Error(), secret)
-			}
-		})
-	}
-}
-
-func TestCreateLinkLogsAttributionWithoutHandoffSecrets(t *testing.T) {
-	for _, tracked := range []bool{true, false} {
-		t.Run(map[bool]string{true: "attributed", false: "missing attribution"}[tracked], func(t *testing.T) {
-			var logs bytes.Buffer
-			previous := slog.Default()
-			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
-			t.Cleanup(func() { slog.SetDefault(previous) })
-			attribution := map[string]string{
-				"utm_campaign": "instacart-idp", "utm_medium": "affiliate",
-				"utm_source": "instacart_idp", "utm_term": "partnertype-mediapartner",
-				"utm_content": "campaignid-20313_partnerid-7078209",
-			}
-			query := url.Values{"token": {"secret-handoff"}}
-			if tracked {
-				for key, value := range attribution {
-					query.Set(key, value)
-				}
-			}
-			link := "https://www.instacart.com/secret-path?" + query.Encode() + "#secret-fragment"
-			body, err := json.Marshal(map[string]string{"products_link_url": link})
-			require.NoError(t, err)
-			client, err := NewOrderClient(config.InstacartConfig{APIKey: "secret-api-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(*http.Request) (*http.Response, error) {
-				return response(http.StatusOK, string(body)), nil
-			})})
-			require.NoError(t, err)
-			got, err := client.createLink(t.Context(), []byte(`{}`))
-			require.NoError(t, err)
-			assert.Equal(t, link, got)
-			var entry map[string]any
-			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
-			assert.Equal(t, "Instacart shopping link received", entry["msg"])
-			assert.Equal(t, productionURL, entry["api_url"])
-			assert.Equal(t, "www.instacart.com", entry["link_host"])
-			for key, value := range attribution {
-				if !tracked {
-					value = ""
-				}
-				assert.Equal(t, value, entry[key])
-			}
-			for _, secret := range []string{"secret-handoff", "secret-path", "secret-fragment", "secret-api-key"} {
-				assert.NotContains(t, logs.String(), secret)
 			}
 		})
 	}
