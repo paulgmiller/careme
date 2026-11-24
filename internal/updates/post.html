@@ -1,0 +1,20 @@
+<div id="careme-feed" class="mt-6" aria-label="Careme posts" aria-live="polite">
+{{if .Post.ID}}
+  <article class="min-w-0 overflow-hidden rounded-xl border border-brand-100 bg-white">
+    <div class="p-6">
+      <time class="text-sm text-gray-500" datetime="{{.Post.Date.Format "2006-01-02T15:04:05Z07:00"}}">{{.Post.Date.Format "Jan 2, 2006"}}</time>
+      <p class="mt-3 whitespace-pre-wrap break-words leading-7 text-gray-700">{{range .Parts}}{{if .Href}}<a href="{{.Href}}" target="_blank" rel="noreferrer" class="text-brand-700 underline underline-offset-4">{{.Text}}</a>{{else}}{{.Text}}{{end}}{{end}}</p>
+    </div>
+    {{if .Images}}<div class="grid grid-cols-2 gap-1 sm:flex">{{range .Images}}
+      <a href="/updates/{{.Src}}" target="_blank" rel="noreferrer" class="block min-w-0 sm:flex-1 {{if .Wide}}col-span-2{{end}}" aria-label="View full photo">
+        <img src="/updates/{{.Src}}" alt="{{.Alt}}" loading="lazy" class="aspect-[4/3] max-h-80 w-full object-cover">
+      </a>{{end}}</div>{{end}}
+    {{range .Videos}}<video controls playsinline preload="metadata" aria-label="Careme cooking video" class="block max-h-[28rem] w-full bg-black"><source src="/updates/{{.Src}}" type="{{.Type}}"><a href="/updates/{{.Src}}">Watch video</a></video>{{end}}
+  </article>
+  <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Browse Careme posts" hx-target="#careme-feed" hx-swap="outerHTML" hx-disabled-elt="find button" hx-request='{"timeout":15000}'>
+    <button id="careme-feed-newer" type="button" {{if .Newer}}hx-get="/updates/post?id={{.Newer}}"{{else}}disabled{{end}} class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Newer</button>
+    <span class="text-sm text-gray-600">Post {{.Position}} of {{.Total}}</span>
+    <button id="careme-feed-older" type="button" {{if .Older}}hx-get="/updates/post?id={{.Older}}"{{else}}disabled{{end}} class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Older</button>
+  </nav>
+{{else}}<p class="text-gray-600">No Careme posts to show yet.</p>{{end}}
+</div>

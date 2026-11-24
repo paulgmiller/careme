@@ -14,8 +14,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"path"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -45,19 +43,6 @@ type bufferPost struct {
 	Assets    []asset   `json:"assets"`
 }
 
-type media struct {
-	Src  string `json:"src"`
-	Type string `json:"type"`
-	Alt  string `json:"alt"`
-}
-
-type post struct {
-	ID    string    `json:"id"`
-	Text  string    `json:"text"`
-	Date  time.Time `json:"date"`
-	Media []media   `json:"media"`
-}
-
 type exporter struct {
 	client   *http.Client
 	endpoint string
@@ -68,12 +53,12 @@ type exporter struct {
 func main() {
 	organization := flag.String("organization-id", "69a67ba9800155d3c2ee9e08", "Buffer organization ID")
 	channel := flag.String("channel-id", "69c40b8daf47dacb6953dd1a", "Careme Facebook channel ID")
-	limit := flag.Int("limit", 4, "Number of published posts in the carousel")
-	output := flag.String("output", "", "Write bundles to this directory instead of Azure (local testing/Hugo)")
+	limit := flag.Int("limit", 4, "Refresh the newest N existing posts; 0 refreshes all (new posts are always imported)")
+	output := flag.String("output", "", "Write bundles to this directory instead of Azure (local testing)")
 	secretFile := flag.String("secret-file", "", "Optional kage encrypted secret file")
 	flag.Parse()
-	if *limit < 1 {
-		log.Fatal("limit must be positive")
+	if *limit < 0 {
+		log.Fatal("limit must be nonnegative")
 	}
 	var err error
 	if *secretFile == "" {
@@ -110,7 +95,7 @@ func main() {
 	if err := e.run(context.Background(), *organization, *channel, *limit); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Exported up to %d published posts. The carousel uses /updates/feed.json.\n", *limit)
+	fmt.Println("Published the merged archive to updates/feed.json.")
 }
 
 type postPage struct {
@@ -169,7 +154,7 @@ func (e exporter) fetch(ctx context.Context, organization, channel string, limit
 	if len(posts) == 0 {
 		return nil, errors.New("no published posts returned; prior feed left unchanged")
 	}
-	if len(posts) > limit {
+	if limit > 0 && len(posts) > limit {
 		posts = posts[:limit]
 	}
 	return posts, nil
@@ -212,93 +197,100 @@ func (e exporter) fetchPage(ctx context.Context, query string) (postPage, error)
 	return result.Data.Posts, nil
 }
 
-type upload struct {
-	key  string
-	data []byte
-}
-
-var validID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-
 func (e exporter) run(ctx context.Context, organization, channel string, limit int) error {
-	source, err := e.fetch(ctx, organization, channel, limit)
+	// Buffer does not guarantee ordering: read metadata, but only sync media for
+	// new posts and the newest limit existing posts. Zero explicitly refreshes all.
+	source, err := e.fetch(ctx, organization, channel, 0)
 	if err != nil {
 		return err
 	}
-	var uploads []upload
-	posts := make([]post, 0, len(source))
-	for _, original := range source {
-		if !validID.MatchString(original.ID) {
+	previous, err := updates.ReadPosts(ctx, e.store)
+	if err != nil && !errors.Is(err, cache.ErrNotFound) {
+		return fmt.Errorf("read prior archive: %w", err)
+	}
+	byID := make(map[string]updates.Post, len(previous))
+	for _, p := range previous {
+		byID[p.ID] = p
+	}
+	for index, original := range source {
+		if !updates.ValidID(original.ID) {
 			return fmt.Errorf("invalid Buffer post ID %q", original.ID)
 		}
-		date := original.date()
-		exported := post{ID: original.ID, Text: original.Text, Date: date, Media: []media{}}
-		markdown := original.Text + "\n"
-		var bundleMedia []media
+		if _, exists := byID[original.ID]; exists && limit > 0 && index >= limit {
+			continue
+		}
+		exported := updates.Post{ID: original.ID, Text: original.Text, Date: original.date(), Media: []updates.Media{}}
 		for _, item := range original.Assets {
 			if !strings.HasPrefix(item.MimeType, "image/") && !strings.HasPrefix(item.MimeType, "video/") {
 				return fmt.Errorf("post %s: unsupported media type %s", original.ID, item.MimeType)
 			}
-			data, err := e.download(ctx, item.Source)
+			src, err := e.copyMedia(ctx, original.ID, item)
 			if err != nil {
 				return fmt.Errorf("post %s: %w", original.ID, err)
 			}
-			extension, err := extensionFor(item.MimeType)
-			if err != nil {
-				return err
-			}
-			hash := sha256.Sum256(data)
-			filename := fmt.Sprintf("%x%s", hash[:12], extension)
-			relative := path.Join(original.ID, filename)
-			uploads = append(uploads, upload{key: updates.Prefix + relative, data: data})
-			exported.Media = append(exported.Media, media{Src: relative, Type: item.MimeType, Alt: item.Image.AltText})
-			bundleMedia = append(bundleMedia, media{Src: filename, Type: item.MimeType, Alt: item.Image.AltText})
-			if strings.HasPrefix(item.MimeType, "image/") {
-				alt := strings.NewReplacer("[", `\[`, "]", `\]`).Replace(item.Image.AltText)
-				markdown += fmt.Sprintf("\n![%s](%s)\n", alt, filename)
-			} else {
-				markdown += fmt.Sprintf("\n[Watch video](%s)\n", filename)
-			}
+			exported.Media = append(exported.Media, updates.Media{Src: src, Type: item.MimeType, Alt: item.Image.AltText})
 		}
-		title, _, _ := strings.Cut(original.Text, "\n")
-		metadata := map[string]any{"title": title, "date": date, "draft": false, "params": map[string]any{"buffer_id": original.ID, "media": bundleMedia}}
-		frontmatter, err := json.MarshalIndent(metadata, "", "  ")
-		if err != nil {
-			return err
-		}
-		uploads = append(uploads, upload{key: path.Join(updates.Prefix, original.ID, "index.md"), data: append(frontmatter, []byte("\n\n"+markdown)...)})
-		posts = append(posts, exported)
+		byID[original.ID] = exported
 	}
-	// All downloads succeed before the first write. Publish the index only after every upload succeeds.
-	for _, item := range uploads {
-		if err := e.store.PutReader(ctx, item.key, bytes.NewReader(item.data), cache.Unconditional()); err != nil {
-			return fmt.Errorf("upload %s: %w", item.key, err)
-		}
+	posts := make([]updates.Post, 0, len(byID))
+	for _, p := range byID {
+		posts = append(posts, p)
 	}
+	updates.SortPosts(posts)
 	manifest, err := json.MarshalIndent(posts, "", "  ")
 	if err != nil {
 		return err
 	}
+	// Immutable media may be orphaned on failure; readers retain the last good
+	// manifest until every required asset has been stored successfully.
 	if err := e.store.Put(ctx, updates.Prefix+"feed.json", string(manifest), cache.Unconditional()); err != nil {
 		return fmt.Errorf("publish feed: %w", err)
 	}
 	return nil
 }
 
-func (e exporter) download(ctx context.Context, source string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+func (e exporter) copyMedia(ctx context.Context, id string, item asset) (string, error) {
+	extension, err := extensionFor(item.MimeType)
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, item.Source, nil)
+	if err != nil {
+		return "", err
 	}
 	// The Buffer bearer token is deliberately absent from media requests.
 	response, err := e.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("download media: %w", err)
+		return "", fmt.Errorf("download media: %w", err)
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download media: HTTP %d", response.StatusCode)
+		return "", fmt.Errorf("download media: HTTP %d", response.StatusCode)
 	}
-	return io.ReadAll(response.Body)
+	file, err := os.CreateTemp("", "buffer-media-*")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = file.Close(); _ = os.Remove(file.Name()) }()
+	hash := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(file, hash), response.Body); err != nil {
+		return "", fmt.Errorf("download media: %w", err)
+	}
+	relative := fmt.Sprintf("%s/%x%s", id, hash.Sum(nil)[:12], extension)
+	key := updates.Prefix + relative
+	exists, err := e.store.Exists(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		if err := e.store.PutReader(ctx, key, file, cache.Unconditional()); err != nil {
+			return "", fmt.Errorf("upload %s: %w", key, err)
+		}
+	}
+	return relative, nil
 }
 
 func extensionFor(contentType string) (string, error) {

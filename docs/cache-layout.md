@@ -381,10 +381,11 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
 ## Published About-page updates
 
 The `recipes` container also stores published Buffer content under `updates/`:
-`updates/feed.json` is the selected carousel index; `updates/<Buffer post ID>/index.md`
-is a Hugo-compatible page bundle; images/videos use content-hashed filenames in
-the same bundle. `cmd/bufferexport` writes media and Markdown first, then replaces
-the index. Old bundles are retained. `/updates/` serves these public posts from
-private storage via `internal/updates`, with 5-minute caching for the manifest
-and Markdown and immutable caching for content-hashed media. No Buffer credentials
-or drafts are stored in these blobs.
+`updates/feed.json` is the durable archive index; images/videos use content-hashed
+filenames under `updates/<Buffer post ID>/`. `cmd/bufferexport` imports new posts,
+refreshes the newest four, and publishes the merged index only after required
+media uploads succeed. Older posts and files are retained. `/updates/post` returns
+one server-rendered post with HTMX navigation. `/updates/` serves archived content
+from private storage via `internal/updates`, with 5-minute caching for the index
+and post fragments and immutable caching for content-hashed media. No Buffer
+credentials or drafts are stored in these blobs.

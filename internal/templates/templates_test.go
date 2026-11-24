@@ -375,9 +375,10 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	for _, required := range []string{
 		`href="#updates"`,
 		`id="careme-feed"`,
-		`aria-label="Browse Careme posts"`,
-		`id="careme-feed-previous"`,
-		`id="careme-feed-next"`,
+		`hx-get="/updates/post"`,
+		`hx-trigger="load"`,
+		`hx-swap="outerHTML"`,
+		`/static/htmx@2.0.10.js`,
 		`max-w-7xl`,
 		`about-feed.js`,
 		`>Follow Careme</h2>`,

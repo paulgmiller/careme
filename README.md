@@ -438,23 +438,34 @@ are configured explicitly in the command defaults; override them with
 `-organization-id` and `-channel-id` if necessary. No account discovery or write
 access to Buffer is used.
 
-The command exports the four newest sent posts to the existing Azure `recipes`
-container under `updates/`. Every post has a Hugo-compatible `index.md` (JSON
-front matter) and downloaded photos/videos. No media is checked into Git. All
-media must download and upload successfully before `updates/feed.json` changes.
-Old bundles remain archived. A repeat export reuses content-hashed media names.
+The command retains all imported sent posts in the existing Azure `recipes`
+container under `updates/`. New posts are always imported; only the four newest
+existing posts are refreshed each day. Older posts remain in the archive even
+if Buffer stops returning them. The public API has no guaranteed sort order, so
+metadata is read across all pages; older media is not downloaded again.
+`-limit N` changes the refresh window; `-limit 0` explicitly refreshes everything.
+The first run backfills every available post automatically. For an explicit full
+backfill/refresh against production, run:
 
-The About carousel reads `/updates/feed.json` and `/updates/<post-id>/<hash>.jpg`
-(or `.mp4`, etc.). Careme serves those paths from private Azure storage, with byte
-ranges for video playback and seeking. Browser requests require no Buffer key,
-Bluesky, HLS library, public container, or expiring SAS URLs. A successful export
-updates the feed without rebuilding or redeploying Careme.
+```sh
+go run ./cmd/bufferexport -limit 0 -secret-file secrets/envprod
+```
 
-For a local/Hugo export, use `go run ./cmd/bufferexport -output /tmp/buffer-posts`.
-Bundles are written under `/tmp/buffer-posts/updates/`; copy that directory into
-Hugo's content tree. Video filenames and media types are listed in front matter,
-and Markdown includes a video link; the Hugo theme controls its video player.
-The carousel still shows one post at a time with Previous/Next controls.
+Photos and videos use content-hashed filenames. Media is processed one file at a
+time through a temporary file, and already stored hashes are not uploaded again.
+Only after all required media succeeds does `updates/feed.json` change. A failed
+sync leaves the last good feed visible. No media is checked into Git; no Hugo
+Markdown is generated. Existing archive objects are never automatically deleted.
+
+The About page requests `/updates/post` and uses HTMX Older/Newer controls to
+fetch one post at a time by stable Buffer ID. The full archive stays server-side.
+Careme serves media from private Azure storage under `/updates/<post-id>/<hash>`
+with byte ranges for native video playback and seeking. Browser requests need no
+Buffer key, Bluesky, HLS library, public container, or expiring SAS URLs. A sync
+updates the page without rebuilding or redeploying Careme.
+
+For a local export, use `go run ./cmd/bufferexport -output /tmp/buffer-posts`.
+Files are written under `/tmp/buffer-posts/updates/`.
 
 `deploy/cronjob-careme-buffer-export.yaml` runs daily at 6:00 AM Pacific
 (`0 6 * * *`, `America/Los_Angeles`) in both namespaces via `deploy/deploy.sh`.
@@ -464,5 +475,4 @@ the existing Dockerfile. The job imports only the namespace's `buffer` secret
 those secrets exist before deploying; kage's local files are not in the image.
 Runs cannot overlap, have a 15-minute deadline, and retry once on failure.
 The web server itself never calls Buffer. Tests:
-`go test ./cmd/bufferexport ./internal/updates` and
-`node internal/static/about-feed.test.mjs`.
+`go test ./cmd/bufferexport ./internal/updates`.

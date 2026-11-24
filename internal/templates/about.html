@@ -8,6 +8,7 @@
 
   {{template "app_head" .Style}}
 
+  <script src="/static/htmx@2.0.10.js" defer></script>
   {{.ClarityScript}}
   {{.GoogleTagScript}}
 </head>
@@ -45,15 +46,11 @@
         <section id="updates" class="border-b border-brand-100 p-8" aria-labelledby="updates-heading">
           <h2 id="updates-heading" class="text-2xl font-bold text-brand-700">Latest from Careme</h2>
           <p class="mt-2 text-gray-600">See what’s cooking this week, with recipes and updates from Careme.</p>
-          <p id="careme-feed-status" class="mt-4 text-sm text-gray-600" role="status">Loading the latest posts…</p>
-          <div id="careme-feed" class="mt-6 grid gap-6" aria-label="Careme posts" aria-busy="true"></div>
-          <nav id="careme-feed-controls" class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Browse Careme posts" hidden>
-            <button id="careme-feed-previous" type="button" aria-label="Previous post" aria-controls="careme-feed" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-            <span id="careme-feed-position" class="text-sm text-gray-600" role="status"></span>
-            <button id="careme-feed-next" type="button" aria-label="Next post" aria-controls="careme-feed" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-          </nav>
-          <noscript><p class="mt-4 text-gray-600">Enable JavaScript to see the latest Careme posts here.</p></noscript>
-          <script type="module" src="{{AssetPath}}about-feed.js"></script>
+          <div id="careme-feed" class="mt-6" hx-get="/updates/post" hx-trigger="load" hx-request='{"timeout":15000}' hx-swap="outerHTML" aria-label="Careme posts">
+            <p class="text-sm text-gray-600" role="status">Loading the latest posts…</p>
+          </div>
+          <noscript><p class="mt-4 text-gray-600">Enable JavaScript to browse Careme posts here, or follow us below.</p></noscript>
+          <script src="{{AssetPath}}about-feed.js" defer></script>
         </section>
 
         <section id="follow" class="border-b border-brand-100 p-8">

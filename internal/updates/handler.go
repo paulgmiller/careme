@@ -17,12 +17,26 @@ import (
 // Prefix holds public, published marketing content in the existing recipes store.
 const Prefix = "updates/"
 
-// Handler serves the exported manifest, Hugo Markdown, and media from private storage.
+// Handler serves the archived posts and media from private storage.
 func Handler(store cache.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			w.Header().Set("Allow", "GET, HEAD")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if r.URL.Path == "/updates/post" {
+			posts, err := ReadPosts(r.Context(), store)
+			if errors.Is(err, cache.ErrNotFound) {
+				servePost(w, r, nil)
+				return
+			}
+			if err != nil {
+				slog.ErrorContext(r.Context(), "read published updates", "error", err)
+				http.Error(w, "could not load updates", http.StatusInternalServerError)
+				return
+			}
+			servePost(w, r, posts)
 			return
 		}
 		key := strings.TrimPrefix(r.URL.Path, "/")
