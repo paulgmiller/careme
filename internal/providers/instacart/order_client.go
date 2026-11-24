@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -67,7 +68,16 @@ func (c *orderClient) create(ctx context.Context, input ordertypes.TransferReque
 		if item.Needed != "" {
 			display += " — " + item.Needed
 		}
-		payload.Items = append(payload.Items, lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)})
+		line := lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)}
+		if item.VariantID != "" {
+			upc := item.VariantID
+			// Express GTIN-13 as GTIN-14 for Instacart's 12/14-digit UPC field.
+			if len(upc) == 13 {
+				upc = "0" + upc
+			}
+			line.UPCs = []string{upc}
+		}
+		payload.Items = append(payload.Items, line)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -101,6 +111,7 @@ type measurement struct {
 type lineItem struct {
 	Name         string        `json:"name"`
 	DisplayText  string        `json:"display_text"`
+	UPCs         []string      `json:"upcs,omitempty"`
 	Measurements []measurement `json:"line_item_measurements,omitempty"`
 }
 
@@ -154,6 +165,9 @@ func (c *orderClient) createLink(ctx context.Context, body []byte) (string, erro
 		reason := strings.ReplaceAll(err.Error(), c.apiKey, "[redacted]")
 		return "", fmt.Errorf("instacart returned an invalid shopping link (API %s): %s", c.baseURL, reason)
 	}
+	u, _ := url.Parse(result.URL) // Already parsed by validateLink.
+	slog.InfoContext(ctx, "Instacart shopping link received",
+		"api_url", c.baseURL, "link_host", u.Hostname(), "query", u.Query())
 	return result.URL, nil
 }
 

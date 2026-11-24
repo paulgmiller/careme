@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"careme/internal/ai"
 	"careme/internal/config"
 
 	"github.com/stretchr/testify/assert"
@@ -54,6 +55,33 @@ func TestCreatePreferredRetailerLink(t *testing.T) {
 			assert.Equal(t, original.Query().Get("aff_id"), got.Query().Get("aff_id"))
 			assert.Equal(t, original.Query().Get("offer_id"), got.Query().Get("offer_id"))
 			assert.Equal(t, original.Fragment, got.Fragment)
+		})
+	}
+}
+
+func TestCreateSendsSelectedUPC(t *testing.T) {
+	for _, tc := range []struct{ location, upc, want string }{
+		{"70500874", "0000000094053", "00000000094053"},
+		{"70500874", "012345678905", "012345678905"},
+		{"70500874", "00012345678905", "00012345678905"},
+		{"safeway_1444", "0000000094053", "00000000094053"},
+	} {
+		t.Run(tc.location+"/"+tc.upc, func(t *testing.T) {
+			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
+				var payload shoppingList
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+				require.Len(t, payload.Items, 2)
+				assert.Equal(t, "Organic lemon", payload.Items[0].Name)
+				assert.Equal(t, []string{tc.want}, payload.Items[0].UPCs)
+				assert.Empty(t, payload.Items[1].UPCs, "missing UPCs remain name-based")
+				return response(http.StatusOK, `{"products_link_url":"https://www.instacart.com/list"}`), nil
+			})})
+			require.NoError(t, err)
+			input := orderInput()
+			input.Location.ID = tc.location
+			input.Items = []ai.ShoppingItem{{ProductID: "source-product", VariantID: tc.upc, Name: "Organic lemon"}, {Name: "Garlic"}}
+			_, err = client.create(t.Context(), input)
+			require.NoError(t, err)
 		})
 	}
 }
