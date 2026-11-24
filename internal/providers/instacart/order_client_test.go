@@ -25,13 +25,17 @@ func response(status int, body string) *http.Response {
 }
 
 func TestCreatePreferredRetailerLink(t *testing.T) {
-	for _, tt := range []struct{ name, location, link, want string }{
-		{"plain link", "safeway_1444", "https://www.instacart.com/store/shopping_lists/123", "safeway"},
-		{"affiliate link", "aldi_F219", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
-		{"replace retailer", "publix_1083", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
-		{"H-E-B", "heb_22", "https://www.instacart.com/store/shopping_lists/123", "heb"},
-		{"Kroger numeric ID", "70500874", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
-		{"no chain prefix", "any-store", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
+	for _, tt := range []struct{ name, location, chain, link, want string }{
+		{"plain link", "safeway_1444", "", "https://www.instacart.com/store/shopping_lists/123", "safeway"},
+		{"affiliate link", "aldi_F219", "", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1#items", "aldi"},
+		{"replace retailer", "publix_1083", "", "https://www.instacart.com/store/shopping_lists/123?retailer_key=other", "publix"},
+		{"H-E-B", "heb_22", "", "https://www.instacart.com/store/shopping_lists/123", "h-e-b"},
+		{"QFC", "70500874", "QFC", "https://www.instacart.com/store/shopping_lists/123?aff_id=7&offer_id=1&retailer_key=pcc#items", "qfc"},
+		{"Fred Meyer", "70100123", " Fred Meyer ", "https://www.instacart.com/list", "fred-meyer"},
+		{"Fred alias", "70100123", "FRED", "https://www.instacart.com/list", "fred-meyer"},
+		{"Kroger", "01400123", "KROGER", "https://www.instacart.com/list", "kroger"},
+		{"Kroger without chain", "70500874", "", "https://www.instacart.com/list", "kroger"},
+		{"no chain prefix", "any-store", "QFC", "https://www.instacart.com/store/shopping_lists/123?aff_id=7", ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewOrderClient(config.InstacartConfig{APIKey: "test-key"}, "https://careme.test", &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
@@ -45,6 +49,7 @@ func TestCreatePreferredRetailerLink(t *testing.T) {
 			require.NoError(t, err)
 			input := orderInput()
 			input.Location.ID = tt.location
+			input.Location.Chain = tt.chain
 			link, err := client.create(t.Context(), input)
 			require.NoError(t, err)
 			got, err := url.Parse(link)

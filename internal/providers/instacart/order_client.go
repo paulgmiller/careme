@@ -16,6 +16,7 @@ import (
 
 	"careme/internal/config"
 	ordertypes "careme/internal/orders/types"
+	"careme/internal/providers/kroger"
 )
 
 const (
@@ -87,11 +88,26 @@ func (c *orderClient) create(ctx context.Context, input ordertypes.TransferReque
 	if err != nil {
 		return "", err
 	}
-	// Experiment with the chain prefix as a preferred retailer. Instacart
+	// Experiment with the source chain as a preferred retailer. Instacart
 	// documents retailer_key on recipe URLs, but not shopping-list URLs.
-	chain, _, ok := strings.Cut(input.Location.ID, "_")
-	if !ok || chain == "" {
+	chain, _, prefixed := strings.Cut(input.Location.ID, "_")
+	if !prefixed {
+		if !kroger.NewIdentityProvider().IsID(input.Location.ID) {
+			return link, nil
+		}
+		chain = strings.ToLower(strings.Join(strings.Fields(input.Location.Chain), "-"))
+		switch chain {
+		case "":
+			chain = "kroger"
+		case "fred":
+			chain = "fred-meyer"
+		}
+	}
+	if chain == "" {
 		return link, nil
+	}
+	if chain == "heb" {
+		chain = "h-e-b"
 	}
 	u, err := url.Parse(link)
 	if err != nil {
