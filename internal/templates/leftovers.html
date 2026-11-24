@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Cook with leftovers · Careme</title>
+  {{template "app_head" .Style}}
+  {{.ClarityScript}}
+  {{.GoogleTagScript}}
+</head>
+<body class="relative min-h-screen bg-gradient-to-b from-brand-50/80 via-white to-brand-50/80 text-ink-700 antialiased">
+  {{template "seasonal_background" .}}
+  <main class="relative z-10 mx-auto max-w-3xl px-4 py-8">
+    <section class="friendly-card border border-brand-100 bg-white/90 p-8 shadow-xl">
+      <a href="/" class="text-brand-700">Careme</a>
+      <h1 class="mt-4 font-display text-3xl font-extrabold text-brand-700">Make the most of your leftovers</h1>
+      <p class="mt-2 text-ink-600">One meal from what you already have.</p>
+      {{if .Error}}<p role="alert" class="mt-4 rounded-lg bg-red-50 p-4 text-red-800">{{.Error}}</p>{{end}}
+      {{if .Explanation}}<p role="status" class="mt-6 rounded-lg bg-brand-50 p-4">{{.Explanation}} Add something else you have, or revise your leftovers below.</p>{{end}}
+      {{if and .Token (not .Explanation)}}
+        <p class="mt-6"><strong>Your leftovers:</strong> {{.Leftovers}}</p>
+        <p class="mt-2">Let's make {{.Meal}} for {{.Servings}}. Do you have these on hand?</p>
+        <form method="post" action="/leftovers/{{.Token}}" class="mt-6 space-y-6" data-leftovers-form>
+          <input type="hidden" name="round" value="{{.Round}}" />
+          {{range $i, $ingredient := .Questions}}
+          <fieldset class="rounded-lg border border-brand-200 p-4">
+            <legend class="px-2 font-semibold">{{$ingredient}}</legend>
+            <div class="flex gap-6">
+              <label class="flex items-center gap-2"><input type="radio" name="ingredient-{{$i}}" value="yes" {{if eq (index $.Answers $i) "yes"}}checked{{end}} required /> Yes</label>
+              <label class="flex items-center gap-2"><input type="radio" name="ingredient-{{$i}}" value="no" {{if eq (index $.Answers $i) "no"}}checked{{end}} required /> No</label>
+            </div>
+          </fieldset>
+          {{end}}
+          <p class="text-sm text-ink-600">We'll work with what you have, allowing for ordinary basics. No shopping needed.</p>
+          <div class="flex flex-wrap gap-3">
+            <button type="submit" name="action" value="continue" class="rounded-lg bg-brand-600 px-6 py-3 font-semibold text-white">Continue</button>
+            <button type="submit" name="action" value="now" formnovalidate class="rounded-lg border border-brand-200 px-6 py-3 font-semibold text-brand-700">Just make something</button>
+          </div>
+          <p class="text-sm text-ink-600">We may ask a few more questions if needed, up to ten total. Skip the rest whenever you're ready.</p>
+          <p role="status" hidden>Cooking up an idea, chef…</p>
+        </form>
+        <a href="/leftovers" class="mt-6 inline-block text-brand-700">Change my leftovers</a>
+      {{else}}
+        <form method="post" action="/leftovers" class="mt-6 space-y-6" data-leftovers-form>
+          <div>
+            <label for="leftovers" class="block font-semibold">What leftovers do you have?</label>
+            <textarea id="leftovers" name="leftovers" required maxlength="2000" rows="4" placeholder="A bowl of cooked rice, some roast chicken and half a zucchini…" class="mt-2 w-full rounded-lg border border-brand-200 p-3">{{.Leftovers}}</textarea>
+          </div>
+          <div>
+            <label for="meal" class="block font-semibold">What are we making?</label>
+            <p class="mt-1 text-sm text-ink-600">We'll guess from your local time. Change it if you're planning ahead.</p>
+            <select id="meal" name="meal" data-meal="{{.Meal}}" class="mt-2 rounded-lg border border-brand-200 p-3">
+              <option value="breakfast" {{if eq .Meal "breakfast"}}selected{{end}}>Breakfast</option>
+              <option value="lunch" {{if eq .Meal "lunch"}}selected{{end}}>Lunch</option>
+              <option value="dinner" {{if or (eq .Meal "dinner") (eq .Meal "")}}selected{{end}}>Dinner</option>
+            </select>
+          </div>
+          <div>
+            <label for="servings" class="block font-semibold">How many servings?</label>
+            <input id="servings" name="servings" type="number" min="1" max="12" required value="{{.Servings}}" class="mt-2 w-full rounded-lg border border-brand-200 p-3" />
+          </div>
+          <button type="submit" class="rounded-lg bg-brand-600 px-6 py-3 font-semibold text-white">Check what's on hand</button>
+          <p role="status" hidden>Thinking of a few ingredients, chef…</p>
+        </form>
+      {{end}}
+    </section>
+  </main>
+  {{template "clerk_refresh.html" .}}
+  <script type="module" src="{{AssetPath}}leftovers.js"></script>
+</body>
+</html>

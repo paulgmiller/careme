@@ -23,7 +23,9 @@
                 <span class="text-sm text-gray-500">{{template "location_details" .Location}}</span>
               </p>
               {{end}}
-              {{if .OriginHash}}
+              {{if .Recipe.Leftovers}}
+              <a href="/leftovers" class="mt-2 inline-flex text-xs font-semibold text-brand-600">Use some other leftovers</a>
+              {{else if .OriginHash}}
               <a href="/recipes?h={{.OriginHash}}" class="mt-2 inline-flex text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">Back to shopping list</a>
               {{end}}
             </div>
@@ -123,7 +125,7 @@
               <p><span class="font-semibold text-brand-700">Health:</span> {{.Recipe.Health}}</p>
               {{end}}
               <p><span class="font-semibold text-brand-700">Drink pairing:</span> {{.Recipe.DrinkPairing}}</p>
-              {{template "recipe_wine" .}}
+              {{if not .Recipe.Leftovers}}{{template "recipe_wine" .}}{{end}}
             </div>
           </article>
 
@@ -332,7 +334,7 @@
 {{end}}
 
 {{define "recipe_save_action"}}
-{{if .OriginHash}}
+{{if or .OriginHash .Recipe.Leftovers}}
 <div class="recipe-save-action pt-2">
   {{if and .ServerSignedIn .Saved}}
   <button type="button"

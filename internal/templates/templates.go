@@ -51,6 +51,7 @@ var Home,
 	TemperatureGuide,
 	Location,
 	FarmersMarket,
+	Leftovers,
 	Mail *template.Template
 
 func Init(config *config.Config) error {
@@ -96,6 +97,7 @@ func Init(config *config.Config) error {
 	TemperatureGuide = ensure(tmpls, "temperature_guide.html")
 	Location = ensure(tmpls, "locations.html")
 	FarmersMarket = ensure(tmpls, "farmersmarket.html")
+	Leftovers = ensure(tmpls, "leftovers.html")
 	Mail = ensure(tmpls, "mail.html")
 
 	// todo pull from config.

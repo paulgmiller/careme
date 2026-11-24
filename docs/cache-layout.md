@@ -377,3 +377,15 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   Wine lookups select Beer, Wine, and Cider category 1220 from the full catalog and use the existing
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
+
+### Leftovers
+
+`leftovers/<random token>` in the default application cache stores a one-hour
+leftovers session: owner user ID, stated leftovers, meal time, pantry questions
+and answers, round number, and a completed recipe or explanation. Reads require the matching signed-in user; expired
+sessions cannot generate meals. Completed sessions reuse their recipe on a
+repeat submission. Physical entries follow the application's normal cache
+retention. Recipes also use the existing `recipe/<hash>` cache with server-owned
+`leftovers` provenance and no shopping-list origin. Only the existing Save action
+records a recipe in the user's recent recipes; generation never does. Pantry
+answers are not reused across sessions. See [the plan](leftovers-plan.md).

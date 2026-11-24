@@ -46,7 +46,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 
 	shoppingListHash := strings.TrimSpace(r.FormValue(queryArgHash))
 	if shoppingListHash == "" {
-		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
+		s.handleLeftoversSelection(w, r, recipeHash, true)
 		return
 	}
 	currentUser, err := s.storage.FromRequest(ctx, r, s.clerk)
@@ -129,7 +129,7 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 
 	selectionHash := strings.TrimSpace(r.FormValue(queryArgHash))
 	if selectionHash == "" {
-		http.Error(w, "recipe list hash not found", http.StatusBadRequest)
+		s.handleLeftoversSelection(w, r, recipeHash, false)
 		return
 	}
 	selection, err := s.loadRecipeSelection(ctx, currentUser.ID, selectionHash)
@@ -264,4 +264,42 @@ func writeShoppingRecipeCard(writer io.Writer, recipe ai.Recipe, state shoppingR
 		return fmt.Errorf("build shopping recipe card: %w", err)
 	}
 	return templates.ShoppingList.ExecuteTemplate(writer, "shopping_recipe_card", view)
+}
+
+// Leftovers use the same Save action and profile history without a shopping list.
+func (s *server) handleLeftoversSelection(w http.ResponseWriter, r *http.Request, hash string, save bool) {
+	recipe, err := s.SingleFromCache(r.Context(), hash)
+	if err != nil || !recipe.Leftovers {
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			http.Error(w, "unable to load recipe", http.StatusInternalServerError)
+		} else {
+			http.Error(w, "recipe not found", http.StatusNotFound)
+		}
+		return
+	}
+	user, err := s.storage.FromRequest(r.Context(), r, s.clerk)
+	if err != nil {
+		if errors.Is(err, auth.ErrNoSession) {
+			redirectToAccountRequired(w, r, auth.AccountRequiredAddRecipe, "/recipe/"+hash)
+		} else {
+			http.Error(w, "unable to load account", http.StatusInternalServerError)
+		}
+		return
+	}
+	if save {
+		err = s.saveRecipesToUserProfile(r.Context(), user, *recipe)
+	} else {
+		_, err = s.storage.RemoveRecipe(user, hash)
+	}
+	if err != nil {
+		http.Error(w, "unable to save recipe decision", http.StatusInternalServerError)
+		return
+	}
+	httpx.SetHTMLContentType(w)
+	if save {
+		w.Header().Set("HX-Trigger", `{"careme:saved-recipes-changed":{},"careme:recipe-saved":{}}`)
+	}
+	if err := templates.Recipe.ExecuteTemplate(w, "recipe_save_action", newRecipeSaveActionView(*recipe, "", save)); err != nil {
+		slog.ErrorContext(r.Context(), "render leftovers save action", "error", err)
+	}
 }

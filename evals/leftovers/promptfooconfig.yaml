@@ -1,0 +1,65 @@
+description: Leftovers pantry questions and direct recipe generation
+prompts:
+  - leftovers
+providers:
+  - id: file://provider.go
+    label: leftovers default
+    config:
+      service_tier: default
+  - id: file://provider.go
+    label: leftovers flex
+    config:
+      service_tier: flex
+defaultTest:
+  assert:
+    - type: is-json
+    - type: javascript
+      value: |
+        const result = JSON.parse(output);
+        const questions = context.providerResponse.metadata.pantryQuestions;
+        return questions.length >= 3 && questions.length <= 5 && new Set(questions.map(q => q.toLowerCase())).size === questions.length
+          && result.questions.length === 0;
+      metric: bounded-pantry-questions
+    - type: javascript
+      value: |
+        const result = JSON.parse(output);
+        return (result.recipes.length === 1) !== Boolean(result.explanation);
+      metric: honest-single-outcome
+tests:
+  - description: Leftovers chicken lunch without shopping
+    vars:
+      input:
+        leftovers: Two portions of cooked roast chicken and cooked rice
+        meal: lunch
+        servings: 3
+        dietary_preferences: Avoid mushrooms
+        confirmed_ingredients: [eggs, scallions, tortillas]
+        unavailable_ingredients: [mushrooms, spinach]
+        recent_meals_to_avoid: [Chicken fried rice, Chicken burrito bowl]
+        already_asked: []
+        make_now: true
+    assert:
+      - type: javascript
+        value: |
+          const r = JSON.parse(output).recipes;
+          return r.length === 1 && r[0].ingredients.length > 0 && r[0].instructions.length > 0 && r[0].properties.servings === 3
+            && r[0].ingredients.every(i => !i.id && !/mushroom|spinach/i.test(i.name));
+        metric: complete-recipe-no-unavailable-food
+  - description: Incompatible leftovers cannot become dinner
+    vars:
+      input:
+        leftovers: Only a teaspoon of cake frosting, nothing else edible
+        meal: dinner
+        servings: 2
+        dietary_preferences: ''
+        confirmed_ingredients: []
+        unavailable_ingredients: [eggs, bread, rice, pasta, flour, vegetables, meat, beans, cheese, milk]
+        recent_meals_to_avoid: []
+        already_asked: []
+        make_now: true
+    assert:
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.recipes.length === 0 && result.explanation.trim().length > 0;
+        metric: honest-inability

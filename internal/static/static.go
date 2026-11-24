@@ -34,6 +34,9 @@ var recipeJS []byte
 //go:embed farmersmarket.js
 var farmersMarketJS []byte
 
+//go:embed leftovers.js
+var leftoversJS []byte
+
 // Official full-color carrot from Instacart's developer logo pack.
 // https://docs.instacart.com/developer_platform_api/guide/concepts/design/logos
 //
@@ -72,7 +75,7 @@ var AssetPath = calculateAssetPath()
 func calculateAssetPath() string {
 	hasher := fnv.New64()
 
-	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS, instacartLogo} {
+	for _, asset := range [][]byte{tailwindCSS, userClerkBillingJS, shareJS, recipeJS, farmersMarketJS, leftoversJS, instacartLogo} {
 		_, _ = hasher.Write(asset)
 	}
 	return fmt.Sprintf("/static/%x/", hasher.Sum(nil))
@@ -111,6 +114,7 @@ func Register(mux routing.Registrar) {
 	mux.HandleFunc(AssetPath+"recipe.js", static(jsContentType, recipeJS))
 
 	mux.HandleFunc(AssetPath+"farmersmarket.js", static(jsContentType, farmersMarketJS))
+	mux.HandleFunc(AssetPath+"leftovers.js", static(jsContentType, leftoversJS))
 
 	fontServer := http.FileServer(http.FS(fontFiles))
 	mux.Handle("/static/fonts/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

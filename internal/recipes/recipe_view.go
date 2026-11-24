@@ -124,6 +124,9 @@ func newRecipePageView(ctx context.Context, input recipeViewInput) (recipePageVi
 
 	data.Title = recipe.Title
 	data.Description = fmt.Sprintf("%s Recipe for %s on %s.", recipe.Description, data.Location.Name, data.Date)
+	if recipe.Leftovers {
+		data.Description = recipe.Description
+	}
 	data.Social = &templates.SocialPreview{
 		Path:      "/recipe/" + recipeHash,
 		ImageHash: recipeHash,

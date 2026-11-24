@@ -89,6 +89,10 @@ func runServer(cfg *config.Config, addr string) error {
 	var generator recipes.ExtGenerator
 	var imageProvider recipes.ImageGen
 	var marketExtractor farmersmarket.IngredientExtractor
+	var leftoversClient interface {
+		SuggestLeftoversIngredients(context.Context, ai.LeftoversInput) ([]string, error)
+		GenerateLeftoversMeal(context.Context, ai.LeftoversInput) (*ai.LeftoversResult, error)
+	}
 	var shoppingMerger recipes.ShoppingQuantityMerger
 	var waiters []waiter
 	if cfg.Mocks.Enable {
@@ -101,6 +105,7 @@ func runServer(cfg *config.Config, addr string) error {
 		generator = recipes.NewMockGenerator(recipes.IO(cache), mc,
 			status.NewStore(cache), postJobs) // no background for post jobs
 		marketExtractor = farmersmarket.MockExtractor{}
+		leftoversClient = recipes.MockLeftoversAI{}
 		shoppingMerger = recipes.SimpleShoppingQuantityMerger{}
 
 	} else {
@@ -111,6 +116,7 @@ func runServer(cfg *config.Config, addr string) error {
 		shoppingMerger = aiclient
 		imageProvider = aiclient
 		marketExtractor = aiclient
+		leftoversClient = aiclient
 		ro.add(aiclient)
 		backends, err := providers.NewStaplesBackends()
 		if err != nil {
@@ -161,6 +167,9 @@ func runServer(cfg *config.Config, addr string) error {
 		return fmt.Errorf("create recipe handler: %w", err)
 	}
 	recipeHandler.Register(appRoutes)
+	leftoversHandler := recipes.NewLeftoversHandler(leftoversClient, cache, userStorage, authClient, recipes.NewImageStore(imageCache), imageProvider)
+	leftoversHandler.Register(appRoutes)
+	waiters = append(waiters, leftoversHandler)
 	waiters = append([]waiter{recipeHandler}, waiters...)
 
 	adminMux := http.NewServeMux()

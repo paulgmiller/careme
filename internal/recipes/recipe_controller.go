@@ -120,6 +120,16 @@ func (s *server) handleSingle(w http.ResponseWriter, r *http.Request) {
 	})
 	loadWG.Wait()
 
+	if recipe.Leftovers {
+		saved := currentUser != nil && slices.ContainsFunc(currentUser.LastRecipes, func(r utypes.Recipe) bool { return r.Hash == hash })
+		writeRecipePage(ctx, w, recipeViewInput{
+			params: DefaultParams(&locations.Location{}, time.Time{}), recipe: *recipe,
+			saved: saved, currentUser: currentUser, recipeCritique: recipeCritique,
+			hasRecipeImage: hasRecipeImage, thread: thread, feedback: feedback,
+		})
+		return
+	}
+
 	if recipe.OriginHash == "" {
 		// Would like to make this an error however this in album is missing a origin hash and its too pretty to break
 		// https://careme.cooking/recipe/mQs4oIYMJoqCmqDMXv74bA==

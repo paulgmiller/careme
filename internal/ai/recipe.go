@@ -63,6 +63,7 @@ type RecipeProperties struct {
 }
 
 type Recipe struct {
+	Leftovers      bool             `json:"leftovers,omitempty" jsonschema:"-"`
 	Title          string           `json:"title"`
 	Description    string           `json:"description"`
 	Properties     RecipeProperties `json:"properties"`
