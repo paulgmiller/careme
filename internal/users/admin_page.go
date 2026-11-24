@@ -14,7 +14,6 @@ import (
 	"careme/internal/cache"
 	"careme/internal/recipes/feedback"
 
-	"careme/internal/users/types"
 	utypes "careme/internal/users/types"
 )
 
@@ -205,10 +204,12 @@ func AdminUserDetailPage(storage *Storage) http.Handler {
 			Emails        []string
 			FavoriteStore string
 			Directive     string
-			Saved         []types.Recipe
-			Dismissed     []types.Recipe
-		}{ID: user.ID, Emails: user.Email, FavoriteStore: user.FavoriteStore,
-			Directive: user.Directive, Saved: user.LastRecipes, Dismissed: user.DismissedRecipes}); err != nil {
+			Saved         []utypes.Recipe
+			Dismissed     []utypes.Recipe
+		}{
+			ID: user.ID, Emails: user.Email, FavoriteStore: user.FavoriteStore,
+			Directive: user.Directive, Saved: user.LastRecipes, Dismissed: user.DismissedRecipes,
+		}); err != nil {
 			slog.ErrorContext(r.Context(), "failed to render admin user detail page", "user_id", id, "error", err)
 			http.Error(w, "unable to render user", http.StatusInternalServerError)
 		}
