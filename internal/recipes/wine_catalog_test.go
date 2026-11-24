@@ -43,7 +43,6 @@ func TestWineCandidateCatalogPreservesRecommendationAndEnrichesShoppingItem(t *t
 	prepared = prepareShoppingItems(items, inputIngredientMap(catalog))
 	assert.Equal(t, "selected-upc", prepared[0].VariantID)
 	assert.Equal(t, "Old red", prepared[0].Name)
-	assert.Equal(t, "Catalog red", prepared[0].CatalogName)
 	assert.Equal(t, "750mL", prepared[0].Size)
 	assert.Equal(t, "1 bottle", prepared[0].Needed)
 	assert.Zero(t, prepared[0].PackageQuantity(), "catalog metadata must not invent a purchase quantity")

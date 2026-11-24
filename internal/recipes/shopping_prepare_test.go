@@ -21,14 +21,12 @@ func TestPrepareShoppingItemsUsesFoodAndWineCatalog(t *testing.T) {
 	require.Len(t, prepared, 2)
 	assert.Equal(t, "food-upc", prepared[0].VariantID)
 	assert.Equal(t, "AI food", prepared[0].Name)
-	assert.Equal(t, "Catalog food", prepared[0].CatalogName)
 	assert.Equal(t, "1 lb", prepared[0].Size)
 	assert.Equal(t, "2", prepared[0].Aisle)
 	assert.Equal(t, "2 lb", prepared[0].Needed)
 	assert.Equal(t, float64(2), *prepared[0].Buy)
 	assert.Equal(t, "wine-upc", prepared[1].VariantID)
 	assert.Equal(t, "AI wine", prepared[1].Name)
-	assert.Equal(t, "Catalog wine", prepared[1].CatalogName)
 	assert.Equal(t, "750mL", prepared[1].Size)
 	assert.Equal(t, "1 bottle", prepared[1].Needed)
 	assert.Equal(t, "AI food", items[0].Name, "preparation must not mutate merger output")
@@ -73,7 +71,6 @@ func TestFinalizedShoppingInputsCombinesCatalogsBeforeQuantityMerge(t *testing.T
 	require.Len(t, purchases, 1)
 	require.Len(t, purchases[0].Items, 2)
 	assert.Equal(t, "AI food", purchases[0].Items[0].Name)
-	assert.Equal(t, "Catalog food", purchases[0].Items[0].CatalogName)
 	assert.Equal(t, "food-upc", purchases[0].Items[0].VariantID)
 }
 

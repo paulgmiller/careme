@@ -60,7 +60,6 @@ func TestShoppingOrderPreservesIngredientNameThroughCatalogAndCache(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, purchases, 1)
 	require.Len(t, purchases[0].Items, 1)
-	assert.Equal(t, "Fresh Organic Lemon - Each", purchases[0].Items[0].CatalogName)
 	view := shoppingListPageView{Hash: "lemon-list", Purchases: purchases}
 	view.User = &utypes.User{ID: "viewer"}
 	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
@@ -73,7 +72,8 @@ func TestShoppingOrderPreservesIngredientNameThroughCatalogAndCache(t *testing.T
 	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", view))
 	assert.Contains(t, page.String(), "Buy 1 × 1 each")
 	assert.Contains(t, page.String(), needed)
-	assert.Contains(t, page.String(), "Fresh Organic Lemon - Each")
+	assert.Contains(t, page.String(), "Organic lemon")
+	assert.NotContains(t, page.String(), "Fresh Organic Lemon - Each")
 }
 
 func TestPopulateOrderViewOptionalDestinationAndFailure(t *testing.T) {

@@ -12,7 +12,6 @@ import (
 	"careme/internal/ai"
 	"careme/internal/cache"
 	"careme/internal/locations"
-	"careme/internal/templates"
 	utypes "careme/internal/users/types"
 
 	"github.com/stretchr/testify/assert"
@@ -20,31 +19,6 @@ import (
 )
 
 type countingShoppingMerger struct{ calls int }
-
-func TestCachedShoppingCatalogNameCompatibility(t *testing.T) {
-	for _, tc := range []struct {
-		name, catalogField, want string
-	}{
-		{name: "legacy row", want: "Organic lemon"},
-		{name: "empty catalog title", catalogField: `,"CatalogName":""`, want: "Organic lemon"},
-		{name: "separate catalog title", catalogField: `,"CatalogName":"Fresh Organic Lemon - Each"`, want: "Fresh Organic Lemon - Each"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := newTestServer(t)
-			body := `[{"Aisle":"Produce","Items":[{"id":"lemon","name":"Organic lemon","needed":"1 medium","buy":1,"Size":"1 each"` + tc.catalogField + `}]}]`
-			require.NoError(t, s.Cache.Put(t.Context(), "shopping_quantities/v7/list", body, cache.Unconditional()))
-			purchases, err := s.cachedShoppingPurchases(t.Context(), "list")
-			require.NoError(t, err)
-			require.Len(t, purchases, 1)
-			require.Len(t, purchases[0].Items, 1)
-			assert.Equal(t, "Organic lemon", purchases[0].Items[0].Name)
-			var page strings.Builder
-			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&page, "shopping_purchase_section", shoppingListPageView{Purchases: purchases}))
-			assert.Contains(t, page.String(), ">"+tc.want+"</span>")
-			assert.Contains(t, page.String(), "Buy 1 × 1 each")
-		})
-	}
-}
 
 func (m *countingShoppingMerger) MergeShoppingQuantities(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
 	m.calls++
@@ -280,7 +254,7 @@ func TestShoppingPurchaseSectionShowsRecommendationsAndUnresolvedNeeds(t *testin
 	s.renderShoppingList(rr, req, p, &ai.ShoppingList{Recipes: p.Saved}, nil, shoppingProgress{})
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
-	assert.Contains(t, body, "Pork &amp; herbs")
+	assert.Contains(t, body, "Pork")
 	assert.Contains(t, body, "Buy 1 × 32 oz")
 	assert.NotContains(t, body, "Needed for recipes")
 	assert.Contains(t, body, "Needed: 24 oz")

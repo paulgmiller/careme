@@ -9,9 +9,8 @@ import (
 
 type shoppingPurchaseItem struct {
 	ai.ShoppingItem
-	CatalogName string
-	Size        string
-	Aisle       string
+	Size  string
+	Aisle string
 }
 
 // prepareShoppingItems attaches server-owned metadata after quantity merging.
@@ -21,9 +20,6 @@ func prepareShoppingItems(items []ai.ShoppingItem, products map[string]ai.InputI
 		row := shoppingPurchaseItem{ShoppingItem: item}
 		if product, ok := products[item.ProductID]; ok {
 			row.VariantID = product.VariantID
-			// Keep the ingredient name for cross-provider matching. Catalog titles
-			// can contain retailer-specific brands, packaging, and sale units.
-			row.CatalogName = product.Description
 			row.Size = product.Size
 			row.Aisle = strings.TrimSpace(product.AisleNumber)
 		}
