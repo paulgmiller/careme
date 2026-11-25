@@ -70,12 +70,7 @@ func (c *orderClient) create(ctx context.Context, input ordertypes.TransferReque
 			display += " — " + item.Needed
 		}
 		line := lineItem{Name: item.Name, DisplayText: display, Measurements: parseMeasurement(item.Needed)}
-		if item.VariantID != "" {
-			upc := item.VariantID
-			// Express GTIN-13 as GTIN-14 for Instacart's 12/14-digit UPC field.
-			if len(upc) == 13 {
-				upc = "0" + upc
-			}
+		if upc := instacartUPC(item.VariantID); upc != "" {
 			line.UPCs = []string{upc}
 		}
 		payload.Items = append(payload.Items, line)
@@ -117,6 +112,24 @@ func (c *orderClient) create(ctx context.Context, input ordertypes.TransferReque
 	query.Set("retailer_key", chain)
 	u.RawQuery = query.Encode()
 	return u.String(), nil
+}
+
+// instacartUPC accepts common GTIN lengths, not arbitrary storefront variant
+// IDs. An empty result lets Instacart match the ingredient by its name.
+func instacartUPC(variantID string) string {
+	if len(variantID) != 12 && len(variantID) != 13 && len(variantID) != 14 {
+		return ""
+	}
+	for i := range len(variantID) {
+		if variantID[i] < '0' || variantID[i] > '9' {
+			return ""
+		}
+	}
+	// Express GTIN-13 as GTIN-14 for the Instacart UPC field.
+	if len(variantID) == 13 {
+		return "0" + variantID
+	}
+	return variantID
 }
 
 type measurement struct {

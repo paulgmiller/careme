@@ -387,4 +387,4 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   location/date/style wine cache keys under `ingredients/`; staples remain
   unfiltered.
 
-Shopping rows retain ingredient names and selected variant IDs under the existing `shopping_quantities/v7/` prefix. Older snapshots retain their saved names; any former `CatalogName` fields are ignored when decoding. Instacart uses selected Kroger variant IDs as UPCs when creating new links. Existing links remain reusable under `instacart_order_transfers/`; no cache invalidation occurs.
+Shopping rows retain ingredient names and selected variant IDs under the existing `shopping_quantities/v7/` prefix. Older snapshots retain their saved names; any former `CatalogName` fields are ignored when decoding. Instacart uses selected variant IDs shaped as 12- or 14-digit UPCs (padding 13-digit GTINs) when creating new links; other items are matched by ingredient name. Existing links remain reusable under `instacart_order_transfers/`; no cache invalidation occurs.
