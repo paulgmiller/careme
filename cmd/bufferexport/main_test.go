@@ -29,7 +29,7 @@ func readStored(t *testing.T, store cache.Cache, key string) []byte {
 	return data
 }
 
-func TestExportPublishedPostsAndLocalMedia(t *testing.T) {
+func TestExportPublishedPostsAndBufferMediaURLs(t *testing.T) {
 	store := cache.NewInMemoryCache()
 	var endpoint string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,8 +46,7 @@ func TestExportPublishedPostsAndLocalMedia(t *testing.T) {
 			assert.NotContains(t, body["query"], "account")
 			_, _ = io.WriteString(w, `{"data":{"posts":{"edges":[{"node":{"id":"post1","text":"Rice cakes!\nhttps://careme.cooking/recipe/example","dueAt":"2026-11-20T12:00:00Z","assets":[{"source":"`+endpoint+`/photo","mimeType":"image/jpeg","image":{"altText":"Dinner [photo]"}},{"source":"`+endpoint+`/video","mimeType":"video/mp4"}]}}]}}}`)
 		case "/photo", "/video":
-			assert.Empty(t, r.Header.Get("Authorization"), "Never send the Buffer key to media hosts")
-			_, _ = io.WriteString(w, "media-bytes:"+r.URL.Path)
+			t.Error("exporter must not request media URLs")
 		default:
 			http.NotFound(w, r)
 		}
@@ -63,11 +62,10 @@ func TestExportPublishedPostsAndLocalMedia(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC), posts[0].Date)
 	require.Len(t, posts[0].Media, 2)
 	assert.Equal(t, "image/jpeg", posts[0].Media[0].Type)
-	assert.True(t, strings.HasSuffix(posts[0].Media[0].Src, ".jpg"))
+	assert.Equal(t, endpoint+"/photo", posts[0].Media[0].Src)
+	assert.Equal(t, "Dinner [photo]", posts[0].Media[0].Alt)
 	assert.Equal(t, "video/mp4", posts[0].Media[1].Type)
-	assert.True(t, strings.HasSuffix(posts[0].Media[1].Src, ".mp4"))
-	assert.Equal(t, "media-bytes:/photo", string(readStored(t, store, "updates/"+posts[0].Media[0].Src)))
-	assert.Equal(t, "media-bytes:/video", string(readStored(t, store, "updates/"+posts[0].Media[1].Src)))
+	assert.Equal(t, endpoint+"/video", posts[0].Media[1].Src)
 	assert.NotContains(t, string(readStored(t, store, "updates/feed.json")), "test-key")
 }
 
@@ -98,51 +96,35 @@ func TestBufferErrorsPreservePriorFeed(t *testing.T) {
 	}
 }
 
-type failedUpload struct{ cache.Cache }
+type failedPublish struct{ cache.Cache }
 
-func (f failedUpload) PutReader(context.Context, string, io.Reader, cache.PutOptions) error {
-	return errors.New("upload failed")
+func (f failedPublish) Put(context.Context, string, string, cache.PutOptions) error {
+	return errors.New("publish failed")
 }
 
-func TestMediaFailuresPreservePriorFeed(t *testing.T) {
+func TestExportFailuresPreservePriorFeed(t *testing.T) {
 	for _, tc := range []struct {
-		name         string
-		id           string
-		mime         string
-		failDownload bool
-		failUpload   bool
-		want         string
+		name, mime, want string
+		failPublish      bool
 	}{
-		{name: "download", id: "post1", mime: "video/mp4", failDownload: true, want: "download media: HTTP 404"},
-		{name: "upload", id: "post1", mime: "video/mp4", failUpload: true, want: "upload failed"},
-		{name: "unsupported", id: "post1", mime: "application/pdf", want: "unsupported media"},
-		{name: "invalid ID", id: "../private", mime: "video/mp4", want: "invalid Buffer post ID"},
+		{name: "unsupported", mime: "application/pdf", want: "unsupported media"},
+		{name: "publish", mime: "video/mp4", want: "publish failed", failPublish: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := cache.NewInMemoryCache()
-			require.NoError(t, store.Put(context.Background(), "updates/feed.json", "[]", cache.Unconditional()))
-			var endpoint string
+			require.NoError(t, store.Put(context.Background(), "updates/feed.json", "prior", cache.Unconditional()))
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/media" {
-					if tc.failDownload {
-						http.NotFound(w, r)
-						return
-					}
-					_, _ = io.WriteString(w, "video")
-					return
-				}
-				p := bufferPost{ID: tc.id, Text: "Dinner", DueAt: time.Now(), Assets: []asset{{Source: endpoint + "/media", MimeType: tc.mime}}}
+				p := bufferPost{ID: "post1", Text: "Dinner", DueAt: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC), Assets: []asset{{Source: "https://media.example/video", MimeType: tc.mime}}}
 				require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"posts": map[string]any{"edges": []any{map[string]any{"node": p}}}}}))
 			}))
 			defer server.Close()
-			endpoint = server.URL
 			var target cache.Cache = store
-			if tc.failUpload {
-				target = failedUpload{Cache: store}
+			if tc.failPublish {
+				target = failedPublish{Cache: store}
 			}
-			e := exporter{client: server.Client(), endpoint: server.URL, key: "test-key", store: target}
+			e := exporter{client: server.Client(), endpoint: server.URL, store: target}
 			require.ErrorContains(t, e.run(context.Background(), "org", "channel"), tc.want)
-			assert.Equal(t, "[]", string(readStored(t, store, "updates/feed.json")))
+			assert.Equal(t, "prior", string(readStored(t, store, "updates/feed.json")))
 		})
 	}
 }
@@ -169,18 +151,16 @@ func TestFetchPagesSelectsNewestAndDeduplicates(t *testing.T) {
 	assert.Equal(t, 2, requests)
 }
 
-func TestRollingFeedReplacesPriorPostsAndOnlyDownloadsLatestTen(t *testing.T) {
+func TestRollingFeedReplacesPriorPostsWithLatestTen(t *testing.T) {
 	ctx := context.Background()
 	store := cache.NewInMemoryCache()
 	// The exporter no longer reads or merges the previous manifest.
 	require.NoError(t, store.Put(ctx, "updates/feed.json", "old snapshot", cache.Unconditional()))
 	require.NoError(t, store.Put(ctx, "updates/old/photo.jpg", "keep old media", cache.Unconditional()))
 	var source []bufferPost
-	downloads := map[string]int{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/media/") {
-			downloads[r.URL.Path]++
-			_, _ = io.WriteString(w, r.URL.Path)
+			t.Error("exporter must not request media URLs")
 			return
 		}
 		edges := []any{}
@@ -201,9 +181,6 @@ func TestRollingFeedReplacesPriorPostsAndOnlyDownloadsLatestTen(t *testing.T) {
 	require.Len(t, posts, 10)
 	assert.Equal(t, "p11", posts[0].ID)
 	assert.Equal(t, "p2", posts[9].ID)
-	assert.Len(t, downloads, 10, "older media must not be downloaded")
-	assert.Zero(t, downloads["/media/p0"])
-	assert.Zero(t, downloads["/media/p1"])
 	assert.Equal(t, "keep old media", string(readStored(t, store, "updates/old/photo.jpg")))
 	// Upstream deletions disappear from the feed; edits are reflected on every run.
 	source = source[8:11]

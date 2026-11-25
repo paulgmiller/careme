@@ -392,11 +392,10 @@ Shopping rows retain ingredient names and selected variant IDs under the existin
 ## Published About-page updates
 
 The `recipes` container also stores published Buffer content under `updates/`:
-`updates/feed.json` contains the ten newest published posts. Each export replaces
-this manifest only after all required media uploads succeed; there is no history
-merge or separate refresh window. Images/videos use content-hashed filenames under
-`updates/<Buffer post ID>/`; older media is left in place. The former full-history
-manifest is preserved once as `updates/archive.json` and is no longer maintained.
-`/updates/` serves these blobs from private storage via `internal/updates`, with
-5-minute caching for JSON and immutable caching for content-hashed media. No Buffer
-credentials or drafts are stored in these blobs.
+`updates/feed.json` contains the ten newest published posts and their original
+Buffer image/video URLs. Each export replaces this JSON manifest; there is no
+history merge, separate refresh window, or media copying. Only `/updates/feed.json`
+is served through Careme, with 5-minute caching. The former full-history manifest
+is preserved once as `updates/archive.json`; it and previously copied media under
+`updates/<Buffer post ID>/` are left in storage but are no longer maintained or
+served by the feed handler. No Buffer credentials or drafts are stored in the feed.

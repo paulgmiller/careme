@@ -36,7 +36,7 @@ async function initializeFeed() {
         }
       }
       for (const media of post.media) {
-        const url = "/updates/" + media.src;
+        const url = media.src;
         if (media.type.startsWith("image/")) {
           const photo = clone("careme-photo");
           photo.href = url;

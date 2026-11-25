@@ -4,17 +4,13 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"mime"
 	"net/http"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -185,8 +181,6 @@ func (e exporter) fetchPage(ctx context.Context, query string) (postPage, error)
 	return result.Data.Posts, nil
 }
 
-var validID = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
-
 func (e exporter) run(ctx context.Context, organization, channel string) error {
 	source, err := e.fetch(ctx, organization, channel)
 	if err != nil {
@@ -194,19 +188,12 @@ func (e exporter) run(ctx context.Context, organization, channel string) error {
 	}
 	posts := make([]updates.Post, 0, len(source))
 	for _, original := range source {
-		if !validID.MatchString(original.ID) {
-			return fmt.Errorf("invalid Buffer post ID %q", original.ID)
-		}
 		exported := updates.Post{ID: original.ID, Text: original.Text, Date: original.date(), Media: []updates.Media{}}
 		for _, item := range original.Assets {
 			if !strings.HasPrefix(item.MimeType, "image/") && !strings.HasPrefix(item.MimeType, "video/") {
 				return fmt.Errorf("post %s: unsupported media type %s", original.ID, item.MimeType)
 			}
-			src, err := e.copyMedia(ctx, original.ID, item)
-			if err != nil {
-				return fmt.Errorf("post %s: %w", original.ID, err)
-			}
-			exported.Media = append(exported.Media, updates.Media{Src: src, Type: item.MimeType, Alt: item.Image.AltText})
+			exported.Media = append(exported.Media, updates.Media{Src: item.Source, Type: item.MimeType, Alt: item.Image.AltText})
 		}
 		posts = append(posts, exported)
 	}
@@ -214,71 +201,9 @@ func (e exporter) run(ctx context.Context, organization, channel string) error {
 	if err != nil {
 		return err
 	}
-	// Immutable media may be orphaned on failure; readers retain the last good
-	// manifest until every required asset has been stored successfully.
-	if err := e.store.Put(ctx, updates.Prefix+"feed.json", string(manifest), cache.Unconditional()); err != nil {
+	// Replace the feed only after the complete Buffer response has been processed.
+	if err := e.store.Put(ctx, updates.FeedKey, string(manifest), cache.Unconditional()); err != nil {
 		return fmt.Errorf("publish feed: %w", err)
 	}
 	return nil
-}
-
-func (e exporter) copyMedia(ctx context.Context, id string, item asset) (string, error) {
-	extension, err := extensionFor(item.MimeType)
-	if err != nil {
-		return "", err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, item.Source, nil)
-	if err != nil {
-		return "", err
-	}
-	// The Buffer bearer token is deliberately absent from media requests.
-	response, err := e.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("download media: %w", err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download media: HTTP %d", response.StatusCode)
-	}
-	file, err := os.CreateTemp("", "buffer-media-*")
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = file.Close(); _ = os.Remove(file.Name()) }()
-	hash := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(file, hash), response.Body); err != nil {
-		return "", fmt.Errorf("download media: %w", err)
-	}
-	relative := fmt.Sprintf("%s/%x%s", id, hash.Sum(nil)[:12], extension)
-	key := updates.Prefix + relative
-	exists, err := e.store.Exists(ctx, key)
-	if err != nil {
-		return "", err
-	}
-	if !exists {
-		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			return "", err
-		}
-		if err := e.store.PutReader(ctx, key, file, cache.Unconditional()); err != nil {
-			return "", fmt.Errorf("upload %s: %w", key, err)
-		}
-	}
-	return relative, nil
-}
-
-func extensionFor(contentType string) (string, error) {
-	switch contentType {
-	case "image/jpeg":
-		return ".jpg", nil
-	case "video/mp4":
-		return ".mp4", nil
-	}
-	extensions, err := mime.ExtensionsByType(contentType)
-	if err != nil {
-		return "", err
-	}
-	if len(extensions) == 0 {
-		return "", fmt.Errorf("unknown media type %s", contentType)
-	}
-	return extensions[0], nil
 }

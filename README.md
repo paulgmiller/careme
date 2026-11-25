@@ -441,7 +441,7 @@ Each run replaces `updates/feed.json` in the Azure `recipes` container with the
 ten newest sent posts from the configured Facebook channel. There is no archive
 merge, backfill mode, or refresh-window setting. The public API has no guaranteed
 sort order, so metadata is read across all pages before selecting the newest ten;
-only those ten posts have their media downloaded.
+the feed contains Buffer’s original image and video URLs.
 
 For a production refresh, run:
 
@@ -449,19 +449,17 @@ For a production refresh, run:
 go run ./cmd/bufferexport -secret-file secrets/envprod
 ```
 
-Photos and videos use content-hashed filenames. Media is processed one file at a
-time through a temporary file, and already stored hashes are not uploaded again.
-Only after all required media succeeds does `updates/feed.json` change. A failed
-sync leaves the last good feed visible. Existing media objects are never deleted.
-The former full-history manifest is preserved as a one-time `updates/archive.json`
-snapshot; the exporter does not read or maintain it. No media is checked into Git.
+The exporter stores only JSON. Images and videos load directly from the source
+URLs supplied by Buffer; there are no media downloads, copies, or proxy requests.
+A failed export leaves the last good feed visible. The former full-history
+manifest is preserved as a one-time `updates/archive.json` snapshot. That snapshot
+and previously copied media are left in Azure but are no longer maintained.
 
 The About page fetches `/updates/feed.json` once. The stored manifest contains
 up to ten posts and is served directly.
 A small browser carousel shows one post at a time and switches locally with
 Older/Newer controls. Only the current post's photos and videos are loaded.
-Careme serves media from private Azure storage under `/updates/<post-id>/<hash>`
-with byte ranges for native video playback and seeking. A sync updates the page
+Native video playback uses Buffer’s media host directly. A sync updates the page
 without rebuilding or redeploying Careme. No HTMX or crawler-specific rendering
 is used for the feed. The exporter writes directly to Azure.
 

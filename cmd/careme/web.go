@@ -67,7 +67,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
-	infraRoutes.Handle("/updates/", updates.Handler(cache))
+	infraRoutes.Handle("/"+updates.FeedKey, updates.Handler(cache))
 	appredirect.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)

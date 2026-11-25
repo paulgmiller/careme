@@ -15,20 +15,17 @@ import (
 
 func TestServePublishedUpdates(t *testing.T) {
 	store := cache.NewInMemoryCache()
-	require.NoError(t, store.Put(context.Background(), Prefix+"feed.json", "[]", cache.Unconditional()))
-	require.NoError(t, store.Put(context.Background(), Prefix+"post/hash.mp4", "0123456789", cache.Unconditional()))
-	require.NoError(t, store.Put(context.Background(), Prefix+"post/hash.jpg", "photo", cache.Unconditional()))
+	require.NoError(t, store.Put(context.Background(), FeedKey, "[]", cache.Unconditional()))
 	require.NoError(t, store.Put(context.Background(), "params/private", "private", cache.Unconditional()))
 	handler := Handler(store)
 	for _, tc := range []struct {
-		name, method, path, rangeHeader string
+		name, method, path              string
 		status                          int
 		body, contentType, cacheControl string
 	}{
-		{"feed", "GET", "/updates/feed.json", "", 200, "[]", "application/json", "public, max-age=300"},
-		{"photo", "GET", "/updates/post/hash.jpg", "", 200, "photo", "image/jpeg", "public, max-age=31536000, immutable"},
-		{"video range", "GET", "/updates/post/hash.mp4", "bytes=2-4", 206, "234", "video/mp4", "public, max-age=31536000, immutable"},
-		{"HEAD", "HEAD", "/updates/post/hash.mp4", "", 200, "", "video/mp4", "public, max-age=31536000, immutable"},
+		{name: "feed", method: "GET", path: "/updates/feed.json", status: 200, body: "[]", contentType: "application/json", cacheControl: "public, max-age=300"},
+		{name: "HEAD", method: "HEAD", path: "/updates/feed.json", status: 200, contentType: "application/json", cacheControl: "public, max-age=300"},
+		{name: "no media proxy", method: "GET", path: "/updates/post/hash.mp4", status: 404},
 		{name: "missing", method: "GET", path: "/updates/missing", status: 404},
 		{name: "other data", method: "GET", path: "/params/private", status: 404},
 		{name: "traversal", method: "GET", path: "/updates/../params/private", status: 404},
@@ -36,7 +33,6 @@ func TestServePublishedUpdates(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			req.Header.Set("Range", tc.rangeHeader)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			require.Equal(t, tc.status, response.Code)
@@ -44,9 +40,6 @@ func TestServePublishedUpdates(t *testing.T) {
 				assert.Equal(t, tc.body, response.Body.String())
 				assert.Equal(t, tc.contentType, response.Header().Get("Content-Type"))
 				assert.Equal(t, tc.cacheControl, response.Header().Get("Cache-Control"))
-			}
-			if tc.rangeHeader != "" {
-				assert.Equal(t, "bytes 2-4/10", response.Header().Get("Content-Range"))
 			}
 		})
 	}
