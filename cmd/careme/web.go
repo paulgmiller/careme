@@ -31,6 +31,7 @@ import (
 	"careme/internal/sitemap"
 	"careme/internal/static"
 	"careme/internal/templates"
+	"careme/internal/updates"
 	"careme/internal/users"
 	"careme/internal/watchdog"
 
@@ -66,6 +67,7 @@ func runServer(cfg *config.Config, addr string) error {
 
 	authClient.Register(appRoutes)
 	static.Register(infraRoutes)
+	infraRoutes.Handle("/"+updates.FeedKey, updates.Handler(cache))
 	appredirect.Register(infraRoutes)
 
 	userStorage := users.NewStorage(cache)

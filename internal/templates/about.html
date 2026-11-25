@@ -7,9 +7,6 @@
   <title>About Careme</title>
 
   {{template "app_head" .Style}}
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/fotorama/4.6.4/fotorama.min.css" rel="stylesheet" />
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/fotorama/4.6.4/fotorama.min.js" defer></script>
 
   {{.ClarityScript}}
   {{.GoogleTagScript}}
@@ -18,7 +15,7 @@
   {{GoogleTagNoScript}}
   {{template "seasonal_background" .}}
   <main class="relative z-10 px-4 py-10">
-    <section class="mx-auto w-full max-w-5xl">
+    <section class="mx-auto w-full max-w-7xl">
       <div class="rounded-2xl border border-brand-100 bg-white/90 shadow-xl">
         <header class="border-b border-brand-100 p-8">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -35,9 +32,9 @@
             </a>
           </div>
           <nav class="mt-6 flex flex-wrap gap-2">
-            <a href="#album" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Album</a>
-            <a href="#ethos" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Ethos</a>
+            <a href="#updates" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Latest from Careme</a>
             <a href="#follow" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Follow</a>
+            <a href="#ethos" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Ethos</a>
             <a href="#install" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">Install</a>
             <a href="#faq" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">FAQ</a>
             <a href="#github" class="rounded-full bg-brand-100 px-3 py-1 text-sm font-medium text-brand-700 hover:bg-brand-200">GitHub</a>
@@ -45,17 +42,51 @@
           </nav>
         </header>
 
-        <section id="album" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">Album</h2>
-          <div class="mt-6 overflow-hidden rounded-xl border border-brand-100 bg-white p-4" >
-            <div class="fotorama" data-shuffle="true" data-allowfullscreen="true" data-nav="thumbs" data-width="100%">
-              {{range .AlbumPhotos}}
-              {{.CommentHTML}}
-              <img src="{{.PreviewURL}}"
-                   data-full="{{.FullURL}}"
-                   {{if .RecipeHash}}data-caption='<a href="/recipe/{{.RecipeHash}}" class="underline">Open recipe</a>'{{end}} />
-              {{end}}
-            </div>
+        <section id="updates" class="border-b border-brand-100 p-8" aria-labelledby="updates-heading">
+          <h2 id="updates-heading" class="text-2xl font-bold text-brand-700">Latest from Careme</h2>
+          <p class="mt-2 text-gray-600">See what’s cooking this week, with recipes and updates from Careme.</p>
+          <p id="careme-feed-status" class="mt-4 text-sm text-gray-600" role="status">Loading the latest posts…</p>
+          <div id="careme-feed" class="mt-6" aria-label="Careme posts" aria-live="polite" aria-busy="true"></div>
+          <nav id="careme-feed-controls" class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Browse Careme posts" hidden>
+            <button id="careme-feed-newer" type="button" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Newer</button>
+            <span id="careme-feed-position" class="text-sm text-gray-600"></span>
+            <button id="careme-feed-older" type="button" class="rounded-lg border border-brand-300 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40">Older</button>
+          </nav>
+          <template id="careme-post">
+            <article class="min-w-0 overflow-hidden rounded-xl border border-brand-100 bg-white">
+              <div class="p-6">
+                <time class="text-sm text-gray-500"></time>
+                <p class="mt-3 whitespace-pre-wrap break-words leading-7 text-gray-700"></p>
+              </div>
+              <div class="grid grid-cols-2 gap-1 sm:flex" data-photos></div>
+            </article>
+          </template>
+          <template id="careme-photo">
+            <a target="_blank" rel="noreferrer" class="block min-w-0 sm:flex-1 last:odd:col-span-2" aria-label="View full photo"><img alt="" loading="lazy" class="aspect-[4/3] max-h-80 w-full object-cover"></a>
+          </template>
+          <template id="careme-video">
+            <video controls playsinline preload="metadata" aria-label="Careme cooking video" class="block max-h-[28rem] w-full bg-black"><source><a>Watch video</a></video>
+          </template>
+          <noscript><p class="mt-4 text-gray-600">Enable JavaScript to browse Careme posts here, or follow us below.</p></noscript>
+          <script src="{{AssetPath}}about-feed.js" defer></script>
+        </section>
+
+        <section id="follow" class="border-b border-brand-100 p-8">
+          <h2 class="text-2xl font-bold text-brand-700">Follow Careme</h2>
+          <p class="mt-2 text-gray-600">Find updates, kitchen notes, and project news.</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <a href="https://www.facebook.com/careme.cooking" target="_blank" rel="noreferrer" aria-label="Facebook"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              {{template "icon_facebook" .}}
+            </a>
+            <a href="#" aria-label="Instagram coming soon" aria-disabled="true"
+               class="inline-flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500">
+              {{template "icon_instagram" .}}
+            </a>
+            <a href="https://bsky.app/profile/northbriton.net" target="_blank" rel="noreferrer" aria-label="Bluesky"
+               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
+              {{template "icon_bluesky" .}}
+            </a>
           </div>
         </section>
 
@@ -90,25 +121,6 @@
                 Great restaurants are great. Meal kits can be useful. Careme aims for the everyday middle: more local, less packaging, lower cost, and food you are proud to put on a plate.
               </p>
             </div>
-          </div>
-        </section>
-
-        <section id="follow" class="border-b border-brand-100 p-8">
-          <h2 class="text-2xl font-bold text-brand-700">Follow Careme</h2>
-          <p class="mt-2 text-gray-600">Find updates, kitchen notes, and project news.</p>
-          <div class="mt-4 flex flex-wrap gap-3">
-            <a href="https://www.facebook.com/careme.cooking" target="_blank" rel="noreferrer" aria-label="Facebook"
-               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
-              {{template "icon_facebook" .}}
-            </a>
-            <a href="#" aria-label="Instagram coming soon" aria-disabled="true"
-               class="inline-flex h-14 w-14 cursor-not-allowed items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-500">
-              {{template "icon_instagram" .}}
-            </a>
-            <a href="https://bsky.app/profile/northbriton.net" target="_blank" rel="noreferrer" aria-label="Bluesky"
-               class="inline-flex h-14 w-14 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/40 text-brand-700 transition hover:bg-brand-50">
-              {{template "icon_bluesky" .}}
-            </a>
           </div>
         </section>
 

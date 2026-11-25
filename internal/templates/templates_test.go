@@ -324,12 +324,18 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 	if _, err := html.Parse(strings.NewReader(rendered)); err != nil {
 		t.Fatalf("about page rendered invalid HTML: %v\nHTML:\n%s", err, rendered)
 	}
-	for _, sectionID := range []string{`id="album"`, `id="ethos"`, `id="follow"`, `id="install"`, `id="faq"`, `id="github"`} {
+	for _, sectionID := range []string{`id="updates"`, `id="ethos"`, `id="follow"`, `id="install"`, `id="faq"`, `id="github"`} {
 		if !strings.Contains(rendered, sectionID) {
 			t.Fatalf("about page should include %s section, body: %s", sectionID, rendered)
 		}
 	}
-	for _, heading := range []string{">Album</h2>", "Ethos", ">Follow Careme</h2>", ">Install the app</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
+	updatesEnd := strings.Index(rendered, `id="careme-feed"`)
+	followStart := strings.Index(rendered, `<section id="follow"`)
+	ethosStart := strings.Index(rendered, `<section id="ethos"`)
+	if updatesEnd >= followStart || followStart >= ethosStart || strings.Contains(rendered[updatesEnd:followStart], "<section ") {
+		t.Fatal("Follow Careme should be the next section after the feed")
+	}
+	for _, heading := range []string{">Latest from Careme</h2>", "Ethos", ">Follow Careme</h2>", ">Install the app</h2>", ">FAQ</h2>", ">GitHub</h2>"} {
 		if !strings.Contains(rendered, heading) {
 			t.Fatalf("about page should include %q heading, body: %s", heading, rendered)
 		}
@@ -366,20 +372,25 @@ func TestAboutTemplateRendersValidHTML(t *testing.T) {
 			t.Fatalf("about page should not include numbered heading %q, body: %s", oldHeading, rendered)
 		}
 	}
-	if got := strings.Count(rendered, `data-full="`); got != len(data.AlbumPhotos) {
-		t.Fatalf("about page should render %d album photos, got %d", len(data.AlbumPhotos), got)
-	}
-	wantCaptions := 0
-	for _, photo := range data.AlbumPhotos {
-		if photo.RecipeHash != "" {
-			wantCaptions++
+	for _, required := range []string{
+		`href="#updates"`,
+		`id="careme-feed"`,
+		`id="careme-post"`,
+		`id="careme-feed-controls"`,
+		`id="careme-feed-newer"`,
+		`id="careme-feed-older"`,
+		`max-w-7xl`,
+		`about-feed.js`,
+		`>Follow Careme</h2>`,
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Errorf("about page should include %q", required)
 		}
 	}
-	if got := strings.Count(rendered, `data-caption='`); got != wantCaptions {
-		t.Fatalf("about page should render %d recipe captions, got %d", wantCaptions, got)
-	}
-	if !strings.Contains(rendered, "Dungeness crab pasta") {
-		t.Fatalf("about page should render album comments from Go data, body: %s", rendered)
+	for _, removed := range []string{`id="album"`, "fotorama", "jquery", "images.northbriton.net", "facebook.com/plugins/page.php", "max-width: 500px"} {
+		if strings.Contains(rendered, removed) {
+			t.Errorf("about page should not include old album content %q", removed)
+		}
 	}
 }
 

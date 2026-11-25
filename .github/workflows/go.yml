@@ -161,6 +161,9 @@ jobs:
           - name: ingredientreview
             cmd_path: ./cmd/ingredientreview
             image_suffix: ingredientreview
+          - name: bufferexport
+            image_suffix: bufferexport
+            cmd_path: ./cmd/bufferexport
           - name: wholefoods
             cmd_path: ./cmd/wholefoods
             image_suffix: wholefoods

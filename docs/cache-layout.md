@@ -388,3 +388,14 @@ survive restarts independently of Careme's `mnfoodclub_order_transfers/` cache.
   unfiltered.
 
 Shopping rows retain ingredient names and selected variant IDs under the existing `shopping_quantities/v7/` prefix. Older snapshots retain their saved names; any former `CatalogName` fields are ignored when decoding. Instacart uses selected Kroger variant IDs as UPCs when creating new links. Existing links remain reusable under `instacart_order_transfers/`; no cache invalidation occurs.
+
+## Published About-page updates
+
+The `recipes` container also stores published Buffer content under `updates/`:
+`updates/feed.json` contains the ten newest published posts and their original
+Buffer image/video URLs. Each export replaces this JSON manifest; there is no
+history merge, separate refresh window, or media copying. Only `/updates/feed.json`
+is served through Careme, with 5-minute caching. The former full-history manifest
+is preserved once as `updates/archive.json`; it and previously copied media under
+`updates/<Buffer post ID>/` are left in storage but are no longer maintained or
+served by the feed handler. No Buffer credentials or drafts are stored in the feed.

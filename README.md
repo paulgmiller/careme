@@ -425,3 +425,50 @@ LOCALYOKELS_LIVE=1 go test ./internal/providers/localyokels -run TestLiveLocalYo
 The catalog reader lives in `internal/localfoodmarketplace` for reuse by other
 Local Food Marketplace storefronts. Farmstand Local Foods uses the same endpoint
 and request format; it is not registered as a provider yet.
+
+## About page posts from Buffer
+
+The daily CronJob runs the exporter automatically. For a manual refresh, run
+`go run ./cmd/bufferexport`. It reads
+`buffer/BUFFER_API_KEY` plus the existing Azure storage credentials from kage
+(`secrets/envtest`, or `-secret-file PATH` / `KAGE_SECRET_FILE`). Only
+`posts:read` and `assets:read` are needed. Organization and Facebook channel IDs
+are configured explicitly in the command defaults; override them with
+`-organization-id` and `-channel-id` if necessary. No account discovery or write
+access to Buffer is used.
+
+Each run replaces `updates/feed.json` in the Azure `recipes` container with the
+ten newest sent posts from the configured Facebook channel. There is no archive
+merge, backfill mode, or refresh-window setting. The public API has no guaranteed
+sort order, so metadata is read across all pages before selecting the newest ten;
+the feed contains Buffer’s original image and video URLs.
+
+For a production refresh, run:
+
+```sh
+go run ./cmd/bufferexport -secret-file secrets/envprod
+```
+
+The exporter stores only JSON. Images and videos load directly from the source
+URLs supplied by Buffer; there are no media downloads, copies, or proxy requests.
+A failed export leaves the last good feed visible. The former full-history
+manifest is preserved as a one-time `updates/archive.json` snapshot. That snapshot
+and previously copied media are left in Azure but are no longer maintained.
+
+The About page fetches `/updates/feed.json` once. The stored manifest contains
+up to ten posts and is served directly.
+A small browser carousel shows one post at a time and switches locally with
+Older/Newer controls. Only the current post's photos and videos are loaded.
+Native video playback uses Buffer’s media host directly. A sync updates the page
+without rebuilding or redeploying Careme. No HTMX or crawler-specific rendering
+is used for the feed. The exporter writes directly to Azure.
+
+`deploy/cronjob-careme-buffer-export.yaml` runs daily at 6:00 AM Pacific
+(`0 6 * * *`, `America/Los_Angeles`) in both namespaces via `deploy/deploy.sh`.
+CI builds `ghcr.io/paulgmiller/careme-bufferexport` from `cmd/bufferexport` using
+the existing Dockerfile. The job imports only the namespace's `buffer` secret
+(containing `BUFFER_API_KEY`) and `storage` secret (Azure credentials). Ensure
+those secrets exist before deploying; kage's local files are not in the image.
+Runs cannot overlap, have a 15-minute deadline, and retry once on failure.
+The web server itself never calls Buffer. Tests:
+`go test ./cmd/bufferexport ./internal/updates`.
