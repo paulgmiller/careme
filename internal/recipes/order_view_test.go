@@ -147,12 +147,73 @@ func TestPopulateOrderViewSearchZIP(t *testing.T) {
 	}
 }
 
-func TestSelectionChangeRequiresRebuildingFinalizedList(t *testing.T) {
-	_ = newTestServer(t)
-	var controls bytes.Buffer
-	require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, "shopping_finalize_controls_response", newShoppingFinalizeView("list")))
-	assert.Contains(t, controls.String(), "Build Shopping List")
-	assert.NotContains(t, controls.String(), "Shopping list ready.")
+func TestDismissOnPreparedShoppingList(t *testing.T) {
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "walmart_123"}, time.Now())
+	soup := ai.Recipe{Title: "Cabbage soup", Ingredients: []ai.Ingredient{{ProductID: "cabbage", Name: "Green cabbage", Quantity: "1 head"}}}
+	fish := ai.Recipe{Title: "Lemon rockfish", Ingredients: []ai.Ingredient{{ProductID: "fish", Name: "Rockfish", Quantity: "1 lb"}}}
+	original := prepareShoppingFinalize(t, s, p, soup, fish)
+	require.NoError(t, s.saveRecipeSelection(t.Context(), "mock-clerk-user-id", original, selectionFromSaved([]ai.Recipe{soup, fish})))
+	s.shoppingMerger = shoppingMergerFunc(func(ctx context.Context, ingredients []ai.Ingredient, catalog []ai.InputIngredient) ([]ai.ShoppingItem, error) {
+		items, err := (SimpleShoppingQuantityMerger{}).MergeShoppingQuantities(ctx, ingredients, catalog)
+		for i := range items {
+			items[i].Buy = new(float64(1))
+		}
+		return items, err
+	})
+	var orderItems []ai.ShoppingItem
+	s.orderView = orderViewBuilderFunc(func(input ordertypes.OrderViewInput) (*ordertypes.OrderView, error) {
+		orderItems = input.Items
+		return &ordertypes.OrderView{Instacart: true, TransferURL: "/destination/order"}, nil
+	})
+	build := func(hash string) string {
+		t.Helper()
+		w := finalizeShoppingRequest(s, hash)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		return w.Header().Get("HX-Redirect")
+	}
+	page := func(url string) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		s.handleRecipes(w, httptest.NewRequest(http.MethodGet, url, nil))
+		return assertHTTPSuccess(t, w)
+	}
+	url := build(original)
+	hash := httptest.NewRequest(http.MethodGet, url, nil).URL.Query().Get("h")
+	selectRecipe := func(recipe ai.Recipe, action string, handler http.HandlerFunc) string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/recipe/"+recipe.ComputeHash()+"/"+action+"?h="+hash, nil)
+		req.SetPathValue("hash", recipe.ComputeHash())
+		req.Header.Set("HX-Request", "true")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		body := assertHTTPSuccess(t, w)
+		require.Contains(t, body, `id="shopping-finalize-controls" hx-swap-oob="outerHTML"`)
+		return body
+	}
+	require.Contains(t, page(url), "Shop on Instacart")
+	require.Len(t, orderItems, 2)
+	hidden := selectRecipe(soup, "dismiss", s.handleDismissRecipe)
+	for _, body := range []string{hidden, page(url)} {
+		assert.Contains(t, body, "Restore")
+		assert.Contains(t, body, `hx-post="/recipes/`+hash+`/finalize"`)
+		assert.NotContains(t, body, "Shop on Instacart")
+		assert.NotContains(t, body, `id="shopping-list-section"`)
+	}
+	empty := selectRecipe(fish, "dismiss", s.handleDismissRecipe)
+	assert.Contains(t, empty, `aria-describedby="finalize-help"`)
+	assert.NotContains(t, empty, hash+"/finalize")
+	selectRecipe(fish, "save", s.handleSaveRecipe)
+	restored := selectRecipe(soup, "save", s.handleSaveRecipe)
+	assert.Contains(t, restored, "Shop on Instacart")
+	assert.Contains(t, restored, `id="shopping-list-section"`)
+
+	selectRecipe(soup, "dismiss", s.handleDismissRecipe)
+	rebuilt := page(build(hash))
+	assert.Contains(t, rebuilt, "Shop on Instacart")
+	assert.NotContains(t, rebuilt, "Green cabbage")
+	require.Len(t, orderItems, 1)
+	assert.Equal(t, "fish", orderItems[0].ProductID)
 }
 
 func TestShoppingControlsRefreshOnReturn(t *testing.T) {
@@ -160,7 +221,7 @@ func TestShoppingControlsRefreshOnReturn(t *testing.T) {
 	for _, name := range []string{"shopping_finalize_controls", "shopping_finalize_controls_response"} {
 		t.Run(name, func(t *testing.T) {
 			var controls bytes.Buffer
-			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, name, newShoppingFinalizeView("saved-list")))
+			require.NoError(t, templates.ShoppingList.ExecuteTemplate(&controls, name, shoppingListPageView{Hash: "saved-list", HasSavedRecipes: true}))
 			for _, attribute := range []string{
 				`hx-get="/recipes?h=saved-list"`,
 				`focus from:window`,

@@ -71,7 +71,7 @@ func (s *server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, shoppingListHash, true); err != nil {
+	if err := s.writeRecipeSelectionResponse(ctx, w, r, currentUser, recipeHash, *recipe, shoppingListHash, true); err != nil {
 		slog.ErrorContext(ctx, "failed to render save response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
@@ -159,13 +159,13 @@ func (s *server) handleDismissRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.writeRecipeSelectionResponse(ctx, w, r, recipeHash, *recipe, selectionHash, false); err != nil {
+	if err := s.writeRecipeSelectionResponse(ctx, w, r, currentUser, recipeHash, *recipe, selectionHash, false); err != nil {
 		slog.ErrorContext(ctx, "failed to render dismiss response", "hash", recipeHash, "error", err)
 		http.Error(w, "failed to write response", http.StatusInternalServerError)
 	}
 }
 
-func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, recipeHash string, recipe ai.Recipe, shoppingListHash string, saved bool) error {
+func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, currentUser *utypes.User, recipeHash string, recipe ai.Recipe, shoppingListHash string, saved bool) error {
 	var response bytes.Buffer
 	if isSingleRecipeAction(r) {
 		if err := templates.Recipe.ExecuteTemplate(&response, "recipe_save_action", newRecipeSaveActionView(recipe, shoppingListHash, saved)); err != nil {
@@ -184,11 +184,17 @@ func (s *server) writeRecipeSelectionResponse(ctx context.Context, w http.Respon
 			return fmt.Errorf("render shopping recipe card: %w", err)
 		}
 
-		// Can finalize after any adds.
-		if err := templates.ShoppingList.ExecuteTemplate(&response, "shopping_finalize_controls_response", newShoppingFinalizeView(shoppingListHash)); err != nil {
+		params, err := s.ParamsFromCache(ctx, shoppingListHash)
+		if err != nil {
+			return fmt.Errorf("load shopping list parameters: %w", err)
+		}
+		view, err := s.shoppingListViewForRequest(r, shoppingListViewInput{params: params, hash: shoppingListHash, currentUser: currentUser})
+		if err != nil {
+			return err
+		}
+		if err := templates.ShoppingList.ExecuteTemplate(&response, "shopping_finalize_controls_response", view); err != nil {
 			return fmt.Errorf("render shopping finalize controls: %w", err)
 		}
-
 	}
 
 	httpx.SetHTMLContentType(w)

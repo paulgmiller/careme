@@ -115,13 +115,6 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 	if err != nil {
 		return shoppingListPageView{}, fmt.Errorf("recipe rendering error: %w", err)
 	}
-	hasSavedRecipes := false
-	for _, view := range recipeViews {
-		if view.Saved {
-			hasSavedRecipes = true
-		}
-	}
-
 	data := shoppingListPageView{
 		Page:                 templates.NewPage(ctx),
 		StatusMessage:        input.progress.StatusMessage,
@@ -134,7 +127,7 @@ func newShoppingListPageView(ctx context.Context, input shoppingListViewInput) (
 		HelpMessage:          strings.TrimSpace(input.helpMessage),
 		Hash:                 input.hash,
 		Recipes:              recipeViews,
-		HasSavedRecipes:      hasSavedRecipes,
+		HasSavedRecipes:      len(input.selection.SavedHashes) > 0,
 		Finalized:            input.purchases != nil,
 		Purchases:            shoppingPurchaseGroupsForDisplay(input.purchases),
 		ServerSignedIn:       serverSignedIn,
@@ -213,23 +206,6 @@ func shoppingListMetaDescription(recipes []ai.Recipe, date string) string {
 		return date + "."
 	}
 	return fmt.Sprintf("%s: %s.", date, strings.Join(titles, ", "))
-}
-
-type shoppingFinalizeView struct {
-	// Selection changes require rebuilding before another order can be submitted.
-	Order           *ordertypes.OrderView
-	Hash            string
-	HasSavedRecipes bool
-	Finalized       bool
-}
-
-func newShoppingFinalizeView(hash string) shoppingFinalizeView {
-	data := shoppingFinalizeView{
-		Hash:            hash,
-		HasSavedRecipes: true,
-	}
-
-	return data
 }
 
 // shoppingRecipeInput is the card state supplied by the controller or list builder.
