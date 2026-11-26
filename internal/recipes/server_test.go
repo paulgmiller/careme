@@ -408,10 +408,8 @@ func TestHandleRecipes_MissingShoppingListRefreshesClerkSession(t *testing.T) {
 			body := rr.Body.String()
 			assert.Contains(t, body, "Let&#39;s get cooking")
 			assert.Contains(t, body, `data-clerk-publishable-key="pk_test_123"`)
-			assert.Regexp(t, fmt.Sprintf(`const serverSignedIn =\s*%t\s*;`, tt.signedIn), body)
-			assert.Contains(t, body, `await Clerk.load()`)
-			assert.Contains(t, body, `!serverSignedIn && clerkSignedIn && !sessionStorage.getItem(key)`)
-			assert.Contains(t, body, `location.reload()`)
+			assert.Contains(t, body, fmt.Sprintf(`data-server-signed-in="%t"`, tt.signedIn))
+			assert.Contains(t, body, `session.js`)
 			assert.Contains(t, body, `name="instructions" value="make it vegetarian"`)
 			assert.Contains(t, rr.Header().Get("Cache-Control"), "no-store")
 			select {
@@ -1712,7 +1710,7 @@ func TestHandleQuestion_HTMXReturnsThreadFragment(t *testing.T) {
 	}
 }
 
-func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
+func TestHandleQuestion_NoSessionKeepsFormOnPage(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore), withTestClerk(noSessionAuth{}))
@@ -1732,8 +1730,8 @@ func TestHandleQuestion_NoSessionHTMXSetsRedirectHeader(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, rr.Code)
 	}
-	if got, want := rr.Header().Get("HX-Redirect"), signInPath("/recipe/hash/question"); got != want {
-		t.Fatalf("expected HX-Redirect %q, got %q", want, got)
+	if got := rr.Header().Get("HX-Redirect"); got != "" {
+		t.Fatalf("unauthorized question must keep the form on the page, got HX-Redirect %q", got)
 	}
 }
 

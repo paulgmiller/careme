@@ -258,7 +258,10 @@ func (s *server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 	_, ok := s.clerk.GetUserIDFromRequest(r)
 	if !ok {
-		redirectToSignIn(w, r, http.StatusUnauthorized)
+		// session.js normally renews an expired token before this POST. If the
+		// session really ended, keep the question in the form: its HTMX error UI
+		// offers a sign-in link. An HX-Redirect here would discard the typed text.
+		http.Error(w, "sign in to ask a question", http.StatusUnauthorized)
 		return
 	}
 

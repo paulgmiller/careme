@@ -9,6 +9,7 @@ export default [
       sourceType: "module",
       globals: {
         console: "readonly",
+        CustomEvent: "readonly",
         document: "readonly",
         File: "readonly",
         DataTransfer: "readonly",

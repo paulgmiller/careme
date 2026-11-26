@@ -143,6 +143,7 @@
                   hx-on::before-request="document.getElementById('ask-question-submit').textContent='Asking...'; document.getElementById('question-error').classList.add('hidden');"
                   hx-on::after-request="document.getElementById('ask-question-submit').textContent='Ask'; if(event.detail.successful){ this.reset(); }"
                   hx-on::response-error="document.getElementById('question-error').classList.remove('hidden');"
+                  hx-on::send-error="document.getElementById('question-error').classList.remove('hidden');"
                   class="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label for="question" class="text-sm font-medium text-gray-700 sm:w-40">Ask Careme</label>
               <textarea id="question"
@@ -173,7 +174,7 @@
                 </button>
               </div>
             </form>
-            <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Please try again.</p>
+            <p id="question-error" class="hidden text-sm font-medium text-red-700">Could not answer your question. Try again, chef. If your session has ended, <a class="underline" href="{{SignInPath (print "/recipe/" .RecipeHash)}}">sign in</a>.</p>
             {{else}}
             <a href="{{SignInPath (print "/recipe/" .RecipeHash)}}"
                class="inline-flex items-center justify-center rounded-lg border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2">
