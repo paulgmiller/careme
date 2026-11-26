@@ -204,7 +204,7 @@ func loadAdminMealPlanPageData(ctx context.Context, rio recipeio, startHash stri
 		data.Lists = append(data.Lists, view)
 
 		for _, recipe := range params.Saved {
-			originHash := normalizeAdminMealPlanOriginHash(recipe.OriginHash)
+			originHash := strings.TrimSpace(recipe.OriginHash)
 			if originHash == "" || originHash == hash {
 				continue
 			}
@@ -216,15 +216,4 @@ func loadAdminMealPlanPageData(ctx context.Context, rio recipeio, startHash stri
 	}
 
 	return data, nil
-}
-
-func normalizeAdminMealPlanOriginHash(hash string) string {
-	hash = strings.TrimSpace(hash)
-	if hash == "" {
-		return ""
-	}
-	if normalizedHash, ok := legacyHashToCurrent(hash, legacyRecipeHashSeed); ok {
-		return normalizedHash
-	}
-	return hash
 }

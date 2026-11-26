@@ -28,14 +28,6 @@ func TestGeneratorParamsHashStableForDifferentHours(t *testing.T) {
 		t.Fatalf("expected hash to be stable and equal to 8sn-uLdtmjA, got %s", h1)
 	}
 
-	legacyHash, ok := legacyRecipeHash(h1)
-	if !ok {
-		t.Fatal("expected current hash passhed to legacy")
-	}
-	if legacyHash != "cmVjaXBl8sn-uLdtmjA=" {
-		t.Fatalf("expected legacy hash to be base64 of recipe hash with prefix, got %s", legacyHash)
-	}
-
 	// ensure stability across multiple calls
 	if h1 != p1.Hash() {
 		t.Fatalf("hash not stable across multiple calls: %s vs %s", h1, p1.Hash())
@@ -104,27 +96,5 @@ func TestGeneratorParamsHash_IgnoresPreviousMenuPlanResponse(t *testing.T) {
 
 	if before != after {
 		t.Fatalf("expected previous menu plan response not to affect params hash: before=%s after=%s", before, after)
-	}
-}
-
-func TestNormalizeLegacyRecipeHash(t *testing.T) {
-	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "34567890", Name: "Legacy Store"}, time.Date(2025, 9, 17, 9, 0, 0, 0, time.UTC))
-	hash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
-
-	normalized, ok := legacyHashToCurrent(legacyHash, legacyRecipeHashSeed)
-	if !ok {
-		t.Fatal("expected legacy hash normalization to succeed")
-	}
-	if normalized != hash {
-		t.Fatalf("expected normalized hash %q, got %q", hash, normalized)
-	}
-
-	if _, ok := legacyHashToCurrent(hash, legacyRecipeHashSeed); ok {
-		t.Fatalf("expected canonical hash %q not to be treated as legacy", hash)
 	}
 }

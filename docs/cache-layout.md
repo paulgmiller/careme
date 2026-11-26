@@ -97,6 +97,11 @@ are versioned below to retain selected item IDs; existing wine cache prefixes ar
 Params retain their supplied timestamps and have no date-hash version marker.
 Wine cache keys keep their existing calendar-date and style hashing formula.
 
+Shopping-list URLs and recipe origin hashes use the current unpadded Base64URL
+hash directly. The old padded hashes containing a `recipe` seed are no longer
+converted or redirected. Cached recipes retaining those origin hashes must be
+migrated before they can load parameters or regenerate against current entries.
+
 | Prefix | Stored value | Written by | Read by |
 | --- | --- | --- | --- |
 | `location/` | JSON `locations.Location` keyed by store ID for providers without a location-cache version | `internal/locations/storage.go` location lookups and searches | `internal/locations/storage.go` lookup by ID |

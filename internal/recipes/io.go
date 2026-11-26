@@ -77,7 +77,6 @@ func (rio recipeio) FromCache(ctx context.Context, hash string) (*ai.ShoppingLis
 
 func (rio recipeio) ParamsFromCache(ctx context.Context, hash string) (*generatorParams, error) {
 	primaryKey := paramsCachePrefix + hash
-	// have to convert legacy hashes because each recipe stored an origin hash and we didn't rewrite them
 	paramsReader, err := rio.Cache.Get(ctx, primaryKey)
 	if err != nil {
 		return nil, fmt.Errorf("error getting params for hash %s: %w", hash, err)

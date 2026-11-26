@@ -1,7 +1,6 @@
 package recipes
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -15,11 +14,6 @@ import (
 	"careme/internal/locations"
 
 	"github.com/samber/lo"
-)
-
-const (
-	legacyRecipeHashSeed      = "recipe"
-	legacyIngredientsHashSeed = "ingredients"
 )
 
 var nowFn = time.Now
@@ -77,18 +71,6 @@ func (g *generatorParams) Hash() string {
 
 func (g *generatorParams) LocationHash() string {
 	return cachekey.ForStore(g.Location.ID, g.Date)
-}
-
-func legacyHashToCurrent(hash string, seed string) (string, bool) {
-	decoded, err := base64.URLEncoding.DecodeString(hash)
-	if err != nil {
-		return hash, false
-	}
-	seedBytes := []byte(seed)
-	if !bytes.HasPrefix(decoded, seedBytes) || len(decoded) == len(seedBytes) {
-		return hash, false
-	}
-	return base64.RawURLEncoding.EncodeToString(decoded[len(seedBytes):]), true
 }
 
 func parseGenerationForm(ctx context.Context, r *http.Request, ls locServer) (*generatorParams, error) {

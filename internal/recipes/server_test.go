@@ -3,7 +3,6 @@ package recipes
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -297,82 +296,16 @@ func TestHandleRecipes_ReadySpinnerPollRedirectsToFullPage(t *testing.T) {
 	assert.Empty(t, rr.Body.String())
 }
 
-func legacyRecipeHash(hash string) (string, bool) {
-	return currentHashToLegacy(hash, legacyRecipeHashSeed)
-}
-
-func currentHashToLegacy(hash string, seed string) (string, bool) {
-	decoded, err := base64.RawURLEncoding.DecodeString(hash)
-	if err != nil || len(decoded) == 0 {
-		return "", false
-	}
-	seedBytes := []byte(seed)
-	if bytes.HasPrefix(decoded, seedBytes) {
-		return hash, false
-	}
-	legacyDecoded := make([]byte, 0, len(seedBytes)+len(decoded))
-	legacyDecoded = append(legacyDecoded, seedBytes...)
-	legacyDecoded = append(legacyDecoded, decoded...)
-	return base64.URLEncoding.EncodeToString(legacyDecoded), true
-}
-
-func TestHandleRecipes_RedirectsLegacyHashToCanonicalHash(t *testing.T) {
+func TestHandleRecipes_DoesNotRedirectLegacyHash(t *testing.T) {
 	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "70000123", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(legacyHash), nil)
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/recipes?h=cmVjaXBl8sn-uLdtmjA%3D", nil)
 	rr := httptest.NewRecorder()
 
-	s := newTestServer(t)
 	s.handleRecipes(rr, req)
 
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
-	}
-	location := rr.Header().Get("Location")
-	u, err := url.Parse(location)
-	if err != nil {
-		t.Fatalf("failed to parse redirect location %q: %v", location, err)
-	}
-	if got := u.Query().Get("h"); got != hash {
-		t.Fatalf("expected redirect hash %q, got %q", hash, got)
-	}
-	if got := rr.Header().Get("Cache-Control"); got != "no-store, no-cache, must-revalidate" {
-		t.Fatalf("expected cache control header on recipes page, got %q", got)
-	}
-}
-
-func TestHandleRecipes_RedirectsLegacyHashAndPreservesQuery(t *testing.T) {
-	t.Parallel()
-	p := DefaultParams(&locations.Location{ID: "70000456", Name: "Test"}, time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC))
-	hash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(hash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/recipes?h="+url.QueryEscape(legacyHash)+"&mail=true", nil)
-	rr := httptest.NewRecorder()
-
-	s := newTestServer(t)
-	s.handleRecipes(rr, req)
-
-	if rr.Code != http.StatusSeeOther {
-		t.Fatalf("expected status %d, got %d", http.StatusSeeOther, rr.Code)
-	}
-	location := rr.Header().Get("Location")
-	u, err := url.Parse(location)
-	if err != nil {
-		t.Fatalf("failed to parse redirect location %q: %v", location, err)
-	}
-	if got := u.Query().Get("h"); got != hash {
-		t.Fatalf("expected redirect hash %q, got %q", hash, got)
-	}
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Empty(t, rr.Header().Get("Location"))
 }
 
 func TestHandleRecipes_MissingShoppingListRefreshesClerkSession(t *testing.T) {
@@ -911,7 +844,7 @@ func TestHandleGenerate_SameRequestDifferentDirectivesProduceDifferentHashes(t *
 	}
 }
 
-func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
+func TestHandleSingle_UsesCanonicalOriginHash(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
@@ -921,10 +854,6 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
 	canonicalHash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(canonicalHash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
 
 	if err := s.SaveParams(t.Context(), p); err != nil {
 		t.Fatalf("failed to save canonical params: %v", err)
@@ -937,10 +866,10 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 		Instructions: []string{"Roast salmon and vegetables until done."},
 		Health:       "High protein",
 		DrinkPairing: "Pinot Noir",
-		OriginHash:   legacyHash,
+		OriginHash:   canonicalHash,
 	}
 	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s, legacyHash, recipe)
+	saveRecipesForOrigin(t, s, canonicalHash, recipe)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
 	req.SetPathValue("hash", recipeHash)
@@ -956,9 +885,6 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	if !strings.Contains(body, "/recipes?h="+canonicalHash) {
 		t.Fatalf("expected recipe page to link to canonical hash %q; body: %s", canonicalHash, body)
 	}
-	if strings.Contains(body, "/recipes?h="+legacyHash) {
-		t.Fatalf("expected recipe page not to link to legacy hash %q; body: %s", legacyHash, body)
-	}
 	if !strings.Contains(body, "Canonical Test Store") {
 		t.Fatalf("expected canonical params location to render, body: %s", body)
 	}
@@ -967,7 +893,26 @@ func TestHandleSingle_NormalizesLegacyOriginHashToCanonicalHash(t *testing.T) {
 	}
 }
 
-func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
+func TestHandleSingle_DoesNotNormalizeLegacyOriginHash(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+	p := DefaultParams(&locations.Location{ID: "loc-123", Name: "Test Loc"}, time.Date(2025, 9, 17, 9, 2, 3, 0, time.UTC))
+	require.Equal(t, "8sn-uLdtmjA", p.Hash())
+	require.NoError(t, s.SaveParams(t.Context(), p))
+
+	recipe := ai.Recipe{Title: "Legacy origin", OriginHash: "cmVjaXBl8sn-uLdtmjA="}
+	require.NoError(t, s.SaveRecipe(t.Context(), recipe))
+	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipe.ComputeHash(), nil)
+	req.SetPathValue("hash", recipe.ComputeHash())
+	rr := httptest.NewRecorder()
+
+	s.handleSingle(rr, req)
+
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found or expired")
+}
+
+func TestHandleSingle_FailsWhenParamsMissing(t *testing.T) {
 	t.Parallel()
 	cacheStore := cache.NewFileCache(filepath.Join(t.TempDir(), "cache"))
 	s := newTestServer(t, withTestCache(cacheStore))
@@ -977,21 +922,17 @@ func TestHandleSingle_LegacyOriginHashFailWhenParamsMissing(t *testing.T) {
 		time.Date(2026, 1, 25, 0, 0, 0, 0, time.UTC),
 	)
 	canonicalHash := p.Hash()
-	legacyHash, ok := legacyRecipeHash(canonicalHash)
-	if !ok {
-		t.Fatal("expected to derive legacy recipe hash")
-	}
 
 	recipe := ai.Recipe{
-		Title:        "Legacy Hash Recipe",
-		Description:  "Recipe with legacy origin hash and no params record.",
+		Title:        "Missing Params Recipe",
+		Description:  "Recipe with no params record.",
 		Ingredients:  []ai.Ingredient{{Name: "chicken", Quantity: "1 lb", Price: "$8"}},
 		Instructions: []string{"Cook chicken until done."},
 		Health:       "Protein rich",
 		DrinkPairing: "Sparkling water",
 	}
 	recipeHash := recipe.ComputeHash()
-	saveRecipesForOrigin(t, s, legacyHash, recipe)
+	saveRecipesForOrigin(t, s, canonicalHash, recipe)
 
 	req := httptest.NewRequest(http.MethodGet, "/recipe/"+recipeHash, nil)
 	req.SetPathValue("hash", recipeHash)
