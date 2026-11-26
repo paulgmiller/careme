@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -408,17 +409,6 @@ func (s *server) handleRecipes(w http.ResponseWriter, r *http.Request) {
 func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *generatorParams, slist *ai.ShoppingList, currentUser *utypes.User, progress shoppingProgress) {
 	ctx := r.Context()
 	hashParam := r.URL.Query().Get(queryArgHash)
-	signedIn := currentUser != nil
-	selection := selectionFromSaved(p.Saved)
-	if signedIn {
-		userSelection, err := s.loadRecipeSelection(ctx, currentUser.ID, hashParam)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to load recipe selection for render", "hash", hashParam, "error", err)
-			http.Error(w, "failed to load recipe selection", http.StatusInternalServerError)
-			return
-		}
-		selection = selection.override(userSelection)
-	}
 	finishedRecipes := make(map[string]ai.Recipe, len(slist.Recipes)+len(progress.Finished))
 	maps.Copy(finishedRecipes, progress.Finished)
 	for _, recipe := range slist.Recipes {
@@ -444,38 +434,22 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		})
 
 	}
-	var purchases []shoppingPurchaseGroup
-	var purchasesErr error
-	recipeWG.Go(func() {
-		purchases, purchasesErr = s.cachedShoppingPurchases(ctx, hashParam)
-	})
 	recipeWG.Wait()
-	if purchasesErr != nil && !errors.Is(purchasesErr, cache.ErrNotFound) {
-		slog.ErrorContext(ctx, "failed to load shopping purchases", "hash", hashParam, "error", purchasesErr)
-		http.Error(w, "failed to load shopping list", http.StatusInternalServerError)
-		return
-	}
-	winepicks := wines.Clone()
 
 	help := r.URL.Query().Get(QueryArgHelp)
 	instructions := strings.TrimSpace(r.URL.Query().Get(queryArgInstructions))
-	view, err := newShoppingListPageView(ctx, shoppingListViewInput{
+	view, err := s.shoppingListViewForRequest(r, shoppingListViewInput{
 		params:               p,
-		purchases:            purchases,
 		list:                 *slist,
-		wineRecommendations:  winepicks,
+		wineRecommendations:  wines.Clone(),
 		recipeImages:         images.Clone(),
 		currentUser:          currentUser,
 		hash:                 hashParam,
-		selection:            selection,
 		helpMessage:          help,
 		pendingInstructions:  instructions,
 		progress:             progress,
 		useTodaysIngredients: shoppingListIsOlderThanFreshIngredientsWindow(ctx, p),
 	})
-	if err == nil && view.Finalized && view.ServerSignedIn {
-		err = s.populateOrderView(r, &view)
-	}
 	if err != nil {
 		slog.ErrorContext(ctx, "prepare shopping list view", "error", err)
 		http.Error(w, "Unable to load shopping list", http.StatusInternalServerError)
@@ -486,6 +460,33 @@ func (s *server) renderShoppingList(w http.ResponseWriter, r *http.Request, p *g
 		templateName = "shopping_content"
 	}
 	renderHTML(w, templates.ShoppingList, templateName, view)
+}
+
+// Purchases belong to the saved recipes in the hashed parameters. A viewer's
+// selection can diverge while the original snapshot is still valid for others.
+func (s *server) shoppingListViewForRequest(r *http.Request, input shoppingListViewInput) (shoppingListPageView, error) {
+	ctx := r.Context()
+	base := selectionFromSaved(input.params.Saved)
+	input.selection = base
+	if input.currentUser != nil {
+		overrides, err := s.loadRecipeSelection(ctx, input.currentUser.ID, input.hash)
+		if err != nil {
+			return shoppingListPageView{}, fmt.Errorf("load recipe selection: %w", err)
+		}
+		input.selection = base.override(overrides)
+	}
+	if slices.Equal(base.SavedHashes, input.selection.SavedHashes) {
+		purchases, err := s.cachedShoppingPurchases(ctx, input.hash)
+		if err != nil && !errors.Is(err, cache.ErrNotFound) {
+			return shoppingListPageView{}, fmt.Errorf("load shopping purchases: %w", err)
+		}
+		input.purchases = purchases
+	}
+	view, err := newShoppingListPageView(ctx, input)
+	if err == nil && view.Finalized && view.ServerSignedIn {
+		err = s.populateOrderView(r, &view)
+	}
+	return view, err
 }
 
 func (s *server) handleGenerate(w http.ResponseWriter, r *http.Request) {

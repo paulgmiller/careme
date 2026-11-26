@@ -37,7 +37,7 @@
 </html>
 
 {{define "shopping_finalize_controls"}}
-<div id="shopping-finalize-controls" {{template "shopping_finalize_refresh" .}} class="mt-10 flex flex-wrap items-center gap-4">
+<div id="shopping-finalize-controls" {{template "shopping_finalize_refresh" .}} class="mt-10 space-y-8">
   {{template "shopping_finalize_controls_content" .}}
 </div>
 {{end}}
@@ -51,6 +51,7 @@ hx-sync="this:drop"
 {{end}}
 
 {{define "shopping_finalize_controls_content"}}
+<div class="flex flex-wrap items-center gap-4">
   {{if .Order}}
   {{template "shopping_order_form" .Order}}
   {{else if .Finalized}}
@@ -87,10 +88,14 @@ hx-sync="this:drop"
     Add at least one recipe to assemble your shopping list.
   </p>
   {{end}}
+</div>
+{{if .Finalized}}
+{{template "shopping_purchase_section" .}}
+{{end}}
 {{end}}
 
 {{define "shopping_finalize_controls_response"}}
-<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" {{template "shopping_finalize_refresh" .}} class="mt-10 flex flex-wrap items-center gap-4">
+<div id="shopping-finalize-controls" hx-swap-oob="outerHTML" {{template "shopping_finalize_refresh" .}} class="mt-10 space-y-8">
   {{template "shopping_finalize_controls_content" .}}
 </div>
 {{end}}
@@ -353,10 +358,6 @@ hx-sync="this:drop"
             {{end}}
 
             {{template "shopping_finalize_controls" .}}
-
-            {{if .Finalized}}
-            {{template "shopping_purchase_section" .}}
-            {{end}}
           </div>
           {{if .AdminURL}}
           <p class="mt-8 text-center text-[0.6875rem] text-ink-400">

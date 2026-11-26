@@ -110,7 +110,7 @@ func TestShoppingProgressReadinessAndCompletion(t *testing.T) {
 	s.handleDismissRecipe(hidden, dismiss)
 	require.Equal(t, http.StatusOK, hidden.Code, hidden.Body.String())
 	assert.Contains(t, hidden.Body.String(), "Restore")
-	assert.Contains(t, hidden.Body.String(), `/recipes/`+hash+`/finalize`)
+	assert.NotContains(t, hidden.Body.String(), `/recipes/`+hash+`/finalize`)
 
 	selection, err := s.loadRecipeSelection(t.Context(), "mock-clerk-user-id", hash)
 	require.NoError(t, err)
