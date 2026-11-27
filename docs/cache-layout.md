@@ -176,7 +176,14 @@ When any structured recipe property is present, the hash appends this pipe-delim
 
 Fields are total minutes, servings, estimated total cost in dollars, calories per serving, cooking-method count, and each cooking method in order. The decimal integers and cooking-method enum values cannot contain `|`, so the separators give every value an unambiguous boundary. The method count makes the variable-length tail explicit. Field and cooking-method order are significant.
 
-The suffix is enabled by comparing the complete `RecipeProperties` value with its Go zero value, so adding a property cannot be missed by a hand-maintained presence predicate. That detection does not make a new field part of the payload automatically: adding a hash input requires an explicit format change.
+The suffix is enabled by comparing the `RecipeProperties` value with its Go zero value after normalizing an empty `special_equipment` slice to nil, so adding a property cannot be missed by a hand-maintained presence predicate. That detection does not make a new field part of the payload automatically: adding a hash input requires an explicit format change.
+
+When `special_equipment` is nonempty, a separate `|special-equipment-v1|`
+suffix follows the existing payload, then the JSON-encoded equipment array.
+JSON escaping preserves name boundaries, including names containing `|`.
+Equipment names and order affect identity. Missing, null, and empty equipment
+lists omit this suffix, preserving existing recipe hashes and dependent records.
+Older cached recipes decode without equipment and show no equipment badges.
 
 Recipe hashes are used by or stored in:
 
